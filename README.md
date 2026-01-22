@@ -6,6 +6,7 @@
 
 ## 功能亮点
 
+- **多Agent**：支持 claude code, gemini, codex, opencode
 - **安全隔离**：保护宿主机，支持安全容器嵌套（Docker-in-Docker）
 - **高效启动**：快捷开启常见 Agent YOLO / SOLO 模式
 - **便捷操作**：快速进入 `/bin/bash`
