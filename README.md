@@ -7,7 +7,7 @@
 ## 功能亮点
 
 - **安全隔离**：保护宿主机，支持安全容器嵌套（Docker-in-Docker）
-- **高效启动**：快捷开启常见 Agent YOLO 模式
+- **高效启动**：快捷开启常见 Agent YOLO / SOLO 模式
 - **便捷操作**：快速进入 `/bin/bash`
 - **会话恢复**：安装 Skills Marketplace 可快速恢复会话
 - **自定义灵活**：支持自定义 `BASEURL`、`AUTH_TOKEN` 等变量
