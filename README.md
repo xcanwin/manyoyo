@@ -1,22 +1,18 @@
-# MANYOYO
+# MANYOYO（慢悠悠）
 
-- 中文名：慢悠悠。
-- 一款AI智能体安全增强工具，安全、高效、省token。
-- 保障在Agent YOLO模式下宿主机的安全。
-- 对大模型采用ReAct得到AI Agent，对AI Agent采用循环得到manyoyo。从而实现高效。
-- 通过预装常见AI Agent及大量AI常用工具实现节省token。
+**MANYOYO** 是一款 AI 智能体安全增强工具，安全、高效、省 token，专为 Agent YOLO 模式设计，保障宿主机安全。
 
-# 功能
+通过 ReAct 与循环机制对 AI Agent 进行优化，并预装常见 Agent 与工具，进一步节省 token。
 
-- 环境隔离，安全可靠
-- 快捷开启常见Agent YOLO模式
-- 快捷进入/bin/bash
-- 安装Skills Marketplace后快捷恢复之前会话
-- 自定义BASEURL、AUTH_TOKEN等任意变量
-- 快捷导入配置文件
-- 支持安全的容器嵌套容器docker-in-docker模式
-- 支持危险的容器嵌套容器mount-docker-socket模式
-- 自定义其他安全沙箱镜像
+## 功能亮点
+
+- **安全隔离**：保护宿主机，支持安全容器嵌套（Docker-in-Docker）
+- **高效启动**：快捷开启常见 Agent YOLO 模式
+- **便捷操作**：快速进入 `/bin/bash`
+- **会话恢复**：安装 Skills Marketplace 可快速恢复会话
+- **自定义灵活**：支持自定义 `BASEURL`、`AUTH_TOKEN` 等变量
+- **配置管理**：快捷导入配置文件
+- **高级模式**：支持危险容器嵌套（mount-docker-socket）、自定义沙箱镜像
 
 # 镜像编译
 
