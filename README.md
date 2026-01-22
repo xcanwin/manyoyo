@@ -2,7 +2,7 @@
 
 **MANYOYO** 是一款 AI 智能体安全增强工具，安全、高效、省 token，专为 Agent YOLO 模式设计，保障宿主机安全。
 
-通过 ReAct 与循环机制对 AI Agent 进行优化，并预装常见 Agent 与工具，进一步节省 token。
+预装常见 Agent 与工具，进一步节省 token。循环自由切换 Agent 和 /bin/bash ，进一步提效。
 
 ## 功能亮点
 
