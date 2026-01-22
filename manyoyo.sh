@@ -6,7 +6,7 @@
 # ==============================================================================
 
 # 默认配置
-CONTAINER_NAME="mh-$(date +%m%d-%H%M)" # "mh$(date +%Y%m%d%H%M%S)"
+CONTAINER_NAME="myy-$(date +%m%d-%H%M)" # "myy$(date +%Y%m%d%H%M%S)"
 HOST_PATH="$(pwd)"
 CONTAINER_PATH=$HOST_PATH # "/tmp/manyoyo"
 IMAGE_NAME="localhost/xcanwin/manyoyo"
