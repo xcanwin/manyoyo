@@ -14,7 +14,7 @@
 - **配置管理**：快捷导入配置文件
 - **高级模式**：支持危险容器嵌套（mount-docker-socket）、自定义沙箱镜像
 
-# 镜像编译
+# 编译镜像
 
 ```
 iv=1.0.0 && podman build -t localhost/xcanwin/manyoyo:$iv -f docker/manyoyo.Dockerfile . --no-cache
@@ -23,12 +23,16 @@ podman image prune -f
 
 # 使用方法
 
+1. 安装 [podman](https://podman.io/docs/installation)
+2. 编译镜像
+3. 执行命令
+
 ```
 ./manyoyo.sh --install manyoyo
 manyoyo -h
 ```
 
-## 命令行介绍
+## 命令行说明
 
 ```
 Usage:
