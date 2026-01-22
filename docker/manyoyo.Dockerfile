@@ -1,0 +1,175 @@
+FROM ubuntu:24.04
+
+RUN <<EOX
+    # 部署 system
+    mv /etc/apt/sources.list.d /etc/apt/sources.list.d.bak 2>/dev/null || true
+    mv /etc/apt/sources.list /etc/apt/sources.list.bak 2>/dev/null || true
+    cat > /etc/apt/sources.list << EOF
+deb https://mirrors.aliyun.com/ubuntu/ noble main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ noble main restricted universe multiverse
+deb https://mirrors.aliyun.com/ubuntu/ noble-security main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ noble-security main restricted universe multiverse
+deb https://mirrors.aliyun.com/ubuntu/ noble-updates main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ noble-updates main restricted universe multiverse
+deb https://mirrors.aliyun.com/ubuntu/ noble-backports main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ noble-backports main restricted universe multiverse
+EOF
+    sed -i 's/https/http/g' /etc/apt/sources.list
+    apt-get update -y
+    apt-get install -y --no-install-recommends ca-certificates
+    update-ca-certificates
+    sed -i 's/http/https/g' /etc/apt/sources.list
+
+    # 安装基本依赖
+    apt-get update -y
+    apt-get install -y --no-install-recommends curl wget nano tar zip unzip gzip net-tools iputils-ping make jq git file tree ripgrep less lsof socat ncat sqlite3 dnsutils bc xxd
+    # apt-get install -y --no-install-recommends docker.io
+
+    # 清理
+    apt-get clean
+    rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+EOX
+
+RUN <<EOX
+    # 部署 python
+    apt-get update -y
+    apt-get install -y --no-install-recommends python3.12 python3.12-dev python3.12-venv python3-pip
+    ln -sf /usr/bin/python3 /usr/bin/python
+    ln -sf /usr/bin/pip3 /usr/bin/pip
+    pip config set global.index-url "https://mirrors.cloud.tencent.com/pypi/simple"
+
+    # 清理
+    apt-get clean
+    rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+EOX
+
+ENV NODE_VERSION=24.13.0
+
+RUN <<EOX
+    # 部署 node.js
+    export NVM_DIR="$HOME/.nvm"
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+    \. "$HOME/.nvm/nvm.sh"
+    npm config set registry=https://mirrors.tencent.com/npm/
+    NVM_NODEJS_ORG_MIRROR=https://mirrors.tencent.com/nodejs-release/ nvm install ${NODE_VERSION}
+    npm install -g npm
+
+    # 安装 Claude CLI
+    npm install -g @anthropic-ai/claude-code
+    echo '{"bypassPermissionsModeAccepted": true, "hasCompletedOnboarding": true, "env": {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}}' > ~/.claude.json
+
+    # 安装 Gemini CLI
+#     npm install -g @google/gemini-cli
+#     mkdir -p ~/.gemini/
+#     cat > ~/.gemini/settings.json <<EOF
+# {
+#   "privacy": {
+#     "usageStatisticsEnabled": false
+#   },
+#   "security": {
+#     "auth": {
+#       "selectedType": "oauth-personal"
+#     }
+#   },
+#   "general": {
+#     "previewFeatures": true,
+#     "disableAutoUpdate": true,
+#     "disableUpdateNag": true
+#   },
+#   "model": {
+#     "name": "gemini-3-pro-preview"
+#   }
+# }
+# EOF
+
+    # 安装 Codex CLI
+    # npm install -g @openai/codex
+
+    # 安装 Copilot CLI
+#     npm install -g @github/copilot
+#     mkdir -p ~/.copilot/
+#     cat > ~/.copilot/config.json <<EOF
+# {
+#   "banner": "never",
+#   "model": "gemini-3-pro-preview",
+#   "render_markdown": true,
+#   "screen_reader": false,
+#   "theme": "auto"
+# }
+# EOF
+
+    # 安装 OpenCode CLI
+#     npm install -g opencode-ai
+#     mkdir -p ~/.config/opencode/
+#     cat > ~/.config/opencode/opencode.json <<EOF
+# {
+#   "$schema": "https://opencode.ai/config.json",
+#   "autoupdate": false,
+#   "permission": "allow",
+#   "model": "myprovider/{env:ANTHROPIC_MODEL}",
+#   "provider": {
+#     "myprovider": {
+#       "npm": "@ai-sdk/openai-compatible",
+#       "options": {
+#         "baseURL": "{env:ANTHROPIC_BASE_URL}",
+#         "apiKey": "{env:ANTHROPIC_AUTH_TOKEN}",
+#         "headers": {
+#           "User-Agent": "opencode-cli"
+#         }
+#       },
+#       "models": {
+#         "{env:ANTHROPIC_MODEL}": {},
+#         "claude-sonnet-4-5-20250929": {},
+#         "gpt-5.2": {}
+#       }
+#     }
+#   }
+# }
+EOF
+
+    # 清理
+    npm cache clean --force
+    rm -rf /tmp/* /var/tmp/* /var/log/* ~/.npm ~/.cache
+EOX
+
+ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin:${PATH}"
+
+RUN <<EOX
+    # # 部署 java
+    # apt-get update -y
+    # apt-get install -y --no-install-recommends openjdk-17-jdk maven
+
+    # # 清理
+    # apt-get clean
+    # rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+EOX
+
+RUN <<EOX
+    # # 部署 go
+    # apt-get update -y
+    # apt-get install -y --no-install-recommends golang golang-src gcc
+    # go env -w GOPROXY=https://mirrors.tencentyun.com/go
+
+    # # 清理
+    # apt-get clean
+    # rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+EOX
+
+RUN <<EOX
+    # 部署 supervisor
+    apt-get update -y
+    apt-get install -y --no-install-recommends supervisor
+
+    # 清理
+    apt-get clean
+    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache
+
+    cat > /etc/supervisor/conf.d/s.conf << EOF
+[supervisord]
+user=root
+nodaemon=true
+EOF
+EOX
+
+WORKDIR /tmp
+CMD ["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
