@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # 默认配置
-BIN_VERSION="1.1.0"
+BIN_VERSION="1.2.0"
 CONTAINER_NAME="myy-$(date +%m%d-%H%M)" # "myy$(date +%Y%m%d%H%M%S)"
 HOST_PATH="$(pwd)"
 CONTAINER_PATH=$HOST_PATH # "/tmp/manyoyo"
@@ -219,7 +219,7 @@ if [[ "$SHOULD_REMOVE" == true ]]; then
 fi
 
 # 安全检查
-case "$(realpath $HOST_PATH)" in
+case $(realpath "${HOST_PATH}") in
     "/"|"/home"|"$HOME") echo -e "${RED}⚠️ 错误: 不允许挂载根目录或home目录。${NC}"; exit 1 ;;
 esac
 
