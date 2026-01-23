@@ -1,27 +1,23 @@
 FROM ubuntu:24.04
 
+ARG TARGETARCH
+ARG NODE_VERSION=24
+
 RUN <<EOX
     # 部署 system
-    mv /etc/apt/sources.list.d /etc/apt/sources.list.d.bak 2>/dev/null || true
-    mv /etc/apt/sources.list /etc/apt/sources.list.bak 2>/dev/null || true
-    cat > /etc/apt/sources.list << EOF
-deb https://mirrors.aliyun.com/ubuntu/ noble main restricted universe multiverse
-deb-src https://mirrors.aliyun.com/ubuntu/ noble main restricted universe multiverse
-deb https://mirrors.aliyun.com/ubuntu/ noble-security main restricted universe multiverse
-deb-src https://mirrors.aliyun.com/ubuntu/ noble-security main restricted universe multiverse
-deb https://mirrors.aliyun.com/ubuntu/ noble-updates main restricted universe multiverse
-deb-src https://mirrors.aliyun.com/ubuntu/ noble-updates main restricted universe multiverse
-deb https://mirrors.aliyun.com/ubuntu/ noble-backports main restricted universe multiverse
-deb-src https://mirrors.aliyun.com/ubuntu/ noble-backports main restricted universe multiverse
-EOF
-    sed -i 's/https/http/g' /etc/apt/sources.list
-    apt-get update -y
-    apt-get install -y --no-install-recommends ca-certificates
+    sed -i 's|http://[^/]*\.ubuntu\.com|https://mirrors.aliyun.com|g' /etc/apt/sources.list.d/ubuntu.sources
+    apt-get -o Acquire::https::Verify-Peer=false update -y
+    apt-get -o Acquire::https::Verify-Peer=false install -y --no-install-recommends ca-certificates openssl
     update-ca-certificates
-    sed -i 's/http/https/g' /etc/apt/sources.list
+
+    # 清理
+    apt-get clean
+    rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
 
     # 安装基本依赖
     apt-get update -y
+    apt-get install -y --no-install-recommends --reinstall ca-certificates openssl
+    update-ca-certificates
     apt-get install -y --no-install-recommends curl wget nano tar zip unzip gzip net-tools iputils-ping make jq git file tree ripgrep less lsof socat ncat sqlite3 dnsutils bc xxd
     # apt-get install -y --no-install-recommends docker.io
 
@@ -36,22 +32,24 @@ RUN <<EOX
     apt-get install -y --no-install-recommends python3.12 python3.12-dev python3.12-venv python3-pip
     ln -sf /usr/bin/python3 /usr/bin/python
     ln -sf /usr/bin/pip3 /usr/bin/pip
-    pip config set global.index-url "https://mirrors.cloud.tencent.com/pypi/simple"
+    pip config set global.index-url "https://mirrors.tencent.com/pypi/simple"
 
     # 清理
     apt-get clean
     rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
 EOX
 
-ENV NODE_VERSION=24.13.0
-
 RUN <<EOX
     # 部署 node.js
-    export NVM_DIR="$HOME/.nvm"
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-    \. "$HOME/.nvm/nvm.sh"
+    case "$TARGETARCH" in
+      amd64) ARCH_NODE="x64" ;;
+      arm64) ARCH_NODE="arm64" ;;
+      *)     ARCH_NODE="$TARGETARCH" ;;
+    esac
+    NVM_NODEJS_ORG_MIRROR=https://mirrors.tencent.com/nodejs-release/
+    NODE_TAR=$(curl -sL ${NVM_NODEJS_ORG_MIRROR}/latest-v${NODE_VERSION}.x/SHASUMS256.txt | grep linux-${ARCH_NODE}.tar.gz | awk '{print $2}')
+    curl -fsSL ${NVM_NODEJS_ORG_MIRROR}/latest-v${NODE_VERSION}.x/${NODE_TAR} | tar -xz -C /usr/local --strip-components=1 --exclude='*.md' --exclude='LICENSE'
     npm config set registry=https://mirrors.tencent.com/npm/
-    NVM_NODEJS_ORG_MIRROR=https://mirrors.tencent.com/nodejs-release/ nvm install ${NODE_VERSION}
     npm install -g npm
 
     # 安装 Claude CLI
@@ -131,8 +129,6 @@ EOF
     npm cache clean --force
     rm -rf /tmp/* /var/tmp/* /var/log/* ~/.npm ~/.cache
 EOX
-
-ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin:${PATH}"
 
 RUN <<EOX
     # # 部署 java
