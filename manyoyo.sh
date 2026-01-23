@@ -2,10 +2,10 @@
 
 # ==============================================================================
 # MANYOYO - AI Agent CLI Sandbox
-# Install: ./manyoyo.sh --install manyoyo
 # ==============================================================================
 
 # 默认配置
+BIN_VERSION="1.1.0"
 CONTAINER_NAME="myy-$(date +%m%d-%H%M)" # "myy$(date +%Y%m%d%H%M%S)"
 HOST_PATH="$(pwd)"
 CONTAINER_PATH=$HOST_PATH # "/tmp/manyoyo"
@@ -52,6 +52,7 @@ show_help() {
     echo "                                 例如 common, dind, mdsock"
     echo "  --install NAME                 安装manyoyo命令"
     echo "                                 例如 manyoyo, myy, docker-cli-plugin"
+    echo "  -V|--version                   显示版本"
     echo "  -h|--help                      显示帮助"
     echo ""
     echo -e "${BLUE}Example:${NC}"
@@ -90,6 +91,10 @@ install_manyoyo() {
         *) echo -e "";;
     esac
     exit 0
+}
+
+show_version() {
+    echo "manyoyo by xcanwin, ${BIN_VERSION}"
 }
 
 set_yolo() {
@@ -194,6 +199,7 @@ while [[ $# -gt 0 ]]; do # 不传参的用shift，传参的用shift 2
         -y|--yolo) set_yolo "$2"; shift 2 ;;
         -m|--cm|--cont-mode) set_cont_mode "$2"; shift 2 ;;
         --install) install_manyoyo $2; exit 0 ;;
+        -V|--version) show_version; exit 0 ;;
         -h|--help) show_help; exit 0 ;;
         *) echo -e "${RED}⚠️ 未知参数: $1${NC}"; show_help; exit 1 ;;
     esac
