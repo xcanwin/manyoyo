@@ -21,6 +21,7 @@
 2. 编译镜像
 
 ```
+podman pull ubuntu:24.04
 iv=1.1.0 && podman build -t localhost/xcanwin/manyoyo:$iv -f docker/manyoyo.Dockerfile . --no-cache
 podman image prune -f
 ```
