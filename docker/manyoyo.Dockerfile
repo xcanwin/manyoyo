@@ -63,7 +63,26 @@ RUN <<EOX
 
     # 安装 Claude CLI
     npm install -g @anthropic-ai/claude-code
-    echo '{"bypassPermissionsModeAccepted": true, "hasCompletedOnboarding": true, "env": {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}}' > ~/.claude.json
+    mkdir -p ~/.claude/
+    cat > ~/.claude.json <<EOF
+{
+  "bypassPermissionsModeAccepted": true,
+  "hasCompletedOnboarding": true,
+  "env": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}
+EOF
+    cat > ~/.claude/settings.json <<EOF
+{
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "gopls-lsp@claude-plugins-official": true,
+    "jdtls-lsp@claude-plugins-official": true
+  }
+}
+EOF
 
     # 安装 Gemini CLI
     case ",$EXT," in *,all,*|*,gemini,*)
@@ -149,10 +168,10 @@ RUN <<EOX
     # 安装 java
     case ",$EXT," in *,all,*|*,java,*)
         apt-get update -y
-        apt-get install -y --no-install-recommends openjdk-17-jdk maven
+        apt-get install -y --no-install-recommends openjdk-21-jdk maven
 
         # 安装 LSP服务（java）
-        # 
+        #
 
         # 清理
         apt-get clean
