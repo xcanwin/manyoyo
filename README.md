@@ -22,7 +22,7 @@
 
 ```
 podman pull ubuntu:24.04
-iv=1.2.0-all && podman build -t localhost/xcanwin/manyoyo:$iv -f docker/manyoyo.Dockerfile . --build-arg EXT=all --no-cache
+iv=1.4.0-all && podman build -t localhost/xcanwin/manyoyo:$iv -f docker/manyoyo.Dockerfile . --build-arg EXT=all --no-cache
 podman image prune -f
 ```
 
