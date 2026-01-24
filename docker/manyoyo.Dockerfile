@@ -29,7 +29,7 @@ RUN <<EOX
 
     # 清理
     apt-get clean
-    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm
+    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
 EOX
 
 RUN <<EOX
@@ -42,7 +42,7 @@ RUN <<EOX
 
     # 清理
     apt-get clean
-    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm
+    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
 EOX
 
 RUN <<EOX
@@ -57,6 +57,9 @@ RUN <<EOX
     curl -fsSL ${NVM_NODEJS_ORG_MIRROR}/latest-v${NODE_VERSION}.x/${NODE_TAR} | tar -xz -C /usr/local --strip-components=1 --exclude='*.md' --exclude='LICENSE'
     npm config set registry=https://mirrors.tencent.com/npm/
     npm install -g npm
+
+    # 安装 LSP服务（python、typescript）
+    npm install -g pyright typescript-language-server typescript
 
     # 安装 Claude CLI
     npm install -g @anthropic-ai/claude-code
@@ -139,7 +142,7 @@ EOF
 
     # 清理
     npm cache clean --force
-    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm
+    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
 EOX
 
 RUN <<EOX
@@ -148,9 +151,12 @@ RUN <<EOX
         apt-get update -y
         apt-get install -y --no-install-recommends openjdk-17-jdk maven
 
+        # 安装 LSP服务（java）
+        # 
+
         # 清理
         apt-get clean
-        rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm
+        rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
     ;; esac
 EOX
 
@@ -161,9 +167,12 @@ RUN <<EOX
         apt-get install -y --no-install-recommends golang golang-src gcc
         go env -w GOPROXY=https://mirrors.tencentyun.com/go
 
+        # 安装 LSP服务（go）
+        # go install golang.org/x/tools/gopls@latest
+
         # 清理
         apt-get clean
-        rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm
+        rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
     ;; esac
 EOX
 
