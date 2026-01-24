@@ -63,26 +63,24 @@ RUN <<EOX
 
     # 安装 Claude CLI
     npm install -g @anthropic-ai/claude-code
-    mkdir -p ~/.claude/
+    mkdir -p ~/.claude/plugins/marketplaces/
     cat > ~/.claude.json <<EOF
 {
   "bypassPermissionsModeAccepted": true,
   "hasCompletedOnboarding": true,
   "env": {
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_HIDE_ACCOUNT_INFO": "1",
+    "DISABLE_AUTOUPDATER": "1"
   }
 }
 EOF
-    cat > ~/.claude/settings.json <<EOF
-{
-  "enabledPlugins": {
-    "typescript-lsp@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
-    "gopls-lsp@claude-plugins-official": true,
-    "jdtls-lsp@claude-plugins-official": true
-  }
-}
-EOF
+    claude plugin marketplace add anthropics/claude-plugins-official
+    claude plugin install ralph-loop@claude-plugins-official
+    claude plugin install typescript-lsp@claude-plugins-official
+    claude plugin install pyright-lsp@claude-plugins-official
+    claude plugin install gopls-lsp@claude-plugins-official
+    claude plugin install jdtls-lsp@claude-plugins-official
 
     # 安装 Gemini CLI
     case ",$EXT," in *,all,*|*,gemini,*)
@@ -111,7 +109,9 @@ EOF
     ;; esac
 
     # 安装 Codex CLI
-    case ",$EXT," in *,all,*|*,codex,*) npm install -g @openai/codex ;; esac
+    case ",$EXT," in *,all,*|*,codex,*)
+        npm install -g @openai/codex
+    ;; esac
 
     # 安装 Copilot CLI
     case ",$EXT," in *,all,*|*,copilot,*)
@@ -164,6 +164,7 @@ EOF
     rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
 EOX
 
+COPY ./docker/lib/jdt-language-server-latest.tar.gz /tmp/
 RUN <<EOX
     # 安装 java
     case ",$EXT," in *,all,*|*,java,*)
@@ -171,7 +172,11 @@ RUN <<EOX
         apt-get install -y --no-install-recommends openjdk-21-jdk maven
 
         # 安装 LSP服务（java）
-        #
+        mkdir -p ~/.local/share/jdtls
+        # wget -O /tmp/jdt-language-server-latest.tar.gz https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz
+        tar -xzf /tmp/jdt-language-server-latest.tar.gz -C ~/.local/share/jdtls
+        rm -f /tmp/jdt-language-server-latest.tar.gz
+        ln -sf ~/.local/share/jdtls/bin/jdtls /usr/local/bin/jdtls
 
         # 清理
         apt-get clean
@@ -188,10 +193,11 @@ RUN <<EOX
 
         # 安装 LSP服务（go）
         go install golang.org/x/tools/gopls@latest
-        ln -sf ~/go/bin/gopls /usr/bin/gopls
+        ln -sf ~/go/bin/gopls /usr/local/bin/gopls
 
         # 清理
         apt-get clean
+        go clean -modcache -cache
         rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
     ;; esac
 EOX
