@@ -6,29 +6,34 @@ ARG EXT=""
 
 RUN <<EOX
     # 部署 system
+
+    # 修复CA证书
     sed -i 's|http://[^/]*\.ubuntu\.com|https://mirrors.aliyun.com|g' /etc/apt/sources.list.d/ubuntu.sources
     apt-get -o Acquire::https::Verify-Peer=false update -y
     apt-get -o Acquire::https::Verify-Peer=false install -y --no-install-recommends ca-certificates openssl
     update-ca-certificates
 
-    # 清理
-    apt-get clean
-    rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
-
     # 安装基本依赖
     apt-get update -y
     apt-get install -y --no-install-recommends --reinstall ca-certificates openssl
     update-ca-certificates
-    apt-get install -y --no-install-recommends curl wget nano tar zip unzip gzip net-tools iputils-ping make jq git file tree ripgrep less lsof socat ncat sqlite3 dnsutils bc xxd
-    case ",$EXT," in *,all,*|*,docker,*) apt-get install -y --no-install-recommends docker.io ;; esac
+    apt-get install -y --no-install-recommends curl wget net-tools iputils-ping git lsof socat ncat dnsutils \
+                    nano jq file tree ripgrep less bc xxd \
+                    tar zip unzip gzip make sqlite3 \
+                    supervisor
+
+    # 安装 docker
+    case ",$EXT," in *,all,*|*,docker,*)
+        apt-get install -y --no-install-recommends docker.io
+    ;; esac
 
     # 清理
     apt-get clean
-    rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm
 EOX
 
 RUN <<EOX
-    # 部署 python
+    # 安装 python
     apt-get update -y
     apt-get install -y --no-install-recommends python3.12 python3.12-dev python3.12-venv python3-pip
     ln -sf /usr/bin/python3 /usr/bin/python
@@ -37,11 +42,11 @@ RUN <<EOX
 
     # 清理
     apt-get clean
-    rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm
 EOX
 
 RUN <<EOX
-    # 部署 node.js
+    # 安装 node.js
     case "$TARGETARCH" in
       amd64) ARCH_NODE="x64" ;;
       arm64) ARCH_NODE="arm64" ;;
@@ -134,23 +139,23 @@ EOF
 
     # 清理
     npm cache clean --force
-    rm -rf /tmp/* /var/tmp/* /var/log/* ~/.npm ~/.cache
+    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm
 EOX
 
 RUN <<EOX
-    # 部署 java
+    # 安装 java
     case ",$EXT," in *,all,*|*,java,*)
         apt-get update -y
         apt-get install -y --no-install-recommends openjdk-17-jdk maven
 
         # 清理
         apt-get clean
-        rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+        rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm
     ;; esac
 EOX
 
 RUN <<EOX
-    # 部署 go
+    # 安装 go
     case ",$EXT," in *,all,*|*,go,*)
         apt-get update -y
         apt-get install -y --no-install-recommends golang golang-src gcc
@@ -158,19 +163,12 @@ RUN <<EOX
 
         # 清理
         apt-get clean
-        rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+        rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm
     ;; esac
 EOX
 
 RUN <<EOX
-    # 部署 supervisor
-    apt-get update -y
-    apt-get install -y --no-install-recommends supervisor
-
-    # 清理
-    apt-get clean
-    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache
-
+    # 配置 supervisor
     cat > /etc/supervisor/conf.d/s.conf << EOF
 [supervisord]
 user=root
