@@ -5,12 +5,12 @@
 # ==============================================================================
 
 # 默认配置
-BIN_VERSION="1.2.0"
+BIN_VERSION="1.2.2"
 CONTAINER_NAME="myy-$(date +%m%d-%H%M)" # "myy$(date +%Y%m%d%H%M%S)"
 HOST_PATH="$(pwd)"
 CONTAINER_PATH=$HOST_PATH # "/tmp/manyoyo"
 IMAGE_NAME="localhost/xcanwin/manyoyo"
-IMAGE_VERSION="1.2.0-all" # "latest"
+IMAGE_VERSION="1.4.0-all" # "latest"
 EXEC_COMMAND=""
 ENV_FILE=""
 SHOULD_REMOVE=false
