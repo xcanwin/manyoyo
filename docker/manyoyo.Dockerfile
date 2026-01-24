@@ -2,6 +2,7 @@ FROM ubuntu:24.04
 
 ARG TARGETARCH
 ARG NODE_VERSION=24
+ARG EXT=""
 
 RUN <<EOX
     # 部署 system
@@ -19,7 +20,7 @@ RUN <<EOX
     apt-get install -y --no-install-recommends --reinstall ca-certificates openssl
     update-ca-certificates
     apt-get install -y --no-install-recommends curl wget nano tar zip unzip gzip net-tools iputils-ping make jq git file tree ripgrep less lsof socat ncat sqlite3 dnsutils bc xxd
-    # apt-get install -y --no-install-recommends docker.io
+    case ",$EXT," in *,all,*|*,docker,*) apt-get install -y --no-install-recommends docker.io ;; esac
 
     # 清理
     apt-get clean
@@ -57,73 +58,79 @@ RUN <<EOX
     echo '{"bypassPermissionsModeAccepted": true, "hasCompletedOnboarding": true, "env": {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}}' > ~/.claude.json
 
     # 安装 Gemini CLI
-#     npm install -g @google/gemini-cli
-#     mkdir -p ~/.gemini/
-#     cat > ~/.gemini/settings.json <<EOF
-# {
-#   "privacy": {
-#     "usageStatisticsEnabled": false
-#   },
-#   "security": {
-#     "auth": {
-#       "selectedType": "oauth-personal"
-#     }
-#   },
-#   "general": {
-#     "previewFeatures": true,
-#     "disableAutoUpdate": true,
-#     "disableUpdateNag": true
-#   },
-#   "model": {
-#     "name": "gemini-3-pro-preview"
-#   }
-# }
-# EOF
+    case ",$EXT," in *,all,*|*,gemini,*)
+        npm install -g @google/gemini-cli
+        mkdir -p ~/.gemini/
+        cat > ~/.gemini/settings.json <<EOF
+{
+  "privacy": {
+    "usageStatisticsEnabled": false
+  },
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  },
+  "general": {
+    "previewFeatures": true,
+    "disableAutoUpdate": true,
+    "disableUpdateNag": true
+  },
+  "model": {
+    "name": "gemini-3-pro-preview"
+  }
+}
+EOF
+    ;; esac
 
     # 安装 Codex CLI
-    # npm install -g @openai/codex
+    case ",$EXT," in *,all,*|*,codex,*) npm install -g @openai/codex ;; esac
 
     # 安装 Copilot CLI
-#     npm install -g @github/copilot
-#     mkdir -p ~/.copilot/
-#     cat > ~/.copilot/config.json <<EOF
-# {
-#   "banner": "never",
-#   "model": "gemini-3-pro-preview",
-#   "render_markdown": true,
-#   "screen_reader": false,
-#   "theme": "auto"
-# }
-# EOF
+    case ",$EXT," in *,all,*|*,copilot,*)
+        npm install -g @github/copilot
+        mkdir -p ~/.copilot/
+        cat > ~/.copilot/config.json <<EOF
+{
+  "banner": "never",
+  "model": "gemini-3-pro-preview",
+  "render_markdown": true,
+  "screen_reader": false,
+  "theme": "auto"
+}
+EOF
+    ;; esac
 
     # 安装 OpenCode CLI
-#     npm install -g opencode-ai
-#     mkdir -p ~/.config/opencode/
-#     cat > ~/.config/opencode/opencode.json <<EOF
-# {
-#   "$schema": "https://opencode.ai/config.json",
-#   "autoupdate": false,
-#   "permission": "allow",
-#   "model": "myprovider/{env:ANTHROPIC_MODEL}",
-#   "provider": {
-#     "myprovider": {
-#       "npm": "@ai-sdk/openai-compatible",
-#       "options": {
-#         "baseURL": "{env:ANTHROPIC_BASE_URL}",
-#         "apiKey": "{env:ANTHROPIC_AUTH_TOKEN}",
-#         "headers": {
-#           "User-Agent": "opencode-cli"
-#         }
-#       },
-#       "models": {
-#         "{env:ANTHROPIC_MODEL}": {},
-#         "claude-sonnet-4-5-20250929": {},
-#         "gpt-5.2": {}
-#       }
-#     }
-#   }
-# }
+    case ",$EXT," in *,all,*|*,opencode,*)
+        npm install -g opencode-ai
+        mkdir -p ~/.config/opencode/
+        cat > ~/.config/opencode/opencode.json <<EOF
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,
+  "permission": "allow",
+  "model": "myprovider/{env:ANTHROPIC_MODEL}",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "{env:ANTHROPIC_BASE_URL}",
+        "apiKey": "{env:ANTHROPIC_AUTH_TOKEN}",
+        "headers": {
+          "User-Agent": "opencode-cli"
+        }
+      },
+      "models": {
+        "{env:ANTHROPIC_MODEL}": {},
+        "claude-sonnet-4-5-20250929": {},
+        "gpt-5.2": {}
+      }
+    }
+  }
+}
 EOF
+    ;; esac
 
     # 清理
     npm cache clean --force
@@ -131,24 +138,28 @@ EOF
 EOX
 
 RUN <<EOX
-    # # 部署 java
-    # apt-get update -y
-    # apt-get install -y --no-install-recommends openjdk-17-jdk maven
+    # 部署 java
+    case ",$EXT," in *,all,*|*,java,*)
+        apt-get update -y
+        apt-get install -y --no-install-recommends openjdk-17-jdk maven
 
-    # # 清理
-    # apt-get clean
-    # rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+        # 清理
+        apt-get clean
+        rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+    ;; esac
 EOX
 
 RUN <<EOX
-    # # 部署 go
-    # apt-get update -y
-    # apt-get install -y --no-install-recommends golang golang-src gcc
-    # go env -w GOPROXY=https://mirrors.tencentyun.com/go
+    # 部署 go
+    case ",$EXT," in *,all,*|*,go,*)
+        apt-get update -y
+        apt-get install -y --no-install-recommends golang golang-src gcc
+        go env -w GOPROXY=https://mirrors.tencentyun.com/go
 
-    # # 清理
-    # apt-get clean
-    # rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+        # 清理
+        apt-get clean
+        rm -rf /tmp/* /var/tmp/* /var/log/* /var/lib/apt/lists/* ~/.cache
+    ;; esac
 EOX
 
 RUN <<EOX
