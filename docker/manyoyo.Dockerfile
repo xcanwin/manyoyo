@@ -165,10 +165,11 @@ RUN <<EOX
     case ",$EXT," in *,all,*|*,go,*)
         apt-get update -y
         apt-get install -y --no-install-recommends golang golang-src gcc
-        go env -w GOPROXY=https://mirrors.tencentyun.com/go
+        go env -w GOPROXY=https://mirrors.tencent.com/go
 
         # 安装 LSP服务（go）
-        # go install golang.org/x/tools/gopls@latest
+        go install golang.org/x/tools/gopls@latest
+        ln -sf ~/go/bin/gopls /usr/bin/gopls
 
         # 清理
         apt-get clean
