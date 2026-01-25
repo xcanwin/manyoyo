@@ -29,5 +29,8 @@
     "README.md",
     "LICENSE",
     "docker/manyoyo.Dockerfile"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }
