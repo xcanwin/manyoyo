@@ -24,7 +24,7 @@ jobs:
       - run: npm run build --if-present
       - run: npm test
 
-  publish-npm:
+  publish:
     needs: build
     runs-on: ubuntu-latest
     steps:
