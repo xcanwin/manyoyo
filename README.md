@@ -36,20 +36,13 @@ podman image prune -f
 ### Global Installation (Recommended)
 
 ```bash
-cd ./manyoyo/
-npm install -g .
+npm install -g @xcanwin/manyoyo
 ```
 
 ### Local Development
 
 ```bash
-npm link
-```
-
-### Direct Symlink Installation
-
-```bash
-node bin/manyoyo.js --install manyoyo
+npm install -g .
 ```
 
 ## 4. 使用方法
@@ -210,11 +203,10 @@ manyoyo -n socket-dev -m mdsock -x docker ps
 - Node.js >= 14.0.0
 - Docker or Podman
 
-### remove
+### Remove
 
 ```bash
-npm unlink -g manyoyo
-sudo rm -rf /usr/local/bin/manyoyo
+npm uninstall -g @xcanwin/manyoyo
 ```
 
 ## License

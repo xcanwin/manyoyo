@@ -8,6 +8,7 @@ const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const { version: BIN_VERSION } = require('../package.json');
 
 // Helper function to format date like bash $(date +%m%d-%H%M)
 function formatDate() {
@@ -20,7 +21,6 @@ function formatDate() {
 }
 
 // Default configuration
-const BIN_VERSION = "2.0.0";
 let CONTAINER_NAME = `myy-${formatDate()}`;
 let HOST_PATH = process.cwd();
 let CONTAINER_PATH = HOST_PATH;
@@ -72,12 +72,11 @@ function show_help() {
     console.log("  -m|--cm|--cont-mode STRING     设置容器嵌套容器模式");
     console.log("                                 例如 common, dind, mdsock");
     console.log("  --install NAME                 安装manyoyo命令");
-    console.log("                                 例如 manyoyo, myy, docker-cli-plugin");
+    console.log("                                 例如 docker-cli-plugin");
     console.log("  -V|--version                   显示版本");
     console.log("  -h|--help                      显示帮助");
     console.log("");
     console.log(`${BLUE}Example:${NC}`);
-    console.log(`  ./${MANYOYO_NAME}.sh --install manyoyo              安装manyoyo命令`);
     console.log(`  ${MANYOYO_NAME} -n test --ef ./xxx.env -y c         设置环境变量并运行无需确认的AGENT`);
     console.log(`  ${MANYOYO_NAME} -n test -- -c                       恢复之前会话`);
     console.log(`  ${MANYOYO_NAME} -x echo 123                         指定命令执行`);
@@ -105,15 +104,9 @@ function ensure_docker() {
 function install_manyoyo(name) {
     const MANYOYO_FILE = fs.realpathSync(__filename);
     switch (name) {
-        case 'manyoyo':
-            execSync(`sudo ln -f -s "${MANYOYO_FILE}" /usr/local/bin/manyoyo`, { stdio: 'inherit' });
-            break;
-        case 'myy':
-            execSync(`sudo ln -f -s "${MANYOYO_FILE}" /usr/local/bin/myy`, { stdio: 'inherit' });
-            break;
         case 'docker-cli-plugin':
             execSync(`mkdir -p "$HOME/.docker/cli-plugins/"`, { stdio: 'inherit' });
-            execSync(`sudo ln -f -s "${MANYOYO_FILE}" "$HOME/.docker/cli-plugins/docker-manyoyo"`, { stdio: 'inherit' });
+            execSync(`ln -f -s "${MANYOYO_FILE}" "$HOME/.docker/cli-plugins/docker-manyoyo"`, { stdio: 'inherit' });
             break;
         default:
             console.log("");
