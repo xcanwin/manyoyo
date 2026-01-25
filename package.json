@@ -1,5 +1,5 @@
 {
-  "name": "manyoyo",
+  "name": "@xcanwin/manyoyo",
   "version": "2.0.0",
   "description": "AI Agent CLI Sandbox",
   "main": "bin/manyoyo.js",
