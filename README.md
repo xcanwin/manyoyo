@@ -4,6 +4,8 @@
 
 预装常见 Agent 与工具，进一步节省 token。循环自由切换 Agent 和 /bin/bash，进一步提效。
 
+MANYOYO provides an isolated Docker/Podman container environment for running AI agent CLIs safely.
+
 ## 功能亮点
 
 - **多Agent**：支持 claude code, gemini, codex, opencode
@@ -17,8 +19,11 @@
 
 # 使用方法
 
-1. 安装 [podman](https://podman.io/docs/installation)
-2. 编译镜像
+## 1. 安装 podman
+
+- 安装 [podman](https://podman.io/docs/installation)
+
+## 2. 编译镜像
 
 ```
 podman pull ubuntu:24.04
@@ -26,49 +31,186 @@ iv=1.4.0-all && podman build -t localhost/xcanwin/manyoyo:$iv -f docker/manyoyo.
 podman image prune -f
 ```
 
-3. 执行命令
+## 3. 安装 manyoyo（选一种）
 
+### Global Installation (Recommended)
+
+```bash
+cd ./manyoyo/
+npm install -g .
 ```
-./manyoyo.sh --install manyoyo
+
+### Local Development
+
+```bash
+npm install
+npm link
+```
+
+### Direct Symlink Installation
+
+```bash
+node manyoyo.js --install manyoyo
+```
+
+## 4. 使用方法
+
+### Basic Commands
+
+```bash
+# Show help
 manyoyo -h
+
+# Show version
+manyoyo -V
+
+# List all containers
+manyoyo -l
+
+# Create new container with environment file
+manyoyo -n test --ef .env -y c
+
+# Resume existing session
+manyoyo -n test -- -c
+
+# Execute command in interactive shell
+manyoyo -n test -x /bin/bash
+
+# Execute custom command
+manyoyo -n test -x echo "hello world"
+
+# Remove container
+manyoyo -n test --rm
 ```
 
-## 命令行说明
+### Environment Variables
 
+#### String Format
+
+```bash
+# Direct
+manyoyo -e "VAR=value" -x env
+
+# Multiple
+manyoyo -e "A=1" -e "B=2" -x env
 ```
-Usage:
-  manyoyo [OPTIONS]
-  manyoyo [--hp HOST_PATH] [-n CONTAINER_NAME] [--cp CONTAINER_PATH] [--ef ENV_FILE] [--sp COMMAND] [-s COMMAND] [-- COMMAND]
 
-Options:
-  -l|--ls|--list                 列举容器
-  --hp|--host-path PATH          设置宿主机工作目录 (默认当前路径)
-  -n|--cn|--cont-name NAME       设置容器名称
-  --cp|--cont-path PATH          设置容器工作目录
-  --in|--image-name NAME         指定镜像名称
-  --iv|--image-ver VERSION       指定镜像版本
-  -e|--env STRING                设置环境变量
-  --ef|--env-file ENV_FILE       设置环境变量通过文件
-  -v|--volume STRING             绑定挂载卷
-  --rm|--remove-cont             删除-n容器
-  --sp|--shell-prefix COMMAND    临时环境变量 (作为-s前缀)
-  -s|--shell COMMAND             指定命令执行
-  --|--shell-suffix COMMAND      指定命令参数, --后面全部直传 (作为-s后缀)
-  -x|--shell-full COMMAND        指定完整命令执行, -x后面全部直传 (代替--sp和-s和--命令)
-  -y|--yolo CLI                  使AGENT无需确认 (代替-s命令)
-                                 例如 claude / c, gemini / gm, codex / cx, opencode / oc
-  -m|--cm|--cont-mode STRING     设置容器嵌套容器模式
-                                 例如 common, dind, mdsock
-  --install NAME                 安装manyoyo命令
-                                 例如 manyoyo, myy, docker-cli-plugin
-  -V|--version                   显示版本
-  -h|--help                      显示帮助
+#### File Format
 
-Example:
-  ./manyoyo.sh --install manyoyo              安装manyoyo命令
-  manyoyo -n test --ef ./xxx.env -y c         设置环境变量并运行无需确认的AGENT
-  manyoyo -n test -- -c                       恢复之前会话
-  manyoyo -x echo 123                         指定命令执行
-  manyoyo -n test --ef ./xxx.env -x claude    设置环境变量并运行
-  manyoyo -n test -x claude -c                恢复之前会话
+```bash
+# From file
+manyoyo --ef .env -x env
 ```
+
+Environment files (`.env`) support the following formats:
+
+```bash
+# With export statement
+export ANTHROPIC_BASE_URL="https://api.anthropic.com"
+# export CLAUDE_CODE_OAUTH_TOKEN="sk-xxxxxxxx"
+export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
+export API_TIMEOUT_MS=3000000
+export ANTHROPIC_MODEL="claude-sonnet-4-5"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-5"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
+export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
+
+# Simple key=value
+API_KEY=your-api-key-here
+
+# Quoted values (quotes will be stripped)
+MESSAGE="Hello World"
+PATH='/usr/local/bin'
+```
+
+### AI CLI Shortcuts (skip permissions)
+
+```bash
+# Claude Code
+manyoyo -y c          # or: claude, cc
+
+# Gemini
+manyoyo -y gm         # or: gemini, g
+
+# Codex
+manyoyo -y cx         # or: codex
+
+# OpenCode
+manyoyo -y oc         # or: opencode
+```
+
+### Interactive Session Management
+
+After exiting a container session, you'll be prompted with options:
+
+- `y` - Keep container running in background (default)
+- `n` - Delete the container
+- `1` - Re-enter with the original command
+- `s` - Execute a new command
+- `i` - Enter interactive shell
+
+### Container Modes
+
+#### Docker-in-Docker Development
+
+```bash
+# Docker-in-Docker (safe nested containers)
+# Create a container with Docker-in-Docker support
+manyoyo -n docker-dev -m dind -x /bin/bash
+
+# Inside the container, start dockerd
+nohup dockerd &
+
+# Now you can use docker commands inside the container
+docker run hello-world
+```
+
+#### Mount Docker socket Development
+
+```bash
+# Mount Docker socket (dangerous - container can access host)
+manyoyo -n socket-dev -m mdsock -x docker ps
+```
+
+### Command-Line Options
+
+| Option | Aliases | Description |
+|--------|---------|-------------|
+| `-l` | `--ls`, `--list` | List all manyoyo containers |
+| `--hp PATH` | `--host-path` | Set host working directory (default: current path) |
+| `-n NAME` | `--cn`, `--cont-name` | Set container name |
+| `--cp PATH` | `--cont-path` | Set container working directory |
+| `--in NAME` | `--image-name` | Specify image name |
+| `--iv VERSION` | `--image-ver` | Specify image version |
+| `-e STRING` | `--env` | Set environment variable |
+| `--ef FILE` | `--env-file` | Load environment variables from file |
+| `-v STRING` | `--volume` | Bind mount volume |
+| `--rm` | `--rmc`, `--remove-cont` | Remove container |
+| `--sp CMD` | `--shell-prefix` | Temporary environment variable (prefix for -s) |
+| `-s CMD` | `--shell` | Specify command to execute |
+| `--` | `--ss`, `--shell-suffix` | Command arguments (suffix for -s) |
+| `-x CMD` | `--sf`, `--shell-full` | Full command (replaces --sp, -s, and --) |
+| `-y CLI` | `--yolo` | Run AI agent without confirmation |
+| `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, mdsock) |
+| `--install NAME` | | Install manyoyo command |
+| `-V` | `--version` | Show version |
+| `-h` | `--help` | Show help |
+
+## 其他说明
+
+### Default Configuration
+
+- **Container Name**: `myy-{MMDD-HHMM}` (auto-generated based on current time)
+- **Host Path**: Current working directory
+- **Container Path**: Same as host path
+- **Image**: `localhost/xcanwin/manyoyo:xxx`
+
+### Requirements
+
+- Node.js >= 14.0.0
+- Docker or Podman
+
+## License
+
+MIT

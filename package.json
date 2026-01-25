@@ -1,0 +1,35 @@
+{
+  "name": "manyoyo",
+  "version": "2.0.0",
+  "description": "AI Agent CLI Sandbox",
+  "main": "manyoyo.js",
+  "bin": {
+    "manyoyo": "./manyoyo.js"
+  },
+  "scripts": {
+    "install-link": "npm link",
+    "test": "node manyoyo.js --help"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "sandbox",
+    "docker",
+    "cli",
+    "container",
+    "development"
+  ],
+  "author": "xcanwin",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xcanwin/manyoyo"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "manyoyo.js",
+    "README.md"
+  ]
+}
