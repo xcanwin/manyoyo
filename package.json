@@ -2,13 +2,13 @@
   "name": "manyoyo",
   "version": "2.0.0",
   "description": "AI Agent CLI Sandbox",
-  "main": "manyoyo.js",
+  "main": "bin/manyoyo.js",
   "bin": {
-    "manyoyo": "./manyoyo.js"
+    "manyoyo": "./bin/manyoyo.js"
   },
   "scripts": {
     "install-link": "npm link",
-    "test": "node manyoyo.js --help"
+    "test": "node bin/manyoyo.js --help"
   },
   "keywords": [
     "ai",

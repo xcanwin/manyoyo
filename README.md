@@ -43,14 +43,13 @@ npm install -g .
 ### Local Development
 
 ```bash
-npm install
 npm link
 ```
 
 ### Direct Symlink Installation
 
 ```bash
-node manyoyo.js --install manyoyo
+node bin/manyoyo.js --install manyoyo
 ```
 
 ## 4. 使用方法
@@ -210,6 +209,13 @@ manyoyo -n socket-dev -m mdsock -x docker ps
 
 - Node.js >= 14.0.0
 - Docker or Podman
+
+### remove
+
+```bash
+npm unlink -g manyoyo
+sudo rm -rf /usr/local/bin/manyoyo
+```
 
 ## License
 
