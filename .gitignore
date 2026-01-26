@@ -12,5 +12,6 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
-docker/cache/
+docker/cache/*
+!docker/cache/.gitkeep
 docker/lib/

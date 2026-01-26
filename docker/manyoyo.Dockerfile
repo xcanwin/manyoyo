@@ -1,3 +1,60 @@
+# ==============================================================================
+# Stage 1: 缓存准备阶段 - 智能检测缓存或下载
+# ==============================================================================
+FROM ubuntu:24.04 AS cache-stage
+
+ARG TARGETARCH
+
+# 复制缓存目录（可能为空）
+COPY ./docker/cache/ /cache/
+
+RUN <<EOX
+    # 确定架构
+    case "$TARGETARCH" in
+      amd64) ARCH_NODE="x64"; ARCH_GO="amd64" ;;
+      arm64) ARCH_NODE="arm64"; ARCH_GO="arm64" ;;
+      *)     ARCH_NODE="$TARGETARCH"; ARCH_GO="$TARGETARCH" ;;
+    esac
+
+    # Node.js: 检测缓存，不存在则下载
+    mkdir -p /opt/node
+    if ls /cache/node/node-*-linux-${ARCH_NODE}.tar.gz 1> /dev/null 2>&1; then
+        echo "使用 Node.js 缓存"
+        NODE_TAR=$(ls /cache/node/node-*-linux-${ARCH_NODE}.tar.gz | head -1)
+        tar -xzf ${NODE_TAR} -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE'
+    else
+        echo "下载 Node.js"
+        NVM_NODEJS_ORG_MIRROR=https://mirrors.tencent.com/nodejs-release/
+        NODE_TAR=$(curl -sL ${NVM_NODEJS_ORG_MIRROR}/latest-v24.x/SHASUMS256.txt | grep linux-${ARCH_NODE}.tar.gz | awk '{print $2}')
+        curl -fsSL ${NVM_NODEJS_ORG_MIRROR}/latest-v24.x/${NODE_TAR} | tar -xz -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE'
+    fi
+
+    # JDT LSP: 检测缓存，不存在则下载
+    mkdir -p /opt/jdtls
+    if [ -f /cache/jdtls/jdt-language-server-latest.tar.gz ]; then
+        echo "使用 JDT LSP 缓存"
+        tar -xzf /cache/jdtls/jdt-language-server-latest.tar.gz -C /opt/jdtls
+    else
+        echo "下载 JDT LSP"
+        curl -fsSL https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz | tar -xz -C /opt/jdtls
+    fi
+
+    # gopls: 检测缓存，不存在则下载
+    mkdir -p /opt/gopls
+    if [ -f /cache/gopls/gopls-linux-${ARCH_GO} ]; then
+        echo "使用 gopls 缓存"
+        cp /cache/gopls/gopls-linux-${ARCH_GO} /opt/gopls/gopls
+        chmod +x /opt/gopls/gopls
+    else
+        echo "下载 gopls (需要 go 环境)"
+        # gopls 需要编译，这里跳过，在最终阶段处理
+        touch /opt/gopls/.no-cache
+    fi
+EOX
+
+# ==============================================================================
+# Stage 2: 最终镜像
+# ==============================================================================
 FROM ubuntu:24.04
 
 ARG TARGETARCH
@@ -45,16 +102,11 @@ RUN <<EOX
     rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
 EOX
 
+# 从 cache-stage 复制 Node.js（缓存或下载）
+COPY --from=cache-stage /opt/node /usr/local
+
 RUN <<EOX
-    # 安装 node.js
-    case "$TARGETARCH" in
-      amd64) ARCH_NODE="x64" ;;
-      arm64) ARCH_NODE="arm64" ;;
-      *)     ARCH_NODE="$TARGETARCH" ;;
-    esac
-    NVM_NODEJS_ORG_MIRROR=https://mirrors.tencent.com/nodejs-release/
-    NODE_TAR=$(curl -sL ${NVM_NODEJS_ORG_MIRROR}/latest-v${NODE_VERSION}.x/SHASUMS256.txt | grep linux-${ARCH_NODE}.tar.gz | awk '{print $2}')
-    curl -fsSL ${NVM_NODEJS_ORG_MIRROR}/latest-v${NODE_VERSION}.x/${NODE_TAR} | tar -xz -C /usr/local --strip-components=1 --exclude='*.md' --exclude='LICENSE'
+    # 配置 node.js
     npm config set registry=https://mirrors.tencent.com/npm/
     npm install -g npm
 
@@ -164,17 +216,16 @@ EOF
     rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
 EOX
 
+# 从 cache-stage 复制 JDT LSP（缓存或下载）
+COPY --from=cache-stage /opt/jdtls /root/.local/share/jdtls
+
 RUN <<EOX
     # 安装 java
     case ",$EXT," in *,all,*|*,java,*)
         apt-get update -y
         apt-get install -y --no-install-recommends openjdk-21-jdk maven
 
-        # 安装 LSP服务（java）
-        mkdir -p ~/.local/share/jdtls
-        wget -O /tmp/jdt-language-server-latest.tar.gz https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz
-        tar -xzf /tmp/jdt-language-server-latest.tar.gz -C ~/.local/share/jdtls
-        rm -f /tmp/jdt-language-server-latest.tar.gz
+        # 配置 LSP服务（java）
         ln -sf ~/.local/share/jdtls/bin/jdtls /usr/local/bin/jdtls
 
         # 清理
@@ -182,6 +233,9 @@ RUN <<EOX
         rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
     ;; esac
 EOX
+
+# 从 cache-stage 复制 gopls（缓存或下载）
+COPY --from=cache-stage /opt/gopls /tmp/gopls-cache
 
 RUN <<EOX
     # 安装 go
@@ -191,8 +245,16 @@ RUN <<EOX
         go env -w GOPROXY=https://mirrors.tencent.com/go
 
         # 安装 LSP服务（go）
-        go install golang.org/x/tools/gopls@latest
-        ln -sf ~/go/bin/gopls /usr/local/bin/gopls
+        if [ -f /tmp/gopls-cache/gopls ] && [ ! -f /tmp/gopls-cache/.no-cache ]; then
+            # 使用缓存
+            cp /tmp/gopls-cache/gopls /usr/local/bin/gopls
+            chmod +x /usr/local/bin/gopls
+        else
+            # 下载编译
+            go install golang.org/x/tools/gopls@latest
+            ln -sf ~/go/bin/gopls /usr/local/bin/gopls
+        fi
+        rm -rf /tmp/gopls-cache
 
         # 清理
         apt-get clean

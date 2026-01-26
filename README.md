@@ -49,14 +49,15 @@ npm install -g .
 # 拉取基础镜像
 podman pull ubuntu:24.04
 
-# 使用 manyoyo 构建镜像（推荐）
-manyoyo --ib all                     # 构建 all 版本（包含所有工具）
-manyoyo --ib common                  # 构建 common 版本（基础版本）
-manyoyo --ib go,codex,java,gemini    # 构建 go 版本（包含 go,codex,java,gemini 工具）
+# 使用 manyoyo 构建镜像（推荐，自动使用缓存加速）
+manyoyo --ib all                     # 构建 all 版本（自动使用缓存，首次下载后 2 天内极速构建）
+manyoyo --ib common                  # 构建 common 版本
+manyoyo --ib go,codex,java,gemini    # 构建自定义组合版本
 
-# 使用本地缓存加速构建（推荐，首次会自动下载缓存，2天内重复构建极速）
-manyoyo --ib all --ibc               # 使用缓存构建，首次自动下载 Node.js、JDT LSP、gopls 等到本地
-manyoyo --ib all --ibc               # 2天内再次构建，直接使用本地缓存，速度提升约 5 倍
+# 工作原理：
+# - 首次构建：自动下载 Node.js、JDT LSP、gopls 等到 docker/cache/
+# - 2天内再次构建：直接使用本地缓存，速度提升约 5 倍
+# - 缓存过期后：自动重新下载最新版本
 
 # 自定义镜像名称和版本
 manyoyo --ib all --in myimage --iv 2.0.0
@@ -214,8 +215,7 @@ docker ps -a
 | `-x CMD` | `--sf`, `--shell-full` | 完整命令（替代 --sp, -s 和 --） |
 | `-y CLI` | `--yolo` | 无需确认运行 AI 智能体 |
 | `-m MODE` | `--cm`, `--cont-mode` | 设置容器模式（common, dind, mdsock） |
-| `--ib EXT` | `--image-build` | 构建镜像，EXT 为镜像变体（all, go, common） |
-| `--ibc` | `--image-build-cache` | 构建镜像时使用本地缓存加速（配合 --ib 使用） |
+| `--ib EXT` | `--image-build` | 构建镜像，EXT 为镜像变体，自动使用缓存加速 |
 | `--ip` | `--image-prune` | 清理悬空镜像和 `<none>` 镜像 |
 | `--install NAME` | | 安装 manyoyo 命令 |
 | `-V` | `--version` | 显示版本 |

@@ -49,14 +49,15 @@ After installing manyoyo, use the built-in command to build images:
 # Pull base image
 podman pull ubuntu:24.04
 
-# Build using manyoyo (Recommended)
-manyoyo --ib all                     # Build all version (includes all tools)
-manyoyo --ib common                  # Build common version (basic version)
-manyoyo --ib go,codex,java,gemini    # Build go version (includes go,codex,java,gemini tools)
+# Build using manyoyo (Recommended, auto-cache enabled)
+manyoyo --ib all                     # Build all version (auto-cache, blazing fast after first build within 2 days)
+manyoyo --ib common                  # Build common version
+manyoyo --ib go,codex,java,gemini    # Build custom combination
 
-# Use local cache to speed up builds (Recommended, auto-downloads cache on first run, blazing fast within 2 days)
-manyoyo --ib all --ibc               # Build with cache, auto-downloads Node.js, JDT LSP, gopls etc. to local
-manyoyo --ib all --ibc               # Rebuild within 2 days uses local cache, ~5x faster
+# How it works:
+# - First build: Auto-downloads Node.js, JDT LSP, gopls etc. to docker/cache/
+# - Rebuild within 2 days: Uses local cache, ~5x faster
+# - After cache expires: Auto-downloads latest versions
 
 # Custom image name and version
 manyoyo --ib all --in myimage --iv 2.0.0
@@ -214,8 +215,7 @@ docker ps -a
 | `-x CMD` | `--sf`, `--shell-full` | Full command (replaces --sp, -s, and --) |
 | `-y CLI` | `--yolo` | Run AI agent without confirmation |
 | `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, mdsock) |
-| `--ib EXT` | `--image-build` | Build image, EXT is image variant (all, go, common) |
-| `--ibc` | `--image-build-cache` | Use local cache to speed up image build (use with --ib) |
+| `--ib EXT` | `--image-build` | Build image with auto-cache, EXT is image variant |
 | `--ip` | `--image-prune` | Clean dangling images and `<none>` images |
 | `--install NAME` | | Install manyoyo command |
 | `-V` | `--version` | Show version |

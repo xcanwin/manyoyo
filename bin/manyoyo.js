@@ -33,7 +33,6 @@ let ENV_FILE = "";
 let SHOULD_REMOVE = false;
 let SHOULD_BUILD_IMAGE = false;
 let BUILD_IMAGE_EXT = "";
-let USE_BUILD_CACHE = false;
 let CONTAINER_ENVS = [];
 let CONTAINER_VOLUMES = [];
 let MANYOYO_NAME = "manyoyo";
@@ -88,7 +87,7 @@ function showHelp() {
     console.log("                                 例如 common, dind, mdsock");
     console.log("  --ib|--image-build EXT         构建镜像，EXT 为镜像变体，逗号分割");
     console.log("                                 例如 \"common\" (默认值), \"all\", \"go,codex,java,gemini\" ...");
-    console.log("  --ibc|--image-build-cache      构建镜像时使用本地缓存加速 (配合 --ib 使用)");
+    console.log("                                 (自动使用缓存加速，缓存过期后自动重新下载)");
     console.log("  --ip|--image-prune             清理悬空镜像和 <none> 镜像");
     console.log("  --install NAME                 安装manyoyo命令");
     console.log("                                 例如 docker-cli-plugin");
@@ -364,14 +363,14 @@ async function prepareBuildCache(ext) {
     // Prepare Node.js cache
     const nodeCacheDir = path.join(cacheDir, 'node');
     const nodeVersion = 24;
-    const nodeKey = `node-v${nodeVersion}-linux-${archNode}`;
+    const nodeKey = 'node/';  // 使用目录级别的相对路径
 
     if (!fs.existsSync(nodeCacheDir)) {
         fs.mkdirSync(nodeCacheDir, { recursive: true });
     }
 
-    const existingNodeTar = fs.readdirSync(nodeCacheDir).find(f => f.startsWith('node-') && f.includes(`linux-${archNode}`));
-    if (!existingNodeTar || isExpired(nodeKey)) {
+    const hasNodeCache = fs.existsSync(nodeCacheDir) && fs.readdirSync(nodeCacheDir).some(f => f.startsWith('node-') && f.includes(`linux-${archNode}`));
+    if (!hasNodeCache || isExpired(nodeKey)) {
         console.log(`${YELLOW}下载 Node.js ${nodeVersion} (${archNode})...${NC}`);
         const mirror = 'https://mirrors.tencent.com/nodejs-release';
         try {
@@ -380,6 +379,7 @@ async function prepareBuildCache(ext) {
             const nodeTargetPath = path.join(nodeCacheDir, shasum);
             execSync(`curl -fsSL "${nodeUrl}" -o "${nodeTargetPath}"`, { stdio: 'inherit' });
             timestamps[nodeKey] = now.toISOString();
+            fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 2));
             console.log(`${GREEN}✓ Node.js 下载完成${NC}`);
         } catch (e) {
             console.error(`${RED}错误: Node.js 下载失败${NC}`);
@@ -392,8 +392,8 @@ async function prepareBuildCache(ext) {
     // Prepare JDT LSP cache (for java variant)
     if (ext === 'all' || ext.includes('java')) {
         const jdtlsCacheDir = path.join(cacheDir, 'jdtls');
-        const jdtlsKey = 'jdt-language-server-latest';
-        const jdtlsPath = path.join(jdtlsCacheDir, 'jdt-language-server-latest.tar.gz');
+        const jdtlsKey = 'jdtls/jdt-language-server-latest.tar.gz';  // 使用相对路径
+        const jdtlsPath = path.join(cacheDir, jdtlsKey);
 
         if (!fs.existsSync(jdtlsCacheDir)) {
             fs.mkdirSync(jdtlsCacheDir, { recursive: true });
@@ -405,6 +405,7 @@ async function prepareBuildCache(ext) {
             try {
                 execSync(`curl -fsSL "${jdtUrl}" -o "${jdtlsPath}"`, { stdio: 'inherit' });
                 timestamps[jdtlsKey] = now.toISOString();
+                fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 2));
                 console.log(`${GREEN}✓ JDT LSP 下载完成${NC}`);
             } catch (e) {
                 console.error(`${RED}错误: JDT LSP 下载失败${NC}`);
@@ -418,8 +419,8 @@ async function prepareBuildCache(ext) {
     // Prepare gopls cache (for go variant)
     if (ext === 'all' || ext.includes('go')) {
         const goplsCacheDir = path.join(cacheDir, 'gopls');
-        const goplsKey = `gopls-linux-${arch}`;
-        const goplsPath = path.join(goplsCacheDir, `gopls-linux-${arch}`);
+        const goplsKey = `gopls/gopls-linux-${arch}`;  // 使用相对路径
+        const goplsPath = path.join(cacheDir, goplsKey);
 
         if (!fs.existsSync(goplsCacheDir)) {
             fs.mkdirSync(goplsCacheDir, { recursive: true });
@@ -430,18 +431,36 @@ async function prepareBuildCache(ext) {
             try {
                 // Download using go install in temporary environment
                 const tmpGoPath = path.join(cacheDir, '.tmp-go');
+
+                // Clean up existing temp directory (with go clean for mod cache)
                 if (fs.existsSync(tmpGoPath)) {
-                    execSync(`rm -rf "${tmpGoPath}"`, { stdio: 'inherit' });
+                    try {
+                        execSync(`GOPATH="${tmpGoPath}" go clean -modcache 2>/dev/null || true`, { stdio: 'inherit' });
+                        execSync(`chmod -R u+w "${tmpGoPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+                        execSync(`rm -rf "${tmpGoPath}"`, { stdio: 'inherit' });
+                    } catch (e) {
+                        // Ignore cleanup errors
+                    }
                 }
                 fs.mkdirSync(tmpGoPath, { recursive: true });
 
                 execSync(`GOPATH="${tmpGoPath}" GOOS=linux GOARCH=${arch} go install golang.org/x/tools/gopls@latest`, { stdio: 'inherit' });
                 execSync(`cp "${tmpGoPath}/bin/linux_${arch}/gopls" "${goplsPath}" || cp "${tmpGoPath}/bin/gopls" "${goplsPath}"`, { stdio: 'inherit' });
                 execSync(`chmod +x "${goplsPath}"`, { stdio: 'inherit' });
-                execSync(`rm -rf "${tmpGoPath}"`, { stdio: 'inherit' });
 
+                // Save timestamp immediately after successful download
                 timestamps[goplsKey] = now.toISOString();
+                fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 2));
                 console.log(`${GREEN}✓ gopls 下载完成${NC}`);
+
+                // Clean up temp directory (with go clean for mod cache)
+                try {
+                    execSync(`GOPATH="${tmpGoPath}" go clean -modcache 2>/dev/null || true`, { stdio: 'inherit' });
+                    execSync(`chmod -R u+w "${tmpGoPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+                    execSync(`rm -rf "${tmpGoPath}"`, { stdio: 'inherit' });
+                } catch (e) {
+                    console.log(`${YELLOW}提示: 临时目录清理失败，可手动删除 ${tmpGoPath}${NC}`);
+                }
             } catch (e) {
                 console.error(`${RED}错误: gopls 下载失败${NC}`);
                 throw e;
@@ -456,22 +475,19 @@ async function prepareBuildCache(ext) {
     console.log(`${GREEN}✅ 构建缓存准备完成${NC}\n`);
 }
 
-async function buildImage(ext, imageName, imageVersion, useCache) {
+async function buildImage(ext, imageName, imageVersion) {
     // Use package.json imageVersion if not specified
     const version = imageVersion || IMAGE_VERSION_BASE;
     const fullImageTag = `${imageName}:${version}-${ext}`;
 
     console.log(`${CYAN}🔨 正在构建镜像: ${YELLOW}${fullImageTag}${NC}`);
-    console.log(`${BLUE}构建参数: EXT=${ext}, 使用缓存=${useCache ? '是' : '否'}${NC}\n`);
+    console.log(`${BLUE}构建参数: EXT=${ext}${NC}\n`);
 
-    // Prepare cache if needed
-    if (useCache) {
-        await prepareBuildCache(ext);
-    }
+    // Prepare cache (自动检测并下载缺失的文件)
+    await prepareBuildCache(ext);
 
     // Find Dockerfile path
-    const dockerfileName = useCache ? 'manyoyo-cache.Dockerfile' : 'manyoyo.Dockerfile';
-    const dockerfilePath = path.join(__dirname, `../docker/${dockerfileName}`);
+    const dockerfilePath = path.join(__dirname, '../docker/manyoyo.Dockerfile');
     if (!fs.existsSync(dockerfilePath)) {
         console.error(`${RED}错误: 找不到 Dockerfile: ${dockerfilePath}${NC}`);
         process.exit(1);
@@ -649,12 +665,6 @@ function parseArguments(argv) {
                 SHOULD_BUILD_IMAGE = true;
                 BUILD_IMAGE_EXT = args[i + 1];
                 i += 2;
-                break;
-
-            case '--ibc':
-            case '--image-build-cache':
-                USE_BUILD_CACHE = true;
-                i += 1;
                 break;
 
             case '--ip':
@@ -858,7 +868,7 @@ async function main() {
 
         // 3. Handle image build operation
         if (SHOULD_BUILD_IMAGE) {
-            await buildImage(BUILD_IMAGE_EXT, IMAGE_NAME, IMAGE_VERSION.split('-')[0], USE_BUILD_CACHE);
+            await buildImage(BUILD_IMAGE_EXT, IMAGE_NAME, IMAGE_VERSION.split('-')[0]);
             process.exit(0);
         }
 
