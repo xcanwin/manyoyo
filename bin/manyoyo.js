@@ -214,7 +214,7 @@ function setContMode(mode) {
         case 'mount-docker-socket':
         case 'mdsock':
         case 's':
-            CONT_MODE = "--volume /var/run/docker.sock:/var/run/docker.sock";
+            CONT_MODE = "--privileged --volume /var/run/docker.sock:/var/run/docker.sock";
             console.log(`${RED}⚠️ 开启危险的容器嵌套容器模式, 危害: 容器可访问宿主机文件${NC}`);
             break;
         default:
