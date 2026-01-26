@@ -589,7 +589,7 @@ async function handlePostExit(defaultCommand) {
     console.log("");
     getHelloTip(CONTAINER_NAME, defaultCommand);
 
-    const reply = await askQuestion(`❔ 会话已结束。是否保留此后台容器 ${CONTAINER_NAME}? [ y=默认保留, n=删除, 1=首次命令进入, s=执行命令, i=交互式SHELL ]: `);
+    const reply = await askQuestion(`❔ 会话已结束。是否保留此后台容器 ${CONTAINER_NAME}? [ y=默认保留, n=删除, 1=首次命令进入, x=执行命令, i=交互式SHELL ]: `);
     console.log("");
 
     const firstChar = reply.trim().toLowerCase()[0];
@@ -605,7 +605,7 @@ async function handlePostExit(defaultCommand) {
         const newArgs = ['-n', CONTAINER_NAME];
         process.argv = [process.argv[0], process.argv[1], ...newArgs];
         await main();
-    } else if (firstChar === 's') {
+    } else if (firstChar === 'x') {
         const command = await askQuestion('❔ 输入要执行的命令: ');
         console.log(`${GREEN}✅ 离开当前连接，执行命令。${NC}`);
         const newArgs = ['-n', CONTAINER_NAME, '-x', command];

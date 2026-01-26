@@ -1,0 +1,218 @@
+[ [English](README_EN.md) ] | [中文](../README.md)
+
+---
+
+# MANYOYO (Man-Yo-Yo)
+
+**MANYOYO** is an AI agent security sandbox that is safe, efficient, and token-saving. Designed specifically for Agent YOLO mode to protect the host machine.
+
+Pre-installed with common agents and tools to further save tokens. Freely switch between agents and `/bin/bash` in a loop for enhanced efficiency.
+
+**MANYOYO** provides an isolated Docker/Podman container environment for running AI agent CLIs safely.
+
+## Key Features
+
+- **Multi-Agent Support**: Supports claude code, gemini, codex, opencode
+- **Security Isolation**: Protects host machine, supports safe nested containers (Docker-in-Docker)
+- **Quick Launch**: Quickly enable common Agent YOLO / SOLO mode (e.g., claude --dangerously-skip-permissions)
+- **Convenient Operations**: Quick access to `/bin/bash`
+- **Session Recovery**: Install Skills Marketplace to quickly resume sessions
+- **Flexible Customization**: Support custom `BASEURL`, `AUTH_TOKEN`, and other variables
+- **Configuration Management**: Quick import of configuration files
+- **Advanced Mode**: Supports dangerous nested containers (mount-docker-socket), custom sandbox images
+
+# Usage
+
+## 1. Install podman
+
+- Install [podman](https://podman.io/docs/installation)
+
+## 2. Build Image
+
+```
+podman pull ubuntu:24.04
+iv=1.4.0-all && podman build -t localhost/xcanwin/manyoyo:$iv -f docker/manyoyo.Dockerfile . --build-arg EXT=all --no-cache
+podman image prune -f
+```
+
+## 3. Install manyoyo (Choose One)
+
+### Global Installation (Recommended)
+
+```bash
+npm install -g @xcanwin/manyoyo
+```
+
+### Local Development
+
+```bash
+npm install -g .
+```
+
+## 4. Usage
+
+### Basic Commands
+
+```bash
+# Show help
+manyoyo -h
+
+# Show version
+manyoyo -V
+
+# List all containers
+manyoyo -l
+
+# Create new container with environment file
+manyoyo -n test --ef .env -y c
+
+# Resume existing session
+manyoyo -n test -- -c
+
+# Execute command in interactive shell
+manyoyo -n test -x /bin/bash
+
+# Execute custom command
+manyoyo -n test -x echo "hello world"
+
+# Remove container
+manyoyo -n test --rm
+```
+
+### Environment Variables
+
+#### String Format
+
+```bash
+# Direct
+manyoyo -e "VAR=value" -x env
+
+# Multiple
+manyoyo -e "A=1" -e "B=2" -x env
+```
+
+#### File Format
+
+```bash
+# From file
+manyoyo --ef .env -x env
+```
+
+Environment files (`.env`) support the following formats:
+
+```bash
+# With export statement
+export ANTHROPIC_BASE_URL="https://api.anthropic.com"
+# export CLAUDE_CODE_OAUTH_TOKEN="sk-xxxxxxxx"
+export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
+export API_TIMEOUT_MS=3000000
+export ANTHROPIC_MODEL="claude-sonnet-4-5"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-5"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
+export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
+
+# Simple key=value
+API_KEY=your-api-key-here
+
+# Quoted values (quotes will be stripped)
+MESSAGE="Hello World"
+PATH='/usr/local/bin'
+```
+
+### AI CLI Shortcuts (skip permissions)
+
+```bash
+# Claude Code
+manyoyo -y c          # or: claude, cc
+
+# Gemini
+manyoyo -y gm         # or: gemini, g
+
+# Codex
+manyoyo -y cx         # or: codex
+
+# OpenCode
+manyoyo -y oc         # or: opencode
+```
+
+### Interactive Session Management
+
+After exiting a container session, you'll be prompted with options:
+
+- `y` - Keep container running in background (default)
+- `n` - Delete the container
+- `1` - Re-enter with the original command
+- `x` - Execute a new command
+- `i` - Enter interactive shell
+
+### Container Modes
+
+#### Docker-in-Docker Development
+
+```bash
+# Docker-in-Docker (safe nested containers)
+# Create a container with Docker-in-Docker support
+manyoyo -n docker-dev -m dind -x /bin/bash
+
+# Inside the container, start dockerd
+nohup dockerd &
+
+# Now you can use docker commands inside the container
+docker run hello-world
+```
+
+#### Mount Docker socket Development
+
+```bash
+# Mount Docker socket (dangerous - container can access host)
+manyoyo -n socket-dev -m mdsock -x docker ps
+```
+
+### Command-Line Options
+
+| Option | Aliases | Description |
+|--------|---------|-------------|
+| `-l` | `--ls`, `--list` | List all manyoyo containers |
+| `--hp PATH` | `--host-path` | Set host working directory (default: current path) |
+| `-n NAME` | `--cn`, `--cont-name` | Set container name |
+| `--cp PATH` | `--cont-path` | Set container working directory |
+| `--in NAME` | `--image-name` | Specify image name |
+| `--iv VERSION` | `--image-ver` | Specify image version |
+| `-e STRING` | `--env` | Set environment variable |
+| `--ef FILE` | `--env-file` | Load environment variables from file |
+| `-v STRING` | `--volume` | Bind mount volume |
+| `--rm` | `--rmc`, `--remove-cont` | Remove container |
+| `--sp CMD` | `--shell-prefix` | Temporary environment variable (prefix for -s) |
+| `-s CMD` | `--shell` | Specify command to execute |
+| `--` | `--ss`, `--shell-suffix` | Command arguments (suffix for -s) |
+| `-x CMD` | `--sf`, `--shell-full` | Full command (replaces --sp, -s, and --) |
+| `-y CLI` | `--yolo` | Run AI agent without confirmation |
+| `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, mdsock) |
+| `--install NAME` | | Install manyoyo command |
+| `-V` | `--version` | Show version |
+| `-h` | `--help` | Show help |
+
+## Additional Information
+
+### Default Configuration
+
+- **Container Name**: `myy-{MMDD-HHMM}` (auto-generated based on current time)
+- **Host Path**: Current working directory
+- **Container Path**: Same as host path
+- **Image**: `localhost/xcanwin/manyoyo:xxx`
+
+### Requirements
+
+- Node.js >= 24.0.0
+- Docker or Podman
+
+### Uninstall
+
+```bash
+npm uninstall -g @xcanwin/manyoyo
+```
+
+## License
+
+MIT

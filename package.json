@@ -1,6 +1,6 @@
 {
   "name": "@xcanwin/manyoyo",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "AI Agent CLI Security Sandbox",
   "keywords": [
     "ai", "agent", "sandbox", "docker", "cli", "container", "development"
@@ -26,8 +26,9 @@
     "node": ">=14.0.0"
   },
   "files": [
-    "manyoyo.js",
+    "bin/manyoyo.js",
     "README.md",
+    "docs/README_EN.md",
     "LICENSE",
     "docker/manyoyo.Dockerfile"
   ]
