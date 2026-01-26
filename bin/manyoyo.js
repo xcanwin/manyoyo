@@ -33,6 +33,7 @@ let ENV_FILE = "";
 let SHOULD_REMOVE = false;
 let SHOULD_BUILD_IMAGE = false;
 let BUILD_IMAGE_EXT = "";
+let USE_BUILD_CACHE = false;
 let CONTAINER_ENVS = [];
 let CONTAINER_VOLUMES = [];
 let MANYOYO_NAME = "manyoyo";
@@ -87,6 +88,7 @@ function showHelp() {
     console.log("                                 例如 common, dind, mdsock");
     console.log("  --ib|--image-build EXT         构建镜像，EXT 为镜像变体，逗号分割");
     console.log("                                 例如 \"common\" (默认值), \"all\", \"go,codex,java,gemini\" ...");
+    console.log("  --ibc|--image-build-cache      构建镜像时使用本地缓存加速 (配合 --ib 使用)");
     console.log("  --ip|--image-prune             清理悬空镜像和 <none> 镜像");
     console.log("  --install NAME                 安装manyoyo命令");
     console.log("                                 例如 docker-cli-plugin");
@@ -325,16 +327,151 @@ function pruneDanglingImages() {
     console.log(`${GREEN}✅ 清理完成${NC}`);
 }
 
-async function buildImage(ext, imageName, imageVersion) {
+async function prepareBuildCache(ext) {
+    const cacheDir = path.join(__dirname, '../docker/cache');
+    const timestampFile = path.join(cacheDir, '.timestamps.json');
+    const cacheTTLDays = 2;
+
+    console.log(`\n${CYAN}准备构建缓存...${NC}`);
+
+    // Create cache directory
+    if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir, { recursive: true });
+    }
+
+    // Load timestamps
+    let timestamps = {};
+    if (fs.existsSync(timestampFile)) {
+        try {
+            timestamps = JSON.parse(fs.readFileSync(timestampFile, 'utf-8'));
+        } catch (e) {
+            timestamps = {};
+        }
+    }
+
+    const now = new Date();
+    const isExpired = (key) => {
+        if (!timestamps[key]) return true;
+        const cachedTime = new Date(timestamps[key]);
+        const diffDays = (now - cachedTime) / (1000 * 60 * 60 * 24);
+        return diffDays > cacheTTLDays;
+    };
+
+    // Determine architecture
+    const arch = process.arch === 'x64' ? 'amd64' : process.arch === 'arm64' ? 'arm64' : process.arch;
+    const archNode = arch === 'amd64' ? 'x64' : 'arm64';
+
+    // Prepare Node.js cache
+    const nodeCacheDir = path.join(cacheDir, 'node');
+    const nodeVersion = 24;
+    const nodeKey = `node-v${nodeVersion}-linux-${archNode}`;
+
+    if (!fs.existsSync(nodeCacheDir)) {
+        fs.mkdirSync(nodeCacheDir, { recursive: true });
+    }
+
+    const existingNodeTar = fs.readdirSync(nodeCacheDir).find(f => f.startsWith('node-') && f.includes(`linux-${archNode}`));
+    if (!existingNodeTar || isExpired(nodeKey)) {
+        console.log(`${YELLOW}下载 Node.js ${nodeVersion} (${archNode})...${NC}`);
+        const mirror = 'https://mirrors.tencent.com/nodejs-release';
+        try {
+            const shasum = execSync(`curl -sL ${mirror}/latest-v${nodeVersion}.x/SHASUMS256.txt | grep linux-${archNode}.tar.gz | awk '{print $2}'`, { encoding: 'utf-8' }).trim();
+            const nodeUrl = `${mirror}/latest-v${nodeVersion}.x/${shasum}`;
+            const nodeTargetPath = path.join(nodeCacheDir, shasum);
+            execSync(`curl -fsSL "${nodeUrl}" -o "${nodeTargetPath}"`, { stdio: 'inherit' });
+            timestamps[nodeKey] = now.toISOString();
+            console.log(`${GREEN}✓ Node.js 下载完成${NC}`);
+        } catch (e) {
+            console.error(`${RED}错误: Node.js 下载失败${NC}`);
+            throw e;
+        }
+    } else {
+        console.log(`${GREEN}✓ Node.js 缓存已存在${NC}`);
+    }
+
+    // Prepare JDT LSP cache (for java variant)
+    if (ext === 'all' || ext.includes('java')) {
+        const jdtlsCacheDir = path.join(cacheDir, 'jdtls');
+        const jdtlsKey = 'jdt-language-server-latest';
+        const jdtlsPath = path.join(jdtlsCacheDir, 'jdt-language-server-latest.tar.gz');
+
+        if (!fs.existsSync(jdtlsCacheDir)) {
+            fs.mkdirSync(jdtlsCacheDir, { recursive: true });
+        }
+
+        if (!fs.existsSync(jdtlsPath) || isExpired(jdtlsKey)) {
+            console.log(`${YELLOW}下载 JDT Language Server...${NC}`);
+            const jdtUrl = 'https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz';
+            try {
+                execSync(`curl -fsSL "${jdtUrl}" -o "${jdtlsPath}"`, { stdio: 'inherit' });
+                timestamps[jdtlsKey] = now.toISOString();
+                console.log(`${GREEN}✓ JDT LSP 下载完成${NC}`);
+            } catch (e) {
+                console.error(`${RED}错误: JDT LSP 下载失败${NC}`);
+                throw e;
+            }
+        } else {
+            console.log(`${GREEN}✓ JDT LSP 缓存已存在${NC}`);
+        }
+    }
+
+    // Prepare gopls cache (for go variant)
+    if (ext === 'all' || ext.includes('go')) {
+        const goplsCacheDir = path.join(cacheDir, 'gopls');
+        const goplsKey = `gopls-linux-${arch}`;
+        const goplsPath = path.join(goplsCacheDir, `gopls-linux-${arch}`);
+
+        if (!fs.existsSync(goplsCacheDir)) {
+            fs.mkdirSync(goplsCacheDir, { recursive: true });
+        }
+
+        if (!fs.existsSync(goplsPath) || isExpired(goplsKey)) {
+            console.log(`${YELLOW}下载 gopls (${arch})...${NC}`);
+            try {
+                // Download using go install in temporary environment
+                const tmpGoPath = path.join(cacheDir, '.tmp-go');
+                if (fs.existsSync(tmpGoPath)) {
+                    execSync(`rm -rf "${tmpGoPath}"`, { stdio: 'inherit' });
+                }
+                fs.mkdirSync(tmpGoPath, { recursive: true });
+
+                execSync(`GOPATH="${tmpGoPath}" GOOS=linux GOARCH=${arch} go install golang.org/x/tools/gopls@latest`, { stdio: 'inherit' });
+                execSync(`cp "${tmpGoPath}/bin/linux_${arch}/gopls" "${goplsPath}" || cp "${tmpGoPath}/bin/gopls" "${goplsPath}"`, { stdio: 'inherit' });
+                execSync(`chmod +x "${goplsPath}"`, { stdio: 'inherit' });
+                execSync(`rm -rf "${tmpGoPath}"`, { stdio: 'inherit' });
+
+                timestamps[goplsKey] = now.toISOString();
+                console.log(`${GREEN}✓ gopls 下载完成${NC}`);
+            } catch (e) {
+                console.error(`${RED}错误: gopls 下载失败${NC}`);
+                throw e;
+            }
+        } else {
+            console.log(`${GREEN}✓ gopls 缓存已存在${NC}`);
+        }
+    }
+
+    // Save timestamps
+    fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 2));
+    console.log(`${GREEN}✅ 构建缓存准备完成${NC}\n`);
+}
+
+async function buildImage(ext, imageName, imageVersion, useCache) {
     // Use package.json imageVersion if not specified
     const version = imageVersion || IMAGE_VERSION_BASE;
     const fullImageTag = `${imageName}:${version}-${ext}`;
 
     console.log(`${CYAN}🔨 正在构建镜像: ${YELLOW}${fullImageTag}${NC}`);
-    console.log(`${BLUE}构建参数: EXT=${ext}${NC}\n`);
+    console.log(`${BLUE}构建参数: EXT=${ext}, 使用缓存=${useCache ? '是' : '否'}${NC}\n`);
+
+    // Prepare cache if needed
+    if (useCache) {
+        await prepareBuildCache(ext);
+    }
 
     // Find Dockerfile path
-    const dockerfilePath = path.join(__dirname, '../docker/manyoyo.Dockerfile');
+    const dockerfileName = useCache ? 'manyoyo-cache.Dockerfile' : 'manyoyo.Dockerfile';
+    const dockerfilePath = path.join(__dirname, `../docker/${dockerfileName}`);
     if (!fs.existsSync(dockerfilePath)) {
         console.error(`${RED}错误: 找不到 Dockerfile: ${dockerfilePath}${NC}`);
         process.exit(1);
@@ -512,6 +649,12 @@ function parseArguments(argv) {
                 SHOULD_BUILD_IMAGE = true;
                 BUILD_IMAGE_EXT = args[i + 1];
                 i += 2;
+                break;
+
+            case '--ibc':
+            case '--image-build-cache':
+                USE_BUILD_CACHE = true;
+                i += 1;
                 break;
 
             case '--ip':
@@ -715,7 +858,7 @@ async function main() {
 
         // 3. Handle image build operation
         if (SHOULD_BUILD_IMAGE) {
-            await buildImage(BUILD_IMAGE_EXT, IMAGE_NAME, IMAGE_VERSION.split('-')[0]);
+            await buildImage(BUILD_IMAGE_EXT, IMAGE_NAME, IMAGE_VERSION.split('-')[0], USE_BUILD_CACHE);
             process.exit(0);
         }
 

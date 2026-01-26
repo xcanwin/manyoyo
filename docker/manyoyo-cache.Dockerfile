@@ -45,16 +45,17 @@ RUN <<EOX
     rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
 EOX
 
+COPY ./docker/cache/node/ /tmp/node-cache/
 RUN <<EOX
-    # 安装 node.js
+    # 安装 node.js (使用缓存)
     case "$TARGETARCH" in
       amd64) ARCH_NODE="x64" ;;
       arm64) ARCH_NODE="arm64" ;;
       *)     ARCH_NODE="$TARGETARCH" ;;
     esac
-    NVM_NODEJS_ORG_MIRROR=https://mirrors.tencent.com/nodejs-release/
-    NODE_TAR=$(curl -sL ${NVM_NODEJS_ORG_MIRROR}/latest-v${NODE_VERSION}.x/SHASUMS256.txt | grep linux-${ARCH_NODE}.tar.gz | awk '{print $2}')
-    curl -fsSL ${NVM_NODEJS_ORG_MIRROR}/latest-v${NODE_VERSION}.x/${NODE_TAR} | tar -xz -C /usr/local --strip-components=1 --exclude='*.md' --exclude='LICENSE'
+    NODE_TAR=$(ls /tmp/node-cache/node-*-linux-${ARCH_NODE}.tar.gz | head -1)
+    tar -xzf ${NODE_TAR} -C /usr/local --strip-components=1 --exclude='*.md' --exclude='LICENSE'
+    rm -rf /tmp/node-cache
     npm config set registry=https://mirrors.tencent.com/npm/
     npm install -g npm
 
@@ -164,17 +165,17 @@ EOF
     rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
 EOX
 
+COPY ./docker/cache/jdtls/ /tmp/jdtls-cache/
 RUN <<EOX
     # 安装 java
     case ",$EXT," in *,all,*|*,java,*)
         apt-get update -y
         apt-get install -y --no-install-recommends openjdk-21-jdk maven
 
-        # 安装 LSP服务（java）
+        # 安装 LSP服务（java，使用缓存）
         mkdir -p ~/.local/share/jdtls
-        wget -O /tmp/jdt-language-server-latest.tar.gz https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz
-        tar -xzf /tmp/jdt-language-server-latest.tar.gz -C ~/.local/share/jdtls
-        rm -f /tmp/jdt-language-server-latest.tar.gz
+        tar -xzf /tmp/jdtls-cache/jdt-language-server-latest.tar.gz -C ~/.local/share/jdtls
+        rm -rf /tmp/jdtls-cache
         ln -sf ~/.local/share/jdtls/bin/jdtls /usr/local/bin/jdtls
 
         # 清理
@@ -183,6 +184,7 @@ RUN <<EOX
     ;; esac
 EOX
 
+COPY ./docker/cache/gopls/ /tmp/gopls-cache/
 RUN <<EOX
     # 安装 go
     case ",$EXT," in *,all,*|*,go,*)
@@ -190,9 +192,17 @@ RUN <<EOX
         apt-get install -y --no-install-recommends golang golang-src gcc
         go env -w GOPROXY=https://mirrors.tencent.com/go
 
-        # 安装 LSP服务（go）
-        go install golang.org/x/tools/gopls@latest
+        # 安装 LSP服务（go，使用缓存）
+        case "$TARGETARCH" in
+          amd64) ARCH_GO="amd64" ;;
+          arm64) ARCH_GO="arm64" ;;
+          *)     ARCH_GO="$TARGETARCH" ;;
+        esac
+        mkdir -p ~/go/bin
+        cp /tmp/gopls-cache/gopls-linux-${ARCH_GO} ~/go/bin/gopls
+        chmod +x ~/go/bin/gopls
         ln -sf ~/go/bin/gopls /usr/local/bin/gopls
+        rm -rf /tmp/gopls-cache
 
         # 清理
         apt-get clean
