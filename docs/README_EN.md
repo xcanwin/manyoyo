@@ -1,4 +1,4 @@
-[ [English](README_EN.md) ] | [中文](../README.md)
+<< [English](README_EN.md) >> | [中文](../README.md)
 
 ---
 
@@ -54,9 +54,16 @@ manyoyo --ib all                     # Build all version (includes all tools)
 manyoyo --ib common                  # Build common version (basic version)
 manyoyo --ib go,codex,java,gemini    # Build go version (includes go,codex,java,gemini tools)
 
+# Use local cache to speed up builds (Recommended, auto-downloads cache on first run, blazing fast within 2 days)
+manyoyo --ib all --ibc               # Build with cache, auto-downloads Node.js, JDT LSP, gopls etc. to local
+manyoyo --ib all --ibc               # Rebuild within 2 days uses local cache, ~5x faster
+
 # Custom image name and version
 manyoyo --ib all --in myimage --iv 2.0.0
 # Builds: myimage:2.0.0-all
+
+# Clean images
+manyoyo --ip                         # Clean dangling images and <none> images
 
 # Or build manually (Not recommended)
 iv=1.4.0 && podman build -t localhost/xcanwin/manyoyo:$iv-all -f docker/manyoyo.Dockerfile . --build-arg EXT=all --no-cache
@@ -208,6 +215,8 @@ docker ps -a
 | `-y CLI` | `--yolo` | Run AI agent without confirmation |
 | `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, mdsock) |
 | `--ib EXT` | `--image-build` | Build image, EXT is image variant (all, go, common) |
+| `--ibc` | `--image-build-cache` | Use local cache to speed up image build (use with --ib) |
+| `--ip` | `--image-prune` | Clean dangling images and `<none>` images |
 | `--install NAME` | | Install manyoyo command |
 | `-V` | `--version` | Show version |
 | `-h` | `--help` | Show help |

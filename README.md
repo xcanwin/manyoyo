@@ -1,4 +1,4 @@
-[English](docs/README_EN.md) | [ [中文](README.md) ]
+[English](docs/README_EN.md) | << [中文](README.md) >>
 
 ---
 
@@ -54,9 +54,16 @@ manyoyo --ib all                     # 构建 all 版本（包含所有工具）
 manyoyo --ib common                  # 构建 common 版本（基础版本）
 manyoyo --ib go,codex,java,gemini    # 构建 go 版本（包含 go,codex,java,gemini 工具）
 
+# 使用本地缓存加速构建（推荐，首次会自动下载缓存，2天内重复构建极速）
+manyoyo --ib all --ibc               # 使用缓存构建，首次自动下载 Node.js、JDT LSP、gopls 等到本地
+manyoyo --ib all --ibc               # 2天内再次构建，直接使用本地缓存，速度提升约 5 倍
+
 # 自定义镜像名称和版本
 manyoyo --ib all --in myimage --iv 2.0.0
 # 构建：myimage:2.0.0-all
+
+# 清理镜像
+manyoyo --ip                         # 清理悬空镜像和 <none> 镜像
 
 # 或手动构建（不推荐）
 iv=1.4.0 && podman build -t localhost/xcanwin/manyoyo:$iv-all -f docker/manyoyo.Dockerfile . --build-arg EXT=all --no-cache
@@ -208,6 +215,8 @@ docker ps -a
 | `-y CLI` | `--yolo` | 无需确认运行 AI 智能体 |
 | `-m MODE` | `--cm`, `--cont-mode` | 设置容器模式（common, dind, mdsock） |
 | `--ib EXT` | `--image-build` | 构建镜像，EXT 为镜像变体（all, go, common） |
+| `--ibc` | `--image-build-cache` | 构建镜像时使用本地缓存加速（配合 --ib 使用） |
+| `--ip` | `--image-prune` | 清理悬空镜像和 `<none>` 镜像 |
 | `--install NAME` | | 安装 manyoyo 命令 |
 | `-V` | `--version` | 显示版本 |
 | `-h` | `--help` | 显示帮助 |
