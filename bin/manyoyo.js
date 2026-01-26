@@ -87,6 +87,7 @@ function showHelp() {
     console.log("                                 例如 common, dind, mdsock");
     console.log("  --ib|--image-build EXT         构建镜像，EXT 为镜像变体，逗号分割");
     console.log("                                 例如 \"common\" (默认值), \"all\", \"go,codex,java,gemini\" ...");
+    console.log("  --ip|--image-prune             清理悬空镜像和 <none> 镜像");
     console.log("  --install NAME                 安装manyoyo命令");
     console.log("                                 例如 docker-cli-plugin");
     console.log("  -V|--version                   显示版本");
@@ -300,6 +301,30 @@ function getContList() {
     }
 }
 
+function pruneDanglingImages() {
+    console.log(`\n${YELLOW}清理悬空镜像...${NC}`);
+    execSync(`${DOCKER_CMD} image prune -f`, { stdio: 'inherit' });
+
+    // Remove remaining <none> images
+    try {
+        const imagesOutput = execSync(`${DOCKER_CMD} images -a --format "{{.ID}} {{.Repository}}"`, { encoding: 'utf-8' });
+        const noneImages = imagesOutput
+            .split('\n')
+            .filter(line => line.includes('<none>'))
+            .map(line => line.split(' ')[0])
+            .filter(id => id);
+
+        if (noneImages.length > 0) {
+            console.log(`${YELLOW}清理剩余的 <none> 镜像 (${noneImages.length} 个)...${NC}`);
+            execSync(`${DOCKER_CMD} rmi -f ${noneImages.join(' ')}`, { stdio: 'inherit' });
+        }
+    } catch (e) {
+        // Ignore errors if no <none> images found
+    }
+
+    console.log(`${GREEN}✅ 清理完成${NC}`);
+}
+
 async function buildImage(ext, imageName, imageVersion) {
     // Use package.json imageVersion if not specified
     const version = imageVersion || IMAGE_VERSION_BASE;
@@ -331,9 +356,7 @@ async function buildImage(ext, imageName, imageVersion) {
         console.log(`  manyoyo -n test --in ${imageName} --iv ${version}-${ext} -y c`);
 
         // Prune dangling images
-        console.log(`\n${YELLOW}清理悬空镜像...${NC}`);
-        execSync(`${DOCKER_CMD} image prune -f`, { stdio: 'inherit' });
-        console.log(`${GREEN}✅ 清理完成${NC}`);
+        pruneDanglingImages();
     } catch (e) {
         console.error(`${RED}错误: 镜像构建失败${NC}`);
         process.exit(1);
@@ -490,6 +513,11 @@ function parseArguments(argv) {
                 BUILD_IMAGE_EXT = args[i + 1];
                 i += 2;
                 break;
+
+            case '--ip':
+            case '--image-prune':
+                pruneDanglingImages();
+                process.exit(0);
 
             case '--install':
                 installManyoyo(args[i + 1]);
