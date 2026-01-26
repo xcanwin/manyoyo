@@ -173,14 +173,18 @@ manyoyo -n docker-dev -m dind -x /bin/bash
 nohup dockerd &
 
 # 现在可以在容器内使用 docker 命令
-docker run hello-world
+docker ps -a
 ```
 
 #### 挂载 Docker Socket 开发
 
 ```bash
-# 挂载 Docker Socket（危险 - 容器可以访问宿主机）
-manyoyo -n socket-dev -m mdsock -x docker ps
+# 挂载 Docker Socket（危险的！！！容器可以访问和执行宿主机的一切）
+# 创建挂载 /var/run/docker.sock 的容器
+manyoyo -n socket-dev -m mdsock -x /bin/bash
+
+# 现在可以在容器内使用 docker 命令
+docker ps -a
 ```
 
 ### 命令行选项

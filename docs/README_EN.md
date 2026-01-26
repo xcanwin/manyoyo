@@ -173,14 +173,18 @@ manyoyo -n docker-dev -m dind -x /bin/bash
 nohup dockerd &
 
 # Now you can use docker commands inside the container
-docker run hello-world
+docker ps -a
 ```
 
 #### Mount Docker socket Development
 
 ```bash
-# Mount Docker socket (dangerous - container can access host)
-manyoyo -n socket-dev -m mdsock -x docker ps
+# Mount Docker socket (dangerous!!! containers can access and execute everything on the host)
+# Create a container mounting /var/run/docker.sock
+manyoyo -n socket-dev -m mdsock -x /bin/bash
+
+# Now you can use docker commands inside the container
+docker ps -a
 ```
 
 ### Command-Line Options
