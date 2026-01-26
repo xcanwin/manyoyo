@@ -23,19 +23,7 @@ Pre-installed with common agents and tools to further save tokens. Freely switch
 
 # Usage
 
-## 1. Install podman
-
-- Install [podman](https://podman.io/docs/installation)
-
-## 2. Build Image
-
-```
-podman pull ubuntu:24.04
-iv=1.4.0-all && podman build -t localhost/xcanwin/manyoyo:$iv -f docker/manyoyo.Dockerfile . --build-arg EXT=all --no-cache
-podman image prune -f
-```
-
-## 3. Install manyoyo (Choose One)
+## 1. Install manyoyo
 
 ### Global Installation (Recommended)
 
@@ -47,6 +35,32 @@ npm install -g @xcanwin/manyoyo
 
 ```bash
 npm install -g .
+```
+
+## 2. Install podman
+
+- Install [podman](https://podman.io/docs/installation)
+
+## 3. Build Image
+
+After installing manyoyo, use the built-in command to build images:
+
+```bash
+# Pull base image
+podman pull ubuntu:24.04
+
+# Build using manyoyo (Recommended)
+manyoyo --ib all                     # Build all version (includes all tools)
+manyoyo --ib common                  # Build common version (basic version)
+manyoyo --ib go,codex,java,gemini    # Build go version (includes go,codex,java,gemini tools)
+
+# Custom image name and version
+manyoyo --ib all --in myimage --iv 2.0.0
+# Builds: myimage:2.0.0-all
+
+# Or build manually (Not recommended)
+iv=1.4.0 && podman build -t localhost/xcanwin/manyoyo:$iv-all -f docker/manyoyo.Dockerfile . --build-arg EXT=all --no-cache
+podman image prune -f
 ```
 
 ## 4. Usage
@@ -189,6 +203,7 @@ manyoyo -n socket-dev -m mdsock -x docker ps
 | `-x CMD` | `--sf`, `--shell-full` | Full command (replaces --sp, -s, and --) |
 | `-y CLI` | `--yolo` | Run AI agent without confirmation |
 | `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, mdsock) |
+| `--ib EXT` | `--image-build` | Build image, EXT is image variant (all, go, common) |
 | `--install NAME` | | Install manyoyo command |
 | `-V` | `--version` | Show version |
 | `-h` | `--help` | Show help |

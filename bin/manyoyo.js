@@ -8,7 +8,7 @@ const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
-const { version: BIN_VERSION } = require('../package.json');
+const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_BASE } = require('../package.json');
 
 // Helper function to format date like bash $(date +%m%d-%H%M)
 function formatDate() {
@@ -25,12 +25,14 @@ let CONTAINER_NAME = `myy-${formatDate()}`;
 let HOST_PATH = process.cwd();
 let CONTAINER_PATH = HOST_PATH;
 let IMAGE_NAME = "localhost/xcanwin/manyoyo";
-let IMAGE_VERSION = "1.4.0-all";
+let IMAGE_VERSION = `${IMAGE_VERSION_BASE}-all`;
 let EXEC_COMMAND = "";
 let EXEC_COMMAND_PREFIX = "";
 let EXEC_COMMAND_SUFFIX = "";
 let ENV_FILE = "";
 let SHOULD_REMOVE = false;
+let SHOULD_BUILD_IMAGE = false;
+let BUILD_IMAGE_EXT = "";
 let CONTAINER_ENVS = [];
 let CONTAINER_VOLUMES = [];
 let MANYOYO_NAME = "manyoyo";
@@ -83,12 +85,15 @@ function showHelp() {
     console.log("                                 例如 claude / c, gemini / gm, codex / cx, opencode / oc");
     console.log("  -m|--cm|--cont-mode STRING     设置容器嵌套容器模式");
     console.log("                                 例如 common, dind, mdsock");
+    console.log("  --ib|--image-build EXT         构建镜像，EXT 为镜像变体，逗号分割");
+    console.log("                                 例如 \"common\" (默认值), \"all\", \"go,codex,java,gemini\" ...");
     console.log("  --install NAME                 安装manyoyo命令");
     console.log("                                 例如 docker-cli-plugin");
     console.log("  -V|--version                   显示版本");
     console.log("  -h|--help                      显示帮助");
     console.log("");
     console.log(`${BLUE}Example:${NC}`);
+    console.log(`  ${MANYOYO_NAME} --ib all                            构建 all 版本镜像`);
     console.log(`  ${MANYOYO_NAME} -n test --ef ./xxx.env -y c         设置环境变量并运行无需确认的AGENT`);
     console.log(`  ${MANYOYO_NAME} -n test -- -c                       恢复之前会话`);
     console.log(`  ${MANYOYO_NAME} -x echo 123                         指定命令执行`);
@@ -295,6 +300,46 @@ function getContList() {
     }
 }
 
+async function buildImage(ext, imageName, imageVersion) {
+    // Use package.json imageVersion if not specified
+    const version = imageVersion || IMAGE_VERSION_BASE;
+    const fullImageTag = `${imageName}:${version}-${ext}`;
+
+    console.log(`${CYAN}🔨 正在构建镜像: ${YELLOW}${fullImageTag}${NC}`);
+    console.log(`${BLUE}构建参数: EXT=${ext}${NC}\n`);
+
+    // Find Dockerfile path
+    const dockerfilePath = path.join(__dirname, '../docker/manyoyo.Dockerfile');
+    if (!fs.existsSync(dockerfilePath)) {
+        console.error(`${RED}错误: 找不到 Dockerfile: ${dockerfilePath}${NC}`);
+        process.exit(1);
+    }
+
+    // Build command
+    const buildCmd = `${DOCKER_CMD} build -t "${fullImageTag}" -f "${dockerfilePath}" "${path.join(__dirname, '..')}" --build-arg EXT=${ext} --no-cache`;
+
+    console.log(`${BLUE}准备执行命令:${NC}`);
+    console.log(`${buildCmd}\n`);
+
+    const reply = await askQuestion(`❔ 是否继续构建? [ 直接回车=继续, ctrl+c=取消 ]: `);
+    console.log("");
+
+    try {
+        execSync(buildCmd, { stdio: 'inherit' });
+        console.log(`\n${GREEN}✅ 镜像构建成功: ${fullImageTag}${NC}`);
+        console.log(`${BLUE}使用镜像:${NC}`);
+        console.log(`  manyoyo -n test --in ${imageName} --iv ${version}-${ext} -y c`);
+
+        // Prune dangling images
+        console.log(`\n${YELLOW}清理悬空镜像...${NC}`);
+        execSync(`${DOCKER_CMD} image prune -f`, { stdio: 'inherit' });
+        console.log(`${GREEN}✅ 清理完成${NC}`);
+    } catch (e) {
+        console.error(`${RED}错误: 镜像构建失败${NC}`);
+        process.exit(1);
+    }
+}
+
 // ==============================================================================
 // Main Function Helpers
 // ==============================================================================
@@ -436,6 +481,13 @@ function parseArguments(argv) {
             case '--cm':
             case '--cont-mode':
                 setContMode(args[i + 1]);
+                i += 2;
+                break;
+
+            case '--ib':
+            case '--image-build':
+                SHOULD_BUILD_IMAGE = true;
+                BUILD_IMAGE_EXT = args[i + 1];
                 i += 2;
                 break;
 
@@ -633,19 +685,25 @@ async function main() {
         // 2. Parse command-line arguments
         parseArguments(process.argv);
 
-        // 3. Handle remove container operation
+        // 3. Handle image build operation
+        if (SHOULD_BUILD_IMAGE) {
+            await buildImage(BUILD_IMAGE_EXT, IMAGE_NAME, IMAGE_VERSION.split('-')[0]);
+            process.exit(0);
+        }
+
+        // 4. Handle remove container operation
         handleRemoveContainer();
 
-        // 4. Validate host path safety
+        // 5. Validate host path safety
         validateHostPath();
 
-        // 5. Setup container (create or connect)
+        // 6. Setup container (create or connect)
         const defaultCommand = await setupContainer();
 
-        // 6. Execute command in container
+        // 7. Execute command in container
         executeInContainer(defaultCommand);
 
-        // 7. Handle post-exit interactions
+        // 8. Handle post-exit interactions
         await handlePostExit(defaultCommand);
 
     } catch (e) {

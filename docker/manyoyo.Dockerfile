@@ -2,7 +2,7 @@ FROM ubuntu:24.04
 
 ARG TARGETARCH
 ARG NODE_VERSION=24
-ARG EXT=""
+ARG EXT="common"
 
 RUN <<EOX
     # 部署 system
