@@ -494,7 +494,7 @@ async function buildImage(ext, imageName, imageVersion) {
     }
 
     // Build command
-    const buildCmd = `${DOCKER_CMD} build -t "${fullImageTag}" -f "${dockerfilePath}" "${path.join(__dirname, '..')}" --build-arg EXT=${ext} --no-cache`;
+    const buildCmd = `${DOCKER_CMD} build -t "${fullImageTag}" -f "${dockerfilePath}" "${path.join(__dirname, '..')}" --build-arg EXT=${ext} --load --progress=plain --no-cache`;
 
     console.log(`${BLUE}准备执行命令:${NC}`);
     console.log(`${buildCmd}\n`);
