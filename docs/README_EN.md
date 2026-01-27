@@ -1,4 +1,4 @@
-<< [English](README_EN.md) >> | [中文](../README.md)
+**<[English](README_EN.md)>** | [中文](../README.md)
 
 ---
 
@@ -173,11 +173,10 @@ After exiting a container session, you'll be prompted with options:
 # Create a container with Docker-in-Docker support
 manyoyo -n docker-dev -m dind -x /bin/bash
 
-# Inside the container, start dockerd
-nohup dockerd &
+podman ps -a             # Now you can use podman commands inside the container
 
-# Now you can use docker commands inside the container
-docker ps -a
+nohup dockerd &          # Inside the container, start dockerd
+docker ps -a             # Now you can use docker commands inside the container
 ```
 
 #### Mount Docker socket Development
@@ -185,10 +184,11 @@ docker ps -a
 ```bash
 # Mount Docker socket (dangerous!!! containers can access and execute everything on the host)
 # Create a container mounting /var/run/docker.sock
-manyoyo -n socket-dev -m mdsock -x /bin/bash
+manyoyo -n socket-dev -m sock -x /bin/bash
 
-# Now you can use docker commands inside the container
-docker ps -a
+podman ps -a             # Now you can use podman commands inside the container
+
+docker ps -a             # Now you can use docker commands inside the container
 ```
 
 ### Command-Line Options
@@ -210,7 +210,7 @@ docker ps -a
 | `--` | `--ss`, `--shell-suffix` | Command arguments (suffix for -s) |
 | `-x CMD` | `--sf`, `--shell-full` | Full command (replaces --sp, -s, and --) |
 | `-y CLI` | `--yolo` | Run AI agent without confirmation |
-| `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, mdsock) |
+| `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, sock) |
 | `--ib` | `--image-build` | Build image |
 | `--iba` | `--image-build-arg` | Pass arguments to a Dockerfile during image build |
 | `--ip` | `--image-prune` | Clean dangling images and `<none>` images |
@@ -229,8 +229,8 @@ docker ps -a
 
 ### Requirements
 
-- Node.js >= 24.0.0
-- Docker or Podman
+- Node.js >= 22.0.0
+- Podman or Docker
 
 ### Uninstall
 

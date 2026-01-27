@@ -79,6 +79,11 @@ RUN <<EOX
                     tar zip unzip gzip make sqlite3 \
                     supervisor
 
+    # 安装 podman
+    case ",$TOOL," in *,full,*|*,podman,*)
+        apt-get install -y --no-install-recommends podman
+    ;; esac
+
     # 安装 docker
     case ",$TOOL," in *,full,*|*,docker,*)
         apt-get install -y --no-install-recommends docker.io

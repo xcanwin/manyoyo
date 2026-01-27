@@ -1,4 +1,4 @@
-[English](docs/README_EN.md) | << [中文](README.md) >>
+[English](docs/README_EN.md) | **<[中文](README.md)>**
 
 ---
 
@@ -173,11 +173,10 @@ manyoyo -y oc         # 或: opencode
 # 创建支持 Docker-in-Docker 的容器
 manyoyo -n docker-dev -m dind -x /bin/bash
 
-# 在容器内启动 dockerd
-nohup dockerd &
+podman ps -a             # 现在可以在容器内使用 podman 命令
 
-# 现在可以在容器内使用 docker 命令
-docker ps -a
+nohup dockerd &          # 在容器内启动 dockerd
+docker ps -a             # 现在可以在容器内使用 docker 命令
 ```
 
 #### 挂载 Docker Socket 开发
@@ -185,10 +184,11 @@ docker ps -a
 ```bash
 # 挂载 Docker Socket（危险的！！！容器可以访问和执行宿主机的一切）
 # 创建挂载 /var/run/docker.sock 的容器
-manyoyo -n socket-dev -m mdsock -x /bin/bash
+manyoyo -n socket-dev -m sock -x /bin/bash
 
-# 现在可以在容器内使用 docker 命令
-docker ps -a
+podman ps -a             # 现在可以在容器内使用 podman 命令
+
+docker ps -a             # 现在可以在容器内使用 docker 命令
 ```
 
 ### 命令行选项
@@ -210,7 +210,7 @@ docker ps -a
 | `--` | `--ss`, `--shell-suffix` | 命令参数（作为 -s 的后缀） |
 | `-x CMD` | `--sf`, `--shell-full` | 完整命令（替代 --sp, -s 和 --） |
 | `-y CLI` | `--yolo` | 无需确认运行 AI 智能体 |
-| `-m MODE` | `--cm`, `--cont-mode` | 设置容器模式（common, dind, mdsock） |
+| `-m MODE` | `--cm`, `--cont-mode` | 设置容器模式（common, dind, sock） |
 | `--ib` | `--image-build` | 构建镜像 |
 | `--iba XXX=YYY` | `--image-build-arg` | 构建镜像时传参给dockerfile |
 | `--ip` | `--image-prune` | 清理悬空镜像和 `<none>` 镜像 |
@@ -229,8 +229,8 @@ docker ps -a
 
 ### 系统要求
 
-- Node.js >= 24.0.0
-- Docker 或 Podman
+- Node.js >= 22.0.0
+- Podman 或 Docker
 
 ### 卸载
 

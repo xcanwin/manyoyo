@@ -1,7 +1,7 @@
 {
   "name": "@xcanwin/manyoyo",
-  "version": "3.4.5",
-  "imageVersion": "1.6.2",
+  "version": "3.5.0",
+  "imageVersion": "1.6.3",
   "description": "AI Agent CLI Security Sandbox",
   "keywords": [
     "ai", "agent", "sandbox", "docker", "cli", "container", "development"
@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/xcanwin/manyoyo",
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=22.0.0"
   },
   "files": [
     "bin/manyoyo.js",

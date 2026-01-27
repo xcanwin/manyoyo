@@ -84,7 +84,7 @@ function showHelp() {
     console.log("  -y|--yolo CLI                    使AGENT无需确认 (代替-s命令)");
     console.log("                                   例如 claude / c, gemini / gm, codex / cx, opencode / oc");
     console.log("  -m|--cm|--cont-mode STRING       设置容器嵌套容器模式");
-    console.log("                                   例如 common, dind, mdsock");
+    console.log("                                   例如 common, dind, sock");
     console.log("  --ib|--image-build               构建镜像");
     console.log("  --iba|--image-build-arg XXX=YYY  构建镜像时传参给dockerfile");
     console.log("  --ip|--image-prune               清理悬空镜像和 <none> 镜像");
@@ -213,9 +213,9 @@ function setContMode(mode) {
             console.log(`${GREEN}✅ 开启安全的容器嵌套容器模式, 手动在容器内启动服务: nohup dockerd &${NC}`);
             break;
         case 'mount-docker-socket':
-        case 'mdsock':
+        case 'sock':
         case 's':
-            CONT_MODE = "--privileged --volume /var/run/docker.sock:/var/run/docker.sock";
+            CONT_MODE = "--privileged --volume /var/run/docker.sock:/var/run/docker.sock --env DOCKER_HOST=unix:///var/run/docker.sock --env CONTAINER_HOST=unix:///var/run/docker.sock";
             console.log(`${RED}⚠️ 开启危险的容器嵌套容器模式, 危害: 容器可访问宿主机文件${NC}`);
             break;
         default:
