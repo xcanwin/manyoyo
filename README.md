@@ -39,32 +39,31 @@ npm install -g .
 
 ## 2. 安装 podman
 
-- 安装 [podman](https://podman.io/docs/installation)
+2.1 安装 [podman](https://podman.io/docs/installation)
+2.2 拉取基础镜像
+
+```bash
+podman pull ubuntu:24.04
+```
 
 ## 3. 编译镜像
 
-安装 manyoyo 后，可以使用内置命令构建镜像：
+以下命令只需执行一条：
 
 ```bash
-# 拉取基础镜像
-podman pull ubuntu:24.04
-
 # 使用 manyoyo 构建镜像（推荐，自动使用缓存加速）
 manyoyo --ib                                     # 默认构建 full 版本（推荐）
-manyoyo --ib --iba TOOL=common                   # 构建常见组件版本
+manyoyo --ib --iba TOOL=common                   # 构建常见组件版本（python,nodejs,claude）
 manyoyo --ib --iba TOOL=go,codex,java,gemini     # 构建自定义组件版本
-manyoyo --ib --iba --iba GIT_SSL_NO_VERIFY=true  # 构建 full 版本且git跳过ssl认证
-manyoyo --ib full --in myimage --iv 2.0.0        # 自定义镜像名称和版本，得到 myimage:2.0.0-full
-manyoyo --ip                                     # 清理悬空镜像和 <none> 镜像
-
+manyoyo --ib --iba --iba GIT_SSL_NO_VERIFY=true  # 构建 full 版本且跳过git的ssl验证
+manyoyo --ib --in myimage --iv 2.0.0             # 自定义镜像名称和版本，得到 myimage:2.0.0-full
 # 工作原理：
 # - 首次构建：自动下载 Node.js、JDT LSP、gopls 等到 docker/cache/
 # - 2天内再次构建：直接使用本地缓存，速度提升约 5 倍
 # - 缓存过期后：自动重新下载最新版本
 
 # 或手动构建（不推荐）
-iv=1.4.0 && podman build -t localhost/xcanwin/manyoyo:$iv-full -f docker/manyoyo.Dockerfile . --build-arg TOOL=full --no-cache
-podman image prune -f
+iv=1.0.0 && podman build -t localhost/xcanwin/manyoyo:$iv-full -f docker/manyoyo.Dockerfile . --build-arg TOOL=full --no-cache
 ```
 
 ## 4. 使用方法
@@ -94,7 +93,10 @@ manyoyo -n test -x /bin/bash
 manyoyo -n test -x echo "hello world"
 
 # 删除容器
-manyoyo -n test --rm
+manyoyo -n test --crm
+
+# 清理悬空镜像和 <none> 镜像
+manyoyo --irm
 ```
 
 ### 环境变量
@@ -199,12 +201,12 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 | `--hp PATH` | `--host-path` | 设置宿主机工作目录（默认：当前路径） |
 | `-n NAME` | `--cn`, `--cont-name` | 设置容器名称 |
 | `--cp PATH` | `--cont-path` | 设置容器工作目录 |
+| `--crm` | `--cont-remove` | 删除容器 |
 | `--in NAME` | `--image-name` | 指定镜像名称 |
 | `--iv VERSION` | `--image-ver` | 指定镜像版本 |
 | `-e STRING` | `--env` | 设置环境变量 |
 | `--ef FILE` | `--env-file` | 从文件加载环境变量 |
 | `-v STRING` | `--volume` | 绑定挂载卷 |
-| `--rm` | `--rmc`, `--remove-cont` | 删除容器 |
 | `--sp CMD` | `--shell-prefix` | 临时环境变量（作为 -s 的前缀） |
 | `-s CMD` | `--shell` | 指定要执行的命令 |
 | `--` | `--ss`, `--shell-suffix` | 命令参数（作为 -s 的后缀） |
@@ -213,7 +215,7 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 | `-m MODE` | `--cm`, `--cont-mode` | 设置容器模式（common, dind, sock） |
 | `--ib` | `--image-build` | 构建镜像 |
 | `--iba XXX=YYY` | `--image-build-arg` | 构建镜像时传参给dockerfile |
-| `--ip` | `--image-prune` | 清理悬空镜像和 `<none>` 镜像 |
+| `--irm` | `--image-remove` | 清理悬空镜像和 `<none>` 镜像 |
 | `--install NAME` | | 安装 manyoyo 命令 |
 | `-V` | `--version` | 显示版本 |
 | `-h` | `--help` | 显示帮助 |

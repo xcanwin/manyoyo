@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // ==============================================================================
-// MANYOYO - AI Agent CLI Sandbox
+// manyoyo - AI Agent CLI Sandbox - xcanwin
 // ==============================================================================
 
 const { execSync, spawnSync } = require('child_process');
@@ -71,12 +71,12 @@ function showHelp() {
     console.log("  --hp|--host-path PATH            设置宿主机工作目录 (默认当前路径)");
     console.log("  -n|--cn|--cont-name NAME         设置容器名称");
     console.log("  --cp|--cont-path PATH            设置容器工作目录");
+    console.log("  --crm|--cont-remove              删除-n指定容器");
     console.log("  --in|--image-name NAME           指定镜像名称");
     console.log("  --iv|--image-ver VERSION         指定镜像版本");
     console.log("  -e|--env XXX=YYY                 设置环境变量");
     console.log("  --ef|--env-file ENV_FILE         设置环境变量通过文件");
     console.log("  -v|--volume XXX:YYY              绑定挂载卷");
-    console.log("  --rm|--remove-cont               删除-n容器");
     console.log("  --sp|--shell-prefix COMMAND      临时环境变量 (作为-s前缀)");
     console.log("  -s|--shell COMMAND               指定命令执行");
     console.log("  --|--shell-suffix COMMAND        指定命令参数, --后面全部直传 (作为-s后缀)");
@@ -87,7 +87,7 @@ function showHelp() {
     console.log("                                   例如 common, dind, sock");
     console.log("  --ib|--image-build               构建镜像");
     console.log("  --iba|--image-build-arg XXX=YYY  构建镜像时传参给dockerfile");
-    console.log("  --ip|--image-prune               清理悬空镜像和 <none> 镜像");
+    console.log("  --irm|--image-remove             清理悬空镜像和 <none> 镜像");
     console.log("  --install NAME                   安装manyoyo命令");
     console.log("                                   例如 docker-cli-plugin");
     console.log("  -V|--version                     显示版本");
@@ -113,7 +113,7 @@ function getHelloTip(containerName, defaultCommand) {
     console.log(`⚫ 执行首次命令    : ${GREEN}${MANYOYO_NAME} -n ${containerName}${NC}`);
     console.log(`⚫ 执行指定命令    : ${GREEN}${MANYOYO_NAME} -n ${containerName} -x /bin/bash${NC}`);
     console.log(`⚫ 执行指定命令    : ${GREEN}docker exec -it ${containerName} /bin/bash${NC}`);
-    console.log(`⚫ 删除容器        : ${MANYOYO_NAME} -n ${containerName} --rm`);
+    console.log(`⚫ 删除容器        : ${MANYOYO_NAME} -n ${containerName} --crm`);
     console.log("");
 }
 
@@ -594,6 +594,12 @@ function parseArguments(argv) {
                 i += 2;
                 break;
 
+            case '--crm':
+            case '--cont-remove':
+                SHOULD_REMOVE = true;
+                i += 1;
+                break;
+
             case '--in':
             case '--image-name':
                 IMAGE_NAME = args[i + 1];
@@ -622,13 +628,6 @@ function parseArguments(argv) {
             case '--volume':
                 addVolume(args[i + 1]);
                 i += 2;
-                break;
-
-            case '--rm':
-            case '--rmc':
-            case '--remove-cont':
-                SHOULD_REMOVE = true;
-                i += 1;
                 break;
 
             case '--sp':
@@ -682,8 +681,8 @@ function parseArguments(argv) {
                 i += 2;
                 break;
 
-            case '--ip':
-            case '--image-prune':
+            case '--irm':
+            case '--image-remove':
                 pruneDanglingImages();
                 process.exit(0);
 

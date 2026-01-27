@@ -39,32 +39,31 @@ npm install -g .
 
 ## 2. Install podman
 
-- Install [podman](https://podman.io/docs/installation)
+2.1 Install [podman](https://podman.io/docs/installation)
+2.2 Pull base image
+
+```bash
+podman pull ubuntu:24.04
+```
 
 ## 3. Build Image
 
-After installing manyoyo, use the built-in command to build images:
+Only one of the following commands needs to be executed:
 
 ```bash
-# Pull base image
-podman pull ubuntu:24.04
-
 # Build using manyoyo (Recommended, auto-cache enabled)
 manyoyo --ib                                     # Build full version by default (Recommended)
-manyoyo --ib --iba TOOL=common                   # Build common version
+manyoyo --ib --iba TOOL=common                   # Build common version (python,nodejs,claude)
 manyoyo --ib --iba TOOL=go,codex,java,gemini     # Build custom combination
 manyoyo --ib --iba --iba GIT_SSL_NO_VERIFY=true  # Build the full version and skip Git SSL verification
-manyoyo --ib all --in myimage --iv 2.0.0         # Customize the image name and version to produce myimage:2.0.0-all
-manyoyo --ip                                     # Clean dangling images and <none> images
-
+manyoyo --ib --in myimage --iv 2.0.0             # Customize the image name and version to produce myimage:2.0.0-full
 # How it works:
 # - First build: Auto-downloads Node.js, JDT LSP, gopls etc. to docker/cache/
 # - Rebuild within 2 days: Uses local cache, ~5x faster
 # - After cache expires: Auto-downloads latest versions
 
 # Or build manually (Not recommended)
-iv=1.4.0 && podman build -t localhost/xcanwin/manyoyo:$iv-all -f docker/manyoyo.Dockerfile . --build-arg TOOL=all --no-cache
-podman image prune -f
+iv=1.0.0 && podman build -t localhost/xcanwin/manyoyo:$iv-full -f docker/manyoyo.Dockerfile . --build-arg TOOL=full --no-cache
 ```
 
 ## 4. Usage
@@ -94,7 +93,10 @@ manyoyo -n test -x /bin/bash
 manyoyo -n test -x echo "hello world"
 
 # Remove container
-manyoyo -n test --rm
+manyoyo -n test --crm
+
+# Clean dangling images and <none> images
+manyoyo --irm
 ```
 
 ### Environment Variables
@@ -199,12 +201,12 @@ docker ps -a             # Now you can use docker commands inside the container
 | `--hp PATH` | `--host-path` | Set host working directory (default: current path) |
 | `-n NAME` | `--cn`, `--cont-name` | Set container name |
 | `--cp PATH` | `--cont-path` | Set container working directory |
+| `--crm` | `--cont-remove` | Remove container |
 | `--in NAME` | `--image-name` | Specify image name |
 | `--iv VERSION` | `--image-ver` | Specify image version |
 | `-e STRING` | `--env` | Set environment variable |
 | `--ef FILE` | `--env-file` | Load environment variables from file |
 | `-v STRING` | `--volume` | Bind mount volume |
-| `--rm` | `--rmc`, `--remove-cont` | Remove container |
 | `--sp CMD` | `--shell-prefix` | Temporary environment variable (prefix for -s) |
 | `-s CMD` | `--shell` | Specify command to execute |
 | `--` | `--ss`, `--shell-suffix` | Command arguments (suffix for -s) |
@@ -213,7 +215,7 @@ docker ps -a             # Now you can use docker commands inside the container
 | `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, sock) |
 | `--ib` | `--image-build` | Build image |
 | `--iba` | `--image-build-arg` | Pass arguments to a Dockerfile during image build |
-| `--ip` | `--image-prune` | Clean dangling images and `<none>` images |
+| `--irm` | `--image-remove` | Clean dangling images and `<none>` images |
 | `--install NAME` | | Install manyoyo command |
 | `-V` | `--version` | Show version |
 | `-h` | `--help` | Show help |
