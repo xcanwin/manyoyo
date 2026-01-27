@@ -50,24 +50,20 @@ npm install -g .
 podman pull ubuntu:24.04
 
 # 使用 manyoyo 构建镜像（推荐，自动使用缓存加速）
-manyoyo --ib all                     # 构建 all 版本（自动使用缓存，首次下载后 2 天内极速构建）
-manyoyo --ib common                  # 构建 common 版本
-manyoyo --ib go,codex,java,gemini    # 构建自定义组合版本
+manyoyo --ib                                     # 默认构建 full 版本（推荐）
+manyoyo --ib --iba TOOL=common                   # 构建常见组件版本
+manyoyo --ib --iba TOOL=go,codex,java,gemini     # 构建自定义组件版本
+manyoyo --ib --iba --iba GIT_SSL_NO_VERIFY=true  # 构建 full 版本且git跳过ssl认证
+manyoyo --ib full --in myimage --iv 2.0.0        # 自定义镜像名称和版本，得到 myimage:2.0.0-full
+manyoyo --ip                                     # 清理悬空镜像和 <none> 镜像
 
 # 工作原理：
 # - 首次构建：自动下载 Node.js、JDT LSP、gopls 等到 docker/cache/
 # - 2天内再次构建：直接使用本地缓存，速度提升约 5 倍
 # - 缓存过期后：自动重新下载最新版本
 
-# 自定义镜像名称和版本
-manyoyo --ib all --in myimage --iv 2.0.0
-# 构建：myimage:2.0.0-all
-
-# 清理镜像
-manyoyo --ip                         # 清理悬空镜像和 <none> 镜像
-
 # 或手动构建（不推荐）
-iv=1.4.0 && podman build -t localhost/xcanwin/manyoyo:$iv-all -f docker/manyoyo.Dockerfile . --build-arg EXT=all --no-cache
+iv=1.4.0 && podman build -t localhost/xcanwin/manyoyo:$iv-full -f docker/manyoyo.Dockerfile . --build-arg TOOL=full --no-cache
 podman image prune -f
 ```
 
@@ -215,7 +211,8 @@ docker ps -a
 | `-x CMD` | `--sf`, `--shell-full` | 完整命令（替代 --sp, -s 和 --） |
 | `-y CLI` | `--yolo` | 无需确认运行 AI 智能体 |
 | `-m MODE` | `--cm`, `--cont-mode` | 设置容器模式（common, dind, mdsock） |
-| `--ib EXT` | `--image-build` | 构建镜像，EXT 为镜像变体，自动使用缓存加速 |
+| `--ib` | `--image-build` | 构建镜像 |
+| `--iba XXX=YYY` | `--image-build-arg` | 构建镜像时传参给dockerfile |
 | `--ip` | `--image-prune` | 清理悬空镜像和 `<none>` 镜像 |
 | `--install NAME` | | 安装 manyoyo 命令 |
 | `-V` | `--version` | 显示版本 |

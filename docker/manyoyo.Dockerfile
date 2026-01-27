@@ -59,7 +59,7 @@ FROM ubuntu:24.04
 
 ARG TARGETARCH
 ARG NODE_VERSION=24
-ARG EXT="common"
+ARG TOOL="full"
 
 RUN <<EOX
     # 部署 system
@@ -80,7 +80,7 @@ RUN <<EOX
                     supervisor
 
     # 安装 docker
-    case ",$EXT," in *,all,*|*,docker,*)
+    case ",$TOOL," in *,full,*|*,docker,*)
         apt-get install -y --no-install-recommends docker.io
     ;; esac
 
@@ -104,6 +104,7 @@ EOX
 
 # 从 cache-stage 复制 Node.js（缓存或下载）
 COPY --from=cache-stage /opt/node /usr/local
+ARG GIT_SSL_NO_VERIFY=false
 
 RUN <<EOX
     # 配置 node.js
@@ -127,7 +128,7 @@ RUN <<EOX
   }
 }
 EOF
-    claude plugin marketplace add anthropics/claude-plugins-official
+    GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY claude plugin marketplace add anthropics/claude-plugins-official
     claude plugin install ralph-loop@claude-plugins-official
     claude plugin install typescript-lsp@claude-plugins-official
     claude plugin install pyright-lsp@claude-plugins-official
@@ -135,7 +136,7 @@ EOF
     claude plugin install jdtls-lsp@claude-plugins-official
 
     # 安装 Gemini CLI
-    case ",$EXT," in *,all,*|*,gemini,*)
+    case ",$TOOL," in *,full,*|*,gemini,*)
         npm install -g @google/gemini-cli
         mkdir -p ~/.gemini/
         cat > ~/.gemini/settings.json <<EOF
@@ -161,12 +162,12 @@ EOF
     ;; esac
 
     # 安装 Codex CLI
-    case ",$EXT," in *,all,*|*,codex,*)
+    case ",$TOOL," in *,full,*|*,codex,*)
         npm install -g @openai/codex
     ;; esac
 
     # 安装 Copilot CLI
-    case ",$EXT," in *,all,*|*,copilot,*)
+    case ",$TOOL," in *,full,*|*,copilot,*)
         npm install -g @github/copilot
         mkdir -p ~/.copilot/
         cat > ~/.copilot/config.json <<EOF
@@ -181,7 +182,7 @@ EOF
     ;; esac
 
     # 安装 OpenCode CLI
-    case ",$EXT," in *,all,*|*,opencode,*)
+    case ",$TOOL," in *,full,*|*,opencode,*)
         npm install -g opencode-ai
         mkdir -p ~/.config/opencode/
         cat > ~/.config/opencode/opencode.json <<EOF
@@ -221,7 +222,7 @@ COPY --from=cache-stage /opt/jdtls /root/.local/share/jdtls
 
 RUN <<EOX
     # 安装 java
-    case ",$EXT," in *,all,*|*,java,*)
+    case ",$TOOL," in *,full,*|*,java,*)
         apt-get update -y
         apt-get install -y --no-install-recommends openjdk-21-jdk maven
 
@@ -239,7 +240,7 @@ COPY --from=cache-stage /opt/gopls /tmp/gopls-cache
 
 RUN <<EOX
     # 安装 go
-    case ",$EXT," in *,all,*|*,go,*)
+    case ",$TOOL," in *,full,*|*,go,*)
         apt-get update -y
         apt-get install -y --no-install-recommends golang golang-src gcc
         go env -w GOPROXY=https://mirrors.tencent.com/go

@@ -50,24 +50,20 @@ After installing manyoyo, use the built-in command to build images:
 podman pull ubuntu:24.04
 
 # Build using manyoyo (Recommended, auto-cache enabled)
-manyoyo --ib all                     # Build all version (auto-cache, blazing fast after first build within 2 days)
-manyoyo --ib common                  # Build common version
-manyoyo --ib go,codex,java,gemini    # Build custom combination
+manyoyo --ib                                     # Build full version by default (Recommended)
+manyoyo --ib --iba TOOL=common                   # Build common version
+manyoyo --ib --iba TOOL=go,codex,java,gemini     # Build custom combination
+manyoyo --ib --iba --iba GIT_SSL_NO_VERIFY=true  # Build the full version and skip Git SSL verification
+manyoyo --ib all --in myimage --iv 2.0.0         # Customize the image name and version to produce myimage:2.0.0-all
+manyoyo --ip                                     # Clean dangling images and <none> images
 
 # How it works:
 # - First build: Auto-downloads Node.js, JDT LSP, gopls etc. to docker/cache/
 # - Rebuild within 2 days: Uses local cache, ~5x faster
 # - After cache expires: Auto-downloads latest versions
 
-# Custom image name and version
-manyoyo --ib all --in myimage --iv 2.0.0
-# Builds: myimage:2.0.0-all
-
-# Clean images
-manyoyo --ip                         # Clean dangling images and <none> images
-
 # Or build manually (Not recommended)
-iv=1.4.0 && podman build -t localhost/xcanwin/manyoyo:$iv-all -f docker/manyoyo.Dockerfile . --build-arg EXT=all --no-cache
+iv=1.4.0 && podman build -t localhost/xcanwin/manyoyo:$iv-all -f docker/manyoyo.Dockerfile . --build-arg TOOL=all --no-cache
 podman image prune -f
 ```
 
@@ -215,7 +211,8 @@ docker ps -a
 | `-x CMD` | `--sf`, `--shell-full` | Full command (replaces --sp, -s, and --) |
 | `-y CLI` | `--yolo` | Run AI agent without confirmation |
 | `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, mdsock) |
-| `--ib EXT` | `--image-build` | Build image with auto-cache, EXT is image variant |
+| `--ib` | `--image-build` | Build image |
+| `--iba` | `--image-build-arg` | Pass arguments to a Dockerfile during image build |
 | `--ip` | `--image-prune` | Clean dangling images and `<none>` images |
 | `--install NAME` | | Install manyoyo command |
 | `-V` | `--version` | Show version |

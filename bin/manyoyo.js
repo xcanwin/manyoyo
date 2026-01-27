@@ -25,14 +25,14 @@ let CONTAINER_NAME = `myy-${formatDate()}`;
 let HOST_PATH = process.cwd();
 let CONTAINER_PATH = HOST_PATH;
 let IMAGE_NAME = "localhost/xcanwin/manyoyo";
-let IMAGE_VERSION = `${IMAGE_VERSION_BASE}-all`;
+let IMAGE_VERSION = `${IMAGE_VERSION_BASE}-full`;
 let EXEC_COMMAND = "";
 let EXEC_COMMAND_PREFIX = "";
 let EXEC_COMMAND_SUFFIX = "";
 let ENV_FILE = "";
 let SHOULD_REMOVE = false;
-let SHOULD_BUILD_IMAGE = false;
-let BUILD_IMAGE_EXT = "";
+let IMAGE_BUILD_NEED = false;
+let IMAGE_BUILD_ARGS = [];
 let CONTAINER_ENVS = [];
 let CONTAINER_VOLUMES = [];
 let MANYOYO_NAME = "manyoyo";
@@ -67,35 +67,34 @@ function showHelp() {
     console.log(`  ${MANYOYO_NAME} [--hp HOST_PATH] [-n CONTAINER_NAME] [--cp CONTAINER_PATH] [--ef ENV_FILE] [--sp COMMAND] [-s COMMAND] [-- COMMAND]`);
     console.log("");
     console.log(`${BLUE}Options:${NC}`);
-    console.log("  -l|--ls|--list                 列举容器");
-    console.log("  --hp|--host-path PATH          设置宿主机工作目录 (默认当前路径)");
-    console.log("  -n|--cn|--cont-name NAME       设置容器名称");
-    console.log("  --cp|--cont-path PATH          设置容器工作目录");
-    console.log("  --in|--image-name NAME         指定镜像名称");
-    console.log("  --iv|--image-ver VERSION       指定镜像版本");
-    console.log("  -e|--env STRING                设置环境变量");
-    console.log("  --ef|--env-file ENV_FILE       设置环境变量通过文件");
-    console.log("  -v|--volume STRING             绑定挂载卷");
-    console.log("  --rm|--remove-cont             删除-n容器");
-    console.log("  --sp|--shell-prefix COMMAND    临时环境变量 (作为-s前缀)");
-    console.log("  -s|--shell COMMAND             指定命令执行");
-    console.log("  --|--shell-suffix COMMAND      指定命令参数, --后面全部直传 (作为-s后缀)");
-    console.log("  -x|--shell-full COMMAND        指定完整命令执行, -x后面全部直传 (代替--sp和-s和--命令)");
-    console.log("  -y|--yolo CLI                  使AGENT无需确认 (代替-s命令)");
-    console.log("                                 例如 claude / c, gemini / gm, codex / cx, opencode / oc");
-    console.log("  -m|--cm|--cont-mode STRING     设置容器嵌套容器模式");
-    console.log("                                 例如 common, dind, mdsock");
-    console.log("  --ib|--image-build EXT         构建镜像，EXT 为镜像变体，逗号分割");
-    console.log("                                 例如 \"common\" (默认值), \"all\", \"go,codex,java,gemini\" ...");
-    console.log("                                 (自动使用缓存加速，缓存过期后自动重新下载)");
-    console.log("  --ip|--image-prune             清理悬空镜像和 <none> 镜像");
-    console.log("  --install NAME                 安装manyoyo命令");
-    console.log("                                 例如 docker-cli-plugin");
-    console.log("  -V|--version                   显示版本");
-    console.log("  -h|--help                      显示帮助");
+    console.log("  -l|--ls|--list                   列举容器");
+    console.log("  --hp|--host-path PATH            设置宿主机工作目录 (默认当前路径)");
+    console.log("  -n|--cn|--cont-name NAME         设置容器名称");
+    console.log("  --cp|--cont-path PATH            设置容器工作目录");
+    console.log("  --in|--image-name NAME           指定镜像名称");
+    console.log("  --iv|--image-ver VERSION         指定镜像版本");
+    console.log("  -e|--env XXX=YYY                 设置环境变量");
+    console.log("  --ef|--env-file ENV_FILE         设置环境变量通过文件");
+    console.log("  -v|--volume XXX:YYY              绑定挂载卷");
+    console.log("  --rm|--remove-cont               删除-n容器");
+    console.log("  --sp|--shell-prefix COMMAND      临时环境变量 (作为-s前缀)");
+    console.log("  -s|--shell COMMAND               指定命令执行");
+    console.log("  --|--shell-suffix COMMAND        指定命令参数, --后面全部直传 (作为-s后缀)");
+    console.log("  -x|--shell-full COMMAND          指定完整命令执行, -x后面全部直传 (代替--sp和-s和--命令)");
+    console.log("  -y|--yolo CLI                    使AGENT无需确认 (代替-s命令)");
+    console.log("                                   例如 claude / c, gemini / gm, codex / cx, opencode / oc");
+    console.log("  -m|--cm|--cont-mode STRING       设置容器嵌套容器模式");
+    console.log("                                   例如 common, dind, mdsock");
+    console.log("  --ib|--image-build               构建镜像");
+    console.log("  --iba|--image-build-arg XXX=YYY  构建镜像时传参给dockerfile");
+    console.log("  --ip|--image-prune               清理悬空镜像和 <none> 镜像");
+    console.log("  --install NAME                   安装manyoyo命令");
+    console.log("                                   例如 docker-cli-plugin");
+    console.log("  -V|--version                     显示版本");
+    console.log("  -h|--help                        显示帮助");
     console.log("");
     console.log(`${BLUE}Example:${NC}`);
-    console.log(`  ${MANYOYO_NAME} --ib all                            构建 all 版本镜像`);
+    console.log(`  ${MANYOYO_NAME} --ib                                构建镜像`);
     console.log(`  ${MANYOYO_NAME} -n test --ef ./xxx.env -y c         设置环境变量并运行无需确认的AGENT`);
     console.log(`  ${MANYOYO_NAME} -n test -- -c                       恢复之前会话`);
     console.log(`  ${MANYOYO_NAME} -x echo 123                         指定命令执行`);
@@ -326,7 +325,7 @@ function pruneDanglingImages() {
     console.log(`${GREEN}✅ 清理完成${NC}`);
 }
 
-async function prepareBuildCache(ext) {
+async function prepareBuildCache(imageTool) {
     const cacheDir = path.join(__dirname, '../docker/cache');
     const timestampFile = path.join(cacheDir, '.timestamps.json');
     const cacheTTLDays = 2;
@@ -390,7 +389,7 @@ async function prepareBuildCache(ext) {
     }
 
     // Prepare JDT LSP cache (for java variant)
-    if (ext === 'all' || ext.includes('java')) {
+    if (imageTool === 'full' || imageTool.includes('java')) {
         const jdtlsCacheDir = path.join(cacheDir, 'jdtls');
         const jdtlsKey = 'jdtls/jdt-language-server-latest.tar.gz';  // 使用相对路径
         const jdtlsPath = path.join(cacheDir, jdtlsKey);
@@ -417,7 +416,7 @@ async function prepareBuildCache(ext) {
     }
 
     // Prepare gopls cache (for go variant)
-    if (ext === 'all' || ext.includes('go')) {
+    if (imageTool === 'full' || imageTool.includes('go')) {
         const goplsCacheDir = path.join(cacheDir, 'gopls');
         const goplsKey = `gopls/gopls-linux-${arch}`;  // 使用相对路径
         const goplsPath = path.join(cacheDir, goplsKey);
@@ -475,16 +474,26 @@ async function prepareBuildCache(ext) {
     console.log(`${GREEN}✅ 构建缓存准备完成${NC}\n`);
 }
 
-async function buildImage(ext, imageName, imageVersion) {
+function addImageBuildArg(string) {
+    IMAGE_BUILD_ARGS.push("--build-arg", string);
+}
+
+async function buildImage(IMAGE_BUILD_ARGS, imageName, imageVersion) {
+    let imageTool = "full";
+    if (IMAGE_BUILD_ARGS.length === 0) {
+        IMAGE_BUILD_ARGS = ["--build-arg", `TOOL=${imageTool}`];
+    } else {
+        imageTool = IMAGE_BUILD_ARGS.filter(v => v.startsWith("TOOL=")).at(-1)?.slice("TOOL=".length) ?? imageTool;
+    }
     // Use package.json imageVersion if not specified
     const version = imageVersion || IMAGE_VERSION_BASE;
-    const fullImageTag = `${imageName}:${version}-${ext}`;
+    const fullImageTag = `${imageName}:${version}-${imageTool}`;
 
     console.log(`${CYAN}🔨 正在构建镜像: ${YELLOW}${fullImageTag}${NC}`);
-    console.log(`${BLUE}构建参数: EXT=${ext}${NC}\n`);
+    console.log(`${BLUE}构建组件类型: ${imageTool}${NC}\n`);
 
     // Prepare cache (自动检测并下载缺失的文件)
-    await prepareBuildCache(ext);
+    await prepareBuildCache(imageTool);
 
     // Find Dockerfile path
     const dockerfilePath = path.join(__dirname, '../docker/manyoyo.Dockerfile');
@@ -494,7 +503,8 @@ async function buildImage(ext, imageName, imageVersion) {
     }
 
     // Build command
-    const buildCmd = `${DOCKER_CMD} build -t "${fullImageTag}" -f "${dockerfilePath}" "${path.join(__dirname, '..')}" --build-arg EXT=${ext} --load --progress=plain --no-cache`;
+    const imageBuildArgs = IMAGE_BUILD_ARGS.join(' ');
+    const buildCmd = `${DOCKER_CMD} build -t "${fullImageTag}" -f "${dockerfilePath}" "${path.join(__dirname, '..')}" ${imageBuildArgs} --load --progress=plain --no-cache`;
 
     console.log(`${BLUE}准备执行命令:${NC}`);
     console.log(`${buildCmd}\n`);
@@ -506,7 +516,7 @@ async function buildImage(ext, imageName, imageVersion) {
         execSync(buildCmd, { stdio: 'inherit' });
         console.log(`\n${GREEN}✅ 镜像构建成功: ${fullImageTag}${NC}`);
         console.log(`${BLUE}使用镜像:${NC}`);
-        console.log(`  manyoyo -n test --in ${imageName} --iv ${version}-${ext} -y c`);
+        console.log(`  manyoyo -n test --in ${imageName} --iv ${version}-${imageTool} -y c`);
 
         // Prune dangling images
         pruneDanglingImages();
@@ -662,8 +672,13 @@ function parseArguments(argv) {
 
             case '--ib':
             case '--image-build':
-                SHOULD_BUILD_IMAGE = true;
-                BUILD_IMAGE_EXT = args[i + 1];
+                IMAGE_BUILD_NEED = true;
+                i += 1;
+                break;
+
+            case '--iba':
+            case '--image-build-arg':
+                addImageBuildArg(args[i + 1]);
                 i += 2;
                 break;
 
@@ -867,8 +882,8 @@ async function main() {
         parseArguments(process.argv);
 
         // 3. Handle image build operation
-        if (SHOULD_BUILD_IMAGE) {
-            await buildImage(BUILD_IMAGE_EXT, IMAGE_NAME, IMAGE_VERSION.split('-')[0]);
+        if (IMAGE_BUILD_NEED) {
+            await buildImage(IMAGE_BUILD_ARGS, IMAGE_NAME, IMAGE_VERSION.split('-')[0]);
             process.exit(0);
         }
 
