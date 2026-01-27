@@ -55,7 +55,7 @@ Only one of the following commands needs to be executed:
 manyoyo --ib                                     # Build full version by default (Recommended)
 manyoyo --ib --iba TOOL=common                   # Build common version (python,nodejs,claude)
 manyoyo --ib --iba TOOL=go,codex,java,gemini     # Build custom combination
-manyoyo --ib --iba --iba GIT_SSL_NO_VERIFY=true  # Build the full version and skip Git SSL verification
+manyoyo --ib --iba GIT_SSL_NO_VERIFY=true        # Build the full version and skip Git SSL verification
 manyoyo --ib --in myimage --iv 2.0.0             # Customize the image name and version to produce myimage:2.0.0-full
 # How it works:
 # - First build: Auto-downloads Node.js, JDT LSP, gopls etc. to docker/cache/

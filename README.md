@@ -55,7 +55,7 @@ podman pull ubuntu:24.04
 manyoyo --ib                                     # 默认构建 full 版本（推荐）
 manyoyo --ib --iba TOOL=common                   # 构建常见组件版本（python,nodejs,claude）
 manyoyo --ib --iba TOOL=go,codex,java,gemini     # 构建自定义组件版本
-manyoyo --ib --iba --iba GIT_SSL_NO_VERIFY=true  # 构建 full 版本且跳过git的ssl验证
+manyoyo --ib --iba GIT_SSL_NO_VERIFY=true        # 构建 full 版本且跳过git的ssl验证
 manyoyo --ib --in myimage --iv 2.0.0             # 自定义镜像名称和版本，得到 myimage:2.0.0-full
 # 工作原理：
 # - 首次构建：自动下载 Node.js、JDT LSP、gopls 等到 docker/cache/
