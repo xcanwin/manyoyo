@@ -21,7 +21,7 @@ RUN <<EOX
     if ls /cache/node/node-*-linux-${ARCH_NODE}.tar.gz 1> /dev/null 2>&1; then
         echo "使用 Node.js 缓存"
         NODE_TAR=$(ls /cache/node/node-*-linux-${ARCH_NODE}.tar.gz | head -1)
-        tar -xzf ${NODE_TAR} -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE'
+        tar -xzf ${NODE_TAR} -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE' --no-same-owner
     else
         echo "下载 Node.js"
         NVM_NODEJS_ORG_MIRROR=https://mirrors.tencent.com/nodejs-release/
@@ -33,7 +33,7 @@ RUN <<EOX
     mkdir -p /opt/jdtls
     if [ -f /cache/jdtls/jdt-language-server-latest.tar.gz ]; then
         echo "使用 JDT LSP 缓存"
-        tar -xzf /cache/jdtls/jdt-language-server-latest.tar.gz -C /opt/jdtls
+        tar -xzf /cache/jdtls/jdt-language-server-latest.tar.gz -C /opt/jdtls --no-same-owner
     else
         echo "下载 JDT LSP"
         curl -fsSL https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz | tar -xz -C /opt/jdtls
