@@ -97,6 +97,9 @@ manyoyo -n test --crm
 
 # 清理悬空镜像和 <none> 镜像
 manyoyo --irm
+
+# 静默显示执行命令
+manyoyo -q full -x echo "hello world"
 ```
 
 ### 环境变量
@@ -217,6 +220,7 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 | `-x CMD` | `--sf`, `--shell-full` | 完整命令（替代 --sp, -s 和 --） |
 | `-y CLI` | `--yolo` | 无需确认运行 AI 智能体 |
 | `--install NAME` | | 安装 manyoyo 命令 |
+| `-q LIST` | `--quiet` | 静默显示 |
 | `-V` | `--version` | 显示版本 |
 | `-h` | `--help` | 显示帮助 |
 

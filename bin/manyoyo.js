@@ -37,6 +37,7 @@ let CONTAINER_ENVS = [];
 let CONTAINER_VOLUMES = [];
 let MANYOYO_NAME = "manyoyo";
 let CONT_MODE = "";
+let QUIET = {};
 
 // Color definitions using ANSI codes
 const RED = '\x1b[0;31m';
@@ -93,6 +94,8 @@ function showHelp() {
     console.log("                                   例如 claude / c, gemini / gm, codex / cx, opencode / oc");
     console.log("  --install NAME                   安装manyoyo命令");
     console.log("                                   例如 docker-cli-plugin");
+    console.log("  -q|--quiet LIST                  静默显示");
+    console.log("                                   例如 cnew,crm,tip,cmd,full");
     console.log("  -V|--version                     显示版本");
     console.log("  -h|--help                        显示帮助");
     console.log("");
@@ -110,14 +113,39 @@ function showVersion() {
 }
 
 function getHelloTip(containerName, defaultCommand) {
-    console.log(`${BLUE}----------------------------------------${NC}`);
-    console.log(`📦 首次命令        : ${defaultCommand}`);
-    console.log(`⚫ 恢复首次命令会话: ${CYAN}${MANYOYO_NAME} -n ${containerName} -- -c${NC}`);
-    console.log(`⚫ 执行首次命令    : ${GREEN}${MANYOYO_NAME} -n ${containerName}${NC}`);
-    console.log(`⚫ 执行指定命令    : ${GREEN}${MANYOYO_NAME} -n ${containerName} -x /bin/bash${NC}`);
-    console.log(`⚫ 执行指定命令    : ${GREEN}docker exec -it ${containerName} /bin/bash${NC}`);
-    console.log(`⚫ 删除容器        : ${MANYOYO_NAME} -n ${containerName} --crm`);
-    console.log("");
+    if ( !(QUIET.tip || QUIET.full) ) {
+        console.log(`${BLUE}----------------------------------------${NC}`);
+        console.log(`📦 首次命令        : ${defaultCommand}`);
+        console.log(`⚫ 恢复首次命令会话: ${CYAN}${MANYOYO_NAME} -n ${containerName} -- -c${NC}`);
+        console.log(`⚫ 执行首次命令    : ${GREEN}${MANYOYO_NAME} -n ${containerName}${NC}`);
+        console.log(`⚫ 执行指定命令    : ${GREEN}${MANYOYO_NAME} -n ${containerName} -x /bin/bash${NC}`);
+        console.log(`⚫ 执行指定命令    : ${GREEN}docker exec -it ${containerName} /bin/bash${NC}`);
+        console.log(`⚫ 删除容器        : ${MANYOYO_NAME} -n ${containerName} --crm`);
+        console.log("");
+    }
+}
+
+function setQuiet(action) {
+    action.split(',').forEach(ac => {
+        switch (ac) {
+            case 'cnew':
+                QUIET.cnew = 1;
+                break;
+            case 'crm':
+                QUIET.crm = 1;
+                break;
+            case 'tip':
+                QUIET.tip = 1;
+                break;
+            case 'cmd':
+                QUIET.cmd = 1;
+                break;
+            case 'full':
+                QUIET.full = 1;
+                break;
+        }
+    });
+    // process.exit(0);
 }
 
 async function askQuestion(prompt) {
@@ -252,9 +280,9 @@ function getContainerStatus(name) {
 }
 
 function removeContainer(name) {
-    console.log(`${YELLOW}🗑️ 正在删除容器: ${name}...${NC}`);
+    if ( !(QUIET.crm || QUIET.full) ) console.log(`${YELLOW}🗑️ 正在删除容器: ${name}...${NC}`);
     dockerExec(`${DOCKER_CMD} rm -f "${name}"`, { stdio: 'pipe' });
-    console.log(`${GREEN}✅ 已彻底删除。${NC}`);
+    if ( !(QUIET.crm || QUIET.full) ) console.log(`${GREEN}✅ 已彻底删除。${NC}`);
 }
 
 // ==============================================================================
@@ -572,6 +600,12 @@ function parseArguments(argv) {
         const arg = args[i];
 
         switch (arg) {
+            case '-q':
+            case '--quiet':
+                setQuiet(args[i + 1]);
+                i += 2;
+                break;
+
             case '--hp':
             case '--host-path':
                 HOST_PATH = args[i + 1];
@@ -772,7 +806,7 @@ async function waitForContainerReady(containerName) {
 }
 
 async function createNewContainer() {
-    console.log(`${CYAN}📦 manyoyo by xcanwin 正在创建新容器: ${YELLOW}${CONTAINER_NAME}${NC}\n`);
+    if ( !(QUIET.cnew || QUIET.full) ) console.log(`${CYAN}📦 manyoyo by xcanwin 正在创建新容器: ${YELLOW}${CONTAINER_NAME}${NC}\n`);
 
     EXEC_COMMAND = `${EXEC_COMMAND_PREFIX}${EXEC_COMMAND}${EXEC_COMMAND_SUFFIX}`;
     const defaultCommand = EXEC_COMMAND;
@@ -794,7 +828,7 @@ async function createNewContainer() {
 }
 
 async function connectExistingContainer() {
-    console.log(`${CYAN}🔄 manyoyo by xcanwin 正在连接到现有容器: ${YELLOW}${CONTAINER_NAME}${NC}`);
+    if ( !(QUIET.cnew || QUIET.full) ) console.log(`${CYAN}🔄 manyoyo by xcanwin 正在连接到现有容器: ${YELLOW}${CONTAINER_NAME}${NC}`);
 
     // Start container if stopped
     const status = getContainerStatus(CONTAINER_NAME);
@@ -824,8 +858,10 @@ async function setupContainer() {
 
 function executeInContainer(defaultCommand) {
     getHelloTip(CONTAINER_NAME, defaultCommand);
-    console.log(`${BLUE}----------------------------------------${NC}`);
-    console.log(`💻 执行命令: ${YELLOW}${EXEC_COMMAND || '交互式 Shell'}${NC}`);
+    if ( !(QUIET.cmd || QUIET.full) ) {
+        console.log(`${BLUE}----------------------------------------${NC}`);
+        console.log(`💻 执行命令: ${YELLOW}${EXEC_COMMAND || '交互式 Shell'}${NC}`);
+    }
 
     // Execute command in container
     if (EXEC_COMMAND) {

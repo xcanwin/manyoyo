@@ -97,6 +97,9 @@ manyoyo -n test --crm
 
 # Clean dangling images and <none> images
 manyoyo --irm
+
+# Execute custom command with quiet output
+manyoyo -q full -x echo "hello world"
 ```
 
 ### Environment Variables
@@ -217,6 +220,7 @@ docker ps -a             # Now you can use docker commands inside the container
 | `-x CMD` | `--sf`, `--shell-full` | Full command (replaces --sp, -s, and --) |
 | `-y CLI` | `--yolo` | Run AI agent without confirmation |
 | `--install NAME` | | Install manyoyo command |
+| `-q LIST` | `--quiet` | Quiet output |
 | `-V` | `--version` | Show version |
 | `-h` | `--help` | Show help |
 
