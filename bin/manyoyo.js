@@ -62,6 +62,9 @@ function sleep(ms) {
 // ==============================================================================
 
 function showHelp() {
+    console.log(`MANYOYO   -   AI Agent CLI Sandbox`);
+    console.log(`https://github.com/xcanwin/manyoyo`);
+    console.log("");
     console.log(`${BLUE}Usage:${NC}`);
     console.log(`  ${MANYOYO_NAME} [OPTIONS]`);
     console.log(`  ${MANYOYO_NAME} [--hp HOST_PATH] [-n CONTAINER_NAME] [--cp CONTAINER_PATH] [--ef ENV_FILE] [--sp COMMAND] [-s COMMAND] [-- COMMAND]`);
@@ -72,8 +75,13 @@ function showHelp() {
     console.log("  -n|--cn|--cont-name NAME         设置容器名称");
     console.log("  --cp|--cont-path PATH            设置容器工作目录");
     console.log("  --crm|--cont-remove              删除-n指定容器");
+    console.log("  -m|--cm|--cont-mode STRING       设置容器嵌套容器模式");
+    console.log("                                   例如 common, dind, sock");
     console.log("  --in|--image-name NAME           指定镜像名称");
     console.log("  --iv|--image-ver VERSION         指定镜像版本");
+    console.log("  --ib|--image-build               构建镜像");
+    console.log("  --iba|--image-build-arg XXX=YYY  构建镜像时传参给dockerfile");
+    console.log("  --irm|--image-remove             清理悬空镜像和 <none> 镜像");
     console.log("  -e|--env XXX=YYY                 设置环境变量");
     console.log("  --ef|--env-file ENV_FILE         设置环境变量通过文件");
     console.log("  -v|--volume XXX:YYY              绑定挂载卷");
@@ -83,11 +91,6 @@ function showHelp() {
     console.log("  -x|--shell-full COMMAND          指定完整命令执行, -x后面全部直传 (代替--sp和-s和--命令)");
     console.log("  -y|--yolo CLI                    使AGENT无需确认 (代替-s命令)");
     console.log("                                   例如 claude / c, gemini / gm, codex / cx, opencode / oc");
-    console.log("  -m|--cm|--cont-mode STRING       设置容器嵌套容器模式");
-    console.log("                                   例如 common, dind, sock");
-    console.log("  --ib|--image-build               构建镜像");
-    console.log("  --iba|--image-build-arg XXX=YYY  构建镜像时传参给dockerfile");
-    console.log("  --irm|--image-remove             清理悬空镜像和 <none> 镜像");
     console.log("  --install NAME                   安装manyoyo命令");
     console.log("                                   例如 docker-cli-plugin");
     console.log("  -V|--version                     显示版本");

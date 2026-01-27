@@ -1,4 +1,4 @@
-[English](docs/README_EN.md) | **<[中文](README.md)>**
+**<[中文](README.md)>** | [English](docs/README_EN.md)
 
 ---
 
@@ -202,8 +202,12 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 | `-n NAME` | `--cn`, `--cont-name` | 设置容器名称 |
 | `--cp PATH` | `--cont-path` | 设置容器工作目录 |
 | `--crm` | `--cont-remove` | 删除容器 |
+| `-m MODE` | `--cm`, `--cont-mode` | 设置容器模式（common, dind, sock） |
 | `--in NAME` | `--image-name` | 指定镜像名称 |
 | `--iv VERSION` | `--image-ver` | 指定镜像版本 |
+| `--ib` | `--image-build` | 构建镜像 |
+| `--iba XXX=YYY` | `--image-build-arg` | 构建镜像时传参给dockerfile |
+| `--irm` | `--image-remove` | 清理悬空镜像和 `<none>` 镜像 |
 | `-e STRING` | `--env` | 设置环境变量 |
 | `--ef FILE` | `--env-file` | 从文件加载环境变量 |
 | `-v STRING` | `--volume` | 绑定挂载卷 |
@@ -212,10 +216,6 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 | `--` | `--ss`, `--shell-suffix` | 命令参数（作为 -s 的后缀） |
 | `-x CMD` | `--sf`, `--shell-full` | 完整命令（替代 --sp, -s 和 --） |
 | `-y CLI` | `--yolo` | 无需确认运行 AI 智能体 |
-| `-m MODE` | `--cm`, `--cont-mode` | 设置容器模式（common, dind, sock） |
-| `--ib` | `--image-build` | 构建镜像 |
-| `--iba XXX=YYY` | `--image-build-arg` | 构建镜像时传参给dockerfile |
-| `--irm` | `--image-remove` | 清理悬空镜像和 `<none>` 镜像 |
 | `--install NAME` | | 安装 manyoyo 命令 |
 | `-V` | `--version` | 显示版本 |
 | `-h` | `--help` | 显示帮助 |

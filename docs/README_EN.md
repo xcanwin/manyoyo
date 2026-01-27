@@ -1,4 +1,4 @@
-**<[English](README_EN.md)>** | [中文](../README.md)
+[中文](../README.md) | **<[English](README_EN.md)>**
 
 ---
 
@@ -202,8 +202,12 @@ docker ps -a             # Now you can use docker commands inside the container
 | `-n NAME` | `--cn`, `--cont-name` | Set container name |
 | `--cp PATH` | `--cont-path` | Set container working directory |
 | `--crm` | `--cont-remove` | Remove container |
+| `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, sock) |
 | `--in NAME` | `--image-name` | Specify image name |
 | `--iv VERSION` | `--image-ver` | Specify image version |
+| `--ib` | `--image-build` | Build image |
+| `--iba` | `--image-build-arg` | Pass arguments to a Dockerfile during image build |
+| `--irm` | `--image-remove` | Clean dangling images and `<none>` images |
 | `-e STRING` | `--env` | Set environment variable |
 | `--ef FILE` | `--env-file` | Load environment variables from file |
 | `-v STRING` | `--volume` | Bind mount volume |
@@ -212,10 +216,6 @@ docker ps -a             # Now you can use docker commands inside the container
 | `--` | `--ss`, `--shell-suffix` | Command arguments (suffix for -s) |
 | `-x CMD` | `--sf`, `--shell-full` | Full command (replaces --sp, -s, and --) |
 | `-y CLI` | `--yolo` | Run AI agent without confirmation |
-| `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, sock) |
-| `--ib` | `--image-build` | Build image |
-| `--iba` | `--image-build-arg` | Pass arguments to a Dockerfile during image build |
-| `--irm` | `--image-remove` | Clean dangling images and `<none>` images |
 | `--install NAME` | | Install manyoyo command |
 | `-V` | `--version` | Show version |
 | `-h` | `--help` | Show help |
