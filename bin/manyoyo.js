@@ -879,7 +879,7 @@ async function handlePostExit(defaultCommand) {
     getHelloTip(CONTAINER_NAME, defaultCommand);
 
     let tipAskKeep = `❔ 会话已结束。是否保留此后台容器 ${CONTAINER_NAME}? [ y=默认保留, n=删除, 1=首次命令进入, x=执行命令, i=交互式SHELL ]: `;
-    if ( QUIET.askkeep || QUIET.full ) tipAskKeep = ``;
+    if ( QUIET.askkeep || QUIET.full ) tipAskKeep = `保留容器吗? [y,n] `;
     const reply = await askQuestion(tipAskKeep);
 
     const firstChar = reply.trim().toLowerCase()[0];
