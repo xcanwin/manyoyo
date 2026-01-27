@@ -114,6 +114,7 @@ function showVersion() {
 
 function getHelloTip(containerName, defaultCommand) {
     if ( !(QUIET.tip || QUIET.full) ) {
+        console.log("");
         console.log(`${BLUE}----------------------------------------${NC}`);
         console.log(`📦 首次命令        : ${defaultCommand}`);
         console.log(`⚫ 恢复首次命令会话: ${CYAN}${MANYOYO_NAME} -n ${containerName} -- -c${NC}`);
@@ -136,6 +137,9 @@ function setQuiet(action) {
                 break;
             case 'tip':
                 QUIET.tip = 1;
+                break;
+            case 'askkeep':
+                QUIET.askkeep = 1;
                 break;
             case 'cmd':
                 QUIET.cmd = 1;
@@ -806,7 +810,7 @@ async function waitForContainerReady(containerName) {
 }
 
 async function createNewContainer() {
-    if ( !(QUIET.cnew || QUIET.full) ) console.log(`${CYAN}📦 manyoyo by xcanwin 正在创建新容器: ${YELLOW}${CONTAINER_NAME}${NC}\n`);
+    if ( !(QUIET.cnew || QUIET.full) ) console.log(`${CYAN}📦 manyoyo by xcanwin 正在创建新容器: ${YELLOW}${CONTAINER_NAME}${NC}`);
 
     EXEC_COMMAND = `${EXEC_COMMAND_PREFIX}${EXEC_COMMAND}${EXEC_COMMAND_SUFFIX}`;
     const defaultCommand = EXEC_COMMAND;
@@ -872,11 +876,11 @@ function executeInContainer(defaultCommand) {
 }
 
 async function handlePostExit(defaultCommand) {
-    console.log("");
     getHelloTip(CONTAINER_NAME, defaultCommand);
 
-    const reply = await askQuestion(`❔ 会话已结束。是否保留此后台容器 ${CONTAINER_NAME}? [ y=默认保留, n=删除, 1=首次命令进入, x=执行命令, i=交互式SHELL ]: `);
-    console.log("");
+    let tipAskKeep = `❔ 会话已结束。是否保留此后台容器 ${CONTAINER_NAME}? [ y=默认保留, n=删除, 1=首次命令进入, x=执行命令, i=交互式SHELL ]: `;
+    if ( QUIET.askkeep || QUIET.full ) tipAskKeep = ``;
+    const reply = await askQuestion(tipAskKeep);
 
     const firstChar = reply.trim().toLowerCase()[0];
 
