@@ -70,10 +70,10 @@ function showHelp() {
     console.log(`  ${MANYOYO_NAME} [--hp HOST_PATH] [-n CONTAINER_NAME] [--cp CONTAINER_PATH] [--ef ENV_FILE] [--sp COMMAND] [-s COMMAND] [-- COMMAND]`);
     console.log("");
     console.log(`${BLUE}Options:${NC}`);
-    console.log("  -l|--ls|--list                   列举容器");
     console.log("  --hp|--host-path PATH            设置宿主机工作目录 (默认当前路径)");
     console.log("  -n|--cn|--cont-name NAME         设置容器名称");
     console.log("  --cp|--cont-path PATH            设置容器工作目录");
+    console.log("  -l|--cl|--cont-list              列举容器");
     console.log("  --crm|--cont-remove              删除-n指定容器");
     console.log("  -m|--cm|--cont-mode STRING       设置容器嵌套容器模式");
     console.log("                                   例如 common, dind, sock");
@@ -572,12 +572,6 @@ function parseArguments(argv) {
         const arg = args[i];
 
         switch (arg) {
-            case '-l':
-            case '--ls':
-            case '--list':
-                getContList();
-                process.exit(0);
-
             case '--hp':
             case '--host-path':
                 HOST_PATH = args[i + 1];
@@ -596,6 +590,12 @@ function parseArguments(argv) {
                 CONTAINER_PATH = args[i + 1];
                 i += 2;
                 break;
+
+            case '-l':
+            case '--cl':
+            case '--cont-list':
+                getContList();
+                process.exit(0);
 
             case '--crm':
             case '--cont-remove':

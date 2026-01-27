@@ -197,10 +197,10 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 
 | 选项 | 别名 | 描述 |
 |------|------|------|
-| `-l` | `--ls`, `--list` | 列出所有 manyoyo 容器 |
 | `--hp PATH` | `--host-path` | 设置宿主机工作目录（默认：当前路径） |
 | `-n NAME` | `--cn`, `--cont-name` | 设置容器名称 |
 | `--cp PATH` | `--cont-path` | 设置容器工作目录 |
+| `-l` | `--cl`, `--cont-list` | 列出所有 manyoyo 容器 |
 | `--crm` | `--cont-remove` | 删除容器 |
 | `-m MODE` | `--cm`, `--cont-mode` | 设置容器模式（common, dind, sock） |
 | `--in NAME` | `--image-name` | 指定镜像名称 |

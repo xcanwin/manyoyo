@@ -197,10 +197,10 @@ docker ps -a             # Now you can use docker commands inside the container
 
 | Option | Aliases | Description |
 |--------|---------|-------------|
-| `-l` | `--ls`, `--list` | List all manyoyo containers |
 | `--hp PATH` | `--host-path` | Set host working directory (default: current path) |
 | `-n NAME` | `--cn`, `--cont-name` | Set container name |
 | `--cp PATH` | `--cont-path` | Set container working directory |
+| `-l` | `--cl`, `--cont-list` | List all manyoyo containers |
 | `--crm` | `--cont-remove` | Remove container |
 | `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, sock) |
 | `--in NAME` | `--image-name` | Specify image name |
