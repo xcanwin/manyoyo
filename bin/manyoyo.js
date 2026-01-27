@@ -879,7 +879,7 @@ async function handlePostExit(defaultCommand) {
     getHelloTip(CONTAINER_NAME, defaultCommand);
 
     let tipAskKeep = `❔ 会话已结束。是否保留此后台容器 ${CONTAINER_NAME}? [ y=默认保留, n=删除, 1=首次命令进入, x=执行命令, i=交互式SHELL ]: `;
-    if ( QUIET.askkeep || QUIET.full ) tipAskKeep = `保留容器吗? [y,n] `;
+    if ( QUIET.askkeep || QUIET.full ) tipAskKeep = `保留容器吗? [y n 1 x i] `;
     const reply = await askQuestion(tipAskKeep);
 
     const firstChar = reply.trim().toLowerCase()[0];
@@ -887,7 +887,7 @@ async function handlePostExit(defaultCommand) {
     if (firstChar === 'n') {
         removeContainer(CONTAINER_NAME);
     } else if (firstChar === '1') {
-        console.log(`${GREEN}✅ 离开当前连接，用首次命令进入。${NC}`);
+        if ( !(QUIET.full) ) console.log(`${GREEN}✅ 离开当前连接，用首次命令进入。${NC}`);
         // Reset command variables to use default command
         EXEC_COMMAND = "";
         EXEC_COMMAND_PREFIX = "";
@@ -897,12 +897,12 @@ async function handlePostExit(defaultCommand) {
         await main();
     } else if (firstChar === 'x') {
         const command = await askQuestion('❔ 输入要执行的命令: ');
-        console.log(`${GREEN}✅ 离开当前连接，执行命令。${NC}`);
+        if ( !(QUIET.cmd || QUIET.full) ) console.log(`${GREEN}✅ 离开当前连接，执行命令。${NC}`);
         const newArgs = ['-n', CONTAINER_NAME, '-x', command];
         process.argv = [process.argv[0], process.argv[1], ...newArgs];
         await main();
     } else if (firstChar === 'i') {
-        console.log(`${GREEN}✅ 离开当前连接，进入容器交互式SHELL。${NC}`);
+        if ( !(QUIET.full) ) console.log(`${GREEN}✅ 离开当前连接，进入容器交互式SHELL。${NC}`);
         const newArgs = ['-n', CONTAINER_NAME, '-x', '/bin/bash'];
         process.argv = [process.argv[0], process.argv[1], ...newArgs];
         await main();
