@@ -102,6 +102,63 @@ manyoyo --irm
 manyoyo -q full -x echo "hello world"
 ```
 
+### 配置文件
+
+MANYOYO 支持通过配置文件 `~/.manyoyo/config.json` 设置默认值，简化命令行操作。
+
+#### 创建配置文件
+
+```bash
+mkdir -p ~/.manyoyo
+cat > ~/.manyoyo/config.json << 'EOF'
+{
+  "containerName": "myy-dev",
+  "imageName": "localhost/xcanwin/manyoyo",
+  "imageVersion": "1.6.3-full",
+  "quiet": "tip",
+  "env": ["IS_SANDBOX=1"],
+  "volumes": []
+}
+EOF
+```
+
+#### 配置项说明
+
+参考 `config.example.json` 文件查看所有可配置项：
+
+```json
+{
+  "containerName": "myy-dev",          // 默认容器名称
+  "hostPath": "/path/to/project",      // 默认宿主机工作目录
+  "containerPath": "/path/to/project", // 默认容器工作目录
+  "imageName": "localhost/xcanwin/manyoyo",  // 默认镜像名称
+  "imageVersion": "1.6.3-full",        // 默认镜像版本
+  "containerMode": "common",           // 容器嵌套模式 (common, dind, sock)
+  "envFile": "",                       // 默认环境变量文件路径
+  "env": [],                           // 默认环境变量数组
+  "volumes": [],                       // 默认挂载卷数组
+  "shellPrefix": "",                   // 默认命令前缀
+  "shell": "",                         // 默认执行命令
+  "yolo": "",                          // 默认 YOLO 模式 (c, gm, cx, oc)
+  "quiet": "",                         // 默认静默选项
+  "imageBuildArgs": []                 // 默认镜像构建参数
+}
+```
+
+#### 优先级
+
+命令行参数 > 配置文件 > 内置默认值
+
+示例：
+
+```bash
+# 使用配置文件中的默认值
+manyoyo -y c
+
+# 命令行参数会覆盖配置文件
+manyoyo -n custom-name -y c  # 使用 custom-name 而不是配置文件中的 containerName
+```
+
 ### 环境变量
 
 #### 字符串格式

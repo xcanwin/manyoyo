@@ -31,6 +31,10 @@
     "README.md",
     "docs/README_EN.md",
     "LICENSE",
-    "docker/manyoyo.Dockerfile"
-  ]
+    "docker/manyoyo.Dockerfile",
+    "config.example.json"
+  ],
+  "dependencies": {
+    "commander": "^12.0.0"
+  }
 }

@@ -7,7 +7,9 @@
 const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const readline = require('readline');
+const { Command } = require('commander');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_BASE } = require('../package.json');
 
 // Helper function to format date like bash $(date +%m%d-%H%M)
@@ -59,58 +61,27 @@ function sleep(ms) {
 }
 
 // ==============================================================================
+// Configuration File Functions
+// ==============================================================================
+
+function loadConfig() {
+    const configPath = path.join(os.homedir(), '.manyoyo', 'config.json');
+    if (fs.existsSync(configPath)) {
+        try {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            return config;
+        } catch (e) {
+            console.error(`${YELLOW}⚠️ 配置文件格式错误: ${configPath}${NC}`);
+            return {};
+        }
+    }
+    return {};
+}
+
+// ==============================================================================
 // UI Functions
 // ==============================================================================
 
-function showHelp() {
-    console.log(`MANYOYO   -   AI Agent CLI Sandbox`);
-    console.log(`https://github.com/xcanwin/manyoyo`);
-    console.log("");
-    console.log(`${BLUE}Usage:${NC}`);
-    console.log(`  ${MANYOYO_NAME} [OPTIONS]`);
-    console.log(`  ${MANYOYO_NAME} [--hp HOST_PATH] [-n CONTAINER_NAME] [--cp CONTAINER_PATH] [--ef ENV_FILE] [--sp COMMAND] [-s COMMAND] [-- COMMAND]`);
-    console.log("");
-    console.log(`${BLUE}Options:${NC}`);
-    console.log("  --hp|--host-path PATH            设置宿主机工作目录 (默认当前路径)");
-    console.log("  -n|--cn|--cont-name NAME         设置容器名称");
-    console.log("  --cp|--cont-path PATH            设置容器工作目录");
-    console.log("  -l|--cl|--cont-list              列举容器");
-    console.log("  --crm|--cont-remove              删除-n指定容器");
-    console.log("  -m|--cm|--cont-mode STRING       设置容器嵌套容器模式");
-    console.log("                                   例如 common, dind, sock");
-    console.log("  --in|--image-name NAME           指定镜像名称");
-    console.log("  --iv|--image-ver VERSION         指定镜像版本");
-    console.log("  --ib|--image-build               构建镜像");
-    console.log("  --iba|--image-build-arg XXX=YYY  构建镜像时传参给dockerfile");
-    console.log("  --irm|--image-remove             清理悬空镜像和 <none> 镜像");
-    console.log("  -e|--env XXX=YYY                 设置环境变量");
-    console.log("  --ef|--env-file ENV_FILE         设置环境变量通过文件");
-    console.log("  -v|--volume XXX:YYY              绑定挂载卷");
-    console.log("  --sp|--shell-prefix COMMAND      临时环境变量 (作为-s前缀)");
-    console.log("  -s|--shell COMMAND               指定命令执行");
-    console.log("  --|--shell-suffix COMMAND        指定命令参数, --后面全部直传 (作为-s后缀)");
-    console.log("  -x|--shell-full COMMAND          指定完整命令执行, -x后面全部直传 (代替--sp和-s和--命令)");
-    console.log("  -y|--yolo CLI                    使AGENT无需确认 (代替-s命令)");
-    console.log("                                   例如 claude / c, gemini / gm, codex / cx, opencode / oc");
-    console.log("  --install NAME                   安装manyoyo命令");
-    console.log("                                   例如 docker-cli-plugin");
-    console.log("  -q|--quiet LIST                  静默显示");
-    console.log("                                   例如 cnew,crm,tip,cmd,full");
-    console.log("  -V|--version                     显示版本");
-    console.log("  -h|--help                        显示帮助");
-    console.log("");
-    console.log(`${BLUE}Example:${NC}`);
-    console.log(`  ${MANYOYO_NAME} --ib                                构建镜像`);
-    console.log(`  ${MANYOYO_NAME} -n test --ef ./xxx.env -y c         设置环境变量并运行无需确认的AGENT`);
-    console.log(`  ${MANYOYO_NAME} -n test -- -c                       恢复之前会话`);
-    console.log(`  ${MANYOYO_NAME} -x echo 123                         指定命令执行`);
-    console.log(`  ${MANYOYO_NAME} -n test --ef ./xxx.env -x claude    设置环境变量并运行`);
-    console.log(`  ${MANYOYO_NAME} -n test -x claude -c                恢复之前会话`);
-}
-
-function showVersion() {
-    console.log(`manyoyo by xcanwin, ${BIN_VERSION}`);
-}
 
 function getHelloTip(containerName, defaultCommand) {
     if ( !(QUIET.tip || QUIET.full) ) {
@@ -565,188 +536,126 @@ async function buildImage(IMAGE_BUILD_ARGS, imageName, imageVersion) {
 // Main Function Helpers
 // ==============================================================================
 
-function validateAndInitialize() {
-    // Check if no arguments provided
-    if (process.argv.length <= 2) {
-        showHelp();
-        process.exit(1);
+function setupCommander() {
+    // Load config file
+    const config = loadConfig();
+
+    const program = new Command();
+
+    program
+        .name(MANYOYO_NAME)
+        .version(BIN_VERSION, '-V, --version', '显示版本')
+        .description('MANYOYO - AI Agent CLI Sandbox\nhttps://github.com/xcanwin/manyoyo')
+        .addHelpText('after', `
+配置文件:
+  ~/.manyoyo/config.json    默认配置文件
+
+示例:
+  ${MANYOYO_NAME} --ib                                构建镜像
+  ${MANYOYO_NAME} -n test --ef ./xxx.env -y c         设置环境变量并运行无需确认的AGENT
+  ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
+  ${MANYOYO_NAME} -x echo 123                         指定命令执行
+  ${MANYOYO_NAME} -n test --ef ./xxx.env -x claude    设置环境变量并运行
+  ${MANYOYO_NAME} -n test -x claude -c                恢复之前会话
+        `);
+
+    // Options
+    program
+        .option('--hp, --host-path <path>', '设置宿主机工作目录 (默认当前路径)')
+        .option('-n, --cn, --cont-name <name>', '设置容器名称')
+        .option('--cp, --cont-path <path>', '设置容器工作目录')
+        .option('-l, --cl, --cont-list', '列举容器')
+        .option('--crm, --cont-remove', '删除-n指定容器')
+        .option('-m, --cm, --cont-mode <mode>', '设置容器嵌套容器模式 (common, dind, sock)')
+        .option('--in, --image-name <name>', '指定镜像名称')
+        .option('--iv, --image-ver <version>', '指定镜像版本')
+        .option('--ib, --image-build', '构建镜像')
+        .option('--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)', (value, previous) => [...(previous || []), value], [])
+        .option('--irm, --image-remove', '清理悬空镜像和 <none> 镜像')
+        .option('-e, --env <env>', '设置环境变量 XXX=YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
+        .option('--ef, --env-file <file>', '设置环境变量通过文件')
+        .option('-v, --volume <volume>', '绑定挂载卷 XXX:YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
+        .option('--sp, --shell-prefix <command>', '临时环境变量 (作为-s前缀)')
+        .option('-s, --shell <command>', '指定命令执行')
+        .option('-x, --shell-full <command...>', '指定完整命令执行 (代替--sp和-s和--命令)')
+        .option('-y, --yolo <cli>', '使AGENT无需确认 (claude/c, gemini/gm, codex/cx, opencode/oc)')
+        .option('--install <name>', '安装manyoyo命令 (docker-cli-plugin)')
+        .option('-q, --quiet <list>', '静默显示 (cnew,crm,tip,cmd,full)');
+
+    // Docker CLI plugin metadata check
+    if (process.argv[2] === 'docker-cli-plugin-metadata') {
+        console.log(JSON.stringify({
+            "SchemaVersion": "0.1.0",
+            "Vendor": "xcanwin",
+            "Version": "v1.0.0",
+            "Description": "AI Agent CLI Sandbox"
+        }, null, 2));
+        process.exit(0);
+    }
+
+    // Docker CLI plugin mode - remove first arg if running as plugin
+    const dockerPluginPath = path.join(process.env.HOME || '', '.docker/cli-plugins/docker-manyoyo');
+    if (process.argv[1] === dockerPluginPath && process.argv[2] === 'manyoyo') {
+        process.argv.splice(2, 1);
+    }
+
+    // Parse arguments
+    program.allowUnknownOption(false);
+    program.parse(process.argv);
+
+    const options = program.opts();
+
+    // Apply config defaults, then override with command line options
+    HOST_PATH = options.hostPath || config.hostPath || HOST_PATH;
+    if (options.contName || config.containerName) CONTAINER_NAME = options.contName || config.containerName;
+    if (options.contPath || config.containerPath) CONTAINER_PATH = options.contPath || config.containerPath;
+    IMAGE_NAME = options.imageName || config.imageName || IMAGE_NAME;
+    if (options.imageVer || config.imageVersion) IMAGE_VERSION = options.imageVer || config.imageVersion;
+    if (options.envFile || config.envFile) addEnvFile(options.envFile || config.envFile);
+    if (options.shellPrefix || config.shellPrefix) EXEC_COMMAND_PREFIX = (options.shellPrefix || config.shellPrefix) + " ";
+    if (options.shell || config.shell) EXEC_COMMAND = options.shell || config.shell;
+
+    // Handle arrays - merge config and command line
+    const envList = [...(config.env || []), ...(options.env || [])];
+    envList.forEach(e => addEnv(e));
+
+    const volumeList = [...(config.volumes || []), ...(options.volume || [])];
+    volumeList.forEach(v => addVolume(v));
+
+    const buildArgList = [...(config.imageBuildArgs || []), ...(options.imageBuildArg || [])];
+    buildArgList.forEach(arg => addImageBuildArg(arg));
+
+    // Handle special options
+    const quietValue = options.quiet || config.quiet;
+    if (quietValue) setQuiet(quietValue);
+
+    const yoloValue = options.yolo || config.yolo;
+    if (yoloValue) setYolo(yoloValue);
+
+    const contModeValue = options.contMode || config.containerMode;
+    if (contModeValue) setContMode(contModeValue);
+
+    if (options.contList) { getContList(); process.exit(0); }
+    if (options.contRemove) SHOULD_REMOVE = true;
+    if (options.imageBuild) IMAGE_BUILD_NEED = true;
+    if (options.imageRemove) { pruneDanglingImages(); process.exit(0); }
+    if (options.install) { installManyoyo(options.install); process.exit(0); }
+
+    // Handle shell-full (variadic arguments)
+    if (options.shellFull) {
+        EXEC_COMMAND = options.shellFull.join(' ');
+    }
+
+    // Handle -- suffix arguments
+    const doubleDashIndex = process.argv.indexOf('--');
+    if (doubleDashIndex !== -1 && doubleDashIndex < process.argv.length - 1) {
+        EXEC_COMMAND_SUFFIX = " " + process.argv.slice(doubleDashIndex + 1).join(' ');
     }
 
     // Ensure docker/podman is available
     ensureDocker();
 
-    // Docker CLI plugin metadata
-    if (process.argv[2] === 'docker-cli-plugin-metadata') {
-        const metadata = {
-            "SchemaVersion": "0.1.0",
-            "Vendor": "xcanwin",
-            "Version": "v1.0.0",
-            "Description": "AI Agent CLI Sandbox"
-        };
-        console.log(JSON.stringify(metadata, null, 2));
-        process.exit(0);
-    }
-}
-
-function parseArguments(argv) {
-    // Parse arguments
-    let args = argv.slice(2);
-
-    // Docker CLI plugin mode - remove first arg if running as plugin
-    const dockerPluginPath = path.join(process.env.HOME || '', '.docker/cli-plugins/docker-manyoyo');
-    if (argv[1] === dockerPluginPath && args[0] === 'manyoyo') {
-        args.shift();
-    }
-
-    // Parse command-line arguments
-    let i = 0;
-    while (i < args.length) {
-        const arg = args[i];
-
-        switch (arg) {
-            case '-q':
-            case '--quiet':
-                setQuiet(args[i + 1]);
-                i += 2;
-                break;
-
-            case '--hp':
-            case '--host-path':
-                HOST_PATH = args[i + 1];
-                i += 2;
-                break;
-
-            case '-n':
-            case '--cn':
-            case '--cont-name':
-                CONTAINER_NAME = args[i + 1];
-                i += 2;
-                break;
-
-            case '--cp':
-            case '--cont-path':
-                CONTAINER_PATH = args[i + 1];
-                i += 2;
-                break;
-
-            case '-l':
-            case '--cl':
-            case '--cont-list':
-                getContList();
-                process.exit(0);
-
-            case '--crm':
-            case '--cont-remove':
-                SHOULD_REMOVE = true;
-                i += 1;
-                break;
-
-            case '--in':
-            case '--image-name':
-                IMAGE_NAME = args[i + 1];
-                i += 2;
-                break;
-
-            case '--iv':
-            case '--image-ver':
-                IMAGE_VERSION = args[i + 1];
-                i += 2;
-                break;
-
-            case '-e':
-            case '--env':
-                addEnv(args[i + 1]);
-                i += 2;
-                break;
-
-            case '--ef':
-            case '--env-file':
-                addEnvFile(args[i + 1]);
-                i += 2;
-                break;
-
-            case '-v':
-            case '--volume':
-                addVolume(args[i + 1]);
-                i += 2;
-                break;
-
-            case '--sp':
-            case '--shell-prefix':
-                EXEC_COMMAND_PREFIX = args[i + 1] + " ";
-                i += 2;
-                break;
-
-            case '-s':
-            case '--shell':
-                EXEC_COMMAND = args[i + 1];
-                i += 2;
-                break;
-
-            case '--':
-            case '--ss':
-            case '--shell-suffix':
-                EXEC_COMMAND_SUFFIX = " " + args.slice(i + 1).join(' ');
-                i = args.length;
-                break;
-
-            case '-x':
-            case '--sf':
-            case '--shell-full':
-                EXEC_COMMAND = args.slice(i + 1).join(' ');
-                i = args.length;
-                break;
-
-            case '-y':
-            case '--yolo':
-                setYolo(args[i + 1]);
-                i += 2;
-                break;
-
-            case '-m':
-            case '--cm':
-            case '--cont-mode':
-                setContMode(args[i + 1]);
-                i += 2;
-                break;
-
-            case '--ib':
-            case '--image-build':
-                IMAGE_BUILD_NEED = true;
-                i += 1;
-                break;
-
-            case '--iba':
-            case '--image-build-arg':
-                addImageBuildArg(args[i + 1]);
-                i += 2;
-                break;
-
-            case '--irm':
-            case '--image-remove':
-                pruneDanglingImages();
-                process.exit(0);
-
-            case '--install':
-                installManyoyo(args[i + 1]);
-                process.exit(0);
-
-            case '-V':
-            case '--version':
-                showVersion();
-                process.exit(0);
-
-            case '-h':
-            case '--help':
-                showHelp();
-                process.exit(0);
-
-            default:
-                console.log(`${RED}⚠️ 未知参数: ${arg}${NC}`);
-                showHelp();
-                process.exit(1);
-        }
-    }
+    return program;
 }
 
 function handleRemoveContainer() {
@@ -917,31 +826,28 @@ async function handlePostExit(defaultCommand) {
 
 async function main() {
     try {
-        // 1. Validate and initialize
-        validateAndInitialize();
+        // 1. Setup commander and parse arguments
+        setupCommander();
 
-        // 2. Parse command-line arguments
-        parseArguments(process.argv);
-
-        // 3. Handle image build operation
+        // 2. Handle image build operation
         if (IMAGE_BUILD_NEED) {
             await buildImage(IMAGE_BUILD_ARGS, IMAGE_NAME, IMAGE_VERSION.split('-')[0]);
             process.exit(0);
         }
 
-        // 4. Handle remove container operation
+        // 3. Handle remove container operation
         handleRemoveContainer();
 
-        // 5. Validate host path safety
+        // 4. Validate host path safety
         validateHostPath();
 
-        // 6. Setup container (create or connect)
+        // 5. Setup container (create or connect)
         const defaultCommand = await setupContainer();
 
-        // 7. Execute command in container
+        // 6. Execute command in container
         executeInContainer(defaultCommand);
 
-        // 8. Handle post-exit interactions
+        // 7. Handle post-exit interactions
         await handlePostExit(defaultCommand);
 
     } catch (e) {
