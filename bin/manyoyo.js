@@ -562,11 +562,11 @@ function setupCommander() {
     // Options
     program
         .option('--hp, --host-path <path>', '设置宿主机工作目录 (默认当前路径)')
-        .option('-n, --cn, --cont-name <name>', '设置容器名称')
+        .option('-n, --cont-name <name>', '设置容器名称')
         .option('--cp, --cont-path <path>', '设置容器工作目录')
-        .option('-l, --cl, --cont-list', '列举容器')
+        .option('-l, --cont-list', '列举容器')
         .option('--crm, --cont-remove', '删除-n指定容器')
-        .option('-m, --cm, --cont-mode <mode>', '设置容器嵌套容器模式 (common, dind, sock)')
+        .option('-m, --cont-mode <mode>', '设置容器嵌套容器模式 (common, dind, sock)')
         .option('--in, --image-name <name>', '指定镜像名称')
         .option('--iv, --image-ver <version>', '指定镜像版本')
         .option('--ib, --image-build', '构建镜像')
@@ -598,6 +598,9 @@ function setupCommander() {
     if (process.argv[1] === dockerPluginPath && process.argv[2] === 'manyoyo') {
         process.argv.splice(2, 1);
     }
+
+    // Ensure docker/podman is available
+    ensureDocker();
 
     // Parse arguments
     program.allowUnknownOption(false);
@@ -651,9 +654,6 @@ function setupCommander() {
     if (doubleDashIndex !== -1 && doubleDashIndex < process.argv.length - 1) {
         EXEC_COMMAND_SUFFIX = " " + process.argv.slice(doubleDashIndex + 1).join(' ');
     }
-
-    // Ensure docker/podman is available
-    ensureDocker();
 
     return program;
 }
