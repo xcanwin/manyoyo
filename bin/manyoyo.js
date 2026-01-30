@@ -71,7 +71,7 @@ function loadConfig() {
             const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
             return config;
         } catch (e) {
-            console.error(`${YELLOW}⚠️ 配置文件格式错误: ${configPath}${NC}`);
+            console.error(`${YELLOW}⚠️  配置文件格式错误: ${configPath}${NC}`);
             return {};
         }
     }
@@ -95,7 +95,7 @@ function loadRunConfig(name) {
             }
         }
     }
-    console.error(`${RED}⚠️ 未找到运行配置: ${name}${NC}`);
+    console.error(`${RED}⚠️  未找到运行配置: ${name}${NC}`);
     return {};
 }
 
@@ -207,7 +207,7 @@ function addEnvFile(envFile) {
             return {};
         }
     }
-    console.error(`${RED}⚠️ 未找到运行配置: ${envFile}${NC}`);
+    console.error(`${RED}⚠️  未找到运行配置: ${envFile}${NC}`);
     return {};
 }
 
@@ -236,7 +236,7 @@ function setYolo(cli) {
             EXEC_COMMAND = "opencode";
             break;
         default:
-            console.log(`${RED}⚠️ 未知LLM CLI: ${cli}${NC}`);
+            console.log(`${RED}⚠️  未知LLM CLI: ${cli}${NC}`);
             process.exit(0);
     }
 }
@@ -256,10 +256,10 @@ function setContMode(mode) {
         case 'sock':
         case 's':
             CONT_MODE = "--privileged --volume /var/run/docker.sock:/var/run/docker.sock --env DOCKER_HOST=unix:///var/run/docker.sock --env CONTAINER_HOST=unix:///var/run/docker.sock";
-            console.log(`${RED}⚠️ 开启危险的容器嵌套容器模式, 危害: 容器可访问宿主机文件${NC}`);
+            console.log(`${RED}⚠️  开启危险的容器嵌套容器模式, 危害: 容器可访问宿主机文件${NC}`);
             break;
         default:
-            console.log(`${RED}⚠️ 未知模式: ${mode}${NC}`);
+            console.log(`${RED}⚠️  未知模式: ${mode}${NC}`);
             process.exit(0);
     }
 }
@@ -721,10 +721,10 @@ function handleRemoveContainer() {
             if (containerExists(CONTAINER_NAME)) {
                 removeContainer(CONTAINER_NAME);
             } else {
-                console.log(`${RED}⚠️ 错误: 未找到名为 ${CONTAINER_NAME} 的容器。${NC}`);
+                console.log(`${RED}⚠️  错误: 未找到名为 ${CONTAINER_NAME} 的容器。${NC}`);
             }
         } catch (e) {
-            console.log(`${RED}⚠️ 错误: 未找到名为 ${CONTAINER_NAME} 的容器。${NC}`);
+            console.log(`${RED}⚠️  错误: 未找到名为 ${CONTAINER_NAME} 的容器。${NC}`);
         }
         process.exit(0);
     }
@@ -734,7 +734,7 @@ function validateHostPath() {
     const realHostPath = fs.realpathSync(HOST_PATH);
     const homeDir = process.env.HOME || '/home';
     if (realHostPath === '/' || realHostPath === '/home' || realHostPath === homeDir) {
-        console.log(`${RED}⚠️ 错误: 不允许挂载根目录或home目录。${NC}`);
+        console.log(`${RED}⚠️  错误: 不允许挂载根目录或home目录。${NC}`);
         process.exit(1);
     }
 }
@@ -751,7 +751,7 @@ async function waitForContainerReady(containerName) {
             }
 
             if (status === 'exited') {
-                console.log(`${RED}⚠️ 错误: 容器启动后立即退出。${NC}`);
+                console.log(`${RED}⚠️  错误: 容器启动后立即退出。${NC}`);
                 dockerExec(`${DOCKER_CMD} logs "${containerName}"`, { stdio: 'inherit' });
                 process.exit(1);
             }
@@ -760,7 +760,7 @@ async function waitForContainerReady(containerName) {
             count++;
 
             if (count >= MAX_RETRIES) {
-                console.log(`${RED}⚠️ 错误: 容器启动超时（当前状态: ${status}）。${NC}`);
+                console.log(`${RED}⚠️  错误: 容器启动超时（当前状态: ${status}）。${NC}`);
                 dockerExec(`${DOCKER_CMD} logs "${containerName}"`, { stdio: 'inherit' });
                 process.exit(1);
             }
@@ -768,7 +768,7 @@ async function waitForContainerReady(containerName) {
             await sleep(100);
             count++;
             if (count >= MAX_RETRIES) {
-                console.log(`${RED}⚠️ 错误: 容器启动超时。${NC}`);
+                console.log(`${RED}⚠️  错误: 容器启动超时。${NC}`);
                 process.exit(1);
             }
         }

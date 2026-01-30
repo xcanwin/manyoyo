@@ -103,27 +103,57 @@ manyoyo --irm
 manyoyo -q full -x echo "hello world"
 ```
 
-### 配置文件
+### 环境变量
 
-MANYOYO 支持通过配置文件简化命令行操作。
+给容器内CLI传递BASE_URL和TOKEN等。
 
-#### 创建配置文件
+#### 字符串形式
 
 ```bash
-mkdir -p ~/.manyoyo/run/
-cat > ~/.manyoyo/run/c << 'EOF'
-{
-    "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.6.3-full",
-    "envFile": [
-        "claude.env"
-    ],
-    "yolo": "c"
-}
-EOF
+manyoyo -e "A=1" -e "B=2" -x claude
 ```
 
-#### 配置项说明
+#### 文件形式
+
+环境文件路径 请放在 `~/.manyoyo/env/` 目录下，命令行的`--ef`和配置文件的`envFile`会优先检查此目录。（TODO）
+
+```bash
+manyoyo --ef claude.env -x claude
+```
+
+环境文件内容 支持以下格式：
+
+```bash
+export BASE_URL="https://xxxx"
+API_KEY=your-api-key-here
+MESSAGE="Hello World"
+PATH='/usr/local/bin'
+```
+
+#### 常用样例
+
+```bash
+mkdir -p ~/.manyoyo/env/
+nano ~/.manyoyo/env/claude.env
+```
+
+```bash
+export ANTHROPIC_BASE_URL="https://api.anthropic.com"
+# export CLAUDE_CODE_OAUTH_TOKEN="sk-xxxxxxxx"
+export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
+export API_TIMEOUT_MS=3000000
+export ANTHROPIC_MODEL="claude-sonnet-4-5"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-5"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
+export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
+```
+
+### 配置文件
+
+简化MANYOYO命令行操作。
+
+#### 可选项
 
 参考 `config.example.json` 文件查看所有可配置项：
 
@@ -148,48 +178,24 @@ EOF
 
 #### 优先级
 
-从左到右覆盖: 命令行参数 > 配置文件 > 内置默认值
+左边覆盖右边: 命令行参数 > 配置文件 > 内置默认值
 
-### 环境变量
-
-#### 字符串形式
+#### 常用样例
 
 ```bash
-# 直接传递
-manyoyo -e "VAR=value" -x claude
-
-# 多个变量
-manyoyo -e "A=1" -e "B=2" -x claude
+mkdir -p ~/.manyoyo/run/
+nano ~/.manyoyo/run/c
 ```
 
-#### 文件形式
-
 ```bash
-# 命令行参数
-manyoyo --ef claude.env -x claude
-```
-
-- 环境文件路径 请放在 ```~/.manyoyo/env/``` 目录下，命令行的`--ef`和配置文件的`envFile`会优先检查此目录。
-- 环境文件内容 支持以下格式：
-
-```bash
-# 使用 export 语句
-export ANTHROPIC_BASE_URL="https://api.anthropic.com"
-# export CLAUDE_CODE_OAUTH_TOKEN="sk-xxxxxxxx"
-export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
-export API_TIMEOUT_MS=3000000
-export ANTHROPIC_MODEL="claude-sonnet-4-5"
-export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-5"
-export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
-export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
-
-# 简单的键值对
-API_KEY=your-api-key-here
-
-# 带引号的值（引号会被移除）
-MESSAGE="Hello World"
-PATH='/usr/local/bin'
+{
+    "imageName": "localhost/xcanwin/manyoyo",
+    "imageVersion": "1.6.3-full",
+    "envFile": [
+        "claude.env"
+    ],
+    "yolo": "c"
+}
 ```
 
 ### AI CLI 快捷方式（跳过权限确认）
