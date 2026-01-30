@@ -40,6 +40,7 @@ npm install -g .
 ## 2. 安装 podman
 
 2.1 安装 [podman](https://podman.io/docs/installation)
+
 2.2 拉取基础镜像
 
 ```bash
@@ -104,20 +105,20 @@ manyoyo -q full -x echo "hello world"
 
 ### 配置文件
 
-MANYOYO 支持通过配置文件 `~/.manyoyo/config.json` 设置默认值，简化命令行操作。
+MANYOYO 支持通过配置文件简化命令行操作。
 
 #### 创建配置文件
 
 ```bash
-mkdir -p ~/.manyoyo
-cat > ~/.manyoyo/config.json << 'EOF'
+mkdir -p ~/.manyoyo/run/
+cat > ~/.manyoyo/run/c << 'EOF'
 {
-  "containerName": "myy-dev",
-  "imageName": "localhost/xcanwin/manyoyo",
-  "imageVersion": "1.6.3-full",
-  "quiet": "tip",
-  "env": ["IS_SANDBOX=1"],
-  "volumes": []
+    "imageName": "localhost/xcanwin/manyoyo",
+    "imageVersion": "1.6.3-full",
+    "envFile": [
+        "claude.env"
+    ],
+    "yolo": "c"
 }
 EOF
 ```
@@ -147,38 +148,29 @@ EOF
 
 #### 优先级
 
-命令行参数 > 配置文件 > 内置默认值
-
-示例：
-
-```bash
-# 使用配置文件中的默认值
-manyoyo -y c
-
-# 命令行参数会覆盖配置文件
-manyoyo -n custom-name -y c  # 使用 custom-name 而不是配置文件中的 containerName
-```
+从左到右覆盖: 命令行参数 > 配置文件 > 内置默认值
 
 ### 环境变量
 
-#### 字符串格式
+#### 字符串形式
 
 ```bash
 # 直接传递
-manyoyo -e "VAR=value" -x env
+manyoyo -e "VAR=value" -x claude
 
 # 多个变量
-manyoyo -e "A=1" -e "B=2" -x env
+manyoyo -e "A=1" -e "B=2" -x claude
 ```
 
-#### 文件格式
+#### 文件形式
 
 ```bash
-# 从文件加载
-manyoyo --ef .env -x env
+# 命令行参数
+manyoyo --ef claude.env -x claude
 ```
 
-环境文件（`.env`）支持以下格式：
+- 环境文件路径 请放在 ```~/.manyoyo/env/``` 目录下，命令行的`--ef`和配置文件的`envFile`会优先检查此目录。
+- 环境文件内容 支持以下格式：
 
 ```bash
 # 使用 export 语句

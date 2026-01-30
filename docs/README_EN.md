@@ -40,6 +40,7 @@ npm install -g .
 ## 2. Install podman
 
 2.1 Install [podman](https://podman.io/docs/installation)
+
 2.2 Pull base image
 
 ```bash

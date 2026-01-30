@@ -80,8 +80,8 @@ function loadConfig() {
 
 function loadRunConfig(name) {
     const paths = [
-        path.join(process.cwd(), `${name}.json`),
-        path.join(os.homedir(), '.manyoyo', 'run', `${name}.json`)
+        path.join(name),
+        path.join(os.homedir(), '.manyoyo', 'run', `${name}`)
     ];
 
     for (const configPath of paths) {
@@ -90,12 +90,12 @@ function loadRunConfig(name) {
                 const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
                 return config;
             } catch (e) {
-                console.error(`${YELLOW}⚠️ 运行配置文件格式错误: ${configPath}${NC}`);
+                console.error(`${YELLOW}⚠️  运行配置文件格式错误: ${configPath}${NC}`);
                 return {};
             }
         }
     }
-    console.error(`${RED}⚠️ 未找到运行配置: ${name}.json${NC}`);
+    console.error(`${RED}⚠️ 未找到运行配置: ${name}${NC}`);
     return {};
 }
 
@@ -170,35 +170,45 @@ function addEnv(env) {
 }
 
 function addEnvFile(envFile) {
-    ENV_FILE = envFile;
-    if (ENV_FILE && fs.existsSync(ENV_FILE)) {
-        const content = fs.readFileSync(ENV_FILE, 'utf-8');
-        const lines = content.split('\n');
+    const paths = [
+        path.join(envFile),
+        path.join(os.homedir(), '.manyoyo', 'env', `${envFile}`)
+    ];
 
-        for (let line of lines) {
-            // Match pattern: (export )?(KEY)=(VALUE)
-            const match = line.match(/^(?:export\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/);
-            if (match) {
-                let key = match[1];
-                let value = match[2].trim();
+    for (const filePath of paths) {
+        ENV_FILE = filePath;
+        if (fs.existsSync(filePath)) {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            const lines = content.split('\n');
 
-                // Filter malicious characters
-                if (/[\$\(\)\`\|\&\*\{\}]/.test(value)) continue;
-                if (/^\(/.test(value)) continue;
+            for (let line of lines) {
+                // Match pattern: (export )?(KEY)=(VALUE)
+                const match = line.match(/^(?:export\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/);
+                if (match) {
+                    let key = match[1];
+                    let value = match[2].trim();
 
-                // Remove quotes
-                if (/^"(.*)"$/.test(value)) {
-                    value = value.slice(1, -1);
-                } else if (/^'(.*)'$/.test(value)) {
-                    value = value.slice(1, -1);
-                }
+                    // Filter malicious characters
+                    if (/[\$\(\)\`\|\&\*\{\}]/.test(value)) continue;
+                    if (/^\(/.test(value)) continue;
 
-                if (key) {
-                    CONTAINER_ENVS.push("--env", `${key}=${value}`);
+                    // Remove quotes
+                    if (/^"(.*)"$/.test(value)) {
+                        value = value.slice(1, -1);
+                    } else if (/^'(.*)'$/.test(value)) {
+                        value = value.slice(1, -1);
+                    }
+
+                    if (key) {
+                        CONTAINER_ENVS.push("--env", `${key}=${value}`);
+                    }
                 }
             }
+            return {};
         }
     }
+    console.error(`${RED}⚠️ 未找到运行配置: ${envFile}${NC}`);
+    return {};
 }
 
 function addVolume(volume) {
@@ -573,7 +583,7 @@ function setupCommander() {
         .addHelpText('after', `
 配置文件:
   ~/.manyoyo/manyoyo.json    全局配置文件
-  ./run/123.json             运行配置示例
+  ~/.manyoyo/run/c           运行配置示例
 
 示例:
   ${MANYOYO_NAME} --ib                                构建镜像
@@ -658,9 +668,12 @@ function setupCommander() {
     }
 
     // Merge mode (array values): concatenate all sources
-    const envFileList = [...(config.envFiles || config.envFile ? [config.envFile] : []),
-                          ...(runConfig.envFiles || runConfig.envFile ? [runConfig.envFile] : []),
-                          ...(options.envFile || [])].filter(Boolean);
+    const toArray = (val) => Array.isArray(val) ? val : (val ? [val] : []);
+    const envFileList = [
+        ...toArray(config.envFile),
+        ...toArray(runConfig.envFile),
+        ...(options.envFile || [])
+    ].filter(Boolean);
     envFileList.forEach(ef => addEnvFile(ef));
 
     const envList = [...(config.env || []), ...(runConfig.env || []), ...(options.env || [])];
