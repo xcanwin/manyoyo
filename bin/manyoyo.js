@@ -78,6 +78,27 @@ function loadConfig() {
     return {};
 }
 
+function loadRunConfig(name) {
+    const paths = [
+        path.join(process.cwd(), `${name}.json`),
+        path.join(os.homedir(), '.manyoyo', 'run', `${name}.json`)
+    ];
+
+    for (const configPath of paths) {
+        if (fs.existsSync(configPath)) {
+            try {
+                const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                return config;
+            } catch (e) {
+                console.error(`${YELLOW}⚠️ 运行配置文件格式错误: ${configPath}${NC}`);
+                return {};
+            }
+        }
+    }
+    console.error(`${RED}⚠️ 未找到运行配置: ${name}.json${NC}`);
+    return {};
+}
+
 // ==============================================================================
 // UI Functions
 // ==============================================================================
@@ -97,30 +118,33 @@ function getHelloTip(containerName, defaultCommand) {
     }
 }
 
-function setQuiet(action) {
-    action.split(',').forEach(ac => {
-        switch (ac) {
-            case 'cnew':
-                QUIET.cnew = 1;
-                break;
-            case 'crm':
-                QUIET.crm = 1;
-                break;
-            case 'tip':
-                QUIET.tip = 1;
-                break;
-            case 'askkeep':
-                QUIET.askkeep = 1;
-                break;
-            case 'cmd':
-                QUIET.cmd = 1;
-                break;
-            case 'full':
-                QUIET.full = 1;
-                break;
-        }
+function setQuiet(actions) {
+    // Support both string and array input
+    const actionArray = Array.isArray(actions) ? actions : [actions];
+    actionArray.forEach(action => {
+        action.split(',').forEach(ac => {
+            switch (ac) {
+                case 'cnew':
+                    QUIET.cnew = 1;
+                    break;
+                case 'crm':
+                    QUIET.crm = 1;
+                    break;
+                case 'tip':
+                    QUIET.tip = 1;
+                    break;
+                case 'askkeep':
+                    QUIET.askkeep = 1;
+                    break;
+                case 'cmd':
+                    QUIET.cmd = 1;
+                    break;
+                case 'full':
+                    QUIET.full = 1;
+                    break;
+            }
+        });
     });
-    // process.exit(0);
 }
 
 async function askQuestion(prompt) {
@@ -548,19 +572,21 @@ function setupCommander() {
         .description('MANYOYO - AI Agent CLI Sandbox\nhttps://github.com/xcanwin/manyoyo')
         .addHelpText('after', `
 配置文件:
-  ~/.manyoyo/config.json    默认配置文件
+  ~/.manyoyo/manyoyo.json    全局配置文件
+  ./run/123.json             运行配置示例
 
 示例:
   ${MANYOYO_NAME} --ib                                构建镜像
+  ${MANYOYO_NAME} -r 123                              使用运行配置快捷启动
   ${MANYOYO_NAME} -n test --ef ./xxx.env -y c         设置环境变量并运行无需确认的AGENT
   ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
   ${MANYOYO_NAME} -x echo 123                         指定命令执行
-  ${MANYOYO_NAME} -n test --ef ./xxx.env -x claude    设置环境变量并运行
-  ${MANYOYO_NAME} -n test -x claude -c                恢复之前会话
+  ${MANYOYO_NAME} -n test -q tip -q cmd               多次使用静默选项
         `);
 
     // Options
     program
+        .option('-r, --run <name>', '加载运行配置 (从 ./<name>.json 或 ~/.manyoyo/run/<name>.json)')
         .option('--hp, --host-path <path>', '设置宿主机工作目录 (默认当前路径)')
         .option('-n, --cont-name <name>', '设置容器名称')
         .option('--cp, --cont-path <path>', '设置容器工作目录')
@@ -573,14 +599,14 @@ function setupCommander() {
         .option('--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--irm, --image-remove', '清理悬空镜像和 <none> 镜像')
         .option('-e, --env <env>', '设置环境变量 XXX=YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
-        .option('--ef, --env-file <file>', '设置环境变量通过文件')
+        .option('--ef, --env-file <file>', '设置环境变量通过文件 (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('-v, --volume <volume>', '绑定挂载卷 XXX:YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--sp, --shell-prefix <command>', '临时环境变量 (作为-s前缀)')
         .option('-s, --shell <command>', '指定命令执行')
         .option('-x, --shell-full <command...>', '指定完整命令执行 (代替--sp和-s和--命令)')
         .option('-y, --yolo <cli>', '使AGENT无需确认 (claude/c, gemini/gm, codex/cx, opencode/oc)')
         .option('--install <name>', '安装manyoyo命令 (docker-cli-plugin)')
-        .option('-q, --quiet <list>', '静默显示 (cnew,crm,tip,cmd,full)');
+        .option('-q, --quiet <item>', '静默显示 (可多次使用: cnew,crm,tip,cmd,full)', (value, previous) => [...(previous || []), value], []);
 
     // Docker CLI plugin metadata check
     if (process.argv[2] === 'docker-cli-plugin-metadata') {
@@ -608,34 +634,52 @@ function setupCommander() {
 
     const options = program.opts();
 
-    // Apply config defaults, then override with command line options
-    HOST_PATH = options.hostPath || config.hostPath || HOST_PATH;
-    if (options.contName || config.containerName) CONTAINER_NAME = options.contName || config.containerName;
-    if (options.contPath || config.containerPath) CONTAINER_PATH = options.contPath || config.containerPath;
-    IMAGE_NAME = options.imageName || config.imageName || IMAGE_NAME;
-    if (options.imageVer || config.imageVersion) IMAGE_VERSION = options.imageVer || config.imageVersion;
-    if (options.envFile || config.envFile) addEnvFile(options.envFile || config.envFile);
-    if (options.shellPrefix || config.shellPrefix) EXEC_COMMAND_PREFIX = (options.shellPrefix || config.shellPrefix) + " ";
-    if (options.shell || config.shell) EXEC_COMMAND = options.shell || config.shell;
+    // Load run config if specified
+    const runConfig = options.run ? loadRunConfig(options.run) : {};
 
-    // Handle arrays - merge config and command line
-    const envList = [...(config.env || []), ...(options.env || [])];
+    // Merge configs: command line > run config > global config > defaults
+    // Override mode (scalar values): use first defined value
+    HOST_PATH = options.hostPath || runConfig.hostPath || config.hostPath || HOST_PATH;
+    if (options.contName || runConfig.containerName || config.containerName) {
+        CONTAINER_NAME = options.contName || runConfig.containerName || config.containerName;
+    }
+    if (options.contPath || runConfig.containerPath || config.containerPath) {
+        CONTAINER_PATH = options.contPath || runConfig.containerPath || config.containerPath;
+    }
+    IMAGE_NAME = options.imageName || runConfig.imageName || config.imageName || IMAGE_NAME;
+    if (options.imageVer || runConfig.imageVersion || config.imageVersion) {
+        IMAGE_VERSION = options.imageVer || runConfig.imageVersion || config.imageVersion;
+    }
+    if (options.shellPrefix || runConfig.shellPrefix || config.shellPrefix) {
+        EXEC_COMMAND_PREFIX = (options.shellPrefix || runConfig.shellPrefix || config.shellPrefix) + " ";
+    }
+    if (options.shell || runConfig.shell || config.shell) {
+        EXEC_COMMAND = options.shell || runConfig.shell || config.shell;
+    }
+
+    // Merge mode (array values): concatenate all sources
+    const envFileList = [...(config.envFiles || config.envFile ? [config.envFile] : []),
+                          ...(runConfig.envFiles || runConfig.envFile ? [runConfig.envFile] : []),
+                          ...(options.envFile || [])].filter(Boolean);
+    envFileList.forEach(ef => addEnvFile(ef));
+
+    const envList = [...(config.env || []), ...(runConfig.env || []), ...(options.env || [])];
     envList.forEach(e => addEnv(e));
 
-    const volumeList = [...(config.volumes || []), ...(options.volume || [])];
+    const volumeList = [...(config.volumes || []), ...(runConfig.volumes || []), ...(options.volume || [])];
     volumeList.forEach(v => addVolume(v));
 
-    const buildArgList = [...(config.imageBuildArgs || []), ...(options.imageBuildArg || [])];
+    const buildArgList = [...(config.imageBuildArgs || []), ...(runConfig.imageBuildArgs || []), ...(options.imageBuildArg || [])];
     buildArgList.forEach(arg => addImageBuildArg(arg));
 
-    // Handle special options
-    const quietValue = options.quiet || config.quiet;
-    if (quietValue) setQuiet(quietValue);
+    const quietList = [...(config.quiet ? [config.quiet] : []), ...(runConfig.quiet ? [runConfig.quiet] : []), ...(options.quiet || [])];
+    if (quietList.length > 0) setQuiet(quietList);
 
-    const yoloValue = options.yolo || config.yolo;
+    // Override mode for special options
+    const yoloValue = options.yolo || runConfig.yolo || config.yolo;
     if (yoloValue) setYolo(yoloValue);
 
-    const contModeValue = options.contMode || config.containerMode;
+    const contModeValue = options.contMode || runConfig.containerMode || config.containerMode;
     if (contModeValue) setContMode(contModeValue);
 
     if (options.contList) { getContList(); process.exit(0); }
