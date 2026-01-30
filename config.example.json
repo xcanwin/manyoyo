@@ -1,16 +1,23 @@
 {
+  "_comment": "MANYOYO 全局配置文件，保存到 ~/.manyoyo/manyoyo.json",
+  "_comment_run": "运行配置文件，保存到 ~/.manyoyo/run/<name>.json，使用 -r <name> 加载",
+
   "containerName": "myy-dev",
   "hostPath": "/path/to/your/project",
   "containerPath": "/path/to/your/project",
   "imageName": "localhost/xcanwin/manyoyo",
-  "imageVersion": "1.6.3-full",
+  "imageVersion": "1.6.4-full",
   "containerMode": "common",
-  "envFile": "",
-  "env": [],
+
+  "_comment_merge": "以下为合并型参数，配置文件和命令行会累加",
+  "env": ["IS_SANDBOX=1"],
+  "envFiles": [],
   "volumes": [],
+  "imageBuildArgs": [],
+  "quiet": "tip,cmd",
+
+  "_comment_override": "以下为覆盖型参数，命令行会覆盖配置文件",
   "shellPrefix": "",
   "shell": "",
-  "yolo": "",
-  "quiet": "",
-  "imageBuildArgs": []
+  "yolo": ""
 }
