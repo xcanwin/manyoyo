@@ -65,7 +65,7 @@ function sleep(ms) {
 // ==============================================================================
 
 function loadConfig() {
-    const configPath = path.join(os.homedir(), '.manyoyo', 'config.json');
+    const configPath = path.join(os.homedir(), '.manyoyo', 'manyoyo.json');
     if (fs.existsSync(configPath)) {
         try {
             const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
