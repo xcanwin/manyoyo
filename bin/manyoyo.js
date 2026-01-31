@@ -10,6 +10,7 @@ const path = require('path');
 const os = require('os');
 const readline = require('readline');
 const { Command } = require('commander');
+const JSON5 = require('json5');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_BASE } = require('../package.json');
 
 // Helper function to format date like bash $(date +%m%d-%H%M)
@@ -68,7 +69,7 @@ function loadConfig() {
     const configPath = path.join(os.homedir(), '.manyoyo', 'manyoyo.json');
     if (fs.existsSync(configPath)) {
         try {
-            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            const config = JSON5.parse(fs.readFileSync(configPath, 'utf-8'));
             return config;
         } catch (e) {
             console.error(`${YELLOW}⚠️  配置文件格式错误: ${configPath}${NC}`);
@@ -79,15 +80,26 @@ function loadConfig() {
 }
 
 function loadRunConfig(name) {
-    const paths = [
-        path.join(name),
-        path.join(os.homedir(), '.manyoyo', 'run', `${name}`)
-    ];
+    // Check if name is a file path (contains path separator or extension)
+    const isFilePath = name.includes('/') || name.includes('\\') || path.extname(name);
 
-    for (const configPath of paths) {
+    if (isFilePath) {
+        // If it's a file path, only check that exact path
+        if (fs.existsSync(name)) {
+            try {
+                const config = JSON5.parse(fs.readFileSync(name, 'utf-8'));
+                return config;
+            } catch (e) {
+                console.error(`${YELLOW}⚠️  运行配置文件格式错误: ${name}${NC}`);
+                return {};
+            }
+        }
+    } else {
+        // If it's just a name, only check ~/.manyoyo/run/name.json
+        const configPath = path.join(os.homedir(), '.manyoyo', 'run', `${name}.json`);
         if (fs.existsSync(configPath)) {
             try {
-                const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                const config = JSON5.parse(fs.readFileSync(configPath, 'utf-8'));
                 return config;
             } catch (e) {
                 console.error(`${YELLOW}⚠️  运行配置文件格式错误: ${configPath}${NC}`);
@@ -95,6 +107,7 @@ function loadRunConfig(name) {
             }
         }
     }
+
     console.error(`${RED}⚠️  未找到运行配置: ${name}${NC}`);
     return {};
 }
@@ -170,44 +183,49 @@ function addEnv(env) {
 }
 
 function addEnvFile(envFile) {
-    const paths = [
-        path.join(envFile),
-        path.join(os.homedir(), '.manyoyo', 'env', `${envFile}`)
-    ];
+    // Check if envFile is a file path (contains path separator)
+    const isFilePath = envFile.includes('/') || envFile.includes('\\');
 
-    for (const filePath of paths) {
-        ENV_FILE = filePath;
-        if (fs.existsSync(filePath)) {
-            const content = fs.readFileSync(filePath, 'utf-8');
-            const lines = content.split('\n');
+    let filePath;
+    if (isFilePath) {
+        // If it's a file path, only check that exact path
+        filePath = envFile;
+    } else {
+        // If it's just a name, only check ~/.manyoyo/env/name.env
+        filePath = path.join(os.homedir(), '.manyoyo', 'env', `${envFile}.env`);
+    }
 
-            for (let line of lines) {
-                // Match pattern: (export )?(KEY)=(VALUE)
-                const match = line.match(/^(?:export\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/);
-                if (match) {
-                    let key = match[1];
-                    let value = match[2].trim();
+    ENV_FILE = filePath;
+    if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const lines = content.split('\n');
 
-                    // Filter malicious characters
-                    if (/[\$\(\)\`\|\&\*\{\}]/.test(value)) continue;
-                    if (/^\(/.test(value)) continue;
+        for (let line of lines) {
+            // Match pattern: (export )?(KEY)=(VALUE)
+            const match = line.match(/^(?:export\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/);
+            if (match) {
+                let key = match[1];
+                let value = match[2].trim();
 
-                    // Remove quotes
-                    if (/^"(.*)"$/.test(value)) {
-                        value = value.slice(1, -1);
-                    } else if (/^'(.*)'$/.test(value)) {
-                        value = value.slice(1, -1);
-                    }
+                // Filter malicious characters
+                if (/[\$\(\)\`\|\&\*\{\}]/.test(value)) continue;
+                if (/^\(/.test(value)) continue;
 
-                    if (key) {
-                        CONTAINER_ENVS.push("--env", `${key}=${value}`);
-                    }
+                // Remove quotes
+                if (/^"(.*)"$/.test(value)) {
+                    value = value.slice(1, -1);
+                } else if (/^'(.*)'$/.test(value)) {
+                    value = value.slice(1, -1);
+                }
+
+                if (key) {
+                    CONTAINER_ENVS.push("--env", `${key}=${value}`);
                 }
             }
-            return {};
         }
+        return {};
     }
-    console.error(`${RED}⚠️  未找到运行配置: ${envFile}${NC}`);
+    console.error(`${RED}⚠️  未找到环境文件: ${envFile}${NC}`);
     return {};
 }
 
@@ -582,13 +600,21 @@ function setupCommander() {
         .description('MANYOYO - AI Agent CLI Sandbox\nhttps://github.com/xcanwin/manyoyo')
         .addHelpText('after', `
 配置文件:
-  ~/.manyoyo/manyoyo.json    全局配置文件
-  ~/.manyoyo/run/c           运行配置示例
+  ~/.manyoyo/manyoyo.json    全局配置文件 (JSON5格式，支持注释)
+  ~/.manyoyo/run/c.json      运行配置示例
+
+路径规则:
+  -r name       → ~/.manyoyo/run/name.json
+  -r ./file.json → 当前目录的 file.json
+  --ef name     → ~/.manyoyo/env/name.env
+  --ef ./file.env → 当前目录的 file.env
 
 示例:
   ${MANYOYO_NAME} --ib                                构建镜像
-  ${MANYOYO_NAME} -r 123                              使用运行配置快捷启动
-  ${MANYOYO_NAME} -n test --ef ./xxx.env -y c         设置环境变量并运行无需确认的AGENT
+  ${MANYOYO_NAME} -r c                                使用 ~/.manyoyo/run/c.json 配置
+  ${MANYOYO_NAME} -r ./myconfig.json                  使用当前目录配置
+  ${MANYOYO_NAME} -n test --ef claude -y c            使用 ~/.manyoyo/env/claude.env 环境变量
+  ${MANYOYO_NAME} -n test --ef ./myenv.env -y c       使用当前目录环境变量文件
   ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
   ${MANYOYO_NAME} -x echo 123                         指定命令执行
   ${MANYOYO_NAME} -n test -q tip -q cmd               多次使用静默选项
@@ -596,7 +622,7 @@ function setupCommander() {
 
     // Options
     program
-        .option('-r, --run <name>', '加载运行配置 (从 ./<name>.json 或 ~/.manyoyo/run/<name>.json)')
+        .option('-r, --run <name>', '加载运行配置 (name → ~/.manyoyo/run/name.json, ./file.json → 当前目录文件)')
         .option('--hp, --host-path <path>', '设置宿主机工作目录 (默认当前路径)')
         .option('-n, --cont-name <name>', '设置容器名称')
         .option('--cp, --cont-path <path>', '设置容器工作目录')
@@ -609,7 +635,7 @@ function setupCommander() {
         .option('--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--irm, --image-remove', '清理悬空镜像和 <none> 镜像')
         .option('-e, --env <env>', '设置环境变量 XXX=YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
-        .option('--ef, --env-file <file>', '设置环境变量通过文件 (可多次使用)', (value, previous) => [...(previous || []), value], [])
+        .option('--ef, --env-file <file>', '设置环境变量通过文件 (name → ~/.manyoyo/env/name.env, ./file.env → 当前目录文件)', (value, previous) => [...(previous || []), value], [])
         .option('-v, --volume <volume>', '绑定挂载卷 XXX:YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--sp, --shell-prefix <command>', '临时环境变量 (作为-s前缀)')
         .option('-s, --shell <command>', '指定命令执行')

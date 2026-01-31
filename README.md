@@ -115,29 +115,25 @@ manyoyo -e "A=1" -e "B=2" -x claude
 
 #### 文件形式
 
-环境文件路径 请放在 `~/.manyoyo/env/` 目录下，命令行的`--ef`和配置文件的`envFile`会优先检查此目录。（TODO）
-
-```bash
-manyoyo --ef claude.env -x claude
-```
-
-环境文件内容 支持以下格式：
+环境文件使用 `.env` 格式，支持注释（以 `#` 开头的行）：
 
 ```bash
 export BASE_URL="https://xxxx"
 API_KEY=your-api-key-here
-MESSAGE="Hello World"
+# MESSAGE="Hello World"  # 注释会被忽略
 PATH='/usr/local/bin'
 ```
 
-#### 常用样例
+**路径规则**：
+- `manyoyo --ef myconfig` → 加载 `~/.manyoyo/env/myconfig.env`
+- `manyoyo --ef ./myconfig.env` → 加载当前目录的 `myconfig.env`
 
 ```bash
+# 创建环境文件目录
 mkdir -p ~/.manyoyo/env/
-nano ~/.manyoyo/env/claude.env
-```
 
-```bash
+# 示例：创建 Claude 环境文件
+cat > ~/.manyoyo/env/claude.env << 'EOF'
 export ANTHROPIC_BASE_URL="https://api.anthropic.com"
 # export CLAUDE_CODE_OAUTH_TOKEN="sk-xxxxxxxx"
 export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
@@ -147,26 +143,42 @@ export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
 export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-5"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
 export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
+EOF
+
+# 使用环境文件
+manyoyo --ef claude -x claude
 ```
 
 ### 配置文件
 
-简化MANYOYO命令行操作。
+简化MANYOYO命令行操作。配置文件使用 **JSON5 格式**，支持注释、尾随逗号等特性。
 
-#### 可选项
+#### 配置文件路径规则
+
+- `manyoyo -r myconfig` → 加载 `~/.manyoyo/run/myconfig.json`
+- `manyoyo -r ./myconfig.json` → 加载当前目录的 `myconfig.json`
+
+#### 配置选项
 
 参考 `config.example.json` 文件查看所有可配置项：
 
-```json
+```json5
 {
+  // 容器基础配置
   "containerName": "myy-dev",          // 默认容器名称
   "hostPath": "/path/to/project",      // 默认宿主机工作目录
   "containerPath": "/path/to/project", // 默认容器工作目录
   "imageName": "localhost/xcanwin/manyoyo",  // 默认镜像名称
   "imageVersion": "1.6.3-full",        // 默认镜像版本
   "containerMode": "common",           // 容器嵌套模式 (common, dind, sock)
-  "envFile": "",                       // 默认环境变量文件路径
+
+  // 环境变量配置
+  "envFile": [
+    "claude"  // 对应 ~/.manyoyo/env/claude.env
+  ],
   "env": [],                           // 默认环境变量数组
+
+  // 其他配置
   "volumes": [],                       // 默认挂载卷数组
   "shellPrefix": "",                   // 默认命令前缀
   "shell": "",                         // 默认执行命令
@@ -183,19 +195,24 @@ export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
 #### 常用样例
 
 ```bash
+# 创建运行配置目录
 mkdir -p ~/.manyoyo/run/
-nano ~/.manyoyo/run/c
-```
 
-```bash
+# 创建 Claude 运行配置
+cat > ~/.manyoyo/run/c.json << 'EOF'
 {
-    "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.6.3-full",
-    "envFile": [
-        "claude.env"
-    ],
-    "yolo": "c"
+  // Claude Code 快捷配置
+  "imageName": "localhost/xcanwin/manyoyo",
+  "imageVersion": "1.6.3-full",
+  "envFile": [
+    "claude"  // 自动加载 ~/.manyoyo/env/claude.env
+  ],
+  "yolo": "c"
 }
+EOF
+
+# 使用运行配置
+manyoyo -r c
 ```
 
 ### AI CLI 快捷方式（跳过权限确认）
@@ -267,7 +284,7 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 | `--iba XXX=YYY` | `--image-build-arg` | 构建镜像时传参给dockerfile |
 | `--irm` | `--image-remove` | 清理悬空镜像和 `<none>` 镜像 |
 | `-e STRING` | `--env` | 设置环境变量 |
-| `--ef FILE` | `--env-file` | 从文件加载环境变量 |
+| `--ef FILE` | `--env-file` | 从文件加载环境变量（支持 `name` 或 `./path.env`） |
 | `-v STRING` | `--volume` | 绑定挂载卷 |
 | `--sp CMD` | `--shell-prefix` | 临时环境变量（作为 -s 的前缀） |
 | `-s CMD` | `--shell` | 指定要执行的命令 |
@@ -276,6 +293,7 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 | `-y CLI` | `--yolo` | 无需确认运行 AI 智能体 |
 | `--install NAME` | | 安装 manyoyo 命令 |
 | `-q LIST` | `--quiet` | 静默显示 |
+| `-r NAME` | `--run` | 加载运行配置（支持 `name` 或 `./path.json`） |
 | `-V` | `--version` | 显示版本 |
 | `-h` | `--help` | 显示帮助 |
 

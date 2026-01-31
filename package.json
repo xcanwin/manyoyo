@@ -1,6 +1,6 @@
 {
   "name": "@xcanwin/manyoyo",
-  "version": "3.6.4",
+  "version": "3.6.5",
   "imageVersion": "1.6.4",
   "description": "AI Agent CLI Security Sandbox",
   "keywords": [
@@ -35,6 +35,7 @@
     "config.example.json"
   ],
   "dependencies": {
-    "commander": "^12.0.0"
+    "commander": "^12.0.0",
+    "json5": "^2.2.3"
   }
 }
