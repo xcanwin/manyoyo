@@ -101,31 +101,40 @@ manyoyo --irm
 
 # Execute custom command with quiet output
 manyoyo -q full -x echo "hello world"
+manyoyo -q tip -q cmd -x echo "hello world"  # Multiple quiet options
 ```
 
 ### Environment Variables
 
+给容器内CLI传递BASE_URL和TOKEN等。
+
 #### String Format
 
 ```bash
-# Direct
-manyoyo -e "VAR=value" -x env
-
-# Multiple
-manyoyo -e "A=1" -e "B=2" -x env
+manyoyo -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" -x claude
 ```
 
 #### File Format
 
+Environment files use `.env` format and support comments (lines starting with `#`):
+
 ```bash
-# From file
-manyoyo --ef .env -x env
+export ANTHROPIC_BASE_URL="https://xxxx"
+ANTHROPIC_AUTH_TOKEN=your-key
+# MESSAGE="Hello World"  # Comments will be ignored
+TESTPATH='/usr/local/bin'
 ```
 
-Environment files (`.env`) support the following formats:
+**Environment file path rules**:
+- `manyoyo --ef myconfig` → loads `~/.manyoyo/env/myconfig.env`
+- `manyoyo --ef ./myconfig.env` → loads `myconfig.env` from current directory
 
 ```bash
-# With export statement
+# Create environment file directory
+mkdir -p ~/.manyoyo/env/
+
+# Example: Create Claude environment file
+cat > ~/.manyoyo/env/claude.env << 'EOF'
 export ANTHROPIC_BASE_URL="https://api.anthropic.com"
 # export CLAUDE_CODE_OAUTH_TOKEN="sk-xxxxxxxx"
 export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
@@ -135,13 +144,82 @@ export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
 export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-5"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
 export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
+EOF
 
-# Simple key=value
-API_KEY=your-api-key-here
+# Use environment file from any directory
+manyoyo --ef claude -x claude
+```
 
-# Quoted values (quotes will be stripped)
-MESSAGE="Hello World"
-PATH='/usr/local/bin'
+### Configuration Files
+
+Simplify MANYOYO command-line operations. Configuration files use **JSON5 format**, which supports comments, trailing commas, and other features.
+
+#### Configuration file path rules
+
+- `manyoyo -r myconfig` → loads `~/.manyoyo/run/myconfig.json`
+- `manyoyo -r ./myconfig.json` → loads `myconfig.json` from current directory
+- `manyoyo [any option]` → always loads global configuration `~/.manyoyo/manyoyo.json`
+
+#### Configuration Options
+
+Refer to `config.example.json` for all available options:
+
+```json5
+{
+  // Container basic configuration
+  "containerName": "myy-dev",          // Default container name
+  "hostPath": "/path/to/project",      // Default host working directory
+  "containerPath": "/path/to/project", // Default container working directory
+  "imageName": "localhost/xcanwin/manyoyo",  // Default image name
+  "imageVersion": "1.6.3-full",        // Default image version
+  "containerMode": "common",           // Container nesting mode (common, dind, sock)
+
+  // Environment variable configuration
+  "envFile": [
+    "claude"  // Corresponds to ~/.manyoyo/env/claude.env
+  ],
+  "env": [],                           // Default environment variables array
+
+  // Other configuration
+  "volumes": [],                       // Default volume mounts array
+  "shellPrefix": "",                   // Default command prefix
+  "shell": "",                         // Default execute command
+  "yolo": "",                          // Default YOLO mode (c, gm, cx, oc)
+  "quiet": [],                           // Default quiet options array (supports ["tip", "cmd"] format)
+  "imageBuildArgs": []                 // Default image build arguments
+}
+```
+
+#### Priority
+
+- **Override parameters**: Command line > Run config > Global config > Defaults
+- **Merge parameters**: Global config + Run config + Command line (concatenated in order)
+
+Override parameters include: `containerName`, `hostPath`, `containerPath`, `imageName`, `imageVersion`, `containerMode`, `shellPrefix`, `shell`, `yolo`, `quiet`
+
+Merge parameters include: `envFile`, `env`, `volumes`, `imageBuildArgs`
+
+#### Common Examples
+
+```bash
+# Create run configuration directory
+mkdir -p ~/.manyoyo/run/
+
+# Create Claude run configuration
+cat > ~/.manyoyo/run/c.json << 'EOF'
+{
+  // Claude Code quick configuration
+  "imageName": "localhost/xcanwin/manyoyo",
+  "imageVersion": "1.6.3-full",
+  "envFile": [
+    "claude"  // Automatically loads ~/.manyoyo/env/claude.env
+  ],
+  "yolo": "c"
+}
+EOF
+
+# Use run configuration from any directory
+manyoyo -r c
 ```
 
 ### AI CLI Shortcuts (skip permissions)
@@ -213,7 +291,7 @@ docker ps -a             # Now you can use docker commands inside the container
 | `--iba` | `--image-build-arg` | Pass arguments to a Dockerfile during image build |
 | `--irm` | `--image-remove` | Clean dangling images and `<none>` images |
 | `-e STRING` | `--env` | Set environment variable |
-| `--ef FILE` | `--env-file` | Load environment variables from file |
+| `--ef FILE` | `--env-file` | Load environment variables from file (supports `name` or `./path.env`) |
 | `-v STRING` | `--volume` | Bind mount volume |
 | `--sp CMD` | `--shell-prefix` | Temporary environment variable (prefix for -s) |
 | `-s CMD` | `--shell` | Specify command to execute |
@@ -222,6 +300,7 @@ docker ps -a             # Now you can use docker commands inside the container
 | `-y CLI` | `--yolo` | Run AI agent without confirmation |
 | `--install NAME` | | Install manyoyo command |
 | `-q LIST` | `--quiet` | Quiet output |
+| `-r NAME` | `--run` | Load run configuration (supports `name` or `./path.json`) |
 | `-V` | `--version` | Show version |
 | `-h` | `--help` | Show help |
 

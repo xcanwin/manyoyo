@@ -101,6 +101,7 @@ manyoyo --irm
 
 # 静默显示执行命令
 manyoyo -q full -x echo "hello world"
+manyoyo -q tip -q cmd -x echo "hello world"  # 多次使用静默选项
 ```
 
 ### 环境变量
@@ -110,7 +111,7 @@ manyoyo -q full -x echo "hello world"
 #### 字符串形式
 
 ```bash
-manyoyo -e "A=1" -e "B=2" -x claude
+manyoyo -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" -x claude
 ```
 
 #### 文件形式
@@ -118,13 +119,13 @@ manyoyo -e "A=1" -e "B=2" -x claude
 环境文件使用 `.env` 格式，支持注释（以 `#` 开头的行）：
 
 ```bash
-export BASE_URL="https://xxxx"
-API_KEY=your-api-key-here
+export ANTHROPIC_BASE_URL="https://xxxx"
+AUTH_TOANTHROPIC_AUTH_TOKENKEN=your-key
 # MESSAGE="Hello World"  # 注释会被忽略
-PATH='/usr/local/bin'
+TESTPATH='/usr/local/bin'
 ```
 
-**路径规则**：
+**环境文件路径规则**：
 - `manyoyo --ef myconfig` → 加载 `~/.manyoyo/env/myconfig.env`
 - `manyoyo --ef ./myconfig.env` → 加载当前目录的 `myconfig.env`
 
@@ -145,7 +146,7 @@ export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
 export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
 EOF
 
-# 使用环境文件
+# 在任意目录下使用环境文件
 manyoyo --ef claude -x claude
 ```
 
@@ -157,6 +158,7 @@ manyoyo --ef claude -x claude
 
 - `manyoyo -r myconfig` → 加载 `~/.manyoyo/run/myconfig.json`
 - `manyoyo -r ./myconfig.json` → 加载当前目录的 `myconfig.json`
+- `manyoyo [任何选项]` → 始终会加载全局配置 `~/.manyoyo/manyoyo.json`
 
 #### 配置选项
 
@@ -183,14 +185,19 @@ manyoyo --ef claude -x claude
   "shellPrefix": "",                   // 默认命令前缀
   "shell": "",                         // 默认执行命令
   "yolo": "",                          // 默认 YOLO 模式 (c, gm, cx, oc)
-  "quiet": "",                         // 默认静默选项
+  "quiet": [],                           // 默认静默选项数组 (支持 ["tip", "cmd"] 格式)
   "imageBuildArgs": []                 // 默认镜像构建参数
 }
 ```
 
 #### 优先级
 
-左边覆盖右边: 命令行参数 > 配置文件 > 内置默认值
+- **覆盖型参数**：命令行 > 运行配置 > 全局配置 > 默认值
+- **合并型参数**：全局配置 + 运行配置 + 命令行（按顺序累加）
+
+覆盖型参数包括：`containerName`, `hostPath`, `containerPath`, `imageName`, `imageVersion`, `containerMode`, `shellPrefix`, `shell`, `yolo`, `quiet`
+
+合并型参数包括：`envFile`, `env`, `volumes`, `imageBuildArgs`
 
 #### 常用样例
 
@@ -211,7 +218,7 @@ cat > ~/.manyoyo/run/c.json << 'EOF'
 }
 EOF
 
-# 使用运行配置
+# 在任意目录下使用运行配置
 manyoyo -r c
 ```
 

@@ -135,28 +135,28 @@ function setQuiet(actions) {
     // Support both string and array input
     const actionArray = Array.isArray(actions) ? actions : [actions];
     actionArray.forEach(action => {
-        action.split(',').forEach(ac => {
-            switch (ac) {
-                case 'cnew':
-                    QUIET.cnew = 1;
-                    break;
-                case 'crm':
-                    QUIET.crm = 1;
-                    break;
-                case 'tip':
-                    QUIET.tip = 1;
-                    break;
-                case 'askkeep':
-                    QUIET.askkeep = 1;
-                    break;
-                case 'cmd':
-                    QUIET.cmd = 1;
-                    break;
-                case 'full':
-                    QUIET.full = 1;
-                    break;
-            }
-        });
+        // Remove comma splitting - each action should be a single quiet option
+        const ac = action.trim();
+        switch (ac) {
+            case 'cnew':
+                QUIET.cnew = 1;
+                break;
+            case 'crm':
+                QUIET.crm = 1;
+                break;
+            case 'tip':
+                QUIET.tip = 1;
+                break;
+            case 'askkeep':
+                QUIET.askkeep = 1;
+                break;
+            case 'cmd':
+                QUIET.cmd = 1;
+                break;
+            case 'full':
+                QUIET.full = 1;
+                break;
+        }
     });
 }
 
@@ -612,9 +612,9 @@ function setupCommander() {
 示例:
   ${MANYOYO_NAME} --ib                                构建镜像
   ${MANYOYO_NAME} -r c                                使用 ~/.manyoyo/run/c.json 配置
-  ${MANYOYO_NAME} -r ./myconfig.json                  使用当前目录配置
-  ${MANYOYO_NAME} -n test --ef claude -y c            使用 ~/.manyoyo/env/claude.env 环境变量
-  ${MANYOYO_NAME} -n test --ef ./myenv.env -y c       使用当前目录环境变量文件
+  ${MANYOYO_NAME} -r ./myconfig.json                  使用当前目录 ./myconfig.json 配置
+  ${MANYOYO_NAME} -n test --ef claude -y c            使用 ~/.manyoyo/env/claude.env 环境变量文件
+  ${MANYOYO_NAME} -n test --ef ./myenv.env -y c       使用当前目录 ./myenv.env 环境变量文件
   ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
   ${MANYOYO_NAME} -x echo 123                         指定命令执行
   ${MANYOYO_NAME} -n test -q tip -q cmd               多次使用静默选项
@@ -711,15 +711,15 @@ function setupCommander() {
     const buildArgList = [...(config.imageBuildArgs || []), ...(runConfig.imageBuildArgs || []), ...(options.imageBuildArg || [])];
     buildArgList.forEach(arg => addImageBuildArg(arg));
 
-    const quietList = [...(config.quiet ? [config.quiet] : []), ...(runConfig.quiet ? [runConfig.quiet] : []), ...(options.quiet || [])];
-    if (quietList.length > 0) setQuiet(quietList);
-
     // Override mode for special options
     const yoloValue = options.yolo || runConfig.yolo || config.yolo;
     if (yoloValue) setYolo(yoloValue);
 
     const contModeValue = options.contMode || runConfig.containerMode || config.containerMode;
     if (contModeValue) setContMode(contModeValue);
+
+    const quietValue = options.quiet || runConfig.quiet || config.quiet;
+    if (quietValue) setQuiet(quietValue);
 
     if (options.contList) { getContList(); process.exit(0); }
     if (options.contRemove) SHOULD_REMOVE = true;
