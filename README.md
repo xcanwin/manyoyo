@@ -85,8 +85,10 @@ manyoyo -l
 manyoyo -n test --ef .env -y c
 
 # 恢复现有会话
-manyoyo -n test -- -c          # Claude Code
-manyoyo -n test -- --last      # Codex
+manyoyo -n test -- -c                 # Claude Code
+manyoyo -n test -- resume --last      # Codex
+manyoyo -n test -- -r                 # Gemini
+manyoyo -n test -- -c                 # OpenCode
 
 # 在交互式 shell 中执行命令
 manyoyo -n test -x /bin/bash

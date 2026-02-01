@@ -85,8 +85,10 @@ manyoyo -l
 manyoyo -n test --ef .env -y c
 
 # Resume existing session
-manyoyo -n test -- -c          # Claude Code
-manyoyo -n test -- --last      # Codex
+manyoyo -n test -- -c                 # Claude Code
+manyoyo -n test -- resume --last      # Codex
+manyoyo -n test -- -r                 # Gemini
+manyoyo -n test -- -c                 # OpenCode
 
 # Execute command in interactive shell
 manyoyo -n test -x /bin/bash
