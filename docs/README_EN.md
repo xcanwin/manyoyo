@@ -85,7 +85,8 @@ manyoyo -l
 manyoyo -n test --ef .env -y c
 
 # Resume existing session
-manyoyo -n test -- -c
+manyoyo -n test -- -c          # Claude Code
+manyoyo -n test -- --last      # Codex
 
 # Execute command in interactive shell
 manyoyo -n test -x /bin/bash
