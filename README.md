@@ -199,6 +199,19 @@ manyoyo --ef claude -x claude
 
 合并型参数包括：`envFile`, `env`, `volumes`, `imageBuildArgs`
 
+#### 常用样例-全局
+
+```bash
+mkdir -p ~/.manyoyo/
+
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
+{
+  "imageName": "localhost/xcanwin/manyoyo",
+  "imageVersion": "1.6.3-full"
+}
+EOF
+```
+
 #### 常用样例-Claude Code
 
 ```bash
@@ -206,8 +219,6 @@ mkdir -p ~/.manyoyo/run/
 
 cat > ~/.manyoyo/run/c.json << 'EOF'
 {
-  "imageName": "localhost/xcanwin/manyoyo",
-  "imageVersion": "1.6.3-full",
   "envFile": [
     "claude"  // 自动加载 ~/.manyoyo/env/claude.env
   ],
@@ -226,8 +237,6 @@ mkdir -p ~/.manyoyo/run/
 
 cat > ~/.manyoyo/run/codex.json << 'EOF'
 {
-    "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.6.3-full",
     "volumes": [
         "/Users/mac_user/.codex/auth.json:/root/.codex/auth.json"
     ],

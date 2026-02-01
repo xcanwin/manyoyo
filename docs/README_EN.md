@@ -199,6 +199,19 @@ Override parameters include: `containerName`, `hostPath`, `containerPath`, `imag
 
 Merge parameters include: `envFile`, `env`, `volumes`, `imageBuildArgs`
 
+#### Common Examples-Global
+
+```bash
+mkdir -p ~/.manyoyo/
+
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
+{
+  "imageName": "localhost/xcanwin/manyoyo",
+  "imageVersion": "1.6.3-full"
+}
+EOF
+```
+
 #### Common Examples-Claude Code
 
 ```bash
@@ -206,8 +219,6 @@ mkdir -p ~/.manyoyo/run/
 
 cat > ~/.manyoyo/run/c.json << 'EOF'
 {
-  "imageName": "localhost/xcanwin/manyoyo",
-  "imageVersion": "1.6.3-full",
   "envFile": [
     "claude"  // Automatically loads ~/.manyoyo/env/claude.env
   ],
@@ -226,8 +237,6 @@ mkdir -p ~/.manyoyo/run/
 
 cat > ~/.manyoyo/run/codex.json << 'EOF'
 {
-    "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.6.3-full",
     "volumes": [
         "/Users/mac_user/.codex/auth.json:/root/.codex/auth.json"
     ],
