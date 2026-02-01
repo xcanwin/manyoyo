@@ -247,7 +247,7 @@ function setYolo(cli) {
             break;
         case 'codex':
         case 'cx':
-            EXEC_COMMAND = "codex";
+            EXEC_COMMAND = "codex --dangerously-bypass-approvals-and-sandbox";
             break;
         case 'opencode':
         case 'oc':

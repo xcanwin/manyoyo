@@ -199,16 +199,13 @@ Override parameters include: `containerName`, `hostPath`, `containerPath`, `imag
 
 Merge parameters include: `envFile`, `env`, `volumes`, `imageBuildArgs`
 
-#### Common Examples
+#### Common Examples-Claude Code
 
 ```bash
-# Create run configuration directory
 mkdir -p ~/.manyoyo/run/
 
-# Create Claude run configuration
 cat > ~/.manyoyo/run/c.json << 'EOF'
 {
-  // Claude Code quick configuration
   "imageName": "localhost/xcanwin/manyoyo",
   "imageVersion": "1.6.3-full",
   "envFile": [
@@ -220,6 +217,26 @@ EOF
 
 # Use run configuration from any directory
 manyoyo -r c
+```
+
+#### Common Examples-Codex
+
+```bash
+mkdir -p ~/.manyoyo/run/
+
+cat > ~/.manyoyo/run/codex.json << 'EOF'
+{
+    "imageName": "localhost/xcanwin/manyoyo",
+    "imageVersion": "1.6.3-full",
+    "volumes": [
+        "/Users/mac_user/.codex/auth.json:/root/.codex/auth.json"
+    ],
+    "yolo": "cx"
+}
+EOF
+
+# Use run configuration from any directory
+manyoyo -r codex
 ```
 
 ### AI CLI Shortcuts (skip permissions)

@@ -199,16 +199,13 @@ manyoyo --ef claude -x claude
 
 合并型参数包括：`envFile`, `env`, `volumes`, `imageBuildArgs`
 
-#### 常用样例
+#### 常用样例-Claude Code
 
 ```bash
-# 创建运行配置目录
 mkdir -p ~/.manyoyo/run/
 
-# 创建 Claude 运行配置
 cat > ~/.manyoyo/run/c.json << 'EOF'
 {
-  // Claude Code 快捷配置
   "imageName": "localhost/xcanwin/manyoyo",
   "imageVersion": "1.6.3-full",
   "envFile": [
@@ -220,6 +217,26 @@ EOF
 
 # 在任意目录下使用运行配置
 manyoyo -r c
+```
+
+#### 常用样例-Codex
+
+```bash
+mkdir -p ~/.manyoyo/run/
+
+cat > ~/.manyoyo/run/codex.json << 'EOF'
+{
+    "imageName": "localhost/xcanwin/manyoyo",
+    "imageVersion": "1.6.3-full",
+    "volumes": [
+        "/Users/mac_user/.codex/auth.json:/root/.codex/auth.json"
+    ],
+    "yolo": "cx"
+}
+EOF
+
+# 在任意目录下使用运行配置
+manyoyo -r codex
 ```
 
 ### AI CLI 快捷方式（跳过权限确认）
