@@ -41,6 +41,7 @@ let CONTAINER_VOLUMES = [];
 let MANYOYO_NAME = "manyoyo";
 let CONT_MODE = "";
 let QUIET = {};
+let SHOW_COMMAND = false;
 
 // Color definitions using ANSI codes
 const RED = '\x1b[0;31m';
@@ -692,6 +693,7 @@ function setupCommander() {
         .option('-y, --yolo <cli>', '使AGENT无需确认 (claude/c, gemini/gm, codex/cx, opencode/oc)')
         .option('--install <name>', '安装manyoyo命令 (docker-cli-plugin)')
         .option('--show-config', '显示最终生效配置并退出')
+        .option('--show-command', '显示将执行的 docker run 命令并退出')
         .option('-q, --quiet <item>', '静默显示 (可多次使用: cnew,crm,tip,cmd,full)', (value, previous) => [...(previous || []), value], []);
 
     // Docker CLI plugin metadata check
@@ -779,12 +781,16 @@ function setupCommander() {
     // Handle shell-full (variadic arguments)
     if (options.shellFull) {
         EXEC_COMMAND = options.shellFull.join(' ');
+        EXEC_COMMAND_PREFIX = "";
+        EXEC_COMMAND_SUFFIX = "";
     }
 
     // Handle -- suffix arguments
-    const doubleDashIndex = process.argv.indexOf('--');
-    if (doubleDashIndex !== -1 && doubleDashIndex < process.argv.length - 1) {
-        EXEC_COMMAND_SUFFIX = " " + process.argv.slice(doubleDashIndex + 1).join(' ');
+    if (!options.shellFull) {
+        const doubleDashIndex = process.argv.indexOf('--');
+        if (doubleDashIndex !== -1 && doubleDashIndex < process.argv.length - 1) {
+            EXEC_COMMAND_SUFFIX = " " + process.argv.slice(doubleDashIndex + 1).join(' ');
+        }
     }
 
     if (options.showConfig) {
@@ -801,16 +807,21 @@ function setupCommander() {
             containerMode: contModeValue || "",
             shellPrefix: EXEC_COMMAND_PREFIX.trim(),
             shell: EXEC_COMMAND || "",
+            shellSuffix: EXEC_COMMAND_SUFFIX || "",
             yolo: yoloValue || "",
             quiet: quietValue || [],
             exec: {
-                command: EXEC_COMMAND,
                 prefix: EXEC_COMMAND_PREFIX,
+                shell: EXEC_COMMAND,
                 suffix: EXEC_COMMAND_SUFFIX
             }
         };
         console.log(JSON.stringify(finalConfig, null, 2));
         process.exit(0);
+    }
+
+    if (options.showCommand) {
+        SHOW_COMMAND = true;
     }
 
     if (options.contList) { getContList(); process.exit(0); }
@@ -892,6 +903,22 @@ async function createNewContainer() {
     EXEC_COMMAND = `${EXEC_COMMAND_PREFIX}${EXEC_COMMAND}${EXEC_COMMAND_SUFFIX}`;
     const defaultCommand = EXEC_COMMAND;
 
+    const dockerRunCmd = buildDockerRunCmd();
+
+    if (SHOW_COMMAND) {
+        console.log(dockerRunCmd);
+        process.exit(0);
+    }
+
+    dockerExec(dockerRunCmd, { stdio: 'pipe' });
+
+    // Wait for container to be ready
+    await waitForContainerReady(CONTAINER_NAME);
+
+    return defaultCommand;
+}
+
+function buildDockerRunCmd() {
     // Build docker run command
     const fullImage = `${IMAGE_NAME}:${IMAGE_VERSION}`;
     const envArgs = CONTAINER_ENVS.join(' ');
@@ -901,12 +928,7 @@ async function createNewContainer() {
     const safeLabelCmd = EXEC_COMMAND.replace(/[\r\n]/g, ' ').replace(/"/g, '\\"');
     const dockerRunCmd = `${DOCKER_CMD} run -d --name "${CONTAINER_NAME}" --entrypoint "" ${contModeArg} ${envArgs} ${volumeArgs} --volume "${HOST_PATH}:${CONTAINER_PATH}" --workdir "${CONTAINER_PATH}" --label "manyoyo.default_cmd=${safeLabelCmd}" "${fullImage}" tail -f /dev/null`;
 
-    dockerExec(dockerRunCmd, { stdio: 'pipe' });
-
-    // Wait for container to be ready
-    await waitForContainerReady(CONTAINER_NAME);
-
-    return defaultCommand;
+    return dockerRunCmd;
 }
 
 async function connectExistingContainer() {
@@ -931,6 +953,19 @@ async function connectExistingContainer() {
 }
 
 async function setupContainer() {
+    if (SHOW_COMMAND) {
+        if (containerExists(CONTAINER_NAME)) {
+            const defaultCommand = dockerExecArgs(['inspect', '-f', '{{index .Config.Labels "manyoyo.default_cmd"}}', CONTAINER_NAME]).trim();
+            const execCmd = EXEC_COMMAND
+                ? `${EXEC_COMMAND_PREFIX}${EXEC_COMMAND}${EXEC_COMMAND_SUFFIX}`
+                : `${EXEC_COMMAND_PREFIX}${defaultCommand}${EXEC_COMMAND_SUFFIX}`;
+            console.log(`${DOCKER_CMD} exec -it ${CONTAINER_NAME} /bin/bash -c "${execCmd.replace(/"/g, '\\"')}"`);
+            process.exit(0);
+        }
+        EXEC_COMMAND = `${EXEC_COMMAND_PREFIX}${EXEC_COMMAND}${EXEC_COMMAND_SUFFIX}`;
+        console.log(buildDockerRunCmd());
+        process.exit(0);
+    }
     if (!containerExists(CONTAINER_NAME)) {
         return await createNewContainer();
     } else {

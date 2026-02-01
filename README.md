@@ -328,6 +328,7 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 | `-x CMD` | `--sf`, `--shell-full` | 完整命令（替代 --sp, -s 和 --） |
 | `-y CLI` | `--yolo` | 无需确认运行 AI 智能体 |
 | `--show-config` | | 显示最终生效配置并退出 |
+| `--show-command` | | 显示将执行的命令并退出（存在容器时为 docker exec，不存在时为 docker run） |
 | `--install NAME` | | 安装 manyoyo 命令 |
 | `-q LIST` | `--quiet` | 静默显示 |
 | `-r NAME` | `--run` | 加载运行配置（支持 `name` 或 `./path.json`） |

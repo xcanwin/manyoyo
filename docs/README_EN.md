@@ -328,6 +328,7 @@ docker ps -a             # Now you can use docker commands inside the container
 | `-x CMD` | `--sf`, `--shell-full` | Full command (replaces --sp, -s, and --) |
 | `-y CLI` | `--yolo` | Run AI agent without confirmation |
 | `--show-config` | | Print final effective config and exit |
+| `--show-command` | | Print the command to be executed and exit (docker exec if container exists, otherwise docker run) |
 | `--install NAME` | | Install manyoyo command |
 | `-q LIST` | `--quiet` | Quiet output |
 | `-r NAME` | `--run` | Load run configuration (supports `name` or `./path.json`) |
