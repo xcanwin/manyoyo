@@ -160,6 +160,14 @@ function setQuiet(actions) {
     });
 }
 
+function validateName(label, value, pattern) {
+    if (!value) return;
+    if (!pattern.test(value)) {
+        console.error(`${RED}⚠️  错误: ${label} 非法: ${value}${NC}`);
+        process.exit(1);
+    }
+}
+
 async function askQuestion(prompt) {
     const rl = readline.createInterface({
         input: process.stdin,
@@ -179,6 +187,21 @@ async function askQuestion(prompt) {
 // ==============================================================================
 
 function addEnv(env) {
+    const idx = env.indexOf('=');
+    if (idx <= 0) {
+        console.error(`${RED}⚠️  错误: env 格式应为 KEY=VALUE: ${env}${NC}`);
+        process.exit(1);
+    }
+    const key = env.slice(0, idx);
+    const value = env.slice(idx + 1);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        console.error(`${RED}⚠️  错误: env key 非法: ${key}${NC}`);
+        process.exit(1);
+    }
+    if (/[\r\n\0]/.test(value) || /[;&|`$<>]/.test(value)) {
+        console.error(`${RED}⚠️  错误: env value 含非法字符: ${key}${NC}`);
+        process.exit(1);
+    }
     CONTAINER_ENVS.push("--env", env);
 }
 
@@ -208,7 +231,8 @@ function addEnvFile(envFile) {
                 let value = match[2].trim();
 
                 // Filter malicious characters
-                if (/[\$\(\)\`\|\&\*\{\}]/.test(value)) continue;
+                if (/[\r\n\0]/.test(value)) continue;
+                if (/[\$\(\)\`\|\&\*\{\};<>]/.test(value)) continue;
                 if (/^\(/.test(value)) continue;
 
                 // Remove quotes
@@ -251,7 +275,7 @@ function setYolo(cli) {
             break;
         case 'opencode':
         case 'oc':
-            EXEC_COMMAND = "opencode";
+            EXEC_COMMAND = "OPENCODE_PERMISSION=allow opencode";
             break;
         default:
             console.log(`${RED}⚠️  未知LLM CLI: ${cli}${NC}`);
@@ -297,18 +321,40 @@ function dockerExec(cmd, options = {}) {
     }
 }
 
+function runCmd(cmd, args, options = {}) {
+    const result = spawnSync(cmd, args, { encoding: 'utf-8', ...options });
+    if (result.error) {
+        throw result.error;
+    }
+    if (result.status !== 0) {
+        if (options.ignoreError) {
+            return result.stdout || '';
+        }
+        const err = new Error(`Command failed: ${cmd} ${args.join(' ')}`);
+        err.stdout = result.stdout;
+        err.stderr = result.stderr;
+        err.status = result.status;
+        throw err;
+    }
+    return result.stdout || '';
+}
+
+function dockerExecArgs(args, options = {}) {
+    return runCmd(DOCKER_CMD, args, options);
+}
+
 function containerExists(name) {
-    const containers = dockerExec(`${DOCKER_CMD} ps -a --format '{{.Names}}'`);
+    const containers = dockerExecArgs(['ps', '-a', '--format', '{{.Names}}']);
     return containers.split('\n').some(n => n.trim() === name);
 }
 
 function getContainerStatus(name) {
-    return dockerExec(`${DOCKER_CMD} inspect -f '{{.State.Status}}' "${name}"`).trim();
+    return dockerExecArgs(['inspect', '-f', '{{.State.Status}}', name]).trim();
 }
 
 function removeContainer(name) {
     if ( !(QUIET.crm || QUIET.full) ) console.log(`${YELLOW}🗑️ 正在删除容器: ${name}...${NC}`);
-    dockerExec(`${DOCKER_CMD} rm -f "${name}"`, { stdio: 'pipe' });
+    dockerExecArgs(['rm', '-f', name], { stdio: 'pipe' });
     if ( !(QUIET.crm || QUIET.full) ) console.log(`${GREEN}✅ 已彻底删除。${NC}`);
 }
 
@@ -320,7 +366,7 @@ function ensureDocker() {
     const commands = ['docker', 'podman'];
     for (const cmd of commands) {
         try {
-            execSync(`${cmd} --version`, { stdio: 'pipe' });
+            runCmd(cmd, ['--version'], { stdio: 'pipe' });
             DOCKER_CMD = cmd;
             return true;
         } catch (e) {
@@ -361,11 +407,11 @@ function getContList() {
 
 function pruneDanglingImages() {
     console.log(`\n${YELLOW}清理悬空镜像...${NC}`);
-    execSync(`${DOCKER_CMD} image prune -f`, { stdio: 'inherit' });
+    dockerExecArgs(['image', 'prune', '-f'], { stdio: 'inherit' });
 
     // Remove remaining <none> images
     try {
-        const imagesOutput = execSync(`${DOCKER_CMD} images -a --format "{{.ID}} {{.Repository}}"`, { encoding: 'utf-8' });
+        const imagesOutput = dockerExecArgs(['images', '-a', '--format', '{{.ID}} {{.Repository}}']);
         const noneImages = imagesOutput
             .split('\n')
             .filter(line => line.includes('<none>'))
@@ -374,7 +420,7 @@ function pruneDanglingImages() {
 
         if (noneImages.length > 0) {
             console.log(`${YELLOW}清理剩余的 <none> 镜像 (${noneImages.length} 个)...${NC}`);
-            execSync(`${DOCKER_CMD} rmi -f ${noneImages.join(' ')}`, { stdio: 'inherit' });
+            dockerExecArgs(['rmi', '-f', ...noneImages], { stdio: 'inherit' });
         }
     } catch (e) {
         // Ignore errors if no <none> images found
@@ -434,7 +480,7 @@ async function prepareBuildCache(imageTool) {
             const shasum = execSync(`curl -sL ${mirror}/latest-v${nodeVersion}.x/SHASUMS256.txt | grep linux-${archNode}.tar.gz | awk '{print $2}'`, { encoding: 'utf-8' }).trim();
             const nodeUrl = `${mirror}/latest-v${nodeVersion}.x/${shasum}`;
             const nodeTargetPath = path.join(nodeCacheDir, shasum);
-            execSync(`curl -fsSL "${nodeUrl}" -o "${nodeTargetPath}"`, { stdio: 'inherit' });
+            runCmd('curl', ['-fsSL', nodeUrl, '-o', nodeTargetPath], { stdio: 'inherit' });
             timestamps[nodeKey] = now.toISOString();
             fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 2));
             console.log(`${GREEN}✓ Node.js 下载完成${NC}`);
@@ -460,7 +506,7 @@ async function prepareBuildCache(imageTool) {
             console.log(`${YELLOW}下载 JDT Language Server...${NC}`);
             const jdtUrl = 'https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz';
             try {
-                execSync(`curl -fsSL "${jdtUrl}" -o "${jdtlsPath}"`, { stdio: 'inherit' });
+                runCmd('curl', ['-fsSL', jdtUrl, '-o', jdtlsPath], { stdio: 'inherit' });
                 timestamps[jdtlsKey] = now.toISOString();
                 fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 2));
                 console.log(`${GREEN}✓ JDT LSP 下载完成${NC}`);
@@ -501,9 +547,12 @@ async function prepareBuildCache(imageTool) {
                 }
                 fs.mkdirSync(tmpGoPath, { recursive: true });
 
-                execSync(`GOPATH="${tmpGoPath}" GOOS=linux GOARCH=${arch} go install golang.org/x/tools/gopls@latest`, { stdio: 'inherit' });
+                runCmd('go', ['install', 'golang.org/x/tools/gopls@latest'], {
+                    stdio: 'inherit',
+                    env: { ...process.env, GOPATH: tmpGoPath, GOOS: 'linux', GOARCH: arch }
+                });
                 execSync(`cp "${tmpGoPath}/bin/linux_${arch}/gopls" "${goplsPath}" || cp "${tmpGoPath}/bin/gopls" "${goplsPath}"`, { stdio: 'inherit' });
-                execSync(`chmod +x "${goplsPath}"`, { stdio: 'inherit' });
+                runCmd('chmod', ['+x', goplsPath], { stdio: 'inherit' });
 
                 // Save timestamp immediately after successful download
                 timestamps[goplsKey] = now.toISOString();
@@ -642,6 +691,7 @@ function setupCommander() {
         .option('-x, --shell-full <command...>', '指定完整命令执行 (代替--sp和-s和--命令)')
         .option('-y, --yolo <cli>', '使AGENT无需确认 (claude/c, gemini/gm, codex/cx, opencode/oc)')
         .option('--install <name>', '安装manyoyo命令 (docker-cli-plugin)')
+        .option('--show-config', '显示最终生效配置并退出')
         .option('-q, --quiet <item>', '静默显示 (可多次使用: cnew,crm,tip,cmd,full)', (value, previous) => [...(previous || []), value], []);
 
     // Docker CLI plugin metadata check
@@ -693,6 +743,11 @@ function setupCommander() {
         EXEC_COMMAND = options.shell || runConfig.shell || config.shell;
     }
 
+    // Basic name validation to reduce injection risk
+    validateName('containerName', CONTAINER_NAME, /^[A-Za-z0-9][A-Za-z0-9_.-]*$/);
+    validateName('imageName', IMAGE_NAME, /^[A-Za-z0-9][A-Za-z0-9._/:-]*$/);
+    validateName('imageVersion', IMAGE_VERSION, /^[A-Za-z0-9][A-Za-z0-9_.-]*$/);
+
     // Merge mode (array values): concatenate all sources
     const toArray = (val) => Array.isArray(val) ? val : (val ? [val] : []);
     const envFileList = [
@@ -721,12 +776,6 @@ function setupCommander() {
     const quietValue = options.quiet || runConfig.quiet || config.quiet;
     if (quietValue) setQuiet(quietValue);
 
-    if (options.contList) { getContList(); process.exit(0); }
-    if (options.contRemove) SHOULD_REMOVE = true;
-    if (options.imageBuild) IMAGE_BUILD_NEED = true;
-    if (options.imageRemove) { pruneDanglingImages(); process.exit(0); }
-    if (options.install) { installManyoyo(options.install); process.exit(0); }
-
     // Handle shell-full (variadic arguments)
     if (options.shellFull) {
         EXEC_COMMAND = options.shellFull.join(' ');
@@ -737,6 +786,38 @@ function setupCommander() {
     if (doubleDashIndex !== -1 && doubleDashIndex < process.argv.length - 1) {
         EXEC_COMMAND_SUFFIX = " " + process.argv.slice(doubleDashIndex + 1).join(' ');
     }
+
+    if (options.showConfig) {
+        const finalConfig = {
+            hostPath: HOST_PATH,
+            containerName: CONTAINER_NAME,
+            containerPath: CONTAINER_PATH,
+            imageName: IMAGE_NAME,
+            imageVersion: IMAGE_VERSION,
+            envFile: envFileList,
+            env: envList,
+            volumes: volumeList,
+            imageBuildArgs: buildArgList,
+            containerMode: contModeValue || "",
+            shellPrefix: EXEC_COMMAND_PREFIX.trim(),
+            shell: EXEC_COMMAND || "",
+            yolo: yoloValue || "",
+            quiet: quietValue || [],
+            exec: {
+                command: EXEC_COMMAND,
+                prefix: EXEC_COMMAND_PREFIX,
+                suffix: EXEC_COMMAND_SUFFIX
+            }
+        };
+        console.log(JSON.stringify(finalConfig, null, 2));
+        process.exit(0);
+    }
+
+    if (options.contList) { getContList(); process.exit(0); }
+    if (options.contRemove) SHOULD_REMOVE = true;
+    if (options.imageBuild) IMAGE_BUILD_NEED = true;
+    if (options.imageRemove) { pruneDanglingImages(); process.exit(0); }
+    if (options.install) { installManyoyo(options.install); process.exit(0); }
 
     return program;
 }
@@ -757,6 +838,10 @@ function handleRemoveContainer() {
 }
 
 function validateHostPath() {
+    if (!fs.existsSync(HOST_PATH)) {
+        console.log(`${RED}⚠️  错误: 宿主机路径不存在: ${HOST_PATH}${NC}`);
+        process.exit(1);
+    }
     const realHostPath = fs.realpathSync(HOST_PATH);
     const homeDir = process.env.HOME || '/home';
     if (realHostPath === '/' || realHostPath === '/home' || realHostPath === homeDir) {
@@ -778,7 +863,7 @@ async function waitForContainerReady(containerName) {
 
             if (status === 'exited') {
                 console.log(`${RED}⚠️  错误: 容器启动后立即退出。${NC}`);
-                dockerExec(`${DOCKER_CMD} logs "${containerName}"`, { stdio: 'inherit' });
+                dockerExecArgs(['logs', containerName], { stdio: 'inherit' });
                 process.exit(1);
             }
 
@@ -787,7 +872,7 @@ async function waitForContainerReady(containerName) {
 
             if (count >= MAX_RETRIES) {
                 console.log(`${RED}⚠️  错误: 容器启动超时（当前状态: ${status}）。${NC}`);
-                dockerExec(`${DOCKER_CMD} logs "${containerName}"`, { stdio: 'inherit' });
+                dockerExecArgs(['logs', containerName], { stdio: 'inherit' });
                 process.exit(1);
             }
         } catch (e) {
@@ -813,7 +898,8 @@ async function createNewContainer() {
     const volumeArgs = CONTAINER_VOLUMES.join(' ');
     const contModeArg = CONT_MODE || '';
 
-    const dockerRunCmd = `${DOCKER_CMD} run -d --name "${CONTAINER_NAME}" --entrypoint "" ${contModeArg} ${envArgs} ${volumeArgs} --volume "${HOST_PATH}:${CONTAINER_PATH}" --workdir "${CONTAINER_PATH}" --label "manyoyo.default_cmd=${EXEC_COMMAND}" "${fullImage}" tail -f /dev/null`;
+    const safeLabelCmd = EXEC_COMMAND.replace(/[\r\n]/g, ' ').replace(/"/g, '\\"');
+    const dockerRunCmd = `${DOCKER_CMD} run -d --name "${CONTAINER_NAME}" --entrypoint "" ${contModeArg} ${envArgs} ${volumeArgs} --volume "${HOST_PATH}:${CONTAINER_PATH}" --workdir "${CONTAINER_PATH}" --label "manyoyo.default_cmd=${safeLabelCmd}" "${fullImage}" tail -f /dev/null`;
 
     dockerExec(dockerRunCmd, { stdio: 'pipe' });
 
@@ -829,11 +915,11 @@ async function connectExistingContainer() {
     // Start container if stopped
     const status = getContainerStatus(CONTAINER_NAME);
     if (status !== 'running') {
-        dockerExec(`${DOCKER_CMD} start "${CONTAINER_NAME}"`, { stdio: 'pipe' });
+        dockerExecArgs(['start', CONTAINER_NAME], { stdio: 'pipe' });
     }
 
     // Get default command from label
-    const defaultCommand = dockerExec(`${DOCKER_CMD} inspect -f '{{index .Config.Labels "manyoyo.default_cmd"}}' "${CONTAINER_NAME}"`).trim();
+    const defaultCommand = dockerExecArgs(['inspect', '-f', '{{index .Config.Labels "manyoyo.default_cmd"}}', CONTAINER_NAME]).trim();
 
     if (!EXEC_COMMAND) {
         EXEC_COMMAND = `${EXEC_COMMAND_PREFIX}${defaultCommand}${EXEC_COMMAND_SUFFIX}`;

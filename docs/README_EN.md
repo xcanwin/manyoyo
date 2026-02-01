@@ -174,7 +174,7 @@ Refer to `config.example.json` for all available options:
   "hostPath": "/path/to/project",      // Default host working directory
   "containerPath": "/path/to/project", // Default container working directory
   "imageName": "localhost/xcanwin/manyoyo",  // Default image name
-  "imageVersion": "1.6.3-full",        // Default image version
+  "imageVersion": "1.6.4-full",        // Default image version
   "containerMode": "common",           // Container nesting mode (common, dind, sock)
 
   // Environment variable configuration
@@ -210,7 +210,7 @@ mkdir -p ~/.manyoyo/
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
   "imageName": "localhost/xcanwin/manyoyo",
-  "imageVersion": "1.6.3-full"
+  "imageVersion": "1.6.4-full"
 }
 EOF
 ```
@@ -309,11 +309,11 @@ docker ps -a             # Now you can use docker commands inside the container
 | Option | Aliases | Description |
 |--------|---------|-------------|
 | `--hp PATH` | `--host-path` | Set host working directory (default: current path) |
-| `-n NAME` | `--cn`, `--cont-name` | Set container name |
+| `-n NAME` | `--cont-name` | Set container name |
 | `--cp PATH` | `--cont-path` | Set container working directory |
-| `-l` | `--cl`, `--cont-list` | List all manyoyo containers |
+| `-l` | `--cont-list` | List all manyoyo containers |
 | `--crm` | `--cont-remove` | Remove container |
-| `-m MODE` | `--cm`, `--cont-mode` | Set container mode (common, dind, sock) |
+| `-m MODE` | `--cont-mode` | Set container mode (common, dind, sock) |
 | `--in NAME` | `--image-name` | Specify image name |
 | `--iv VERSION` | `--image-ver` | Specify image version |
 | `--ib` | `--image-build` | Build image |
@@ -327,6 +327,7 @@ docker ps -a             # Now you can use docker commands inside the container
 | `--` | `--ss`, `--shell-suffix` | Command arguments (suffix for -s) |
 | `-x CMD` | `--sf`, `--shell-full` | Full command (replaces --sp, -s, and --) |
 | `-y CLI` | `--yolo` | Run AI agent without confirmation |
+| `--show-config` | | Print final effective config and exit |
 | `--install NAME` | | Install manyoyo command |
 | `-q LIST` | `--quiet` | Quiet output |
 | `-r NAME` | `--run` | Load run configuration (supports `name` or `./path.json`) |

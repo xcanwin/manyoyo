@@ -123,7 +123,7 @@ manyoyo -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" 
 
 ```bash
 export ANTHROPIC_BASE_URL="https://xxxx"
-AUTH_TOANTHROPIC_AUTH_TOKENKEN=your-key
+AUTH_TOANTHROPIC_AUTH_TOKEN=your-key
 # MESSAGE="Hello World"  # 注释会被忽略
 TESTPATH='/usr/local/bin'
 ```
@@ -174,7 +174,7 @@ manyoyo --ef claude -x claude
   "hostPath": "/path/to/project",      // 默认宿主机工作目录
   "containerPath": "/path/to/project", // 默认容器工作目录
   "imageName": "localhost/xcanwin/manyoyo",  // 默认镜像名称
-  "imageVersion": "1.6.3-full",        // 默认镜像版本
+  "imageVersion": "1.6.4-full",        // 默认镜像版本
   "containerMode": "common",           // 容器嵌套模式 (common, dind, sock)
 
   // 环境变量配置
@@ -210,7 +210,7 @@ mkdir -p ~/.manyoyo/
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
   "imageName": "localhost/xcanwin/manyoyo",
-  "imageVersion": "1.6.3-full"
+  "imageVersion": "1.6.4-full"
 }
 EOF
 ```
@@ -309,11 +309,11 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 | 选项 | 别名 | 描述 |
 |------|------|------|
 | `--hp PATH` | `--host-path` | 设置宿主机工作目录（默认：当前路径） |
-| `-n NAME` | `--cn`, `--cont-name` | 设置容器名称 |
+| `-n NAME` | `--cont-name` | 设置容器名称 |
 | `--cp PATH` | `--cont-path` | 设置容器工作目录 |
-| `-l` | `--cl`, `--cont-list` | 列出所有 manyoyo 容器 |
+| `-l` | `--cont-list` | 列出所有 manyoyo 容器 |
 | `--crm` | `--cont-remove` | 删除容器 |
-| `-m MODE` | `--cm`, `--cont-mode` | 设置容器模式（common, dind, sock） |
+| `-m MODE` | `--cont-mode` | 设置容器模式（common, dind, sock） |
 | `--in NAME` | `--image-name` | 指定镜像名称 |
 | `--iv VERSION` | `--image-ver` | 指定镜像版本 |
 | `--ib` | `--image-build` | 构建镜像 |
@@ -327,6 +327,7 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 | `--` | `--ss`, `--shell-suffix` | 命令参数（作为 -s 的后缀） |
 | `-x CMD` | `--sf`, `--shell-full` | 完整命令（替代 --sp, -s 和 --） |
 | `-y CLI` | `--yolo` | 无需确认运行 AI 智能体 |
+| `--show-config` | | 显示最终生效配置并退出 |
 | `--install NAME` | | 安装 manyoyo 命令 |
 | `-q LIST` | `--quiet` | 静默显示 |
 | `-r NAME` | `--run` | 加载运行配置（支持 `name` 或 `./path.json`） |

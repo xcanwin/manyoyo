@@ -169,6 +169,10 @@ EOF
     # 安装 Codex CLI
     case ",$TOOL," in *,full,*|*,codex,*)
         npm install -g @openai/codex
+        mkdir -p ~/.codex
+        cat > ~/.codex/config.toml <<EOF
+check_for_update_on_startup = false
+EOF
     ;; esac
 
     # 安装 Copilot CLI
@@ -194,7 +198,6 @@ EOF
 {
   "\$schema": "https://opencode.ai/config.json",
   "autoupdate": false,
-  "permission": "allow",
   "model": "myprovider/{env:ANTHROPIC_MODEL}",
   "provider": {
     "myprovider": {
