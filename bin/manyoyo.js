@@ -505,15 +505,23 @@ async function prepareBuildCache(imageTool) {
 
         if (!fs.existsSync(jdtlsPath) || isExpired(jdtlsKey)) {
             console.log(`${YELLOW}下载 JDT Language Server...${NC}`);
-            const jdtUrl = 'https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz';
+            const apkUrl = 'https://mirrors.tencent.com/alpine/latest-stable/community/x86_64/jdtls-1.53.0-r0.apk';
+            const tmpDir = path.join(jdtlsCacheDir, '.tmp-apk');
+            const apkPath = path.join(tmpDir, 'jdtls.apk');
             try {
-                runCmd('curl', ['-fsSL', jdtUrl, '-o', jdtlsPath], { stdio: 'inherit' });
+                fs.mkdirSync(tmpDir, { recursive: true });
+                runCmd('curl', ['-fsSL', apkUrl, '-o', apkPath], { stdio: 'inherit' });
+                runCmd('tar', ['-xzf', apkPath, '-C', tmpDir], { stdio: 'inherit' });
+                const srcDir = path.join(tmpDir, 'usr', 'share', 'jdtls');
+                runCmd('tar', ['-czf', jdtlsPath, '-C', srcDir, '.'], { stdio: 'inherit' });
                 timestamps[jdtlsKey] = now.toISOString();
                 fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 2));
                 console.log(`${GREEN}✓ JDT LSP 下载完成${NC}`);
             } catch (e) {
                 console.error(`${RED}错误: JDT LSP 下载失败${NC}`);
                 throw e;
+            } finally {
+                try { runCmd('rm', ['-rf', tmpDir], { stdio: 'inherit', ignoreError: true }); } catch {}
             }
         } else {
             console.log(`${GREEN}✓ JDT LSP 缓存已存在${NC}`);

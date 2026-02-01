@@ -53,7 +53,7 @@ Only one of the following commands needs to be executed:
 
 ```bash
 # Build using manyoyo (Recommended, auto-cache enabled)
-manyoyo --ib                                     # Build full version by default (Recommended)
+manyoyo --ib --iv 1.6.4                          # Build full version by default (Recommended, specify version)
 manyoyo --ib --iba TOOL=common                   # Build common version (python,nodejs,claude)
 manyoyo --ib --iba TOOL=go,codex,java,gemini     # Build custom combination
 manyoyo --ib --iba GIT_SSL_NO_VERIFY=true        # Build the full version and skip Git SSL verification

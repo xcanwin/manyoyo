@@ -53,7 +53,7 @@ podman pull ubuntu:24.04
 
 ```bash
 # 使用 manyoyo 构建镜像（推荐，自动使用缓存加速）
-manyoyo --ib                                     # 默认构建 full 版本（推荐）
+manyoyo --ib --iv 1.6.4                          # 默认构建 full 版本（推荐，建议指定版本号）
 manyoyo --ib --iba TOOL=common                   # 构建常见组件版本（python,nodejs,claude）
 manyoyo --ib --iba TOOL=go,codex,java,gemini     # 构建自定义组件版本
 manyoyo --ib --iba GIT_SSL_NO_VERIFY=true        # 构建 full 版本且跳过git的ssl验证
