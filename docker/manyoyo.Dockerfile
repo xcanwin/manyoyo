@@ -11,9 +11,9 @@ COPY ./docker/cache/ /cache/
 RUN <<EOX
     # 确定架构
     case "$TARGETARCH" in
-      amd64) ARCH_NODE="x64"; ARCH_GO="amd64" ;;
-      arm64) ARCH_NODE="arm64"; ARCH_GO="arm64" ;;
-      *)     ARCH_NODE="$TARGETARCH"; ARCH_GO="$TARGETARCH" ;;
+        amd64) ARCH_NODE="x64"; ARCH_GO="amd64" ;;
+        arm64) ARCH_NODE="arm64"; ARCH_GO="arm64" ;;
+        *)     ARCH_NODE="$TARGETARCH"; ARCH_GO="$TARGETARCH" ;;
     esac
 
     # Node.js: 检测缓存，不存在则下载
@@ -124,13 +124,13 @@ RUN <<EOX
     mkdir -p ~/.claude/plugins/marketplaces/
     cat > ~/.claude.json <<EOF
 {
-  "bypassPermissionsModeAccepted": true,
-  "hasCompletedOnboarding": true,
-  "env": {
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    "CLAUDE_CODE_HIDE_ACCOUNT_INFO": "1",
-    "DISABLE_AUTOUPDATER": "1"
-  }
+    "bypassPermissionsModeAccepted": true,
+    "hasCompletedOnboarding": true,
+    "env": {
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        "CLAUDE_CODE_HIDE_ACCOUNT_INFO": "1",
+        "DISABLE_AUTOUPDATER": "1"
+    }
 }
 EOF
     GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY claude plugin marketplace add anthropics/claude-plugins-official
@@ -146,22 +146,22 @@ EOF
         mkdir -p ~/.gemini/
         cat > ~/.gemini/settings.json <<EOF
 {
-  "privacy": {
-    "usageStatisticsEnabled": false
-  },
-  "security": {
-    "auth": {
-      "selectedType": "oauth-personal"
+    "privacy": {
+        "usageStatisticsEnabled": false
+    },
+    "security": {
+        "auth": {
+            "selectedType": "oauth-personal"
+        }
+    },
+    "general": {
+        "previewFeatures": true,
+        "disableAutoUpdate": true,
+        "disableUpdateNag": true
+    },
+    "model": {
+        "name": "gemini-3-pro-preview"
     }
-  },
-  "general": {
-    "previewFeatures": true,
-    "disableAutoUpdate": true,
-    "disableUpdateNag": true
-  },
-  "model": {
-    "name": "gemini-3-pro-preview"
-  }
 }
 EOF
     ;; esac
@@ -181,11 +181,11 @@ EOF
         mkdir -p ~/.copilot/
         cat > ~/.copilot/config.json <<EOF
 {
-  "banner": "never",
-  "model": "gemini-3-pro-preview",
-  "render_markdown": true,
-  "screen_reader": false,
-  "theme": "auto"
+    "banner": "never",
+    "model": "gemini-3-pro-preview",
+    "render_markdown": true,
+    "screen_reader": false,
+    "theme": "auto"
 }
 EOF
     ;; esac
@@ -196,26 +196,26 @@ EOF
         mkdir -p ~/.config/opencode/
         cat > ~/.config/opencode/opencode.json <<EOF
 {
-  "\$schema": "https://opencode.ai/config.json",
-  "autoupdate": false,
-  "model": "Custom-Provider/{env:OPENAI_MODEL}",
-  "provider": {
-    "Custom-Provider": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
-        "baseURL": "{env:OPENAI_BASE_URL}",
-        "apiKey": "{env:OPENAI_API_KEY}",
-        "headers": {
-          "User-Agent": "opencode"
+    "\$schema": "https://opencode.ai/config.json",
+    "autoupdate": false,
+    "model": "Custom-Provider/{env:OPENAI_MODEL}",
+    "provider": {
+        "Custom-Provider": {
+            "npm": "@ai-sdk/openai-compatible",
+            "options": {
+                "baseURL": "{env:OPENAI_BASE_URL}",
+                "apiKey": "{env:OPENAI_API_KEY}",
+                "headers": {
+                   "User-Agent": "opencode"
+                }
+            },
+            "models": {
+                "{env:OPENAI_MODEL}": {},
+                "claude-sonnet-4-5-20250929": {},
+                "gpt-5.2": {}
+            }
         }
-      },
-      "models": {
-        "{env:OPENAI_MODEL}": {},
-        "claude-sonnet-4-5-20250929": {},
-        "gpt-5.2": {}
-      }
     }
-  }
 }
 EOF
     ;; esac

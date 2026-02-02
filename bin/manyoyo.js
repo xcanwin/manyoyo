@@ -483,7 +483,7 @@ async function prepareBuildCache(imageTool) {
             const nodeTargetPath = path.join(nodeCacheDir, shasum);
             runCmd('curl', ['-fsSL', nodeUrl, '-o', nodeTargetPath], { stdio: 'inherit' });
             timestamps[nodeKey] = now.toISOString();
-            fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 2));
+            fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
             console.log(`${GREEN}✓ Node.js 下载完成${NC}`);
         } catch (e) {
             console.error(`${RED}错误: Node.js 下载失败${NC}`);
@@ -515,7 +515,7 @@ async function prepareBuildCache(imageTool) {
                 const srcDir = path.join(tmpDir, 'usr', 'share', 'jdtls');
                 runCmd('tar', ['-czf', jdtlsPath, '-C', srcDir, '.'], { stdio: 'inherit' });
                 timestamps[jdtlsKey] = now.toISOString();
-                fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 2));
+                fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
                 console.log(`${GREEN}✓ JDT LSP 下载完成${NC}`);
             } catch (e) {
                 console.error(`${RED}错误: JDT LSP 下载失败${NC}`);
@@ -565,7 +565,7 @@ async function prepareBuildCache(imageTool) {
 
                 // Save timestamp immediately after successful download
                 timestamps[goplsKey] = now.toISOString();
-                fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 2));
+                fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
                 console.log(`${GREEN}✓ gopls 下载完成${NC}`);
 
                 // Clean up temp directory (with go clean for mod cache)
@@ -586,7 +586,7 @@ async function prepareBuildCache(imageTool) {
     }
 
     // Save timestamps
-    fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 2));
+    fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
     console.log(`${GREEN}✅ 构建缓存准备完成${NC}\n`);
 }
 
@@ -711,7 +711,7 @@ function setupCommander() {
             "Vendor": "xcanwin",
             "Version": "v1.0.0",
             "Description": "AI Agent CLI Sandbox"
-        }, null, 2));
+        }, null, 4));
         process.exit(0);
     }
 
@@ -824,7 +824,7 @@ function setupCommander() {
                 suffix: EXEC_COMMAND_SUFFIX
             }
         };
-        console.log(JSON.stringify(finalConfig, null, 2));
+        console.log(JSON.stringify(finalConfig, null, 4));
         process.exit(0);
     }
 

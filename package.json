@@ -1,41 +1,41 @@
 {
-  "name": "@xcanwin/manyoyo",
-  "version": "3.7.6",
-  "imageVersion": "1.6.5",
-  "description": "AI Agent CLI Security Sandbox",
-  "keywords": [
-    "ai", "agent", "sandbox", "docker", "cli", "container", "development"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/xcanwin/manyoyo.git"
-  },
-  "license": "MIT",
-  "author": "xcanwin",
-  "type": "commonjs",
-  "main": "bin/manyoyo.js",
-  "bin": {
-    "manyoyo": "bin/manyoyo.js",
-    "myy": "bin/manyoyo.js"
-  },
-  "scripts": {
-    "install-link": "npm link",
-    "test": "node bin/manyoyo.js --help"
-  },
-  "homepage": "https://github.com/xcanwin/manyoyo",
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "files": [
-    "bin/manyoyo.js",
-    "README.md",
-    "docs/README_EN.md",
-    "LICENSE",
-    "docker/manyoyo.Dockerfile",
-    "config.example.json"
-  ],
-  "dependencies": {
-    "commander": "^12.0.0",
-    "json5": "^2.2.3"
-  }
+    "name": "@xcanwin/manyoyo",
+    "version": "3.7.7",
+    "imageVersion": "1.6.5",
+    "description": "AI Agent CLI Security Sandbox",
+    "keywords": [
+        "ai", "agent", "sandbox", "docker", "cli", "container", "development"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/xcanwin/manyoyo.git"
+    },
+    "license": "MIT",
+    "author": "xcanwin",
+    "type": "commonjs",
+    "main": "bin/manyoyo.js",
+    "bin": {
+        "manyoyo": "bin/manyoyo.js",
+        "myy": "bin/manyoyo.js"
+    },
+    "scripts": {
+        "install-link": "npm link",
+        "test": "node bin/manyoyo.js --help"
+    },
+    "homepage": "https://github.com/xcanwin/manyoyo",
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "files": [
+        "bin/manyoyo.js",
+        "README.md",
+        "docs/README_EN.md",
+        "LICENSE",
+        "docker/manyoyo.Dockerfile",
+        "config.example.json"
+    ],
+    "dependencies": {
+        "commander": "^12.0.0",
+        "json5": "^2.2.3"
+    }
 }

@@ -195,27 +195,27 @@ Refer to `config.example.json` for all available options:
 
 ```json5
 {
-  // Container basic configuration
-  "containerName": "myy-dev",          // Default container name
-  "hostPath": "/path/to/project",      // Default host working directory
-  "containerPath": "/path/to/project", // Default container working directory
-  "imageName": "localhost/xcanwin/manyoyo",  // Default image name
-  "imageVersion": "1.6.4-full",        // Default image version
-  "containerMode": "common",           // Container nesting mode (common, dind, sock)
+    // Container basic configuration
+    "containerName": "myy-dev",          // Default container name
+    "hostPath": "/path/to/project",      // Default host working directory
+    "containerPath": "/path/to/project", // Default container working directory
+    "imageName": "localhost/xcanwin/manyoyo",  // Default image name
+    "imageVersion": "1.6.4-full",        // Default image version
+    "containerMode": "common",           // Container nesting mode (common, dind, sock)
 
-  // Environment variable configuration
-  "envFile": [
-    "claude"  // Corresponds to ~/.manyoyo/env/claude.env
-  ],
-  "env": [],                           // Default environment variables array
+    // Environment variable configuration
+    "envFile": [
+        "claude"  // Corresponds to ~/.manyoyo/env/claude.env
+    ],
+    "env": [],                           // Default environment variables array
 
-  // Other configuration
-  "volumes": [],                       // Default volume mounts array
-  "shellPrefix": "",                   // Default command prefix
-  "shell": "",                         // Default execute command
-  "yolo": "",                          // Default YOLO mode (c, gm, cx, oc)
-  "quiet": [],                           // Default quiet options array (supports ["tip", "cmd"] format)
-  "imageBuildArgs": []                 // Default image build arguments
+    // Other configuration
+    "volumes": [],                       // Default volume mounts array
+    "shellPrefix": "",                   // Default command prefix
+    "shell": "",                         // Default execute command
+    "yolo": "",                          // Default YOLO mode (c, gm, cx, oc)
+    "quiet": [],                           // Default quiet options array (supports ["tip", "cmd"] format)
+    "imageBuildArgs": []                 // Default image build arguments
 }
 ```
 
@@ -235,8 +235,8 @@ mkdir -p ~/.manyoyo/
 
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-  "imageName": "localhost/xcanwin/manyoyo",
-  "imageVersion": "1.6.4-full"
+    "imageName": "localhost/xcanwin/manyoyo",
+    "imageVersion": "1.6.4-full"
 }
 EOF
 ```
@@ -248,10 +248,10 @@ mkdir -p ~/.manyoyo/run/
 
 cat > ~/.manyoyo/run/c.json << 'EOF'
 {
-  "envFile": [
-    "anthropic_[claudecode]_claudecode"  // Automatically loads ~/.manyoyo/env/claude.env
-  ],
-  "yolo": "c"
+    "envFile": [
+        "anthropic_[claudecode]_claudecode"  // Automatically loads ~/.manyoyo/env/claude.env
+    ],
+    "yolo": "c"
 }
 EOF
 

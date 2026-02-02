@@ -205,7 +205,7 @@ manyoyo --ef openai_[gpt]_codex -x codex
 
     // 环境变量配置
     "envFile": [
-      "claude"  // 对应 ~/.manyoyo/env/claude.env
+        "claude"  // 对应 ~/.manyoyo/env/claude.env
     ],
     "env": [],                           // 默认环境变量数组
 
