@@ -276,7 +276,7 @@ function setYolo(cli) {
             break;
         case 'opencode':
         case 'oc':
-            EXEC_COMMAND = "OPENCODE_PERMISSION=allow opencode";
+            EXEC_COMMAND = "OPENCODE_PERMISSION='\"allow\"' opencode";
             break;
         default:
             console.log(`${RED}⚠️  未知LLM CLI: ${cli}${NC}`);
@@ -668,7 +668,7 @@ function setupCommander() {
   --ef ./file.env → 当前目录的 file.env
 
 示例:
-  ${MANYOYO_NAME} --ib                                构建镜像
+  ${MANYOYO_NAME} --ib --iv ${IMAGE_VERSION_BASE || "1.0.0"}                     构建镜像
   ${MANYOYO_NAME} -r c                                使用 ~/.manyoyo/run/c.json 配置
   ${MANYOYO_NAME} -r ./myconfig.json                  使用当前目录 ./myconfig.json 配置
   ${MANYOYO_NAME} -n test --ef claude -y c            使用 ~/.manyoyo/env/claude.env 环境变量文件

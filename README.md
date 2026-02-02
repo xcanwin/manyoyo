@@ -1,8 +1,16 @@
-**<[中文](README.md)>** | [English](docs/README_EN.md)
+# <p align="center"><a href="https://github.com/xcanwin/manyoyo">MANYOYO（慢悠悠）</a></p>
+<p align="center">一款AI智能体安全沙箱，保障PC安全，可以随心所欲运行YOLO/SOLO模式。</p>
+<p align="center">
+  <a href="https://www.npmjs.com/package/@xcanwin/manyoyo"><img alt="npm" src="https://img.shields.io/npm/v/@xcanwin/manyoyo?style=flat-square" /></a>
+  <a href="https://github.com/xcanwin/manyoyo/actions/workflows/npm-publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/xcanwin/manyoyo/npm-publish.yml?style=flat-square" /></a>
+</p>
+
+<p align="center">
+  <a href="README.md"><b>中文</b></a> |
+  <a href="docs/README_EN.md">English</a>
+</p>
 
 ---
-
-# MANYOYO（慢悠悠）
 
 **MANYOYO** 是一款 AI 智能体提效安全沙箱，安全、高效、省 token，专为 Agent YOLO 模式设计，保障宿主机安全。
 
@@ -132,12 +140,14 @@ TESTPATH='/usr/local/bin'
 - `manyoyo --ef myconfig` → 加载 `~/.manyoyo/env/myconfig.env`
 - `manyoyo --ef ./myconfig.env` → 加载当前目录的 `myconfig.env`
 
+#### 常用样例-Claude Code
+
 ```bash
 # 创建环境文件目录
 mkdir -p ~/.manyoyo/env/
 
 # 示例：创建 Claude 环境文件
-cat > ~/.manyoyo/env/claude.env << 'EOF'
+cat > ~/.manyoyo/env/anthropic_[claudecode]_claudecode.env << 'EOF'
 export ANTHROPIC_BASE_URL="https://api.anthropic.com"
 # export CLAUDE_CODE_OAUTH_TOKEN="sk-xxxxxxxx"
 export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
@@ -150,7 +160,23 @@ export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
 EOF
 
 # 在任意目录下使用环境文件
-manyoyo --ef claude -x claude
+manyoyo --ef anthropic_[claudecode]_claudecode -x claude
+```
+
+#### 常用样例-Codex
+
+```bash
+# 创建环境文件目录
+mkdir -p ~/.manyoyo/env/
+
+# 示例：创建 Codex 环境文件
+cat > ~/.manyoyo/env/openai_[gpt]_codex.env << 'EOF'
+export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
+export OTEL_SDK_DISABLED=true
+EOF
+
+# 在任意目录下使用环境文件
+manyoyo --ef openai_[gpt]_codex -x codex
 ```
 
 ### 配置文件
@@ -169,27 +195,27 @@ manyoyo --ef claude -x claude
 
 ```json5
 {
-  // 容器基础配置
-  "containerName": "myy-dev",          // 默认容器名称
-  "hostPath": "/path/to/project",      // 默认宿主机工作目录
-  "containerPath": "/path/to/project", // 默认容器工作目录
-  "imageName": "localhost/xcanwin/manyoyo",  // 默认镜像名称
-  "imageVersion": "1.6.4-full",        // 默认镜像版本
-  "containerMode": "common",           // 容器嵌套模式 (common, dind, sock)
+    // 容器基础配置
+    "containerName": "myy-dev",          // 默认容器名称
+    "hostPath": "/path/to/project",      // 默认宿主机工作目录
+    "containerPath": "/path/to/project", // 默认容器工作目录
+    "imageName": "localhost/xcanwin/manyoyo",  // 默认镜像名称
+    "imageVersion": "1.6.4-full",        // 默认镜像版本
+    "containerMode": "common",           // 容器嵌套模式 (common, dind, sock)
 
-  // 环境变量配置
-  "envFile": [
-    "claude"  // 对应 ~/.manyoyo/env/claude.env
-  ],
-  "env": [],                           // 默认环境变量数组
+    // 环境变量配置
+    "envFile": [
+      "claude"  // 对应 ~/.manyoyo/env/claude.env
+    ],
+    "env": [],                           // 默认环境变量数组
 
-  // 其他配置
-  "volumes": [],                       // 默认挂载卷数组
-  "shellPrefix": "",                   // 默认命令前缀
-  "shell": "",                         // 默认执行命令
-  "yolo": "",                          // 默认 YOLO 模式 (c, gm, cx, oc)
-  "quiet": [],                           // 默认静默选项数组 (支持 ["tip", "cmd"] 格式)
-  "imageBuildArgs": []                 // 默认镜像构建参数
+    // 其他配置
+    "volumes": [],                       // 默认挂载卷数组
+    "shellPrefix": "",                   // 默认命令前缀
+    "shell": "",                         // 默认执行命令
+    "yolo": "",                          // 默认 YOLO 模式 (c, gm, cx, oc)
+    "quiet": [],                           // 默认静默选项数组 (支持 ["tip", "cmd"] 格式)
+    "imageBuildArgs": []                 // 默认镜像构建参数
 }
 ```
 
@@ -209,8 +235,8 @@ mkdir -p ~/.manyoyo/
 
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-  "imageName": "localhost/xcanwin/manyoyo",
-  "imageVersion": "1.6.4-full"
+    "imageName": "localhost/xcanwin/manyoyo",
+    "imageVersion": "1.6.4-full"
 }
 EOF
 ```
@@ -220,17 +246,17 @@ EOF
 ```bash
 mkdir -p ~/.manyoyo/run/
 
-cat > ~/.manyoyo/run/c.json << 'EOF'
+cat > ~/.manyoyo/run/claude.json << 'EOF'
 {
-  "envFile": [
-    "claude"  // 自动加载 ~/.manyoyo/env/claude.env
-  ],
-  "yolo": "c"
+    "envFile": [
+        "anthropic_[claudecode]_claudecode"  // 自动加载 ~/.manyoyo/env/claude.env
+    ],
+    "yolo": "c"
 }
 EOF
 
 # 在任意目录下使用运行配置
-manyoyo -r c
+manyoyo -r claude
 ```
 
 #### 常用样例-Codex
@@ -240,8 +266,11 @@ mkdir -p ~/.manyoyo/run/
 
 cat > ~/.manyoyo/run/codex.json << 'EOF'
 {
+    "envFile": [
+        "openai_[gpt]_codex"
+    ],
     "volumes": [
-        "/Users/mac_user/.codex/auth.json:/root/.codex/auth.json"
+        "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
     ],
     "yolo": "cx"
 }

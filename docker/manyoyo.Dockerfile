@@ -198,19 +198,19 @@ EOF
 {
   "\$schema": "https://opencode.ai/config.json",
   "autoupdate": false,
-  "model": "myprovider/{env:ANTHROPIC_MODEL}",
+  "model": "Custom-Provider/{env:OPENAI_MODEL}",
   "provider": {
-    "myprovider": {
+    "Custom-Provider": {
       "npm": "@ai-sdk/openai-compatible",
       "options": {
-        "baseURL": "{env:ANTHROPIC_BASE_URL}",
-        "apiKey": "{env:ANTHROPIC_AUTH_TOKEN}",
+        "baseURL": "{env:OPENAI_BASE_URL}",
+        "apiKey": "{env:OPENAI_API_KEY}",
         "headers": {
-          "User-Agent": "opencode-cli"
+          "User-Agent": "opencode"
         }
       },
       "models": {
-        "{env:ANTHROPIC_MODEL}": {},
+        "{env:OPENAI_MODEL}": {},
         "claude-sonnet-4-5-20250929": {},
         "gpt-5.2": {}
       }

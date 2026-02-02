@@ -1,8 +1,16 @@
-[中文](../README.md) | **<[English](README_EN.md)>**
+# <p align="center"><a href="https://github.com/xcanwin/manyoyo">MANYOYO (Man-Yo-Yo)</a></p>
+<p align="center">AI Agent CLI Security Sandbox.</p>
+<p align="center">
+  <a href="https://www.npmjs.com/package/@xcanwin/manyoyo"><img alt="npm" src="https://img.shields.io/npm/v/@xcanwin/manyoyo?style=flat-square" /></a>
+  <a href="https://github.com/xcanwin/manyoyo/actions/workflows/npm-publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/xcanwin/manyoyo/npm-publish.yml?style=flat-square" /></a>
+</p>
+
+<p align="center">
+  <a href="README.md">中文</a> |
+  <a href="docs/README_EN.md"><b>English</b></a>
+</p>
 
 ---
-
-# MANYOYO (Man-Yo-Yo)
 
 **MANYOYO** is an AI agent security sandbox that is safe, efficient, and token-saving. Designed specifically for Agent YOLO mode to protect the host machine.
 
@@ -109,7 +117,7 @@ manyoyo -q tip -q cmd -x echo "hello world"  # Multiple quiet options
 
 ### Environment Variables
 
-给容器内CLI传递BASE_URL和TOKEN等。
+Send BASE_URL, TOKEN, etc. to the CLI in the container.
 
 #### String Format
 
@@ -132,12 +140,14 @@ TESTPATH='/usr/local/bin'
 - `manyoyo --ef myconfig` → loads `~/.manyoyo/env/myconfig.env`
 - `manyoyo --ef ./myconfig.env` → loads `myconfig.env` from current directory
 
+#### Common Examples-Claude Code
+
 ```bash
 # Create environment file directory
 mkdir -p ~/.manyoyo/env/
 
 # Example: Create Claude environment file
-cat > ~/.manyoyo/env/claude.env << 'EOF'
+cat > ~/.manyoyo/env/anthropic_[claudecode]_claudecode.env << 'EOF'
 export ANTHROPIC_BASE_URL="https://api.anthropic.com"
 # export CLAUDE_CODE_OAUTH_TOKEN="sk-xxxxxxxx"
 export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
@@ -150,7 +160,23 @@ export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
 EOF
 
 # Use environment file from any directory
-manyoyo --ef claude -x claude
+manyoyo --ef anthropic_[claudecode]_claudecode -x claude
+```
+
+#### Common Examples-Codex
+
+```bash
+# Create environment file directory
+mkdir -p ~/.manyoyo/env/
+
+# Example: Create Codex environment file
+cat > ~/.manyoyo/env/openai_[gpt]_codex.env << 'EOF'
+export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
+export OTEL_SDK_DISABLED=true
+EOF
+
+# Use environment file from any directory
+manyoyo --ef openai_[gpt]_codex -x codex
 ```
 
 ### Configuration Files
@@ -223,14 +249,14 @@ mkdir -p ~/.manyoyo/run/
 cat > ~/.manyoyo/run/c.json << 'EOF'
 {
   "envFile": [
-    "claude"  // Automatically loads ~/.manyoyo/env/claude.env
+    "anthropic_[claudecode]_claudecode"  // Automatically loads ~/.manyoyo/env/claude.env
   ],
   "yolo": "c"
 }
 EOF
 
 # Use run configuration from any directory
-manyoyo -r c
+manyoyo -r claude
 ```
 
 #### Common Examples-Codex
@@ -240,8 +266,11 @@ mkdir -p ~/.manyoyo/run/
 
 cat > ~/.manyoyo/run/codex.json << 'EOF'
 {
+    "envFile": [
+        "openai_[gpt]_codex"
+    ],
     "volumes": [
-        "/Users/mac_user/.codex/auth.json:/root/.codex/auth.json"
+        "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
     ],
     "yolo": "cx"
 }
