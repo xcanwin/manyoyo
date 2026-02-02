@@ -74,7 +74,7 @@ RUN <<EOX
     apt-get update -y
     apt-get install -y --no-install-recommends --reinstall ca-certificates openssl
     update-ca-certificates
-    apt-get install -y --no-install-recommends curl wget net-tools iputils-ping git lsof socat ncat dnsutils \
+    apt-get install -y --no-install-recommends curl wget net-tools iputils-ping git lsof socat ncat dnsutils ssh \
                     nano jq file tree ripgrep less bc xxd \
                     tar zip unzip gzip make sqlite3 \
                     supervisor
