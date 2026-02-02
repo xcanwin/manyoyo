@@ -322,6 +322,19 @@ function dockerExec(cmd, options = {}) {
     }
 }
 
+function showImagePullHint(err) {
+    const stderr = err && err.stderr ? err.stderr.toString() : '';
+    const stdout = err && err.stdout ? err.stdout.toString() : '';
+    const message = err && err.message ? err.message : '';
+    const combined = `${message}\n${stderr}\n${stdout}`;
+    if (!/localhost\/v2|pinging container registry localhost|connection refused|dial tcp .*:443/i.test(combined)) {
+        return;
+    }
+    const image = `${IMAGE_NAME}:${IMAGE_VERSION}`;
+    console.log(`${YELLOW}💡 提示: 本地未找到镜像 ${image}，并且从 localhost 注册表拉取失败。${NC}`);
+    console.log(`${YELLOW}   你可以: 1) 更新 ~/.manyoyo/manyoyo.json 的 imageVersion 2) 或先执行 manyoyo --ib --iv <version> 构建镜像。${NC}`);
+}
+
 function runCmd(cmd, args, options = {}) {
     const result = spawnSync(cmd, args, { encoding: 'utf-8', ...options });
     if (result.error) {
@@ -918,7 +931,12 @@ async function createNewContainer() {
         process.exit(0);
     }
 
-    dockerExec(dockerRunCmd, { stdio: 'pipe' });
+    try {
+        dockerExec(dockerRunCmd, { stdio: 'pipe' });
+    } catch (e) {
+        showImagePullHint(e);
+        throw e;
+    }
 
     // Wait for container to be ready
     await waitForContainerReady(CONTAINER_NAME);
