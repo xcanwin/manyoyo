@@ -8,6 +8,7 @@ const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const readline = require('readline');
 const { Command } = require('commander');
 const JSON5 = require('json5');
@@ -74,6 +75,18 @@ let DOCKER_CMD = 'docker';
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * 计算文件的 SHA256 哈希值（跨平台）
+ * @param {string} filePath - 文件路径
+ * @returns {string} SHA256 哈希值（十六进制）
+ */
+function getFileSha256(filePath) {
+    const fileBuffer = fs.readFileSync(filePath);
+    const hashSum = crypto.createHash('sha256');
+    hashSum.update(fileBuffer);
+    return hashSum.digest('hex');
 }
 
 /**
@@ -614,8 +627,8 @@ async function prepareBuildCache(imageTool) {
                 // 下载文件
                 runCmd('curl', ['-fsSL', nodeUrl, '-o', nodeTargetPath], { stdio: 'inherit' });
 
-                // SHA256 校验
-                const actualHash = execSync(`sha256sum "${nodeTargetPath}" | awk '{print $1}'`, { encoding: 'utf-8' }).trim();
+                // SHA256 校验（使用 Node.js crypto 模块，跨平台）
+                const actualHash = getFileSha256(nodeTargetPath);
                 if (actualHash !== expectedHash) {
                     console.log(`${RED}SHA256 校验失败，删除文件${NC}`);
                     fs.unlinkSync(nodeTargetPath);
