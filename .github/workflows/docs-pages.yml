@@ -39,7 +39,15 @@ jobs:
       - name: Build docs
         run: npm run docs:build
 
+      - name: Setup Pages (auto-enable, optional PAT)
+        if: ${{ secrets.PAGES_ADMIN_TOKEN != '' }}
+        uses: actions/configure-pages@v5
+        with:
+          token: ${{ secrets.PAGES_ADMIN_TOKEN }}
+          enablement: true
+
       - name: Setup Pages
+        if: ${{ secrets.PAGES_ADMIN_TOKEN == '' }}
         uses: actions/configure-pages@v5
 
       - name: Upload artifact

@@ -67,6 +67,7 @@ npm run docs:preview
 
 文档基于 VitePress 构建，并通过 GitHub Actions 自动部署到 GitHub Pages。
 首次启用时，请在 GitHub 仓库 `Settings -> Pages` 中将 Source 设为 `GitHub Actions`。
+也可以配置仓库 Secret `PAGES_ADMIN_TOKEN`（PAT，含 Pages/Administration 写权限）让工作流自动启用 Pages。
 
 # 使用方法
 

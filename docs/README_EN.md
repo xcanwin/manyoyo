@@ -67,6 +67,7 @@ npm run docs:preview
 
 The docs site is powered by VitePress and deployed automatically to GitHub Pages via GitHub Actions.
 For first-time setup, go to `Settings -> Pages` and set Source to `GitHub Actions`.
+You can also add a repository secret named `PAGES_ADMIN_TOKEN` (PAT with Pages/Administration write permission) to let the workflow auto-enable Pages.
 
 # Usage
 
