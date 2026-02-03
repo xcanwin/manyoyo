@@ -1,5 +1,4 @@
 node_modules/
-test/
 temp/
 log/
 npm-debug.log*
