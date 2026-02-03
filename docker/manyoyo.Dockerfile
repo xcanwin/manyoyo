@@ -61,30 +61,32 @@ ARG TARGETARCH
 ARG NODE_VERSION=24
 ARG TOOL="full"
 
+# 镜像源参数化（默认使用阿里云，可按需覆盖）
+ARG APT_MIRROR=https://mirrors.aliyun.com
+ARG NPM_REGISTRY=https://mirrors.tencent.com/npm/
+ARG PIP_INDEX_URL=https://mirrors.tencent.com/pypi/simple
+
+# 合并系统依赖安装为单层，减少镜像体积
 RUN <<EOX
-    # 部署 system
+    # 配置 APT 镜像源
+    sed -i "s|http://[^/]*\.ubuntu\.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
 
-    # 修复CA证书
-    sed -i 's|http://[^/]*\.ubuntu\.com|https://mirrors.aliyun.com|g' /etc/apt/sources.list.d/ubuntu.sources
+    # 安装所有基础依赖（单次 apt-get 操作）
     apt-get -o Acquire::https::Verify-Peer=false update -y
-    apt-get -o Acquire::https::Verify-Peer=false install -y --no-install-recommends ca-certificates openssl
+    apt-get -o Acquire::https::Verify-Peer=false install -y --no-install-recommends \
+        ca-certificates openssl curl wget net-tools iputils-ping \
+        git lsof socat ncat dnsutils ssh nano jq file tree ripgrep less bc xxd \
+        tar zip unzip gzip make sqlite3 supervisor
+
+    # 更新 CA 证书
     update-ca-certificates
 
-    # 安装基本依赖
-    apt-get update -y
-    apt-get install -y --no-install-recommends --reinstall ca-certificates openssl
-    update-ca-certificates
-    apt-get install -y --no-install-recommends curl wget net-tools iputils-ping git lsof socat ncat dnsutils ssh \
-                    nano jq file tree ripgrep less bc xxd \
-                    tar zip unzip gzip make sqlite3 \
-                    supervisor
-
-    # 安装 podman
+    # 安装 podman（条件）
     case ",$TOOL," in *,full,*|*,podman,*)
         apt-get install -y --no-install-recommends podman
     ;; esac
 
-    # 安装 docker
+    # 安装 docker（条件）
     case ",$TOOL," in *,full,*|*,docker,*)
         apt-get install -y --no-install-recommends docker.io
     ;; esac
@@ -100,7 +102,7 @@ RUN <<EOX
     apt-get install -y --no-install-recommends python3.12 python3.12-dev python3.12-venv python3-pip
     ln -sf /usr/bin/python3 /usr/bin/python
     ln -sf /usr/bin/pip3 /usr/bin/pip
-    pip config set global.index-url "https://mirrors.tencent.com/pypi/simple"
+    pip config set global.index-url "${PIP_INDEX_URL}"
 
     # 清理
     apt-get clean
@@ -113,7 +115,7 @@ ARG GIT_SSL_NO_VERIFY=false
 
 RUN <<EOX
     # 配置 node.js
-    npm config set registry=https://mirrors.tencent.com/npm/
+    npm config set registry=${NPM_REGISTRY}
     npm install -g npm
 
     # 安装 LSP服务（python、typescript）

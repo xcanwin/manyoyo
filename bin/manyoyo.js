@@ -23,6 +23,17 @@ function formatDate() {
     return `${month}${day}-${hour}${minute}`;
 }
 
+// ==============================================================================
+// Configuration Constants
+// ==============================================================================
+
+const CONFIG = {
+    CACHE_TTL_DAYS: 2,                    // 缓存过期天数
+    CONTAINER_READY_MAX_RETRIES: 30,      // 容器就绪最大重试次数
+    CONTAINER_READY_INITIAL_DELAY: 100,   // 容器就绪初始延迟(ms)
+    CONTAINER_READY_MAX_DELAY: 2000,      // 容器就绪最大延迟(ms)
+};
+
 // Default configuration
 let CONTAINER_NAME = `myy-${formatDate()}`;
 let HOST_PATH = process.cwd();
@@ -40,8 +51,11 @@ let CONTAINER_ENVS = [];
 let CONTAINER_VOLUMES = [];
 let MANYOYO_NAME = "manyoyo";
 let CONT_MODE = "";
+let CONT_MODE_ARGS = [];
 let QUIET = {};
 let SHOW_COMMAND = false;
+let YES_MODE = false;
+let RM_ON_EXIT = false;
 
 // Color definitions using ANSI codes
 const RED = '\x1b[0;31m';
@@ -62,10 +76,73 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * 敏感信息脱敏（用于 --show-config 输出）
+ * @param {Object} obj - 配置对象
+ * @returns {Object} 脱敏后的配置对象
+ */
+function sanitizeSensitiveData(obj) {
+    const sensitiveKeys = ['KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'AUTH', 'CREDENTIAL'];
+
+    function sanitizeValue(key, value) {
+        if (typeof value !== 'string') return value;
+        const upperKey = key.toUpperCase();
+        if (sensitiveKeys.some(k => upperKey.includes(k))) {
+            if (value.length <= 8) return '****';
+            return value.slice(0, 4) + '****' + value.slice(-4);
+        }
+        return value;
+    }
+
+    function sanitizeArray(arr) {
+        return arr.map(item => {
+            if (typeof item === 'string' && item.includes('=')) {
+                const idx = item.indexOf('=');
+                const key = item.slice(0, idx);
+                const value = item.slice(idx + 1);
+                return `${key}=${sanitizeValue(key, value)}`;
+            }
+            return item;
+        });
+    }
+
+    const result = {};
+    for (const [key, value] of Object.entries(obj)) {
+        if (Array.isArray(value)) {
+            result[key] = sanitizeArray(value);
+        } else if (typeof value === 'object' && value !== null) {
+            result[key] = sanitizeSensitiveData(value);
+        } else {
+            result[key] = sanitizeValue(key, value);
+        }
+    }
+    return result;
+}
+
 // ==============================================================================
 // Configuration File Functions
 // ==============================================================================
 
+/**
+ * @typedef {Object} Config
+ * @property {string} [containerName] - 容器名称
+ * @property {string} [hostPath] - 宿主机路径
+ * @property {string} [containerPath] - 容器路径
+ * @property {string} [imageName] - 镜像名称
+ * @property {string} [imageVersion] - 镜像版本
+ * @property {string[]} [env] - 环境变量数组
+ * @property {string[]} [envFile] - 环境文件数组
+ * @property {string[]} [volumes] - 挂载卷数组
+ * @property {string} [yolo] - YOLO 模式
+ * @property {string} [containerMode] - 容器模式
+ * @property {number} [cacheTTL] - 缓存过期天数
+ * @property {string} [nodeMirror] - Node.js 镜像源
+ */
+
+/**
+ * 加载全局配置文件
+ * @returns {Config} 配置对象
+ */
 function loadConfig() {
     const configPath = path.join(os.homedir(), '.manyoyo', 'manyoyo.json');
     if (fs.existsSync(configPath)) {
@@ -187,6 +264,10 @@ async function askQuestion(prompt) {
 // Configuration Functions
 // ==============================================================================
 
+/**
+ * 添加环境变量
+ * @param {string} env - 环境变量字符串 (KEY=VALUE)
+ */
 function addEnv(env) {
     const idx = env.indexOf('=');
     if (idx <= 0) {
@@ -284,21 +365,33 @@ function setYolo(cli) {
     }
 }
 
+/**
+ * 设置容器嵌套模式
+ * @param {string} mode - 模式名称 (common, dind, sock)
+ */
 function setContMode(mode) {
     switch (mode) {
         case 'common':
             CONT_MODE = "";
+            CONT_MODE_ARGS = [];
             break;
         case 'docker-in-docker':
         case 'dind':
         case 'd':
             CONT_MODE = "--privileged";
+            CONT_MODE_ARGS = ['--privileged'];
             console.log(`${GREEN}✅ 开启安全的容器嵌套容器模式, 手动在容器内启动服务: nohup dockerd &${NC}`);
             break;
         case 'mount-docker-socket':
         case 'sock':
         case 's':
             CONT_MODE = "--privileged --volume /var/run/docker.sock:/var/run/docker.sock --env DOCKER_HOST=unix:///var/run/docker.sock --env CONTAINER_HOST=unix:///var/run/docker.sock";
+            CONT_MODE_ARGS = [
+                '--privileged',
+                '--volume', '/var/run/docker.sock:/var/run/docker.sock',
+                '--env', 'DOCKER_HOST=unix:///var/run/docker.sock',
+                '--env', 'CONTAINER_HOST=unix:///var/run/docker.sock'
+            ];
             console.log(`${RED}⚠️  开启危险的容器嵌套容器模式, 危害: 容器可访问宿主机文件${NC}`);
             break;
         default:
@@ -443,10 +536,24 @@ function pruneDanglingImages() {
     console.log(`${GREEN}✅ 清理完成${NC}`);
 }
 
+/**
+ * 准备构建缓存（Node.js、JDT LSP、gopls）
+ * @param {string} imageTool - 构建工具类型
+ */
 async function prepareBuildCache(imageTool) {
     const cacheDir = path.join(__dirname, '../docker/cache');
     const timestampFile = path.join(cacheDir, '.timestamps.json');
-    const cacheTTLDays = 2;
+
+    // 从配置文件读取 TTL，默认 2 天
+    const config = loadConfig();
+    const cacheTTLDays = config.cacheTTL || CONFIG.CACHE_TTL_DAYS;
+
+    // 镜像源优先级：用户配置 > 腾讯云 > 官方
+    const nodeMirrors = [
+        config.nodeMirror,
+        'https://mirrors.tencent.com/nodejs-release',
+        'https://nodejs.org/dist'
+    ].filter(Boolean);
 
     console.log(`\n${CYAN}准备构建缓存...${NC}`);
 
@@ -489,18 +596,46 @@ async function prepareBuildCache(imageTool) {
     const hasNodeCache = fs.existsSync(nodeCacheDir) && fs.readdirSync(nodeCacheDir).some(f => f.startsWith('node-') && f.includes(`linux-${archNode}`));
     if (!hasNodeCache || isExpired(nodeKey)) {
         console.log(`${YELLOW}下载 Node.js ${nodeVersion} (${archNode})...${NC}`);
-        const mirror = 'https://mirrors.tencent.com/nodejs-release';
-        try {
-            const shasum = execSync(`curl -sL ${mirror}/latest-v${nodeVersion}.x/SHASUMS256.txt | grep linux-${archNode}.tar.gz | awk '{print $2}'`, { encoding: 'utf-8' }).trim();
-            const nodeUrl = `${mirror}/latest-v${nodeVersion}.x/${shasum}`;
-            const nodeTargetPath = path.join(nodeCacheDir, shasum);
-            runCmd('curl', ['-fsSL', nodeUrl, '-o', nodeTargetPath], { stdio: 'inherit' });
-            timestamps[nodeKey] = now.toISOString();
-            fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
-            console.log(`${GREEN}✓ Node.js 下载完成${NC}`);
-        } catch (e) {
-            console.error(`${RED}错误: Node.js 下载失败${NC}`);
-            throw e;
+
+        // 尝试多个镜像源
+        let downloadSuccess = false;
+        for (const mirror of nodeMirrors) {
+            try {
+                console.log(`${BLUE}尝试镜像源: ${mirror}${NC}`);
+                const shasumUrl = `${mirror}/latest-v${nodeVersion}.x/SHASUMS256.txt`;
+                const shasumContent = execSync(`curl -sL ${shasumUrl}`, { encoding: 'utf-8' });
+                const shasumLine = shasumContent.split('\n').find(line => line.includes(`linux-${archNode}.tar.gz`));
+                if (!shasumLine) continue;
+
+                const [expectedHash, fileName] = shasumLine.trim().split(/\s+/);
+                const nodeUrl = `${mirror}/latest-v${nodeVersion}.x/${fileName}`;
+                const nodeTargetPath = path.join(nodeCacheDir, fileName);
+
+                // 下载文件
+                runCmd('curl', ['-fsSL', nodeUrl, '-o', nodeTargetPath], { stdio: 'inherit' });
+
+                // SHA256 校验
+                const actualHash = execSync(`sha256sum "${nodeTargetPath}" | awk '{print $1}'`, { encoding: 'utf-8' }).trim();
+                if (actualHash !== expectedHash) {
+                    console.log(`${RED}SHA256 校验失败，删除文件${NC}`);
+                    fs.unlinkSync(nodeTargetPath);
+                    continue;
+                }
+
+                console.log(`${GREEN}✓ SHA256 校验通过${NC}`);
+                timestamps[nodeKey] = now.toISOString();
+                fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
+                console.log(`${GREEN}✓ Node.js 下载完成${NC}`);
+                downloadSuccess = true;
+                break;
+            } catch (e) {
+                console.log(`${YELLOW}镜像源 ${mirror} 失败，尝试下一个...${NC}`);
+            }
+        }
+
+        if (!downloadSuccess) {
+            console.error(`${RED}错误: Node.js 下载失败（所有镜像源均不可用）${NC}`);
+            throw new Error('Node.js download failed');
         }
     } else {
         console.log(`${GREEN}✓ Node.js 缓存已存在${NC}`);
@@ -638,8 +773,10 @@ async function buildImage(IMAGE_BUILD_ARGS, imageName, imageVersion) {
     console.log(`${BLUE}准备执行命令:${NC}`);
     console.log(`${buildCmd}\n`);
 
-    const reply = await askQuestion(`❔ 是否继续构建? [ 直接回车=继续, ctrl+c=取消 ]: `);
-    console.log("");
+    if (!YES_MODE) {
+        await askQuestion(`❔ 是否继续构建? [ 直接回车=继续, ctrl+c=取消 ]: `);
+        console.log("");
+    }
 
     try {
         execSync(buildCmd, { stdio: 'inherit' });
@@ -715,6 +852,8 @@ function setupCommander() {
         .option('--install <name>', '安装manyoyo命令 (docker-cli-plugin)')
         .option('--show-config', '显示最终生效配置并退出')
         .option('--show-command', '显示将执行的 docker run 命令并退出')
+        .option('--yes', '所有提示自动确认 (用于CI/脚本)')
+        .option('--rm-on-exit', '退出后自动删除容器 (一次性模式)')
         .option('-q, --quiet <item>', '静默显示 (可多次使用: cnew,crm,tip,cmd,full)', (value, previous) => [...(previous || []), value], []);
 
     // Docker CLI plugin metadata check
@@ -814,6 +953,14 @@ function setupCommander() {
         }
     }
 
+    if (options.yes) {
+        YES_MODE = true;
+    }
+
+    if (options.rmOnExit) {
+        RM_ON_EXIT = true;
+    }
+
     if (options.showConfig) {
         const finalConfig = {
             hostPath: HOST_PATH,
@@ -837,7 +984,9 @@ function setupCommander() {
                 suffix: EXEC_COMMAND_SUFFIX
             }
         };
-        console.log(JSON.stringify(finalConfig, null, 4));
+        // 敏感信息脱敏
+        const sanitizedConfig = sanitizeSensitiveData(finalConfig);
+        console.log(JSON.stringify(sanitizedConfig, null, 4));
         process.exit(0);
     }
 
@@ -882,15 +1031,20 @@ function validateHostPath() {
     }
 }
 
+/**
+ * 等待容器就绪（使用指数退避算法）
+ * @param {string} containerName - 容器名称
+ */
 async function waitForContainerReady(containerName) {
-    const MAX_RETRIES = 50;
-    let count = 0;
-    while (true) {
+    const MAX_RETRIES = CONFIG.CONTAINER_READY_MAX_RETRIES;
+    let retryDelay = CONFIG.CONTAINER_READY_INITIAL_DELAY;
+
+    for (let count = 0; count < MAX_RETRIES; count++) {
         try {
             const status = getContainerStatus(containerName);
 
             if (status === 'running') {
-                break;
+                return;
             }
 
             if (status === 'exited') {
@@ -899,40 +1053,37 @@ async function waitForContainerReady(containerName) {
                 process.exit(1);
             }
 
-            await sleep(100);
-            count++;
-
-            if (count >= MAX_RETRIES) {
-                console.log(`${RED}⚠️  错误: 容器启动超时（当前状态: ${status}）。${NC}`);
-                dockerExecArgs(['logs', containerName], { stdio: 'inherit' });
-                process.exit(1);
-            }
+            await sleep(retryDelay);
+            retryDelay = Math.min(retryDelay * 2, CONFIG.CONTAINER_READY_MAX_DELAY);
         } catch (e) {
-            await sleep(100);
-            count++;
-            if (count >= MAX_RETRIES) {
-                console.log(`${RED}⚠️  错误: 容器启动超时。${NC}`);
-                process.exit(1);
-            }
+            await sleep(retryDelay);
+            retryDelay = Math.min(retryDelay * 2, CONFIG.CONTAINER_READY_MAX_DELAY);
         }
     }
+
+    console.log(`${RED}⚠️  错误: 容器启动超时。${NC}`);
+    process.exit(1);
 }
 
+/**
+ * 创建新容器
+ * @returns {Promise<string>} 默认命令
+ */
 async function createNewContainer() {
     if ( !(QUIET.cnew || QUIET.full) ) console.log(`${CYAN}📦 manyoyo by xcanwin 正在创建新容器: ${YELLOW}${CONTAINER_NAME}${NC}`);
 
     EXEC_COMMAND = `${EXEC_COMMAND_PREFIX}${EXEC_COMMAND}${EXEC_COMMAND_SUFFIX}`;
     const defaultCommand = EXEC_COMMAND;
 
-    const dockerRunCmd = buildDockerRunCmd();
-
     if (SHOW_COMMAND) {
-        console.log(dockerRunCmd);
+        console.log(buildDockerRunCmd());
         process.exit(0);
     }
 
+    // 使用数组参数执行命令（安全方式）
     try {
-        dockerExec(dockerRunCmd, { stdio: 'pipe' });
+        const args = buildDockerRunArgs();
+        dockerExecArgs(args, { stdio: 'pipe' });
     } catch (e) {
         showImagePullHint(e);
         throw e;
@@ -944,17 +1095,45 @@ async function createNewContainer() {
     return defaultCommand;
 }
 
-function buildDockerRunCmd() {
-    // Build docker run command
+/**
+ * 构建 Docker run 命令参数数组（安全方式，避免命令注入）
+ * @returns {string[]} 命令参数数组
+ */
+function buildDockerRunArgs() {
     const fullImage = `${IMAGE_NAME}:${IMAGE_VERSION}`;
-    const envArgs = CONTAINER_ENVS.join(' ');
-    const volumeArgs = CONTAINER_VOLUMES.join(' ');
-    const contModeArg = CONT_MODE || '';
+    const safeLabelCmd = EXEC_COMMAND.replace(/[\r\n]/g, ' ');
 
-    const safeLabelCmd = EXEC_COMMAND.replace(/[\r\n]/g, ' ').replace(/"/g, '\\"');
-    const dockerRunCmd = `${DOCKER_CMD} run -d --name "${CONTAINER_NAME}" --entrypoint "" ${contModeArg} ${envArgs} ${volumeArgs} --volume "${HOST_PATH}:${CONTAINER_PATH}" --workdir "${CONTAINER_PATH}" --label "manyoyo.default_cmd=${safeLabelCmd}" "${fullImage}" tail -f /dev/null`;
+    const args = [
+        'run', '-d',
+        '--name', CONTAINER_NAME,
+        '--entrypoint', '',
+        ...CONT_MODE_ARGS,
+        ...CONTAINER_ENVS,
+        ...CONTAINER_VOLUMES,
+        '--volume', `${HOST_PATH}:${CONTAINER_PATH}`,
+        '--workdir', CONTAINER_PATH,
+        '--label', `manyoyo.default_cmd=${safeLabelCmd}`,
+        fullImage,
+        'tail', '-f', '/dev/null'
+    ];
 
-    return dockerRunCmd;
+    return args;
+}
+
+/**
+ * 构建 Docker run 命令字符串（用于显示）
+ * @returns {string} 命令字符串
+ */
+function buildDockerRunCmd() {
+    const args = buildDockerRunArgs();
+    // 对包含空格或特殊字符的参数加引号
+    const quotedArgs = args.map(arg => {
+        if (arg.includes(' ') || arg.includes('"') || arg.includes('=')) {
+            return `"${arg.replace(/"/g, '\\"')}"`;
+        }
+        return arg;
+    });
+    return `${DOCKER_CMD} ${quotedArgs.join(' ')}`;
 }
 
 async function connectExistingContainer() {
@@ -1014,7 +1193,17 @@ function executeInContainer(defaultCommand) {
     }
 }
 
+/**
+ * 处理会话退出后的交互
+ * @param {string} defaultCommand - 默认命令
+ */
 async function handlePostExit(defaultCommand) {
+    // --rm-on-exit 模式：自动删除容器
+    if (RM_ON_EXIT) {
+        removeContainer(CONTAINER_NAME);
+        return;
+    }
+
     getHelloTip(CONTAINER_NAME, defaultCommand);
 
     let tipAskKeep = `❔ 会话已结束。是否保留此后台容器 ${CONTAINER_NAME}? [ y=默认保留, n=删除, 1=首次命令进入, x=执行命令, i=交互式SHELL ]: `;

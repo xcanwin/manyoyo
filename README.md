@@ -13,6 +13,25 @@
 
 ---
 
+## 2 分钟快速开始
+
+**Docker 用户：**
+```bash
+npm install -g @xcanwin/manyoyo    # 安装
+manyoyo --ib --iv 1.6.5            # 构建镜像
+manyoyo -y c                        # 运行 Claude Code YOLO 模式
+```
+
+**Podman 用户：**
+```bash
+npm install -g @xcanwin/manyoyo    # 安装
+podman pull ubuntu:24.04           # 拉取基础镜像
+manyoyo --ib --iv 1.6.5            # 构建镜像
+manyoyo -y c                        # 运行 Claude Code YOLO 模式
+```
+
+---
+
 **MANYOYO** 是一款 AI 智能体提效安全沙箱，安全、高效、省 token，专为 Agent YOLO 模式设计，保障宿主机安全。
 
 预装常见 Agent 与工具，进一步节省 token。循环自由切换 Agent 和 `/bin/bash`，进一步提效。
@@ -62,7 +81,7 @@ podman pull ubuntu:24.04
 
 ```bash
 # 使用 manyoyo 构建镜像（推荐，自动使用缓存加速）
-manyoyo --ib --iv 1.6.4                          # 默认构建 full 版本（推荐，建议指定版本号）
+manyoyo --ib --iv 1.6.5                          # 默认构建 full 版本（推荐，建议指定版本号）
 manyoyo --ib --iba TOOL=common                   # 构建常见组件版本（python,nodejs,claude）
 manyoyo --ib --iba TOOL=go,codex,java,gemini     # 构建自定义组件版本
 manyoyo --ib --iba GIT_SSL_NO_VERIFY=true        # 构建 full 版本且跳过git的ssl验证
@@ -201,7 +220,7 @@ manyoyo --ef openai_[gpt]_codex -x codex
     "hostPath": "/path/to/project",      // 默认宿主机工作目录
     "containerPath": "/path/to/project", // 默认容器工作目录
     "imageName": "localhost/xcanwin/manyoyo",  // 默认镜像名称
-    "imageVersion": "1.6.4-full",        // 默认镜像版本
+    "imageVersion": "1.6.5-full",        // 默认镜像版本
     "containerMode": "common",           // 容器嵌套模式 (common, dind, sock)
 
     // 环境变量配置
@@ -225,9 +244,21 @@ manyoyo --ef openai_[gpt]_codex -x codex
 - **覆盖型参数**：命令行 > 运行配置 > 全局配置 > 默认值
 - **合并型参数**：全局配置 + 运行配置 + 命令行（按顺序累加）
 
-覆盖型参数包括：`containerName`, `hostPath`, `containerPath`, `imageName`, `imageVersion`, `containerMode`, `shellPrefix`, `shell`, `yolo`, `quiet`
+#### 配置合并规则表
 
-合并型参数包括：`envFile`, `env`, `volumes`, `imageBuildArgs`
+| 参数类型 | 参数名 | 合并行为 | 示例 |
+|---------|--------|---------|------|
+| 覆盖型 | `containerName` | 取最高优先级的值 | CLI `-n test` 覆盖配置文件中的值 |
+| 覆盖型 | `hostPath` | 取最高优先级的值 | 默认为当前目录 |
+| 覆盖型 | `containerPath` | 取最高优先级的值 | 默认与 hostPath 相同 |
+| 覆盖型 | `imageName` | 取最高优先级的值 | 默认 `localhost/xcanwin/manyoyo` |
+| 覆盖型 | `imageVersion` | 取最高优先级的值 | 如 `1.6.5-full` |
+| 覆盖型 | `containerMode` | 取最高优先级的值 | `common`, `dind`, `sock` |
+| 覆盖型 | `yolo` | 取最高优先级的值 | `c`, `gm`, `cx`, `oc` |
+| 合并型 | `env` | 数组累加合并 | 全局 + 运行配置 + CLI 的所有值 |
+| 合并型 | `envFile` | 数组累加合并 | 所有环境文件依次加载 |
+| 合并型 | `volumes` | 数组累加合并 | 所有挂载卷生效 |
+| 合并型 | `imageBuildArgs` | 数组累加合并 | 所有构建参数生效 |
 
 #### 常用样例-全局
 
@@ -237,7 +268,7 @@ mkdir -p ~/.manyoyo/
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.6.4-full"
+    "imageVersion": "1.6.5-full"
 }
 EOF
 ```
@@ -359,6 +390,8 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 | `-y CLI` | `--yolo` | 无需确认运行 AI 智能体 |
 | `--show-config` | | 显示最终生效配置并退出 |
 | `--show-command` | | 显示将执行的命令并退出（存在容器时为 docker exec，不存在时为 docker run） |
+| `--yes` | | 所有提示自动确认（用于CI/脚本） |
+| `--rm-on-exit` | | 退出后自动删除容器（一次性模式） |
 | `--install NAME` | | 安装 manyoyo 命令 |
 | `-q LIST` | `--quiet` | 静默显示 |
 | `-r NAME` | `--run` | 加载运行配置（支持 `name` 或 `./path.json`） |
@@ -384,6 +417,53 @@ docker ps -a             # 现在可以在容器内使用 docker 命令
 ```bash
 npm uninstall -g @xcanwin/manyoyo
 ```
+
+## 故障排查 FAQ
+
+### 镜像构建失败
+
+**问题**：执行 `manyoyo --ib` 时报错
+
+**解决方案**：
+1. 检查网络连接：`curl -I https://mirrors.tencent.com`
+2. 检查磁盘空间：`df -h`（需要至少 10GB 可用空间）
+3. 使用 `--yes` 跳过确认：`manyoyo --ib --iv 1.6.5 --yes`
+4. 如果在国外，可能需要修改镜像源（配置文件中设置 `nodeMirror`）
+
+### 镜像拉取失败
+
+**问题**：提示 `pinging container registry localhost failed`
+
+**解决方案**：
+1. 本地镜像需要先构建：`manyoyo --ib --iv 1.6.5`
+2. 或修改配置文件 `~/.manyoyo/manyoyo.json` 中的 `imageVersion`
+
+### 容器启动失败
+
+**问题**：容器无法启动或立即退出
+
+**解决方案**：
+1. 查看容器日志：`docker logs <容器名>`
+2. 检查端口冲突：`docker ps -a`
+3. 检查权限问题：确保当前用户有 Docker/Podman 权限
+
+### 权限不足
+
+**问题**：提示 `permission denied` 或无法访问 Docker
+
+**解决方案**：
+1. 将用户添加到 docker 组：`sudo usermod -aG docker $USER`
+2. 重新登录或运行：`newgrp docker`
+3. 或使用 `sudo` 运行命令
+
+### 环境变量未生效
+
+**问题**：容器内无法读取设置的环境变量
+
+**解决方案**：
+1. 检查环境文件格式（支持 `KEY=VALUE` 或 `export KEY=VALUE`）
+2. 确认文件路径正确（`--ef name` 对应 `~/.manyoyo/env/name.env`）
+3. 使用 `--show-config` 查看最终生效的配置
 
 ## 许可证
 

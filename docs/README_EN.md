@@ -7,9 +7,28 @@
 </p>
 
 <p align="center">
-  <a href="README.md">中文</a> |
-  <a href="docs/README_EN.md"><b>English</b></a>
+  <a href="../README.md">中文</a> |
+  <a href="README_EN.md"><b>English</b></a>
 </p>
+
+---
+
+## 2-Minute Quick Start
+
+**Docker users:**
+```bash
+npm install -g @xcanwin/manyoyo    # Install
+manyoyo --ib --iv 1.6.5            # Build image
+manyoyo -y c                        # Run Claude Code YOLO mode
+```
+
+**Podman users:**
+```bash
+npm install -g @xcanwin/manyoyo    # Install
+podman pull ubuntu:24.04           # Pull base image
+manyoyo --ib --iv 1.6.5            # Build image
+manyoyo -y c                        # Run Claude Code YOLO mode
+```
 
 ---
 
@@ -62,7 +81,7 @@ Only one of the following commands needs to be executed:
 
 ```bash
 # Build using manyoyo (Recommended, auto-cache enabled)
-manyoyo --ib --iv 1.6.4                          # Build full version by default (Recommended, specify version)
+manyoyo --ib --iv 1.6.5                          # Build full version by default (Recommended, specify version)
 manyoyo --ib --iba TOOL=common                   # Build common version (python,nodejs,claude)
 manyoyo --ib --iba TOOL=go,codex,java,gemini     # Build custom combination
 manyoyo --ib --iba GIT_SSL_NO_VERIFY=true        # Build the full version and skip Git SSL verification
@@ -201,7 +220,7 @@ Refer to `config.example.json` for all available options:
     "hostPath": "/path/to/project",      // Default host working directory
     "containerPath": "/path/to/project", // Default container working directory
     "imageName": "localhost/xcanwin/manyoyo",  // Default image name
-    "imageVersion": "1.6.4-full",        // Default image version
+    "imageVersion": "1.6.5-full",        // Default image version
     "containerMode": "common",           // Container nesting mode (common, dind, sock)
 
     // Environment variable configuration
@@ -225,9 +244,21 @@ Refer to `config.example.json` for all available options:
 - **Override parameters**: Command line > Run config > Global config > Defaults
 - **Merge parameters**: Global config + Run config + Command line (concatenated in order)
 
-Override parameters include: `containerName`, `hostPath`, `containerPath`, `imageName`, `imageVersion`, `containerMode`, `shellPrefix`, `shell`, `yolo`, `quiet`
+#### Configuration Merge Rules
 
-Merge parameters include: `envFile`, `env`, `volumes`, `imageBuildArgs`
+| Type | Parameter | Behavior | Example |
+|------|-----------|----------|---------|
+| Override | `containerName` | Use highest priority value | CLI `-n test` overrides config file |
+| Override | `hostPath` | Use highest priority value | Defaults to current directory |
+| Override | `containerPath` | Use highest priority value | Defaults to same as hostPath |
+| Override | `imageName` | Use highest priority value | Default `localhost/xcanwin/manyoyo` |
+| Override | `imageVersion` | Use highest priority value | e.g., `1.6.5-full` |
+| Override | `containerMode` | Use highest priority value | `common`, `dind`, `sock` |
+| Override | `yolo` | Use highest priority value | `c`, `gm`, `cx`, `oc` |
+| Merge | `env` | Array concatenation | All values from global + run + CLI |
+| Merge | `envFile` | Array concatenation | All env files loaded in order |
+| Merge | `volumes` | Array concatenation | All volume mounts apply |
+| Merge | `imageBuildArgs` | Array concatenation | All build args apply |
 
 #### Common Examples-Global
 
@@ -237,7 +268,7 @@ mkdir -p ~/.manyoyo/
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.6.4-full"
+    "imageVersion": "1.6.5-full"
 }
 EOF
 ```
@@ -359,6 +390,8 @@ docker ps -a             # Now you can use docker commands inside the container
 | `-y CLI` | `--yolo` | Run AI agent without confirmation |
 | `--show-config` | | Print final effective config and exit |
 | `--show-command` | | Print the command to be executed and exit (docker exec if container exists, otherwise docker run) |
+| `--yes` | | Auto-confirm all prompts (for CI/scripts) |
+| `--rm-on-exit` | | Auto-remove container on exit (one-time mode) |
 | `--install NAME` | | Install manyoyo command |
 | `-q LIST` | `--quiet` | Quiet output |
 | `-r NAME` | `--run` | Load run configuration (supports `name` or `./path.json`) |
@@ -384,6 +417,53 @@ docker ps -a             # Now you can use docker commands inside the container
 ```bash
 npm uninstall -g @xcanwin/manyoyo
 ```
+
+## Troubleshooting FAQ
+
+### Image Build Failed
+
+**Problem**: Error when running `manyoyo --ib`
+
+**Solutions**:
+1. Check network connection: `curl -I https://mirrors.tencent.com`
+2. Check disk space: `df -h` (need at least 10GB free space)
+3. Use `--yes` to skip confirmation: `manyoyo --ib --iv 1.6.5 --yes`
+4. If outside China, you may need to change mirror source (set `nodeMirror` in config file)
+
+### Image Pull Failed
+
+**Problem**: Error `pinging container registry localhost failed`
+
+**Solutions**:
+1. Local images need to be built first: `manyoyo --ib --iv 1.6.5`
+2. Or modify `imageVersion` in config file `~/.manyoyo/manyoyo.json`
+
+### Container Startup Failed
+
+**Problem**: Container won't start or exits immediately
+
+**Solutions**:
+1. View container logs: `docker logs <container-name>`
+2. Check port conflicts: `docker ps -a`
+3. Check permission issues: Ensure current user has Docker/Podman permissions
+
+### Permission Denied
+
+**Problem**: Error `permission denied` or cannot access Docker
+
+**Solutions**:
+1. Add user to docker group: `sudo usermod -aG docker $USER`
+2. Re-login or run: `newgrp docker`
+3. Or run commands with `sudo`
+
+### Environment Variables Not Working
+
+**Problem**: Container cannot read configured environment variables
+
+**Solutions**:
+1. Check env file format (supports `KEY=VALUE` or `export KEY=VALUE`)
+2. Verify file path is correct (`--ef name` corresponds to `~/.manyoyo/env/name.env`)
+3. Use `--show-config` to view final effective configuration
 
 ## License
 
