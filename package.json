@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "3.8.0",
+    "version": "3.8.1",
     "imageVersion": "1.7.0",
     "description": "AI Agent CLI Security Sandbox",
     "keywords": [
@@ -42,5 +42,9 @@
     },
     "devDependencies": {
         "jest": "^29.7.0"
+    },
+    "jest": {
+        "testMatch": ["**/test/**/*.test.js"],
+        "testEnvironment": "node"
     }
 }

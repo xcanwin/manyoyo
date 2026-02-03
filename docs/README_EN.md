@@ -18,7 +18,7 @@
 **Docker users:**
 ```bash
 npm install -g @xcanwin/manyoyo    # Install
-manyoyo --ib --iv 1.6.5            # Build image
+manyoyo --ib --iv 1.7.0            # Build image
 manyoyo -y c                        # Run Claude Code YOLO mode
 ```
 
@@ -26,7 +26,7 @@ manyoyo -y c                        # Run Claude Code YOLO mode
 ```bash
 npm install -g @xcanwin/manyoyo    # Install
 podman pull ubuntu:24.04           # Pull base image
-manyoyo --ib --iv 1.6.5            # Build image
+manyoyo --ib --iv 1.7.0            # Build image
 manyoyo -y c                        # Run Claude Code YOLO mode
 ```
 
@@ -81,7 +81,7 @@ Only one of the following commands needs to be executed:
 
 ```bash
 # Build using manyoyo (Recommended, auto-cache enabled)
-manyoyo --ib --iv 1.6.5                          # Build full version by default (Recommended, specify version)
+manyoyo --ib --iv 1.7.0                          # Build full version by default (Recommended, specify version)
 manyoyo --ib --iba TOOL=common                   # Build common version (python,nodejs,claude)
 manyoyo --ib --iba TOOL=go,codex,java,gemini     # Build custom combination
 manyoyo --ib --iba GIT_SSL_NO_VERIFY=true        # Build the full version and skip Git SSL verification
@@ -220,7 +220,7 @@ Refer to `config.example.json` for all available options:
     "hostPath": "/path/to/project",      // Default host working directory
     "containerPath": "/path/to/project", // Default container working directory
     "imageName": "localhost/xcanwin/manyoyo",  // Default image name
-    "imageVersion": "1.6.5-full",        // Default image version
+    "imageVersion": "1.7.0-full",        // Default image version
     "containerMode": "common",           // Container nesting mode (common, dind, sock)
 
     // Environment variable configuration
@@ -252,7 +252,7 @@ Refer to `config.example.json` for all available options:
 | Override | `hostPath` | Use highest priority value | Defaults to current directory |
 | Override | `containerPath` | Use highest priority value | Defaults to same as hostPath |
 | Override | `imageName` | Use highest priority value | Default `localhost/xcanwin/manyoyo` |
-| Override | `imageVersion` | Use highest priority value | e.g., `1.6.5-full` |
+| Override | `imageVersion` | Use highest priority value | e.g., `1.7.0-full` |
 | Override | `containerMode` | Use highest priority value | `common`, `dind`, `sock` |
 | Override | `yolo` | Use highest priority value | `c`, `gm`, `cx`, `oc` |
 | Merge | `env` | Array concatenation | All values from global + run + CLI |
@@ -268,7 +268,7 @@ mkdir -p ~/.manyoyo/
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.6.5-full"
+    "imageVersion": "1.7.0-full"
 }
 EOF
 ```
@@ -427,7 +427,7 @@ npm uninstall -g @xcanwin/manyoyo
 **Solutions**:
 1. Check network connection: `curl -I https://mirrors.tencent.com`
 2. Check disk space: `df -h` (need at least 10GB free space)
-3. Use `--yes` to skip confirmation: `manyoyo --ib --iv 1.6.5 --yes`
+3. Use `--yes` to skip confirmation: `manyoyo --ib --iv 1.7.0 --yes`
 4. If outside China, you may need to change mirror source (set `nodeMirror` in config file)
 
 ### Image Pull Failed
@@ -435,7 +435,7 @@ npm uninstall -g @xcanwin/manyoyo
 **Problem**: Error `pinging container registry localhost failed`
 
 **Solutions**:
-1. Local images need to be built first: `manyoyo --ib --iv 1.6.5`
+1. Local images need to be built first: `manyoyo --ib --iv 1.7.0`
 2. Or modify `imageVersion` in config file `~/.manyoyo/manyoyo.json`
 
 ### Container Startup Failed

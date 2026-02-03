@@ -18,7 +18,7 @@
 **Docker 用户：**
 ```bash
 npm install -g @xcanwin/manyoyo    # 安装
-manyoyo --ib --iv 1.6.5            # 构建镜像
+manyoyo --ib --iv 1.7.0            # 构建镜像
 manyoyo -y c                        # 运行 Claude Code YOLO 模式
 ```
 
@@ -26,7 +26,7 @@ manyoyo -y c                        # 运行 Claude Code YOLO 模式
 ```bash
 npm install -g @xcanwin/manyoyo    # 安装
 podman pull ubuntu:24.04           # 拉取基础镜像
-manyoyo --ib --iv 1.6.5            # 构建镜像
+manyoyo --ib --iv 1.7.0            # 构建镜像
 manyoyo -y c                        # 运行 Claude Code YOLO 模式
 ```
 
@@ -81,7 +81,7 @@ podman pull ubuntu:24.04
 
 ```bash
 # 使用 manyoyo 构建镜像（推荐，自动使用缓存加速）
-manyoyo --ib --iv 1.6.5                          # 默认构建 full 版本（推荐，建议指定版本号）
+manyoyo --ib --iv 1.7.0                          # 默认构建 full 版本（推荐，建议指定版本号）
 manyoyo --ib --iba TOOL=common                   # 构建常见组件版本（python,nodejs,claude）
 manyoyo --ib --iba TOOL=go,codex,java,gemini     # 构建自定义组件版本
 manyoyo --ib --iba GIT_SSL_NO_VERIFY=true        # 构建 full 版本且跳过git的ssl验证
@@ -220,7 +220,7 @@ manyoyo --ef openai_[gpt]_codex -x codex
     "hostPath": "/path/to/project",      // 默认宿主机工作目录
     "containerPath": "/path/to/project", // 默认容器工作目录
     "imageName": "localhost/xcanwin/manyoyo",  // 默认镜像名称
-    "imageVersion": "1.6.5-full",        // 默认镜像版本
+    "imageVersion": "1.7.0-full",        // 默认镜像版本
     "containerMode": "common",           // 容器嵌套模式 (common, dind, sock)
 
     // 环境变量配置
@@ -252,7 +252,7 @@ manyoyo --ef openai_[gpt]_codex -x codex
 | 覆盖型 | `hostPath` | 取最高优先级的值 | 默认为当前目录 |
 | 覆盖型 | `containerPath` | 取最高优先级的值 | 默认与 hostPath 相同 |
 | 覆盖型 | `imageName` | 取最高优先级的值 | 默认 `localhost/xcanwin/manyoyo` |
-| 覆盖型 | `imageVersion` | 取最高优先级的值 | 如 `1.6.5-full` |
+| 覆盖型 | `imageVersion` | 取最高优先级的值 | 如 `1.7.0-full` |
 | 覆盖型 | `containerMode` | 取最高优先级的值 | `common`, `dind`, `sock` |
 | 覆盖型 | `yolo` | 取最高优先级的值 | `c`, `gm`, `cx`, `oc` |
 | 合并型 | `env` | 数组累加合并 | 全局 + 运行配置 + CLI 的所有值 |
@@ -268,7 +268,7 @@ mkdir -p ~/.manyoyo/
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.6.5-full"
+    "imageVersion": "1.7.0-full"
 }
 EOF
 ```
@@ -427,7 +427,7 @@ npm uninstall -g @xcanwin/manyoyo
 **解决方案**：
 1. 检查网络连接：`curl -I https://mirrors.tencent.com`
 2. 检查磁盘空间：`df -h`（需要至少 10GB 可用空间）
-3. 使用 `--yes` 跳过确认：`manyoyo --ib --iv 1.6.5 --yes`
+3. 使用 `--yes` 跳过确认：`manyoyo --ib --iv 1.7.0 --yes`
 4. 如果在国外，可能需要修改镜像源（配置文件中设置 `nodeMirror`）
 
 ### 镜像拉取失败
@@ -435,7 +435,7 @@ npm uninstall -g @xcanwin/manyoyo
 **问题**：提示 `pinging container registry localhost failed`
 
 **解决方案**：
-1. 本地镜像需要先构建：`manyoyo --ib --iv 1.6.5`
+1. 本地镜像需要先构建：`manyoyo --ib --iv 1.7.0`
 2. 或修改配置文件 `~/.manyoyo/manyoyo.json` 中的 `imageVersion`
 
 ### 容器启动失败
