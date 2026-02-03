@@ -276,7 +276,7 @@ function setYolo(cli) {
             break;
         case 'opencode':
         case 'oc':
-            EXEC_COMMAND = "OPENCODE_PERMISSION='\"allow\"' opencode";
+            EXEC_COMMAND = "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode";
             break;
         default:
             console.log(`${RED}⚠️  未知LLM CLI: ${cli}${NC}`);
