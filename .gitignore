@@ -1,4 +1,6 @@
 node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
 temp/
 log/
 npm-debug.log*

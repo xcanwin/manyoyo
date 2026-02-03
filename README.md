@@ -10,6 +10,9 @@
   <a href="README.md"><b>中文</b></a> |
   <a href="docs/README_EN.md">English</a>
 </p>
+<p align="center">
+  📚 在线文档：<a href="https://xcanwin.github.io/manyoyo/">https://xcanwin.github.io/manyoyo/</a>
+</p>
 
 ---
 
@@ -48,6 +51,22 @@ manyoyo -y c                        # 运行 Claude Code YOLO 模式
 - **灵活自定义**：支持自定义 `BASEURL`、`AUTH_TOKEN` 等变量
 - **配置管理**：快捷导入配置文件
 - **高级模式**：支持危险容器嵌套（mount-docker-socket）、自定义沙箱镜像
+
+## 文档站开发
+
+```bash
+# 本地开发
+npm run docs:dev
+
+# 构建文档
+npm run docs:build
+
+# 预览构建产物
+npm run docs:preview
+```
+
+文档基于 VitePress 构建，并通过 GitHub Actions 自动部署到 GitHub Pages。
+首次启用时，请在 GitHub 仓库 `Settings -> Pages` 中将 Source 设为 `GitHub Actions`。
 
 # 使用方法
 

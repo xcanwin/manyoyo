@@ -10,6 +10,9 @@
   <a href="../README.md">中文</a> |
   <a href="README_EN.md"><b>English</b></a>
 </p>
+<p align="center">
+  📚 Online docs: <a href="https://xcanwin.github.io/manyoyo/">https://xcanwin.github.io/manyoyo/</a>
+</p>
 
 ---
 
@@ -48,6 +51,22 @@ Pre-installed with common agents and tools to further save tokens. Freely switch
 - **Flexible Customization**: Support custom `BASEURL`, `AUTH_TOKEN`, and other variables
 - **Configuration Management**: Quick import of configuration files
 - **Advanced Mode**: Supports dangerous nested containers (mount-docker-socket), custom sandbox images
+
+## Docs Site Development
+
+```bash
+# Run local docs server
+npm run docs:dev
+
+# Build static docs
+npm run docs:build
+
+# Preview build output
+npm run docs:preview
+```
+
+The docs site is powered by VitePress and deployed automatically to GitHub Pages via GitHub Actions.
+For first-time setup, go to `Settings -> Pages` and set Source to `GitHub Actions`.
 
 # Usage
 
