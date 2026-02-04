@@ -36,7 +36,7 @@ export default defineConfig({
           { text: 'GitHub', link: repo }
         ],
         sidebar: {
-          '/zh/guide/': [
+          '/zh/': [
             {
               text: '基础指南',
               collapsed: false,
@@ -45,9 +45,7 @@ export default defineConfig({
                 { text: '安装详解', link: '/zh/guide/installation' },
                 { text: '基础用法', link: '/zh/guide/basic-usage' }
               ]
-            }
-          ],
-          '/zh/configuration/': [
+            },
             {
               text: '配置系统',
               collapsed: false,
@@ -57,9 +55,7 @@ export default defineConfig({
                 { text: '配置文件', link: '/zh/configuration/config-files' },
                 { text: '配置示例', link: '/zh/configuration/examples' }
               ]
-            }
-          ],
-          '/zh/reference/': [
+            },
             {
               text: '命令参考',
               collapsed: false,
@@ -68,9 +64,7 @@ export default defineConfig({
                 { text: 'AI 智能体', link: '/zh/reference/agents' },
                 { text: '容器模式', link: '/zh/reference/container-modes' }
               ]
-            }
-          ],
-          '/zh/advanced/': [
+            },
             {
               text: '高级主题',
               collapsed: false,
@@ -78,9 +72,7 @@ export default defineConfig({
                 { text: 'Docker-in-Docker', link: '/zh/advanced/docker-in-docker' },
                 { text: '会话管理', link: '/zh/advanced/session-management' }
               ]
-            }
-          ],
-          '/zh/troubleshooting/': [
+            },
             {
               text: '故障排查',
               collapsed: false,
@@ -133,7 +125,7 @@ export default defineConfig({
           { text: 'GitHub', link: repo }
         ],
         sidebar: {
-          '/en/guide/': [
+          '/en/': [
             {
               text: 'Basic Guide',
               collapsed: false,
@@ -142,9 +134,7 @@ export default defineConfig({
                 { text: 'Installation', link: '/en/guide/installation' },
                 { text: 'Basic Usage', link: '/en/guide/basic-usage' }
               ]
-            }
-          ],
-          '/en/configuration/': [
+            },
             {
               text: 'Configuration System',
               collapsed: false,
@@ -154,9 +144,7 @@ export default defineConfig({
                 { text: 'Configuration Files', link: '/en/configuration/config-files' },
                 { text: 'Examples', link: '/en/configuration/examples' }
               ]
-            }
-          ],
-          '/en/reference/': [
+            },
             {
               text: 'Command Reference',
               collapsed: false,
@@ -165,9 +153,7 @@ export default defineConfig({
                 { text: 'AI Agents', link: '/en/reference/agents' },
                 { text: 'Container Modes', link: '/en/reference/container-modes' }
               ]
-            }
-          ],
-          '/en/advanced/': [
+            },
             {
               text: 'Advanced Topics',
               collapsed: false,
@@ -175,9 +161,7 @@ export default defineConfig({
                 { text: 'Docker-in-Docker', link: '/en/advanced/docker-in-docker' },
                 { text: 'Session Management', link: '/en/advanced/session-management' }
               ]
-            }
-          ],
-          '/en/troubleshooting/': [
+            },
             {
               text: 'Troubleshooting',
               collapsed: false,
