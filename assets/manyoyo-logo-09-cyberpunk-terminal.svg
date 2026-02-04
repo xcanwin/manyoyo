@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">MANYOYO Security Sandbox Logo</title>
+  <desc id="desc">AI Agent CLI Security Sandbox with safe YOLO and SOLO mode on Docker and Podman</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#020617" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="panel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f766e" />
+      <stop offset="100%" stop-color="#14b8a6" />
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="320" fill="url(#bg)" />
+  <circle cx="980" cy="72" r="88" fill="#ffffff" opacity="0.08" />
+  <circle cx="1080" cy="230" r="120" fill="#ffffff" opacity="0.06" />
+
+  <g transform="translate(108 50)">
+    <rect x="0" y="0" width="220" height="220" rx="44" fill="url(#panel)" />
+    <rect x="0" y="0" width="220" height="220" rx="44" fill="#ffffff" opacity="0.06" />
+    <rect x="54" y="62" width="112" height="96" rx="12" fill="none" stroke="#99f6e4" stroke-width="8"/><path d="M76 96 L96 110 L76 124" fill="none" stroke="#99f6e4" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M104 126 H142" stroke="#99f6e4" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(372 84)">
+    <text x="0" y="78" fill="#99f6e4" font-size="88" font-weight="800" letter-spacing="2" font-family="Segoe UI, Ubuntu, Helvetica, Arial, sans-serif">MANYOYO</text>
+    <text x="2" y="128" fill="#2dd4bf" font-size="25" font-weight="600" font-family="Segoe UI, Ubuntu, Helvetica, Arial, sans-serif">AI Agent CLI Security Sandbox</text>
+    <text x="2" y="162" fill="#2dd4bf" font-size="20" font-weight="500" opacity="0.9" font-family="Segoe UI, Ubuntu, Helvetica, Arial, sans-serif">Security First, Run YOLO/SOLO Freely</text>
+    <rect x="0" y="184" width="560" height="8" rx="4" fill="url(#panel)" opacity="0.88" />
+  </g>
+</svg>
