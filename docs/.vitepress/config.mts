@@ -16,11 +16,11 @@ export default defineConfig({
     root: {
       label: '简体中文',
       lang: 'zh-CN',
-      link: '/',
+      link: '/zh/',
       themeConfig: {
         siteTitle: 'MANYOYO 文档',
         nav: [
-          { text: '首页', link: '/' },
+          { text: '首页', link: '/zh/' },
           { text: '快速开始', link: '/zh/guide/quick-start' },
           {
             text: '文档',
@@ -129,7 +129,7 @@ export default defineConfig({
               { text: 'Troubleshooting', link: '/en/troubleshooting/' }
             ]
           },
-          { text: '中文', link: '/' },
+          { text: '中文', link: '/zh/' },
           { text: 'GitHub', link: repo }
         ],
         sidebar: {
