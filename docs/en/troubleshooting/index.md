@@ -1,0 +1,214 @@
+# Troubleshooting Guide
+
+This page provides a quick index and solutions for common MANYOYO issues.
+
+## Quick Navigation
+
+### Build-Related Issues
+- [Image Build Failures](./build-errors.md#image-build-failures)
+- [Image Pull Failures](./build-errors.md#image-pull-failures)
+- [Network Connection Issues](./build-errors.md#network-connection-issues)
+- [Insufficient Disk Space](./build-errors.md#insufficient-disk-space)
+
+### Runtime Issues
+- [Container Startup Failures](./runtime-errors.md#container-startup-failures)
+- [Permission Denied](./runtime-errors.md#permission-denied)
+- [Environment Variables Not Taking Effect](./runtime-errors.md#environment-variables-not-taking-effect)
+- [Cannot Access Host Files from Container](./runtime-errors.md#cannot-access-host-files-from-container)
+- [AI CLI Tool Errors](./runtime-errors.md#ai-cli-tool-errors)
+
+## Common Issues Quick Reference
+
+| Symptom | Possible Cause | Quick Solution | Detailed Documentation |
+|---------|---------------|----------------|------------------------|
+| `manyoyo --ib` build fails | Network issues, insufficient disk space | Check network and disk space | [Build Issues](./build-errors.md) |
+| `pinging container registry failed` | Image not built | Run `manyoyo --ib --iv 1.7.0` | [Image Pull Failures](./build-errors.md#image-pull-failures) |
+| Container won't start | Port conflicts, permission issues | Check logs and permissions | [Container Startup Failures](./runtime-errors.md#container-startup-failures) |
+| `permission denied` | Insufficient Docker/Podman permissions | Add user to docker group | [Permission Denied](./runtime-errors.md#permission-denied) |
+| Environment variables not working | File format errors, path errors | Check environment file format | [Environment Variables Not Taking Effect](./runtime-errors.md#environment-variables-not-taking-effect) |
+| AI CLI missing API Key | Environment variables not configured | Configure environment file | [AI CLI Tool Errors](./runtime-errors.md#ai-cli-tool-errors) |
+
+## Debugging Tools
+
+### View Configuration
+
+```bash
+# Display the final effective configuration
+manyoyo --show-config
+
+# Display the command that will be executed
+manyoyo --show-command
+
+# Display specific run configuration
+manyoyo -r claude --show-config
+```
+
+### View Container Status
+
+```bash
+# List all manyoyo containers
+manyoyo -l
+
+# View container logs (Docker)
+docker logs <container-name>
+
+# View container logs (Podman)
+podman logs <container-name>
+
+# View detailed container information
+docker inspect <container-name>
+```
+
+### Test Environment Variables
+
+```bash
+# View all environment variables in container
+manyoyo --ef myconfig -x env
+
+# View specific environment variable
+manyoyo --ef myconfig -x 'env | grep ANTHROPIC'
+
+# Test environment file loading
+manyoyo --ef myconfig --show-config
+```
+
+### Test Network Connectivity
+
+```bash
+# Test domestic mirror sources
+curl -I https://mirrors.tencent.com
+
+# Test API endpoint
+curl -I https://api.anthropic.com
+
+# Test network from within container
+manyoyo -x curl -I https://api.anthropic.com
+```
+
+## Diagnostic Process
+
+### 1. Verify System Requirements
+
+Check if the following requirements are met:
+- Node.js >= 22.0.0
+- Docker or Podman installed
+- At least 10GB disk space
+
+```bash
+# Check Node.js version
+node --version
+
+# Check Docker/Podman
+docker --version  # or podman --version
+
+# Check disk space
+df -h
+```
+
+### 2. Verify MANYOYO Installation
+
+```bash
+# View manyoyo version
+manyoyo -V
+
+# Display help information
+manyoyo -h
+
+# Test basic command
+manyoyo -x echo "Hello MANYOYO"
+```
+
+### 3. Check Image Status
+
+```bash
+# List images
+docker images | grep manyoyo  # or podman images
+
+# If no image exists, build it
+manyoyo --ib --iv 1.7.0
+```
+
+### 4. Test Container Creation
+
+```bash
+# Create test container
+manyoyo -n test-container -x echo "Container works"
+
+# View container
+manyoyo -l
+
+# Remove test container
+manyoyo -n test-container --crm
+```
+
+### 5. Verify Configuration Files
+
+```bash
+# Check global configuration
+cat ~/.manyoyo/manyoyo.json
+
+# Verify JSON format
+cat ~/.manyoyo/manyoyo.json | jq .
+
+# Check run configuration
+cat ~/.manyoyo/run/claude.json | jq .
+```
+
+### 6. Test Environment Variables
+
+```bash
+# Check if environment file exists
+ls -la ~/.manyoyo/env/
+
+# View environment file content
+cat ~/.manyoyo/env/anthropic_claudecode.env
+
+# Test loading
+manyoyo --ef anthropic_claudecode --show-config
+```
+
+## Getting Help
+
+If the issue remains unresolved, follow these steps to get help:
+
+### 1. Collect Diagnostic Information
+
+```bash
+# System information
+uname -a
+node --version
+docker --version  # or podman --version
+
+# MANYOYO configuration
+manyoyo -V
+manyoyo --show-config
+
+# Container status
+manyoyo -l
+docker ps -a | grep myy
+```
+
+### 2. View Detailed Logs
+
+```bash
+# Container logs
+docker logs <container-name> 2>&1 | tee manyoyo-error.log
+
+# If build failed
+manyoyo --ib --iv 1.7.0 2>&1 | tee build-error.log
+```
+
+### 3. Submit an Issue
+
+Visit [GitHub Issues](https://github.com/xcanwin/manyoyo/issues) and provide:
+- Problem description and reproduction steps
+- Error messages and logs
+- System environment information
+- Related configuration files (remove sensitive information)
+
+## Related Documentation
+
+- [Build Issues Explained](./build-errors.md) - Image build related issues
+- [Runtime Issues Explained](./runtime-errors.md) - Container runtime related issues
+- [Configuration System](../configuration/) - Configuration files and environment variables
+- [Command Reference](../reference/cli-options.md) - Command line options description

@@ -34,7 +34,6 @@
     "files": [
         "bin/manyoyo.js",
         "README.md",
-        "docs/README_EN.md",
         "LICENSE",
         "docker/manyoyo.Dockerfile",
         "config.example.json"

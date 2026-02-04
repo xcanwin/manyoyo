@@ -4,33 +4,47 @@ layout: home
 hero:
   name: MANYOYO
   text: AI Agent CLI Security Sandbox
-  tagline: Run YOLO/SOLO agent workflows safely with container isolation
+  tagline: Safely run Agent YOLO/SOLO mode, protect your host machine
   actions:
     - theme: brand
-      text: Get Started
-      link: /en/guide/getting-started
+      text: 2-Minute Quick Start
+      link: /en/guide/quick-start
     - theme: alt
-      text: Command Reference
-      link: /en/guide/command-reference
+      text: Installation Guide
+      link: /en/guide/installation
     - theme: alt
       text: GitHub
       link: https://github.com/xcanwin/manyoyo
 
 features:
-  - title: Multi-agent ready
-    details: Works with claude code, gemini, codex and opencode in one workflow.
-  - title: Host safety first
-    details: Uses Docker/Podman sandbox isolation to reduce host-side risk.
-  - title: Team-friendly automation
-    details: Supports env files, reusable config, and fast session resume.
+  - title: Multi-Agent Support
+    details: Claude Code, Gemini, Codex, OpenCode - switch between agents with one command.
+  - title: Security Isolation
+    details: Docker/Podman container isolation to reduce host machine risks.
+  - title: Configuration System
+    details: Support environment variables, config files, and run configs for flexible scenario management.
+  - title: Troubleshooting
+    details: Complete issue index with build and runtime error solutions.
+  - title: Built for Efficiency
+    details: Session recovery, environment file import, config templates to reduce repetition and token costs.
+  - title: Container Nesting
+    details: Docker-in-Docker mode support for safely running containerized applications.
 ---
+
+> If you prefer Chinese documentation, please switch to [简体中文](/zh/).
 
 ## Why MANYOYO
 
-MANYOYO is focused on one thing: safe and efficient agent CLI execution.
+MANYOYO is not a general container tool, but a security sandbox specifically designed for AI Agent CLIs:
 
-- Keep your host clean while running high-privilege agent workflows
-- Switch between Agent CLI and `/bin/bash` inside the same sandbox session
-- Reuse configuration and environment templates across projects
+- Pre-installed common Agents and development tools, avoiding repeated installations
+- Freely switch between Agent and `/bin/bash`, suitable for real development workflows
+- Support configuration files and environment files for team collaboration
 
-For complete details, see the repository `README.md` and `docs/README_EN.md`.
+## Documentation Deployment
+
+This documentation site uses **VitePress + GitHub Actions + GitHub Pages**:
+
+- Local development: `npm run docs:dev`
+- Build static site: `npm run docs:build`
+- Automatically deploy to GitHub Pages after pushing to `main` branch
