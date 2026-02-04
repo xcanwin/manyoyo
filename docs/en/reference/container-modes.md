@@ -77,37 +77,23 @@ manyoyo --cont-mode dind -y c
 manyoyo -n dind-dev -m dind -x /bin/bash
 ```
 
-### Operations Inside Container
-
-#### Use Podman (Recommended)
+### Operations Inside Container (Quick)
 
 ```bash
 # Enter container
 manyoyo -n dind-dev -m dind -x /bin/bash
 
-# Use Podman directly inside container
-$ podman ps -a
-$ podman run hello-world
-$ podman build -t myimage .
+# Podman (recommended)
+podman ps -a
+
+# Docker (start daemon first)
+nohup dockerd &
+sleep 10
+docker ps -a
 ```
 
-#### Use Docker
-
-```bash
-# Enter container
-manyoyo -n dind-dev -m dind -x /bin/bash
-
-# Start dockerd manually (needs manual start)
-$ nohup dockerd &
-
-# Wait for dockerd to start (about 5-10 seconds)
-$ sleep 10
-
-# Use Docker
-$ docker ps -a
-$ docker run hello-world
-$ docker build -t myimage .
-```
+For full workflows (architecture, performance, security, CI examples), see:  
+[Docker-in-Docker Complete Guide](../advanced/docker-in-docker)
 
 ### Use Cases
 
@@ -145,34 +131,10 @@ $ docker build -t myimage .
 }
 ```
 
-### Complete Example
+### In-depth Examples
 
-```bash
-# 1. Create dind configuration
-cat > ~/.manyoyo/run/dind.json << 'EOF'
-{
-    "containerMode": "dind",
-    "envFile": ["anthropic_claudecode"],
-    "yolo": "c"
-}
-EOF
-
-# 2. Start container
-manyoyo -r dind
-
-# 3. AI helps develop (may build Docker images)...
-
-# 4. Exit and enter shell to check
-manyoyo -n myy-xxx -x /bin/bash
-
-# 5. Use Podman inside container
-$ podman ps -a
-$ podman images
-
-# 6. Or start Docker
-$ nohup dockerd &
-$ docker ps -a
-```
+For complete configuration and end-to-end examples, see:  
+[Docker-in-Docker Complete Guide](../advanced/docker-in-docker)
 
 ## Socket Mount Mode (Dangerous)
 

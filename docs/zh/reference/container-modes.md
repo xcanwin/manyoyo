@@ -77,37 +77,23 @@ manyoyo --cont-mode dind -y c
 manyoyo -n dind-dev -m dind -x /bin/bash
 ```
 
-### 容器内操作
-
-#### 使用 Podman（推荐）
+### 容器内操作（简版）
 
 ```bash
 # 进入容器
 manyoyo -n dind-dev -m dind -x /bin/bash
 
-# 在容器内直接使用 Podman
-$ podman ps -a
-$ podman run hello-world
-$ podman build -t myimage .
+# Podman（推荐）
+podman ps -a
+
+# Docker（需要先启动 daemon）
+nohup dockerd &
+sleep 10
+docker ps -a
 ```
 
-#### 使用 Docker
-
-```bash
-# 进入容器
-manyoyo -n dind-dev -m dind -x /bin/bash
-
-# 启动 dockerd（需要手动启动）
-$ nohup dockerd &
-
-# 等待 dockerd 启动（约 5-10 秒）
-$ sleep 10
-
-# 使用 Docker
-$ docker ps -a
-$ docker run hello-world
-$ docker build -t myimage .
-```
+完整流程（原理、性能、安全、CI 示例）请查看：  
+[Docker-in-Docker 完整指南](../advanced/docker-in-docker)
 
 ### 适用场景
 
@@ -145,34 +131,10 @@ $ docker build -t myimage .
 }
 ```
 
-### 完整示例
+### 深入示例
 
-```bash
-# 1. 创建 dind 配置
-cat > ~/.manyoyo/run/dind.json << 'EOF'
-{
-    "containerMode": "dind",
-    "envFile": ["anthropic_claudecode"],
-    "yolo": "c"
-}
-EOF
-
-# 2. 启动容器
-manyoyo -r dind
-
-# 3. AI 帮助开发（可能会构建 Docker 镜像）...
-
-# 4. 退出后进入 shell 检查
-manyoyo -n myy-xxx -x /bin/bash
-
-# 5. 在容器内使用 Podman
-$ podman ps -a
-$ podman images
-
-# 6. 或启动 Docker
-$ nohup dockerd &
-$ docker ps -a
-```
+完整配置与实战示例请查看：  
+[Docker-in-Docker 完整指南](../advanced/docker-in-docker)
 
 ## Socket Mount 模式（危险）
 

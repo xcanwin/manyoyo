@@ -87,61 +87,17 @@ manyoyo -x curl -I https://api.anthropic.com
 
 ## 诊断流程
 
-### 1. 确认系统要求
+### 1. 先完成安装验证
 
-检查以下要求是否满足：
-- Node.js >= 22.0.0
-- Docker 或 Podman 已安装
-- 磁盘空间至少 10GB
+系统要求、版本、镜像、测试容器等基础检查，建议先按安装文档执行：
+- [安装详解：验证安装](../guide/installation#验证安装)
 
-```bash
-# 检查 Node.js 版本
-node --version
+### 2. 按问题类型进入专项排查
 
-# 检查 Docker/Podman
-docker --version  # 或 podman --version
+- 构建相关问题：[`build-errors`](./build-errors)
+- 运行时相关问题：[`runtime-errors`](./runtime-errors)
 
-# 检查磁盘空间
-df -h
-```
-
-### 2. 验证 MANYOYO 安装
-
-```bash
-# 查看 manyoyo 版本
-manyoyo -V
-
-# 显示帮助信息
-manyoyo -h
-
-# 测试基本命令
-manyoyo -x echo "Hello MANYOYO"
-```
-
-### 3. 检查镜像状态
-
-```bash
-# 列出镜像
-docker images | grep manyoyo  # 或 podman images
-
-# 如果没有镜像，构建镜像
-manyoyo --ib --iv 1.7.0
-```
-
-### 4. 测试容器创建
-
-```bash
-# 创建测试容器
-manyoyo -n test-container -x echo "Container works"
-
-# 查看容器
-manyoyo -l
-
-# 删除测试容器
-manyoyo -n test-container --crm
-```
-
-### 5. 验证配置文件
+### 3. 验证配置文件
 
 ```bash
 # 检查全局配置
@@ -154,7 +110,7 @@ cat ~/.manyoyo/manyoyo.json | jq .
 cat ~/.manyoyo/run/claude.json | jq .
 ```
 
-### 6. 测试环境变量
+### 4. 测试环境变量
 
 ```bash
 # 检查环境文件存在

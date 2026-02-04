@@ -87,61 +87,17 @@ manyoyo -x curl -I https://api.anthropic.com
 
 ## Diagnostic Process
 
-### 1. Verify System Requirements
+### 1. Complete Installation Verification First
 
-Check if the following requirements are met:
-- Node.js >= 22.0.0
-- Docker or Podman installed
-- At least 10GB disk space
+For requirements, version checks, image checks, and test container creation, run the installation verification checklist first:
+- [Installation Guide: Verify Installation](../guide/installation#verify-installation)
 
-```bash
-# Check Node.js version
-node --version
+### 2. Jump to Targeted Troubleshooting
 
-# Check Docker/Podman
-docker --version  # or podman --version
+- Build-related issues: [`build-errors`](./build-errors)
+- Runtime-related issues: [`runtime-errors`](./runtime-errors)
 
-# Check disk space
-df -h
-```
-
-### 2. Verify MANYOYO Installation
-
-```bash
-# View manyoyo version
-manyoyo -V
-
-# Display help information
-manyoyo -h
-
-# Test basic command
-manyoyo -x echo "Hello MANYOYO"
-```
-
-### 3. Check Image Status
-
-```bash
-# List images
-docker images | grep manyoyo  # or podman images
-
-# If no image exists, build it
-manyoyo --ib --iv 1.7.0
-```
-
-### 4. Test Container Creation
-
-```bash
-# Create test container
-manyoyo -n test-container -x echo "Container works"
-
-# View container
-manyoyo -l
-
-# Remove test container
-manyoyo -n test-container --crm
-```
-
-### 5. Verify Configuration Files
+### 3. Verify Configuration Files
 
 ```bash
 # Check global configuration
@@ -154,7 +110,7 @@ cat ~/.manyoyo/manyoyo.json | jq .
 cat ~/.manyoyo/run/claude.json | jq .
 ```
 
-### 6. Test Environment Variables
+### 4. Test Environment Variables
 
 ```bash
 # Check if environment file exists

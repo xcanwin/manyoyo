@@ -379,49 +379,27 @@ manyoyo -n test -x node --version
 
 ## 故障排查
 
-### 构建失败
-
-如果构建过程中遇到问题，请参考：
+安装相关问题已统一收敛到：
+- [故障排查指南](../troubleshooting/)
 - [构建问题详解](../troubleshooting/build-errors)
-- [镜像构建失败](../troubleshooting/build-errors#镜像构建失败)
+- [运行时问题详解](../troubleshooting/runtime-errors)
 
-常见解决方案：
+建议先执行以下最小检查：
+
 ```bash
-# 检查网络
+# 检查网络和磁盘
 curl -I https://mirrors.tencent.com
-
-# 检查磁盘空间
 df -h
 
-# 使用 --yes 跳过确认
-manyoyo --ib --iv 1.7.0 --yes
-
-# 先构建精简版本
+# 先构建精简版本，验证基础链路
 manyoyo --ib --iba TOOL=common
 ```
 
-### 权限问题
+如果遇到 `permission denied`，可先执行：
 
-如果遇到权限错误：
 ```bash
-# Docker 用户
 sudo usermod -aG docker $USER
 newgrp docker
-
-# Podman 用户（通常不需要 sudo）
-podman ps
-```
-
-### 网络问题
-
-如果网络不稳定：
-```bash
-# 使用缓存机制（推荐）
-# MANYOYO 会自动缓存已下载的文件
-
-# 分步构建
-manyoyo --ib --iba TOOL=common  # 先构建基础版
-manyoyo --ib --iv 1.7.0         # 再构建完整版
 ```
 
 ## 升级指南

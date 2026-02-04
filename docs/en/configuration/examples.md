@@ -26,36 +26,8 @@ manyoyo -y c  # Automatically uses image from global configuration
 
 ### Basic Configuration
 
-**Environment File** (`~/.manyoyo/env/anthropic_[claudecode]_claudecode.env`):
-```bash
-export ANTHROPIC_BASE_URL="https://api.anthropic.com"
-export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
-export API_TIMEOUT_MS=3000000
-export ANTHROPIC_MODEL="claude-sonnet-4-5"
-export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-5"
-export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
-export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
-```
-
-**Run Configuration** (`~/.manyoyo/run/claude.json`):
-```json5
-{
-    "envFile": [
-        "anthropic_[claudecode]_claudecode"
-    ],
-    "yolo": "c"
-}
-```
-
-**Usage**:
-```bash
-# Quick start from any directory
-manyoyo -r claude
-
-# Resume session
-manyoyo -r claude -- -c
-```
+Baseline template (env vars, run config, common commands) is maintained in one place:  
+[AI Agents / Claude Code](../reference/agents#claude-code).
 
 ### Advanced Configuration (Custom Base URL)
 
@@ -103,33 +75,8 @@ EOF
 
 ### Basic Configuration
 
-**Environment File** (`~/.manyoyo/env/openai_[gpt]_codex.env`):
-```bash
-export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
-export OTEL_SDK_DISABLED=true
-```
-
-**Run Configuration** (`~/.manyoyo/run/codex.json`):
-```json5
-{
-    "envFile": [
-        "openai_[gpt]_codex"
-    ],
-    "volumes": [
-        "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
-    ],
-    "yolo": "cx"
-}
-```
-
-**Usage**:
-```bash
-# Start Codex YOLO mode
-manyoyo -r codex
-
-# Resume session
-manyoyo -r codex -- resume --last
-```
+Baseline template (env vars, run config, resume commands) is maintained in one place:  
+[AI Agents / Codex](../reference/agents#codex).
 
 ### API Key Authentication Configuration
 
@@ -156,49 +103,15 @@ EOF
 
 ### Basic Configuration
 
-**Environment File** (`~/.manyoyo/env/gemini.env`):
-```bash
-export GEMINI_API_KEY="your-api-key"
-export GEMINI_MODEL="gemini-2.0-flash-exp"
-```
-
-**Run Configuration** (`~/.manyoyo/run/gemini.json`):
-```json5
-{
-    "envFile": [
-        "gemini"
-    ],
-    "yolo": "gm"
-}
-```
-
-**Usage**:
-```bash
-manyoyo -r gemini
-
-# Resume session
-manyoyo -r gemini -- -r
-```
+Baseline template (env vars, run config, resume commands) is maintained in one place:  
+[AI Agents / Gemini](../reference/agents#gemini).
 
 ## OpenCode Configuration Examples
 
 ### Basic Configuration
 
-**Environment File** (`~/.manyoyo/env/opencode.env`):
-```bash
-export OPENAI_API_KEY="your-api-key"
-export OPENAI_BASE_URL="https://api.openai.com/v1"
-```
-
-**Run Configuration** (`~/.manyoyo/run/opencode.json`):
-```json5
-{
-    "envFile": [
-        "opencode"
-    ],
-    "yolo": "oc"
-}
-```
+Baseline template (env vars, run config, shortcuts) is maintained in one place:  
+[AI Agents / OpenCode](../reference/agents#opencode).
 
 ## Docker-in-Docker Configuration Examples
 

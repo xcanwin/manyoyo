@@ -126,22 +126,19 @@ For detailed configuration, refer to:
 
 ## Troubleshooting
 
-If you encounter problems, refer to:
+Common issues are now centralized in troubleshooting docs. Start here:
 
-- **Build Failures**: [Build Errors Troubleshooting](../troubleshooting/build-errors)
-- **Container Start Failures**: [Runtime Errors Troubleshooting](../troubleshooting/runtime-errors)
-- **Environment Variables Not Taking Effect**: [Environment Variable Troubleshooting](../troubleshooting/runtime-errors#environment-variables-not-taking-effect)
+- [Troubleshooting Guide](../troubleshooting/)
+- [Build Errors Troubleshooting](../troubleshooting/build-errors)
+- [Runtime Errors Troubleshooting](../troubleshooting/runtime-errors)
 
-Quick solutions for common issues:
+For a minimal quick check, run:
 
 ```bash
-# Check if image exists
+# Check whether image is built
 docker images | grep manyoyo
 
-# View container logs
-docker logs <container-name>
-
-# Verify environment variables
+# Verify environment variables are loaded
 manyoyo --ef anthropic --show-config
 
 # Test container

@@ -126,22 +126,19 @@ manyoyo -r claude
 
 ## 故障排查
 
-如果遇到问题，请参考：
+常见问题已统一收敛到排查文档，请优先查看：
 
-- **构建失败**：[构建问题排查](../troubleshooting/build-errors)
-- **容器启动失败**：[运行时问题排查](../troubleshooting/runtime-errors)
-- **环境变量未生效**：[环境变量故障排查](../troubleshooting/runtime-errors#环境变量未生效)
+- [故障排查指南](../troubleshooting/)
+- [构建问题排查](../troubleshooting/build-errors)
+- [运行时问题排查](../troubleshooting/runtime-errors)
 
-常见问题快速解决：
+如果只想先做最小化自检，可执行：
 
 ```bash
-# 检查镜像是否存在
+# 检查镜像是否已构建
 docker images | grep manyoyo
 
-# 查看容器日志
-docker logs <容器名>
-
-# 验证环境变量
+# 验证环境变量是否被正确加载
 manyoyo --ef anthropic --show-config
 
 # 测试容器

@@ -26,36 +26,8 @@ manyoyo -y c  # 自动使用全局配置中的镜像
 
 ### 基础配置
 
-**环境文件**（`~/.manyoyo/env/anthropic_[claudecode]_claudecode.env`）：
-```bash
-export ANTHROPIC_BASE_URL="https://api.anthropic.com"
-export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
-export API_TIMEOUT_MS=3000000
-export ANTHROPIC_MODEL="claude-sonnet-4-5"
-export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-5"
-export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
-export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
-```
-
-**运行配置**（`~/.manyoyo/run/claude.json`）：
-```json5
-{
-    "envFile": [
-        "anthropic_[claudecode]_claudecode"
-    ],
-    "yolo": "c"
-}
-```
-
-**使用**：
-```bash
-# 在任意目录下快速启动
-manyoyo -r claude
-
-# 恢复会话
-manyoyo -r claude -- -c
-```
+基础模板（环境变量、运行配置、常用命令）已统一在参考文档维护：  
+[AI 智能体 / Claude Code](../reference/agents#claude-code)。
 
 ### 高级配置（自定义 Base URL）
 
@@ -103,33 +75,8 @@ EOF
 
 ### 基础配置
 
-**环境文件**（`~/.manyoyo/env/openai_[gpt]_codex.env`）：
-```bash
-export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
-export OTEL_SDK_DISABLED=true
-```
-
-**运行配置**（`~/.manyoyo/run/codex.json`）：
-```json5
-{
-    "envFile": [
-        "openai_[gpt]_codex"
-    ],
-    "volumes": [
-        "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
-    ],
-    "yolo": "cx"
-}
-```
-
-**使用**：
-```bash
-# 启动 Codex YOLO 模式
-manyoyo -r codex
-
-# 恢复会话
-manyoyo -r codex -- resume --last
-```
+基础模板（环境变量、运行配置、会话恢复）已统一在参考文档维护：  
+[AI 智能体 / Codex](../reference/agents#codex)。
 
 ### API Key 认证配置
 
@@ -156,49 +103,15 @@ EOF
 
 ### 基础配置
 
-**环境文件**（`~/.manyoyo/env/gemini.env`）：
-```bash
-export GEMINI_API_KEY="your-api-key"
-export GEMINI_MODEL="gemini-2.0-flash-exp"
-```
-
-**运行配置**（`~/.manyoyo/run/gemini.json`）：
-```json5
-{
-    "envFile": [
-        "gemini"
-    ],
-    "yolo": "gm"
-}
-```
-
-**使用**：
-```bash
-manyoyo -r gemini
-
-# 恢复会话
-manyoyo -r gemini -- -r
-```
+基础模板（环境变量、运行配置、恢复命令）已统一在参考文档维护：  
+[AI 智能体 / Gemini](../reference/agents#gemini)。
 
 ## OpenCode 配置示例
 
 ### 基础配置
 
-**环境文件**（`~/.manyoyo/env/opencode.env`）：
-```bash
-export OPENAI_API_KEY="your-api-key"
-export OPENAI_BASE_URL="https://api.openai.com/v1"
-```
-
-**运行配置**（`~/.manyoyo/run/opencode.json`）：
-```json5
-{
-    "envFile": [
-        "opencode"
-    ],
-    "yolo": "oc"
-}
-```
+基础模板（环境变量、运行配置、快捷方式）已统一在参考文档维护：  
+[AI 智能体 / OpenCode](../reference/agents#opencode)。
 
 ## Docker-in-Docker 配置示例
 

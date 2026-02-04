@@ -379,49 +379,27 @@ manyoyo -n test -x node --version
 
 ## Troubleshooting
 
-### Build Failures
-
-If you encounter problems during the build process, refer to:
+Installation issues are centralized in:
+- [Troubleshooting Guide](../troubleshooting/)
 - [Build Issues Guide](../troubleshooting/build-errors)
-- [Image Build Failures](../troubleshooting/build-errors#image-build-failures)
+- [Runtime Errors Guide](../troubleshooting/runtime-errors)
 
-Common solutions:
+Run this minimal checklist first:
+
 ```bash
-# Check network
+# Check network and disk
 curl -I https://mirrors.tencent.com
-
-# Check disk space
 df -h
 
-# Use --yes to skip confirmation
-manyoyo --ib --iv 1.7.0 --yes
-
-# Build minimal version first
+# Build minimal image first to verify base pipeline
 manyoyo --ib --iba TOOL=common
 ```
 
-### Permission Issues
+If you hit `permission denied`, run:
 
-If you encounter permission errors:
 ```bash
-# Docker users
 sudo usermod -aG docker $USER
 newgrp docker
-
-# Podman users (usually don't need sudo)
-podman ps
-```
-
-### Network Issues
-
-If network is unstable:
-```bash
-# Use cache mechanism (recommended)
-# MANYOYO will automatically cache downloaded files
-
-# Build in stages
-manyoyo --ib --iba TOOL=common  # Build base version first
-manyoyo --ib --iv 1.7.0         # Then build full version
 ```
 
 ## Upgrade Guide
