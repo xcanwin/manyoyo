@@ -122,6 +122,6 @@ These debugging commands will display the merged results from all configuration 
 
 ## Next Steps
 
-- [Environment Variables Details](./environment.md) - Learn how to configure environment variables
-- [Configuration Files Details](./config-files.md) - Learn all configuration options
-- [Configuration Examples](./examples.md) - View practical configuration examples
+- [Environment Variables Details](./environment) - Learn how to configure environment variables
+- [Configuration Files Details](./config-files) - Learn all configuration options
+- [Configuration Examples](./examples) - View practical configuration examples

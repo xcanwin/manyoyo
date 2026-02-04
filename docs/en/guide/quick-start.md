@@ -4,8 +4,8 @@
 
 Before getting started, ensure your system meets the following requirements:
 
-- **Node.js** >= 22.0.0 - [Installation Guide](./installation.md#install-nodejs)
-- **Docker** or **Podman** (Podman recommended) - [Installation Guide](./installation.md#install-podman-recommended)
+- **Node.js** >= 22.0.0 - [Installation Guide](./installation#install-nodejs)
+- **Docker** or **Podman** (Podman recommended) - [Installation Guide](./installation#install-podman-recommended)
 - **Disk Space**: At least 10GB available
 - **Network Connection**: Stable network connection (required for downloading dependencies on first build)
 
@@ -24,7 +24,7 @@ df -h
 ```
 
 ::: tip
-If required software is not installed, please refer to [Installation Guide](./installation.md).
+If required software is not installed, please refer to [Installation Guide](./installation).
 :::
 
 ## Install manyoyo
@@ -120,17 +120,17 @@ manyoyo -r claude
 ```
 
 For detailed configuration, refer to:
-- [Environment Variables Guide](../configuration/environment.md)
-- [Configuration Files Guide](../configuration/config-files.md)
-- [Configuration Examples](../configuration/examples.md)
+- [Environment Variables Guide](../configuration/environment)
+- [Configuration Files Guide](../configuration/config-files)
+- [Configuration Examples](../configuration/examples)
 
 ## Troubleshooting
 
 If you encounter problems, refer to:
 
-- **Build Failures**: [Build Errors Troubleshooting](../troubleshooting/build-errors.md)
-- **Container Start Failures**: [Runtime Errors Troubleshooting](../troubleshooting/runtime-errors.md)
-- **Environment Variables Not Taking Effect**: [Environment Variable Troubleshooting](../troubleshooting/runtime-errors.md#environment-variables-not-taking-effect)
+- **Build Failures**: [Build Errors Troubleshooting](../troubleshooting/build-errors)
+- **Container Start Failures**: [Runtime Errors Troubleshooting](../troubleshooting/runtime-errors)
+- **Environment Variables Not Taking Effect**: [Environment Variable Troubleshooting](../troubleshooting/runtime-errors#environment-variables-not-taking-effect)
 
 Quick solutions for common issues:
 
@@ -152,7 +152,7 @@ manyoyo -x echo "Hello MANYOYO"
 
 Now that you've completed the quick start, you can continue with:
 
-- [Installation Guide](./installation.md) - Learn more about installation options and build parameters
-- [Basic Usage](./basic-usage.md) - Learn more commands and operations
+- [Installation Guide](./installation) - Learn more about installation options and build parameters
+- [Basic Usage](./basic-usage) - Learn more commands and operations
 - [Configuration System](../configuration/) - Master advanced configuration techniques
-- [Command Reference](../reference/cli-options.md) - View all command options
+- [Command Reference](../reference/cli-options) - View all command options

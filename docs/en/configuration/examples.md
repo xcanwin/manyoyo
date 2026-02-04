@@ -586,6 +586,6 @@ Command Line Arguments
 
 ## Related Documentation
 
-- [Configuration System Overview](./index.md) - Understand configuration principles
-- [Environment Variables Details](./environment.md) - Deep dive into environment variables
-- [Configuration Files Details](./config-files.md) - Learn all configuration options
+- [Configuration System Overview](./index) - Understand configuration principles
+- [Environment Variables Details](./environment) - Deep dive into environment variables
+- [Configuration Files Details](./config-files) - Learn all configuration options

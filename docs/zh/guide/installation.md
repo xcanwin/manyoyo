@@ -382,8 +382,8 @@ manyoyo -n test -x node --version
 ### 构建失败
 
 如果构建过程中遇到问题，请参考：
-- [构建问题详解](../troubleshooting/build-errors.md)
-- [镜像构建失败](../troubleshooting/build-errors.md#镜像构建失败)
+- [构建问题详解](../troubleshooting/build-errors)
+- [镜像构建失败](../troubleshooting/build-errors#镜像构建失败)
 
 常见解决方案：
 ```bash
@@ -483,7 +483,7 @@ manyoyo --irm
 
 安装完成后，您可以：
 
-1. [快速开始](./quick-start.md) - 了解基本使用流程
-2. [基础用法](./basic-usage.md) - 学习常用命令和操作
+1. [快速开始](./quick-start) - 了解基本使用流程
+2. [基础用法](./basic-usage) - 学习常用命令和操作
 3. [配置系统](../configuration/) - 设置环境变量和配置文件
-4. [命令参考](../reference/cli-options.md) - 查看所有命令行选项
+4. [命令参考](../reference/cli-options) - 查看所有命令行选项

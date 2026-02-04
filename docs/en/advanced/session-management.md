@@ -594,7 +594,7 @@ claude --sync-sessions
 
 ## Related Documentation
 
-- [Basic Usage](../guide/basic-usage.md) - Learn basic commands
-- [AI Agents](../reference/agents.md) - Learn about each agent's session management
-- [Configuration Examples](../configuration/examples.md) - View configuration examples
-- [Container Modes](../reference/container-modes.md) - Learn about container management
+- [Basic Usage](../guide/basic-usage) - Learn basic commands
+- [AI Agents](../reference/agents) - Learn about each agent's session management
+- [Configuration Examples](../configuration/examples) - View configuration examples
+- [Container Modes](../reference/container-modes) - Learn about container management

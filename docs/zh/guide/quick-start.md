@@ -4,8 +4,8 @@
 
 在开始之前，请确保您的系统满足以下要求：
 
-- **Node.js** >= 22.0.0 - [安装指南](./installation.md#安装-nodejs)
-- **Docker** 或 **Podman**（推荐 Podman）- [安装指南](./installation.md#安装-podman推荐)
+- **Node.js** >= 22.0.0 - [安装指南](./installation#安装-nodejs)
+- **Docker** 或 **Podman**（推荐 Podman）- [安装指南](./installation#安装-podman推荐)
 - **磁盘空间**：至少 10GB 可用空间
 - **网络连接**：稳定的网络连接（首次构建需要下载依赖）
 
@@ -24,7 +24,7 @@ df -h
 ```
 
 ::: tip
-如果未安装必需软件，请参考[安装详解](./installation.md)。
+如果未安装必需软件，请参考[安装详解](./installation)。
 :::
 
 ## 安装 manyoyo
@@ -120,17 +120,17 @@ manyoyo -r claude
 ```
 
 详细配置请参考：
-- [环境变量详解](../configuration/environment.md)
-- [配置文件详解](../configuration/config-files.md)
-- [配置示例](../configuration/examples.md)
+- [环境变量详解](../configuration/environment)
+- [配置文件详解](../configuration/config-files)
+- [配置示例](../configuration/examples)
 
 ## 故障排查
 
 如果遇到问题，请参考：
 
-- **构建失败**：[构建问题排查](../troubleshooting/build-errors.md)
-- **容器启动失败**：[运行时问题排查](../troubleshooting/runtime-errors.md)
-- **环境变量未生效**：[环境变量故障排查](../troubleshooting/runtime-errors.md#环境变量未生效)
+- **构建失败**：[构建问题排查](../troubleshooting/build-errors)
+- **容器启动失败**：[运行时问题排查](../troubleshooting/runtime-errors)
+- **环境变量未生效**：[环境变量故障排查](../troubleshooting/runtime-errors#环境变量未生效)
 
 常见问题快速解决：
 
@@ -152,7 +152,7 @@ manyoyo -x echo "Hello MANYOYO"
 
 现在您已经完成了快速开始，可以继续：
 
-- [安装详解](./installation.md) - 深入了解安装选项和构建参数
-- [基础用法](./basic-usage.md) - 学习更多命令和操作
+- [安装详解](./installation) - 深入了解安装选项和构建参数
+- [基础用法](./basic-usage) - 学习更多命令和操作
 - [配置系统](../configuration/) - 掌握高级配置技巧
-- [命令参考](../reference/cli-options.md) - 查看所有命令选项
+- [命令参考](../reference/cli-options) - 查看所有命令选项

@@ -494,7 +494,7 @@ manyoyo --yes -m dind -x "
 
 ## Related Documentation
 
-- [Container Mode Comparison](../reference/container-modes.md) - Learn about different container modes
-- [Basic Usage](../guide/basic-usage.md) - Learn basic commands
-- [Configuration Examples](../configuration/examples.md) - View configuration examples
-- [Troubleshooting](../troubleshooting/runtime-errors.md) - Solve runtime issues
+- [Container Mode Comparison](../reference/container-modes) - Learn about different container modes
+- [Basic Usage](../guide/basic-usage) - Learn basic commands
+- [Configuration Examples](../configuration/examples) - View configuration examples
+- [Troubleshooting](../troubleshooting/runtime-errors) - Solve runtime issues

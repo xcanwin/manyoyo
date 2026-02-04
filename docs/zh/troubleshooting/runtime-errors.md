@@ -741,7 +741,7 @@ diff clean.json problem.json
 
 ## 相关文档
 
-- [故障排查首页](./index.md) - 问题索引和快速导航
-- [构建问题](./build-errors.md) - 镜像构建相关问题
+- [故障排查首页](./index) - 问题索引和快速导航
+- [构建问题](./build-errors) - 镜像构建相关问题
 - [配置系统](../configuration/) - 配置文件和环境变量
-- [命令参考](../reference/cli-options.md) - 命令行选项详解
+- [命令参考](../reference/cli-options) - 命令行选项详解

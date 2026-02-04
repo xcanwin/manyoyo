@@ -565,6 +565,6 @@ fi
 ## Next Steps
 
 - [Configuration System](../configuration/) - Learn how to use configuration files to simplify operations
-- [Command Reference](../reference/cli-options.md) - View all command-line options
-- [Container Modes](../reference/container-modes.md) - Learn about different container nesting modes
+- [Command Reference](../reference/cli-options) - View all command-line options
+- [Container Modes](../reference/container-modes) - Learn about different container nesting modes
 - [Troubleshooting](../troubleshooting/) - Solve common problems

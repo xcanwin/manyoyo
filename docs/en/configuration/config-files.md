@@ -261,7 +261,7 @@ Global configuration is always loaded from a fixed location:
 
 ## Configuration Merge Rules
 
-Refer to [Configuration System Overview](./index.md#priority-mechanism) for detailed merge rules.
+Refer to [Configuration System Overview](./index#priority-mechanism) for detailed merge rules.
 
 Brief description:
 
@@ -499,6 +499,6 @@ vim ~/.manyoyo/run/claude.json
 
 ## Related Documentation
 
-- [Configuration System Overview](./index.md) - Understand configuration priority mechanism
-- [Environment Variables Details](./environment.md) - Learn how to configure environment variables
-- [Configuration Examples](./examples.md) - View more practical examples
+- [Configuration System Overview](./index) - Understand configuration priority mechanism
+- [Environment Variables Details](./environment) - Learn how to configure environment variables
+- [Configuration Examples](./examples) - View more practical examples

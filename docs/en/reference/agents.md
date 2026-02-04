@@ -538,7 +538,7 @@ manyoyo -n test -r claude
 
 ## Related Documentation
 
-- [Basic Usage](../guide/basic-usage.md) - Learn basic commands and operations
-- [Configuration Examples](../configuration/examples.md) - View agent configuration examples
-- [Environment Variables](../configuration/environment.md) - Learn how to configure environment variables
-- [Runtime Issues](../troubleshooting/runtime-errors.md#ai-cli-tool-errors) - AI CLI tool troubleshooting
+- [Basic Usage](../guide/basic-usage) - Learn basic commands and operations
+- [Configuration Examples](../configuration/examples) - View agent configuration examples
+- [Environment Variables](../configuration/environment) - Learn how to configure environment variables
+- [Runtime Issues](../troubleshooting/runtime-errors#ai-cli-tool-errors) - AI CLI tool troubleshooting

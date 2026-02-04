@@ -494,7 +494,7 @@ Document why specific modes are needed for team understanding.
 
 ## Related Documentation
 
-- [Basic Usage](../guide/basic-usage.md) - Learn basic commands
-- [Configuration Examples](../configuration/examples.md) - View configuration examples
-- [Installation Guide](../guide/installation.md) - Learn about image building
+- [Basic Usage](../guide/basic-usage) - Learn basic commands
+- [Configuration Examples](../configuration/examples) - View configuration examples
+- [Installation Guide](../guide/installation) - Learn about image building
 - [Troubleshooting](../troubleshooting/) - Solve container issues

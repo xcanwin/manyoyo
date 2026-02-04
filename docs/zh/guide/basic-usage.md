@@ -565,6 +565,6 @@ fi
 ## 下一步
 
 - [配置系统](../configuration/) - 学习如何使用配置文件简化操作
-- [命令参考](../reference/cli-options.md) - 查看所有命令行选项
-- [容器模式](../reference/container-modes.md) - 了解不同的容器嵌套模式
+- [命令参考](../reference/cli-options) - 查看所有命令行选项
+- [容器模式](../reference/container-modes) - 了解不同的容器嵌套模式
 - [故障排查](../troubleshooting/) - 解决常见问题

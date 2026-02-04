@@ -382,8 +382,8 @@ manyoyo -n test -x node --version
 ### Build Failures
 
 If you encounter problems during the build process, refer to:
-- [Build Issues Guide](../troubleshooting/build-errors.md)
-- [Image Build Failures](../troubleshooting/build-errors.md#image-build-failures)
+- [Build Issues Guide](../troubleshooting/build-errors)
+- [Image Build Failures](../troubleshooting/build-errors#image-build-failures)
 
 Common solutions:
 ```bash
@@ -483,7 +483,7 @@ manyoyo --irm
 
 After installation, you can:
 
-1. [Quick Start](./quick-start.md) - Learn basic usage workflow
-2. [Basic Usage](./basic-usage.md) - Learn common commands and operations
+1. [Quick Start](./quick-start) - Learn basic usage workflow
+2. [Basic Usage](./basic-usage) - Learn common commands and operations
 3. [Configuration System](../configuration/) - Set environment variables and configuration files
-4. [Command Reference](../reference/cli-options.md) - View all command-line options
+4. [Command Reference](../reference/cli-options) - View all command-line options

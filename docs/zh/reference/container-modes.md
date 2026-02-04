@@ -494,7 +494,7 @@ docker ps -a
 
 ## 相关文档
 
-- [基础用法](../guide/basic-usage.md) - 学习基本命令
-- [配置示例](../configuration/examples.md) - 查看配置示例
-- [安装详解](../guide/installation.md) - 了解镜像构建
+- [基础用法](../guide/basic-usage) - 学习基本命令
+- [配置示例](../configuration/examples) - 查看配置示例
+- [安装详解](../guide/installation) - 了解镜像构建
 - [故障排查](../troubleshooting/) - 解决容器问题
