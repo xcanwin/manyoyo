@@ -32,7 +32,6 @@ export default defineConfig({
               { text: '故障排查', link: '/zh/troubleshooting/' }
             ]
           },
-          { text: 'English', link: '/en/' },
           { text: 'GitHub', link: repo }
         ],
         sidebar: {
@@ -121,7 +120,6 @@ export default defineConfig({
               { text: 'Troubleshooting', link: '/en/troubleshooting/' }
             ]
           },
-          { text: '中文', link: '/zh/' },
           { text: 'GitHub', link: repo }
         ],
         sidebar: {
