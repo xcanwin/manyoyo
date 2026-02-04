@@ -19,16 +19,28 @@ hero:
 features:
   - title: Multi-Agent Support
     details: Claude Code, Gemini, Codex, OpenCode - switch between agents with one command.
+    link: /en/reference/agents
+    linkText: Learn more
   - title: Security Isolation
     details: Docker/Podman container isolation to reduce host machine risks.
+    link: /en/reference/container-modes
+    linkText: Learn more
   - title: Configuration System
     details: Support environment variables, config files, and run configs for flexible scenario management.
+    link: /en/configuration/
+    linkText: Learn more
   - title: Troubleshooting
     details: Complete issue index with build and runtime error solutions.
+    link: /en/troubleshooting/
+    linkText: Learn more
   - title: Built for Efficiency
     details: Session recovery, environment file import, config templates to reduce repetition and token costs.
+    link: /en/advanced/session-management
+    linkText: Learn more
   - title: Container Nesting
     details: Docker-in-Docker mode support for safely running containerized applications.
+    link: /en/advanced/docker-in-docker
+    linkText: Learn more
 ---
 
 > If you prefer Chinese documentation, please switch to [简体中文](/zh/).
