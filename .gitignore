@@ -17,3 +17,4 @@ docker/cache/*
 !docker/cache/.gitkeep
 docker/lib/
 coverage/
+AGENTS.md
