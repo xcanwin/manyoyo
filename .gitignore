@@ -16,3 +16,4 @@ yarn-error.log*
 docker/cache/*
 !docker/cache/.gitkeep
 docker/lib/
+coverage/
