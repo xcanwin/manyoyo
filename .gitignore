@@ -18,3 +18,4 @@ docker/cache/*
 docker/lib/
 coverage/
 AGENTS.md
+CLAUDE.md
