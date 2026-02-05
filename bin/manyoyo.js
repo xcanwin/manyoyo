@@ -70,7 +70,7 @@ const NC = '\x1b[0m'; // No Color
 let DOCKER_CMD = 'docker';
 
 // ==============================================================================
-// Utility Functions
+// SECTION: Utility Functions
 // ==============================================================================
 
 function sleep(ms) {
@@ -133,7 +133,7 @@ function sanitizeSensitiveData(obj) {
 }
 
 // ==============================================================================
-// Configuration File Functions
+// SECTION: Configuration Management
 // ==============================================================================
 
 /**
@@ -204,9 +204,8 @@ function loadRunConfig(name) {
 }
 
 // ==============================================================================
-// UI Functions
+// SECTION: UI Functions
 // ==============================================================================
-
 
 function getHelloTip(containerName, defaultCommand) {
     if ( !(QUIET.tip || QUIET.full) ) {
@@ -258,6 +257,10 @@ function validateName(label, value, pattern) {
         process.exit(1);
     }
 }
+
+// ==============================================================================
+// SECTION: Environment Variables and Volume Handling
+// ==============================================================================
 
 async function askQuestion(prompt) {
     const rl = readline.createInterface({
@@ -351,6 +354,10 @@ function addEnvFile(envFile) {
 function addVolume(volume) {
     CONTAINER_VOLUMES.push("--volume", volume);
 }
+
+// ==============================================================================
+// SECTION: YOLO Mode and Container Mode Configuration
+// ==============================================================================
 
 function setYolo(cli) {
     switch (cli) {
@@ -479,7 +486,7 @@ function removeContainer(name) {
 }
 
 // ==============================================================================
-// Docker Operations
+// SECTION: Docker Operations
 // ==============================================================================
 
 function ensureDocker() {
@@ -548,6 +555,10 @@ function pruneDanglingImages() {
 
     console.log(`${GREEN}✅ 清理完成${NC}`);
 }
+
+// ==============================================================================
+// SECTION: Image Build System
+// ==============================================================================
 
 /**
  * 准备构建缓存（Node.js、JDT LSP、gopls）
@@ -806,7 +817,7 @@ async function buildImage(IMAGE_BUILD_ARGS, imageName, imageVersion) {
 }
 
 // ==============================================================================
-// Main Function Helpers
+// SECTION: Command Line Interface
 // ==============================================================================
 
 function setupCommander() {
@@ -1077,6 +1088,10 @@ async function waitForContainerReady(containerName) {
     console.log(`${RED}⚠️  错误: 容器启动超时。${NC}`);
     process.exit(1);
 }
+
+// ==============================================================================
+// SECTION: Container Lifecycle Management
+// ==============================================================================
 
 /**
  * 创建新容器
