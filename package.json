@@ -2,9 +2,19 @@
     "name": "@xcanwin/manyoyo",
     "version": "3.8.4",
     "imageVersion": "1.7.0",
-    "description": "AI Agent CLI Security Sandbox",
+    "description": "AI Agent CLI Security Sandbox for Docker and Podman",
     "keywords": [
-        "ai", "agent", "sandbox", "docker", "cli", "container", "development"
+        "manyoyo",
+        "ai-agent",
+        "agent-cli",
+        "security-sandbox",
+        "claude-code",
+        "codex-cli",
+        "gemini-cli",
+        "opencode",
+        "docker-sandbox",
+        "podman-sandbox",
+        "yolo-mode"
     ],
     "repository": {
         "type": "git",
@@ -27,7 +37,10 @@
         "docs:build": "vitepress build docs",
         "docs:preview": "vitepress preview docs --host --port 4173"
     },
-    "homepage": "https://github.com/xcanwin/manyoyo",
+    "homepage": "https://xcanwin.github.io/manyoyo/",
+    "bugs": {
+        "url": "https://github.com/xcanwin/manyoyo/issues"
+    },
     "engines": {
         "node": ">=22.0.0"
     },

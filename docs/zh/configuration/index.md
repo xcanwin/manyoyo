@@ -1,3 +1,8 @@
+---
+title: 配置系统概览 | MANYOYO
+description: 了解 MANYOYO 配置系统，包含环境变量、JSON5 配置文件、运行配置与配置优先级，适配 AI Agent CLI 场景。
+---
+
 # 配置系统概览
 
 MANYOYO 提供灵活的配置系统，用于简化命令行操作和管理复杂的运行环境。

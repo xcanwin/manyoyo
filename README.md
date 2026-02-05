@@ -3,7 +3,7 @@
 </p>
 
 # <p align="center"><a href="https://github.com/xcanwin/manyoyo">MANYOYO（慢悠悠）</a></p>
-<p align="center">一款AI智能体安全沙箱，保障PC安全，可以随心所欲运行YOLO/SOLO模式。</p>
+<p align="center">一款 AI Agent CLI 安全沙箱，基于 Docker/Podman 保护宿主机，支持 YOLO/SOLO 模式。</p>
 <p align="center">
   <a href="https://www.npmjs.com/package/@xcanwin/manyoyo"><img alt="npm" src="https://img.shields.io/npm/v/@xcanwin/manyoyo?style=flat-square" /></a>
   <a href="https://github.com/xcanwin/manyoyo/actions/workflows/npm-publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/xcanwin/manyoyo/npm-publish.yml?style=flat-square" /></a>
@@ -51,6 +51,24 @@ manyoyo -y c                       # 运行 Claude Code YOLO 模式
 ```
 
 注意：YOLO/SOLO 会跳过权限确认，请确保在可控环境中使用。
+
+---
+
+## 适用场景（高频）
+
+- 安全运行 **Claude Code YOLO** / **SOLO** 模式
+- 在容器中运行 **Codex CLI**，降低宿主机风险
+- 使用 **Gemini CLI / OpenCode** 做代码任务隔离
+- 用 **Docker/Podman sandbox** 统一团队 Agent 运行环境
+
+## 裸跑 vs MANYOYO
+
+| 对比项 | 裸跑 Agent CLI | MANYOYO |
+| --- | --- | --- |
+| 宿主机风险 | 高 | 低（容器隔离） |
+| 环境复用 | 弱 | 强（镜像 + 配置） |
+| 会话恢复 | 依赖工具自身 | 支持统一会话管理 |
+| 切换效率 | 一般 | 快捷（`-y` / `-x`） |
 
 ---
 

@@ -1,3 +1,8 @@
+---
+title: 快速开始 | MANYOYO
+description: 2 分钟完成 MANYOYO 安装、镜像构建与 Agent 启动，安全运行 Claude Code、Gemini、Codex、OpenCode 等 AI Agent CLI。
+---
+
 # 快速开始
 
 ## 前置条件

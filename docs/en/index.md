@@ -1,5 +1,7 @@
 ---
 layout: home
+title: MANYOYO Docs | AI Agent CLI Security Sandbox
+description: MANYOYO is a Docker/Podman security sandbox for AI Agent CLI tools. Safely run Claude Code, Gemini, Codex, and OpenCode in YOLO/SOLO workflows.
 
 hero:
   name: MANYOYO
@@ -52,6 +54,12 @@ MANYOYO is not a general container tool, but a security sandbox specifically des
 - Pre-installed common Agents and development tools, avoiding repeated installations
 - Freely switch between Agent and `/bin/bash`, suitable for real development workflows
 - Support configuration files and environment files for team collaboration
+
+## Popular Use Cases
+
+- [Claude Code YOLO sandbox](./guide/quick-start) - launch an isolated environment in 2 minutes
+- [Codex CLI container sandbox](./reference/agents) - run `codex` in an isolated container with session recovery
+- [Docker/Podman secure runtime for Agent CLI](./reference/container-modes) - compare `none` / `dind` / `sock` modes
 
 ## Documentation Deployment
 

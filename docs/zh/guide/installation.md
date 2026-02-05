@@ -1,3 +1,8 @@
+---
+title: 安装详解 | MANYOYO
+description: MANYOYO 安装指南，涵盖 Node.js 与 Docker/Podman 前置条件、全局安装、镜像构建参数和常见安装问题。
+---
+
 # 安装详解
 
 本页面提供 MANYOYO 的详细安装指南，包括前置条件、安装步骤和镜像构建。

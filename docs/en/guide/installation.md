@@ -1,3 +1,8 @@
+---
+title: Installation Guide | MANYOYO
+description: Complete MANYOYO installation guide covering Node.js and Docker/Podman prerequisites, global install, image build options, and common setup issues.
+---
+
 # Installation Guide
 
 This page provides a detailed installation guide for MANYOYO, including prerequisites, installation steps, and image building.

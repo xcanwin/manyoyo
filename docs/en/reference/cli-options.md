@@ -1,3 +1,8 @@
+---
+title: CLI Reference | MANYOYO
+description: MANYOYO CLI option reference for container management, env injection, YOLO/SOLO modes, debugging, and cleanup commands.
+---
+
 # Command Reference
 
 ## Common Commands

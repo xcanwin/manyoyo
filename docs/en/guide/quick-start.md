@@ -1,3 +1,8 @@
+---
+title: Quick Start | MANYOYO
+description: Install MANYOYO, build the sandbox image, and launch Claude Code, Gemini, Codex, or OpenCode in a secure container in 2 minutes.
+---
+
 # Quick Start
 
 ## Prerequisites

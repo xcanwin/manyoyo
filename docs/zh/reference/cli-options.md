@@ -1,3 +1,8 @@
+---
+title: 命令参考 | MANYOYO
+description: MANYOYO 命令行参数与常用命令速查，覆盖容器管理、环境变量注入、YOLO/SOLO 模式、调试与清理操作。
+---
+
 # 命令参考
 
 ## 常用命令

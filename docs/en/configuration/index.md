@@ -1,3 +1,8 @@
+---
+title: Configuration Overview | MANYOYO
+description: Understand MANYOYO configuration with environment variables, JSON5 config files, run profiles, and config priority for AI Agent CLI workflows.
+---
+
 # Configuration System Overview
 
 MANYOYO provides a flexible configuration system to simplify command-line operations and manage complex runtime environments.

@@ -2,15 +2,183 @@ import { defineConfig } from 'vitepress'
 
 const repo = 'https://github.com/xcanwin/manyoyo'
 const editBase = 'https://github.com/xcanwin/manyoyo/edit/main/docs'
+const siteUrl = 'https://xcanwin.github.io/manyoyo/'
+const sitePathPrefix = new URL(siteUrl).pathname.replace(/\/$/, '')
+const siteName = 'MANYOYO'
+const defaultDescription = 'AI Agent CLI Security Sandbox'
+const defaultKeywords = [
+  'manyoyo',
+  'ai agent sandbox',
+  'ai agent cli',
+  'claude code',
+  'codex cli',
+  'gemini cli',
+  'docker sandbox',
+  'podman sandbox',
+  'yolo mode'
+].join(', ')
+const defaultOgImage = `${siteUrl}images/manyoyo-og-cover.svg`
+
+function toRoutePath(relativePath: string): string {
+  const normalized = relativePath.replace(/\\/g, '/').replace(/\.md$/, '')
+
+  if (normalized === 'index') {
+    return '/'
+  }
+
+  if (normalized.endsWith('/index')) {
+    return `/${normalized.slice(0, -'/index'.length)}/`
+  }
+
+  return `/${normalized}`
+}
+
+function toAbsoluteUrl(path: string): string {
+  return new URL(path.replace(/^\//, ''), siteUrl).toString()
+}
+
+function toRoutePathFromUrl(url: string): string {
+  const parsed = new URL(url, siteUrl)
+  let routePath = parsed.pathname
+
+  if (sitePathPrefix && routePath.startsWith(sitePathPrefix)) {
+    routePath = routePath.slice(sitePathPrefix.length) || '/'
+  }
+
+  if (!routePath.startsWith('/')) {
+    routePath = `/${routePath}`
+  }
+
+  return routePath
+}
+
+function resolveLocalePaths(routePath: string): {
+  canonicalPath: string
+  zhPath: string
+  enPath: string
+  xDefaultPath: string
+} {
+  let canonicalPath = routePath
+
+  if (routePath === '/') {
+    canonicalPath = '/zh/'
+  } else if (!routePath.startsWith('/zh/') && !routePath.startsWith('/en/')) {
+    canonicalPath = `/zh${routePath}`
+  }
+
+  if (canonicalPath.startsWith('/zh/')) {
+    return {
+      canonicalPath,
+      zhPath: canonicalPath,
+      enPath: canonicalPath.replace(/^\/zh\//, '/en/'),
+      xDefaultPath: '/zh/'
+    }
+  }
+
+  if (canonicalPath.startsWith('/en/')) {
+    return {
+      canonicalPath,
+      zhPath: canonicalPath.replace(/^\/en\//, '/zh/'),
+      enPath: canonicalPath,
+      xDefaultPath: '/zh/'
+    }
+  }
+
+  return {
+    canonicalPath,
+    zhPath: '/zh/',
+    enPath: '/en/',
+    xDefaultPath: '/zh/'
+  }
+}
 
 export default defineConfig({
-  title: 'MANYOYO',
-  description: 'AI Agent CLI Security Sandbox',
+  title: siteName,
+  description: defaultDescription,
   base: process.env.GITHUB_ACTIONS ? '/manyoyo/' : '/',
   cleanUrls: true,
   lastUpdated: true,
   srcExclude: ['README_EN.md'],
-  head: [['meta', { name: 'theme-color', content: '#0f766e' }]],
+  head: [
+    ['meta', { name: 'theme-color', content: '#0f766e' }],
+    ['meta', { name: 'keywords', content: defaultKeywords }]
+  ],
+  sitemap: {
+    hostname: siteUrl,
+    transformItems: (items) => {
+      return items
+        .filter((item) => {
+          const routePath = toRoutePathFromUrl(item.url)
+          return routePath === '/zh/' || routePath === '/en/' || routePath.startsWith('/zh/') || routePath.startsWith('/en/')
+        })
+        .map((item) => {
+          const routePath = toRoutePathFromUrl(item.url)
+          const { canonicalPath, zhPath, enPath } = resolveLocalePaths(routePath)
+          return {
+            ...item,
+            url: toAbsoluteUrl(canonicalPath),
+            links: [
+              { lang: 'zh-CN', url: toAbsoluteUrl(zhPath) },
+              { lang: 'en-US', url: toAbsoluteUrl(enPath) }
+            ]
+          }
+        })
+    }
+  },
+  transformHead: ({ pageData, description }) => {
+    const routePath = toRoutePath(pageData.relativePath)
+    const { canonicalPath, zhPath, enPath, xDefaultPath } = resolveLocalePaths(routePath)
+    const canonicalUrl = toAbsoluteUrl(canonicalPath)
+    const isCompatPath = routePath === '/' || (!routePath.startsWith('/zh/') && !routePath.startsWith('/en/'))
+    const pageTitle =
+      (typeof pageData.frontmatter.title === 'string' && pageData.frontmatter.title) ||
+      pageData.title ||
+      siteName
+    const pageDescription = description || defaultDescription
+    const locale = canonicalPath.startsWith('/en/') ? 'en_US' : 'zh_CN'
+    const alternateLocale = locale === 'en_US' ? 'zh_CN' : 'en_US'
+    const head = [
+      ['link', { rel: 'canonical', href: canonicalUrl }],
+      ['link', { rel: 'alternate', hreflang: 'zh-CN', href: toAbsoluteUrl(zhPath) }],
+      ['link', { rel: 'alternate', hreflang: 'en', href: toAbsoluteUrl(enPath) }],
+      ['link', { rel: 'alternate', hreflang: 'x-default', href: toAbsoluteUrl(xDefaultPath) }],
+      ['meta', { name: 'robots', content: isCompatPath ? 'noindex,follow' : 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1' }],
+      ['meta', { property: 'og:type', content: 'website' }],
+      ['meta', { property: 'og:site_name', content: siteName }],
+      ['meta', { property: 'og:title', content: pageTitle }],
+      ['meta', { property: 'og:description', content: pageDescription }],
+      ['meta', { property: 'og:url', content: canonicalUrl }],
+      ['meta', { property: 'og:image', content: defaultOgImage }],
+      ['meta', { property: 'og:locale', content: locale }],
+      ['meta', { property: 'og:locale:alternate', content: alternateLocale }],
+      ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+      ['meta', { name: 'twitter:title', content: pageTitle }],
+      ['meta', { name: 'twitter:description', content: pageDescription }],
+      ['meta', { name: 'twitter:image', content: defaultOgImage }]
+    ] as [string, Record<string, string>, string?][]
+
+    if (canonicalPath === '/zh/' || canonicalPath === '/en/') {
+      const inLanguage = canonicalPath.startsWith('/en/') ? 'en-US' : 'zh-CN'
+      const siteDescription = canonicalPath.startsWith('/en/')
+        ? 'Security sandbox for running AI Agent CLI tools with Docker or Podman.'
+        : '用于在 Docker 或 Podman 中安全运行 AI Agent CLI 工具的安全沙箱。'
+      const jsonLd = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareApplication',
+        name: siteName,
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Linux, macOS, Windows',
+        inLanguage,
+        description: siteDescription,
+        url: siteUrl,
+        codeRepository: repo,
+        license: `${repo}/blob/main/LICENSE`
+      })
+      head.push(['script', { type: 'application/ld+json' }, jsonLd])
+    }
+
+    return head
+  },
 
   locales: {
     root: {
