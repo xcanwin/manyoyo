@@ -907,6 +907,11 @@ function setupCommander() {
         process.argv.splice(2, 1);
     }
 
+    // No args: show help instead of starting container
+    if (process.argv.length <= 2) {
+        program.help();
+    }
+
     // Ensure docker/podman is available
     ensureDocker();
 

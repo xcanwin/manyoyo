@@ -16,6 +16,12 @@ describe('MANYOYO CLI', () => {
     // ==============================================================================
 
     describe('Basic Commands', () => {
+        test('no args should display help message', () => {
+            const output = execSync(`node ${BIN_PATH}`, { encoding: 'utf-8' });
+            expect(output).toContain('Usage: manyoyo [options]');
+            expect(output).toContain('MANYOYO');
+        });
+
         test('--help should display help message', () => {
             const output = execSync(`node ${BIN_PATH} --help`, { encoding: 'utf-8' });
             expect(output).toContain('MANYOYO');
