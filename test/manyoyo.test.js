@@ -222,7 +222,7 @@ describe('MANYOYO CLI', () => {
             );
             const config = JSON.parse(output);
             expect(config.yolo).toBe('gm');
-            expect(config.shell).toContain('gemini');
+            expect(config.shell).toBe('gemini --yolo');
         });
 
         test('-y cx should set codex yolo mode', () => {
@@ -232,7 +232,7 @@ describe('MANYOYO CLI', () => {
             );
             const config = JSON.parse(output);
             expect(config.yolo).toBe('cx');
-            expect(config.shell).toContain('codex');
+            expect(config.shell).toBe('codex --dangerously-bypass-approvals-and-sandbox');
         });
 
         test('-y oc should set opencode yolo mode', () => {
@@ -242,7 +242,7 @@ describe('MANYOYO CLI', () => {
             );
             const config = JSON.parse(output);
             expect(config.yolo).toBe('oc');
-            expect(config.shell).toContain('opencode');
+            expect(config.shell).toBe('OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode');
         });
     });
 

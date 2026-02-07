@@ -75,7 +75,7 @@ manyoyo -y g
 
 **Equivalent to**:
 ```bash
-manyoyo -x gemini --skip-safety-check
+manyoyo -x gemini --yolo
 ```
 
 **Resume session**:
@@ -124,7 +124,7 @@ manyoyo -y codex
 
 **Equivalent to**:
 ```bash
-manyoyo -x codex --skip-permissions
+manyoyo -x codex --dangerously-bypass-approvals-and-sandbox
 ```
 
 **Resume session**:
@@ -179,7 +179,7 @@ manyoyo -y opencode
 
 **Equivalent to**:
 ```bash
-manyoyo -x opencode --yolo
+manyoyo -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
 ```
 
 **Resume session**:
@@ -323,8 +323,8 @@ manyoyo -n dev -y c
 manyoyo -n dev -x /bin/bash
 
 # Manually run other agents in shell
-gemini --skip-safety-check
-codex --skip-permissions
+gemini --yolo
+codex --dangerously-bypass-approvals-and-sandbox
 ```
 
 ### Use Different Containers
@@ -366,8 +366,8 @@ manyoyo -n dev -x /bin/bash
 
 # Run agent directly inside container
 claude --dangerously-skip-permissions
-gemini --skip-safety-check
-codex --skip-permissions
+gemini --yolo
+codex --dangerously-bypass-approvals-and-sandbox
 
 # Or exit and use command
 manyoyo -n dev -y c

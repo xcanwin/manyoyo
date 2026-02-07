@@ -161,7 +161,7 @@ manyoyo -y gemini
 manyoyo -y g
 
 # 等同于
-manyoyo -x gemini --skip-safety-check
+manyoyo -x gemini --yolo
 ```
 
 ### Codex
@@ -172,7 +172,7 @@ manyoyo -y cx         # 推荐
 manyoyo -y codex
 
 # 等同于
-manyoyo -x codex --skip-permissions
+manyoyo -x codex --dangerously-bypass-approvals-and-sandbox
 ```
 
 ### OpenCode
@@ -183,7 +183,7 @@ manyoyo -y oc         # 推荐
 manyoyo -y opencode
 
 # 等同于
-manyoyo -x opencode --yolo
+manyoyo -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
 ```
 
 ## 环境变量和配置

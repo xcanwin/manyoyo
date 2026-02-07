@@ -30,12 +30,13 @@
 - `docker/` `bin/` `test/` `assets/` `coverage/`
 
 ## 构建、测试与开发命令
-- `npm install -g .` / `npm link` / `npm run install-link`: 本地全局安装或软链 CLI。
+- `npm install`: 开发阶段安装/更新依赖（会更新 `package-lock.json`）。
+- `npm ci --include=optional`: 提交前与 CI 的可复现安装（CI 不再执行 `npm install`）。
 - `npm test`: 运行全部测试并生成覆盖率（输出到 `coverage/`）。
 - `npm run test:unit`: 仅跑 `test/` 下的单元测试。
 - `npm run lint`: 占位的 lint 检查（不做风格约束）。
-- `npm run docs:dev|build|preview`: 启动/构建/预览文档站点。
-- 文档构建前建议先执行 `npm ci --include=optional`，避免 Rollup 可选依赖缺失导致 `docs:build` 失败。
+- `npm run docs:dev|build|preview`: 启动/构建/预览文档站点（先执行 `npm ci --include=optional`，再执行 `npm run docs:build`，不要并行）。
+- `npm install -g .` / `npm link` / `npm run install-link`: 本地全局安装或软链 CLI。
 
 ## 编码风格与命名约定
 - Node.js >= 22，CommonJS `require`/`module.exports`，四空格缩进，分号结尾。

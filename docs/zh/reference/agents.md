@@ -75,7 +75,7 @@ manyoyo -y g
 
 **等同于**：
 ```bash
-manyoyo -x gemini --skip-safety-check
+manyoyo -x gemini --yolo
 ```
 
 **恢复会话**：
@@ -124,7 +124,7 @@ manyoyo -y codex
 
 **等同于**：
 ```bash
-manyoyo -x codex --skip-permissions
+manyoyo -x codex --dangerously-bypass-approvals-and-sandbox
 ```
 
 **恢复会话**：
@@ -179,7 +179,7 @@ manyoyo -y opencode
 
 **等同于**：
 ```bash
-manyoyo -x opencode --yolo
+manyoyo -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
 ```
 
 **恢复会话**：
@@ -323,8 +323,8 @@ manyoyo -n dev -y c
 manyoyo -n dev -x /bin/bash
 
 # 在 shell 中手动运行其他智能体
-gemini --skip-safety-check
-codex --skip-permissions
+gemini --yolo
+codex --dangerously-bypass-approvals-and-sandbox
 ```
 
 ### 使用不同容器
@@ -366,8 +366,8 @@ manyoyo -n dev -x /bin/bash
 
 # 在容器内直接运行智能体
 claude --dangerously-skip-permissions
-gemini --skip-safety-check
-codex --skip-permissions
+gemini --yolo
+codex --dangerously-bypass-approvals-and-sandbox
 
 # 或退出后使用命令
 manyoyo -n dev -y c

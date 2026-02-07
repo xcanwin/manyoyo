@@ -161,7 +161,7 @@ manyoyo -y gemini
 manyoyo -y g
 
 # Equivalent to
-manyoyo -x gemini --skip-safety-check
+manyoyo -x gemini --yolo
 ```
 
 ### Codex
@@ -172,7 +172,7 @@ manyoyo -y cx         # Recommended
 manyoyo -y codex
 
 # Equivalent to
-manyoyo -x codex --skip-permissions
+manyoyo -x codex --dangerously-bypass-approvals-and-sandbox
 ```
 
 ### OpenCode
@@ -183,7 +183,7 @@ manyoyo -y oc         # Recommended
 manyoyo -y opencode
 
 # Equivalent to
-manyoyo -x opencode --yolo
+manyoyo -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
 ```
 
 ## Environment Variables and Configuration
