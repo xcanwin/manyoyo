@@ -38,6 +38,7 @@ MANYOYO 支持两种配置文件：
 ```json5
 {
     "envFile": ["anthropic_claudecode"],
+    "shellSuffix": "-c",
     "yolo": "c"
 }
 ```
@@ -192,6 +193,18 @@ MANYOYO 支持两种配置文件：
 ```json5
 {
     "shell": "claude"
+}
+```
+
+#### shellSuffix
+- **类型**：字符串
+- **说明**：命令后缀，追加在 `shell` 后面（例如 `-c`、`resume --last`）
+- **优先级**：可被命令行 `--ss` 或 `-- ...` 覆盖（其中 `-- ...` 优先级最高）
+- **示例**：
+```json5
+{
+    "shell": "codex",
+    "shellSuffix": "resume --last"
 }
 ```
 

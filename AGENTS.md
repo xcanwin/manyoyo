@@ -35,6 +35,7 @@
 - `npm run test:unit`: 仅跑 `test/` 下的单元测试。
 - `npm run lint`: 占位的 lint 检查（不做风格约束）。
 - `npm run docs:dev|build|preview`: 启动/构建/预览文档站点。
+- 文档构建前建议先执行 `npm ci --include=optional`，避免 Rollup 可选依赖缺失导致 `docs:build` 失败。
 
 ## 编码风格与命名约定
 - Node.js >= 22，CommonJS `require`/`module.exports`，四空格缩进，分号结尾。

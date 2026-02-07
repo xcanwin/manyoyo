@@ -77,6 +77,12 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function normalizeCommandSuffix(suffix) {
+    if (typeof suffix !== 'string') return "";
+    const trimmed = suffix.trim();
+    return trimmed ? ` ${trimmed}` : "";
+}
+
 /**
  * 计算文件的 SHA256 哈希值（跨平台）
  * @param {string} filePath - 文件路径
@@ -840,10 +846,13 @@ function setupCommander() {
   -r ./file.json → 当前目录的 file.json
   --ef name     → ~/.manyoyo/env/name.env
   --ef ./file.env → 当前目录的 file.env
+  --ss "<args>" → 显式设置命令后缀
+  -- <args...>  → 直接透传命令后缀（优先级最高）
 
 示例:
   ${MANYOYO_NAME} --ib --iv ${IMAGE_VERSION_BASE || "1.0.0"}                     构建镜像
   ${MANYOYO_NAME} -r c                                使用 ~/.manyoyo/run/c.json 配置
+  ${MANYOYO_NAME} -r codex --ss "resume --last"       使用命令后缀
   ${MANYOYO_NAME} -r ./myconfig.json                  使用当前目录 ./myconfig.json 配置
   ${MANYOYO_NAME} -n test --ef claude -y c            使用 ~/.manyoyo/env/claude.env 环境变量文件
   ${MANYOYO_NAME} -n test --ef ./myenv.env -y c       使用当前目录 ./myenv.env 环境变量文件
@@ -871,6 +880,7 @@ function setupCommander() {
         .option('-v, --volume <volume>', '绑定挂载卷 XXX:YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--sp, --shell-prefix <command>', '临时环境变量 (作为-s前缀)')
         .option('-s, --shell <command>', '指定命令执行')
+        .option('--ss, --shell-suffix <command>', '指定命令后缀 (追加到-s之后，等价于 -- <args>)')
         .option('-x, --shell-full <command...>', '指定完整命令执行 (代替--sp和-s和--命令)')
         .option('-y, --yolo <cli>', '使AGENT无需确认 (claude/c, gemini/gm, codex/cx, opencode/oc)')
         .option('--install <name>', '安装manyoyo命令 (docker-cli-plugin)')
@@ -900,6 +910,13 @@ function setupCommander() {
     // Ensure docker/podman is available
     ensureDocker();
 
+    // Pre-handle -x/--shell-full: treat all following args as a single command
+    const shellFullIndex = process.argv.findIndex(arg => arg === '-x' || arg === '--shell-full');
+    if (shellFullIndex !== -1 && shellFullIndex < process.argv.length - 1) {
+        const shellFullArgs = process.argv.slice(shellFullIndex + 1).join(' ');
+        process.argv.splice(shellFullIndex + 1, process.argv.length - (shellFullIndex + 1), shellFullArgs);
+    }
+
     // Parse arguments
     program.allowUnknownOption(false);
     program.parse(process.argv);
@@ -927,6 +944,9 @@ function setupCommander() {
     }
     if (options.shell || runConfig.shell || config.shell) {
         EXEC_COMMAND = options.shell || runConfig.shell || config.shell;
+    }
+    if (options.shellSuffix || runConfig.shellSuffix || config.shellSuffix) {
+        EXEC_COMMAND_SUFFIX = normalizeCommandSuffix(options.shellSuffix || runConfig.shellSuffix || config.shellSuffix);
     }
 
     // Basic name validation to reduce injection risk
@@ -973,7 +993,7 @@ function setupCommander() {
     if (!options.shellFull) {
         const doubleDashIndex = process.argv.indexOf('--');
         if (doubleDashIndex !== -1 && doubleDashIndex < process.argv.length - 1) {
-            EXEC_COMMAND_SUFFIX = " " + process.argv.slice(doubleDashIndex + 1).join(' ');
+            EXEC_COMMAND_SUFFIX = normalizeCommandSuffix(process.argv.slice(doubleDashIndex + 1).join(' '));
         }
     }
 

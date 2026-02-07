@@ -151,6 +151,46 @@ describe('MANYOYO CLI', () => {
             expect(config.volumes).toContain('/tmp:/tmp');
             expect(config.volumes).toContain('/var:/var');
         });
+
+        test('--ss should set shell suffix', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --show-config -s codex --ss "-c"`,
+                { encoding: 'utf-8' }
+            );
+            const config = JSON.parse(output);
+            expect(config.shell).toBe('codex');
+            expect(config.shellSuffix).toBe(' -c');
+        });
+
+        test('run config should support shellSuffix', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-shellsuffix-'));
+            const runConfigPath = path.join(tempDir, 'codex.json');
+            fs.writeFileSync(runConfigPath, JSON.stringify({
+                shell: 'codex',
+                shellSuffix: 'resume --last'
+            }, null, 4));
+
+            try {
+                const output = execSync(
+                    `node ${BIN_PATH} --show-config -r "${runConfigPath}"`,
+                    { encoding: 'utf-8' }
+                );
+                const config = JSON.parse(output);
+                expect(config.shell).toBe('codex');
+                expect(config.shellSuffix).toBe(' resume --last');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
+        test('-- should override --ss suffix', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --show-config -s codex --ss "-c" -- resume --last`,
+                { encoding: 'utf-8' }
+            );
+            const config = JSON.parse(output);
+            expect(config.shellSuffix).toBe(' resume --last');
+        });
     });
 
     // ==============================================================================
@@ -219,6 +259,14 @@ describe('MANYOYO CLI', () => {
                 { encoding: 'utf-8' }
             );
             expect(output).toContain('--rm-on-exit');
+        });
+
+        test('--ss option should be accepted', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --help`,
+                { encoding: 'utf-8' }
+            );
+            expect(output).toContain('--ss');
         });
 
         test('quiet options should work', () => {

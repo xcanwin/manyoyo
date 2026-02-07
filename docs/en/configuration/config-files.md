@@ -38,6 +38,7 @@ MANYOYO supports two types of configuration files:
 ```json5
 {
     "envFile": ["anthropic_claudecode"],
+    "shellSuffix": "-c",
     "yolo": "c"
 }
 ```
@@ -192,6 +193,18 @@ Mode descriptions:
 ```json5
 {
     "shell": "claude"
+}
+```
+
+#### shellSuffix
+- **Type**: String
+- **Description**: Command suffix appended after `shell` (e.g., `-c`, `resume --last`)
+- **Priority**: Can be overridden by command-line `--ss` or `-- ...` (`-- ...` has highest priority)
+- **Example**:
+```json5
+{
+    "shell": "codex",
+    "shellSuffix": "resume --last"
 }
 ```
 

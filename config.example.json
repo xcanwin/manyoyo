@@ -10,6 +10,7 @@
     "containerMode": "common",
     "shellPrefix": "",
     "shell": "",
+    "shellSuffix": "",
     "yolo": "",
 
     // 合并型参数（配置文件和命令行会累加）
