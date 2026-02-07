@@ -149,7 +149,6 @@ manyoyo -n <container-name> -- resume <session-id>
 ```bash
 # ~/.manyoyo/env/openai_codex.env
 export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
-export OTEL_SDK_DISABLED=true
 ```
 
 **Common commands**:

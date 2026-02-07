@@ -129,7 +129,6 @@ mkdir -p ~/.manyoyo/env/
 # 创建 Codex 环境文件
 cat > ~/.manyoyo/env/openai_[gpt]_codex.env << 'EOF'
 export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
-export OTEL_SDK_DISABLED=true
 EOF
 ```
 
