@@ -31,6 +31,7 @@ description: MANYOYO CLI option reference for container management, env injectio
 | `--ib` | Build sandbox image |
 | `--iv` | Specify image version |
 | `--iba` | Pass image build arguments (e.g., `TOOL=common`) |
+| `--server [port]` | Start web interaction server (default `3000`) |
 | `-q` | Silent output (can be used multiple times) |
 
 ## Configuration File Rules

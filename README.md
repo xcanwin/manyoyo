@@ -120,6 +120,7 @@ manyoyo -y oc         # OpenCode（或 opencode）
 manyoyo -l
 manyoyo -n myy-dev -x /bin/bash
 manyoyo -n myy-dev --crm
+manyoyo --server 3000
 
 # 调试配置与命令拼装
 manyoyo --show-config

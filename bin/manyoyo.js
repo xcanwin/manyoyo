@@ -10,6 +10,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const readline = require('readline');
+const http = require('http');
 const { Command } = require('commander');
 const JSON5 = require('json5');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_BASE } = require('../package.json');
@@ -57,6 +58,9 @@ let QUIET = {};
 let SHOW_COMMAND = false;
 let YES_MODE = false;
 let RM_ON_EXIT = false;
+let SERVER_MODE = false;
+let SERVER_PORT = 3000;
+const SAFE_CONTAINER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
 // Color definitions using ANSI codes
 const RED = '\x1b[0;31m';
@@ -81,6 +85,26 @@ function normalizeCommandSuffix(suffix) {
     if (typeof suffix !== 'string') return "";
     const trimmed = suffix.trim();
     return trimmed ? ` ${trimmed}` : "";
+}
+
+function parseServerPort(rawPort) {
+    if (rawPort === true || rawPort === undefined || rawPort === null || rawPort === '') {
+        return 3000;
+    }
+
+    const value = String(rawPort).trim();
+    if (!/^\d+$/.test(value)) {
+        console.error(`${RED}⚠️  错误: --server 端口必须是 1-65535 的整数: ${rawPort}${NC}`);
+        process.exit(1);
+    }
+
+    const port = Number(value);
+    if (port < 1 || port > 65535) {
+        console.error(`${RED}⚠️  错误: --server 端口超出范围 (1-65535): ${rawPort}${NC}`);
+        process.exit(1);
+    }
+
+    return port;
 }
 
 /**
@@ -262,6 +286,10 @@ function validateName(label, value, pattern) {
         console.error(`${RED}⚠️  错误: ${label} 非法: ${value}${NC}`);
         process.exit(1);
     }
+}
+
+function isValidContainerName(value) {
+    return typeof value === 'string' && SAFE_CONTAINER_NAME_PATTERN.test(value);
 }
 
 // ==============================================================================
@@ -858,6 +886,7 @@ function setupCommander() {
   ${MANYOYO_NAME} -n test --ef ./myenv.env -y c       使用当前目录 ./myenv.env 环境变量文件
   ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
   ${MANYOYO_NAME} -x echo 123                         指定命令执行
+  ${MANYOYO_NAME} --server 3000                       启动网页交互服务
   ${MANYOYO_NAME} -n test -q tip -q cmd               多次使用静默选项
         `);
 
@@ -886,6 +915,7 @@ function setupCommander() {
         .option('--install <name>', '安装manyoyo命令 (docker-cli-plugin)')
         .option('--show-config', '显示最终生效配置并退出')
         .option('--show-command', '显示将执行的 docker run 命令并退出')
+        .option('--server [port]', '启动网页交互服务 (默认端口: 3000)')
         .option('--yes', '所有提示自动确认 (用于CI/脚本)')
         .option('--rm-on-exit', '退出后自动删除容器 (一次性模式)')
         .option('-q, --quiet <item>', '静默显示 (可多次使用: cnew,crm,tip,cmd,full)', (value, previous) => [...(previous || []), value], []);
@@ -955,7 +985,7 @@ function setupCommander() {
     }
 
     // Basic name validation to reduce injection risk
-    validateName('containerName', CONTAINER_NAME, /^[A-Za-z0-9][A-Za-z0-9_.-]*$/);
+    validateName('containerName', CONTAINER_NAME, SAFE_CONTAINER_NAME_PATTERN);
     validateName('imageName', IMAGE_NAME, /^[A-Za-z0-9][A-Za-z0-9._/:-]*$/);
     validateName('imageVersion', IMAGE_VERSION, /^[A-Za-z0-9][A-Za-z0-9_.-]*$/);
 
@@ -1010,6 +1040,11 @@ function setupCommander() {
         RM_ON_EXIT = true;
     }
 
+    if (options.server !== undefined) {
+        SERVER_MODE = true;
+        SERVER_PORT = parseServerPort(options.server);
+    }
+
     if (options.showConfig) {
         const finalConfig = {
             hostPath: HOST_PATH,
@@ -1027,6 +1062,8 @@ function setupCommander() {
             shellSuffix: EXEC_COMMAND_SUFFIX || "",
             yolo: yoloValue || "",
             quiet: quietValue || [],
+            server: SERVER_MODE,
+            serverPort: SERVER_MODE ? SERVER_PORT : null,
             exec: {
                 prefix: EXEC_COMMAND_PREFIX,
                 shell: EXEC_COMMAND,
@@ -1293,6 +1330,1019 @@ async function handlePostExit(defaultCommand) {
 }
 
 // ==============================================================================
+// SECTION: Web Server
+// ==============================================================================
+
+const WEB_HISTORY_DIR = path.join(os.homedir(), '.manyoyo', 'web-history');
+const WEB_HISTORY_MAX_MESSAGES = 500;
+const WEB_OUTPUT_MAX_CHARS = 16000;
+
+function ensureWebHistoryDir() {
+    fs.mkdirSync(WEB_HISTORY_DIR, { recursive: true });
+}
+
+function getWebHistoryFile(containerName) {
+    return path.join(WEB_HISTORY_DIR, `${containerName}.json`);
+}
+
+function loadWebSessionHistory(containerName) {
+    ensureWebHistoryDir();
+    const filePath = getWebHistoryFile(containerName);
+    if (!fs.existsSync(filePath)) {
+        return { containerName, updatedAt: null, messages: [] };
+    }
+
+    try {
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        return {
+            containerName,
+            updatedAt: data.updatedAt || null,
+            messages: Array.isArray(data.messages) ? data.messages : []
+        };
+    } catch (e) {
+        return { containerName, updatedAt: null, messages: [] };
+    }
+}
+
+function saveWebSessionHistory(containerName, history) {
+    ensureWebHistoryDir();
+    const filePath = getWebHistoryFile(containerName);
+    fs.writeFileSync(filePath, JSON.stringify(history, null, 4));
+}
+
+function removeWebSessionHistory(containerName) {
+    ensureWebHistoryDir();
+    const filePath = getWebHistoryFile(containerName);
+    if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+    }
+}
+
+function listWebHistorySessionNames() {
+    ensureWebHistoryDir();
+    return fs.readdirSync(WEB_HISTORY_DIR)
+        .filter(file => file.endsWith('.json'))
+        .map(file => path.basename(file, '.json'))
+        .filter(name => isValidContainerName(name));
+}
+
+function appendWebSessionMessage(containerName, role, content, extra = {}) {
+    const history = loadWebSessionHistory(containerName);
+    const timestamp = new Date().toISOString();
+    history.messages.push({
+        id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        role,
+        content,
+        timestamp,
+        ...extra
+    });
+
+    if (history.messages.length > WEB_HISTORY_MAX_MESSAGES) {
+        history.messages = history.messages.slice(-WEB_HISTORY_MAX_MESSAGES);
+    }
+
+    history.updatedAt = timestamp;
+    saveWebSessionHistory(containerName, history);
+}
+
+function stripAnsi(text) {
+    if (typeof text !== 'string') return '';
+    return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function clipText(text, maxChars = WEB_OUTPUT_MAX_CHARS) {
+    if (typeof text !== 'string') return '';
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, maxChars)}\n...[truncated]`;
+}
+
+function listWebManyoyoContainers() {
+    const output = dockerExecArgs(
+        ['ps', '-a', '--filter', 'label=manyoyo.default_cmd', '--format', '{{.Names}}\t{{.Status}}\t{{.Image}}'],
+        { ignoreError: true }
+    );
+
+    const map = {};
+    if (!output.trim()) {
+        return map;
+    }
+
+    output.trim().split('\n').forEach(line => {
+        const [name, status, image] = line.split('\t');
+        if (!isValidContainerName(name)) {
+            return;
+        }
+        map[name] = {
+            name,
+            status: status || 'unknown',
+            image: image || ''
+        };
+    });
+
+    return map;
+}
+
+async function ensureWebContainer(containerName) {
+    if (!containerExists(containerName)) {
+        const webDefaultCommand = `${EXEC_COMMAND_PREFIX}${EXEC_COMMAND}${EXEC_COMMAND_SUFFIX}`.trim() || '/bin/bash';
+        const safeLabelCmd = webDefaultCommand.replace(/[\r\n]/g, ' ');
+        const args = [
+            'run', '-d',
+            '--name', containerName,
+            '--entrypoint', '',
+            ...CONT_MODE_ARGS,
+            ...CONTAINER_ENVS,
+            ...CONTAINER_VOLUMES,
+            '--volume', `${HOST_PATH}:${CONTAINER_PATH}`,
+            '--workdir', CONTAINER_PATH,
+            '--label', `manyoyo.default_cmd=${safeLabelCmd}`,
+            `${IMAGE_NAME}:${IMAGE_VERSION}`,
+            'tail', '-f', '/dev/null'
+        ];
+
+        try {
+            dockerExecArgs(args, { stdio: 'pipe' });
+        } catch (e) {
+            showImagePullHint(e);
+            throw e;
+        }
+
+        await waitForContainerReady(containerName);
+        appendWebSessionMessage(containerName, 'system', `容器 ${containerName} 已创建并启动。`);
+        return;
+    }
+
+    const status = getContainerStatus(containerName);
+    if (status !== 'running') {
+        dockerExecArgs(['start', containerName], { stdio: 'pipe' });
+        appendWebSessionMessage(containerName, 'system', `容器 ${containerName} 已启动。`);
+    }
+}
+
+function execCommandInWebContainer(containerName, command) {
+    const result = spawnSync(DOCKER_CMD, ['exec', containerName, '/bin/bash', '-lc', command], {
+        encoding: 'utf-8',
+        maxBuffer: 32 * 1024 * 1024
+    });
+
+    if (result.error) {
+        throw result.error;
+    }
+
+    const exitCode = typeof result.status === 'number' ? result.status : 1;
+    const rawOutput = `${result.stdout || ''}${result.stderr || ''}`;
+    const output = clipText(stripAnsi(rawOutput).trim() || '(无输出)');
+
+    return { exitCode, output };
+}
+
+function readRequestBody(req) {
+    return new Promise((resolve, reject) => {
+        let body = '';
+        req.on('data', chunk => {
+            body += chunk.toString('utf-8');
+            if (body.length > 1024 * 1024) {
+                reject(new Error('请求体过大'));
+                req.destroy();
+            }
+        });
+        req.on('end', () => resolve(body));
+        req.on('error', reject);
+    });
+}
+
+async function readJsonBody(req) {
+    const body = await readRequestBody(req);
+    if (!body.trim()) {
+        return {};
+    }
+    try {
+        return JSON.parse(body);
+    } catch (e) {
+        throw new Error('JSON body 格式错误');
+    }
+}
+
+function sendJson(res, statusCode, payload) {
+    res.writeHead(statusCode, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store'
+    });
+    res.end(JSON.stringify(payload));
+}
+
+function sendHtml(res, statusCode, html) {
+    res.writeHead(statusCode, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store'
+    });
+    res.end(html);
+}
+
+function decodeSessionName(encoded) {
+    try {
+        return decodeURIComponent(encoded);
+    } catch (e) {
+        return encoded;
+    }
+}
+
+function buildSessionSummary(containerMap, name) {
+    const history = loadWebSessionHistory(name);
+    const latestMessage = history.messages.length ? history.messages[history.messages.length - 1] : null;
+    const containerInfo = containerMap[name] || {};
+    const updatedAt = history.updatedAt || (latestMessage && latestMessage.timestamp) || null;
+    return {
+        name,
+        status: containerInfo.status || 'history',
+        image: containerInfo.image || '',
+        updatedAt,
+        messageCount: history.messages.length
+    };
+}
+
+function getWebServerHtml() {
+    return `<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MANYOYO Web</title>
+    <style>
+        :root {
+            --bg: #f4f7f5;
+            --panel: #ffffff;
+            --panel-soft: #f0f5f2;
+            --line: #dbe4de;
+            --text: #0f2f20;
+            --muted: #4a6256;
+            --accent: #0f9d58;
+            --accent-strong: #087f45;
+            --user-bubble: #e4f5eb;
+            --assistant-bubble: #f7faf8;
+            --system-bubble: #eef4ff;
+            --sidebar-width: 280px;
+            --header-height: 70px;
+            --composer-height: 176px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            color: var(--text);
+            background: radial-gradient(circle at 0 0, #d8efe2 0%, var(--bg) 45%, #f5f8f6 100%);
+        }
+
+        .app {
+            height: 100vh;
+        }
+
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: var(--sidebar-width);
+            z-index: 30;
+            border-right: 1px solid var(--line);
+            background: linear-gradient(180deg, #f9fcfa 0%, #eef6f1 100%);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .brand {
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            font-size: 16px;
+        }
+
+        .new-session {
+            display: flex;
+            gap: 8px;
+        }
+
+        .new-session input {
+            flex: 1;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 9px 10px;
+            background: var(--panel);
+        }
+
+        button {
+            border: none;
+            border-radius: 10px;
+            padding: 9px 12px;
+            font-weight: 600;
+            cursor: pointer;
+            background: var(--accent);
+            color: #fff;
+        }
+
+        button:hover {
+            background: var(--accent-strong);
+        }
+
+        button.secondary {
+            background: var(--panel-soft);
+            color: var(--text);
+            border: 1px solid var(--line);
+        }
+
+        button.secondary:hover {
+            background: #e6efe9;
+        }
+
+        #sessionList {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding-right: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .session-item {
+            text-align: left;
+            width: 100%;
+            background: var(--panel);
+            color: var(--text);
+            border: 1px solid var(--line);
+            padding: 10px;
+            border-radius: 12px;
+            transition: 120ms ease;
+        }
+
+        .session-item.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(15, 157, 88, 0.15);
+        }
+
+        .session-name {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 3px;
+            word-break: break-all;
+        }
+
+        .session-meta {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .empty {
+            color: var(--muted);
+            font-size: 13px;
+            padding: 8px 4px;
+        }
+
+        .main {
+            margin-left: var(--sidebar-width);
+            height: 100vh;
+        }
+
+        .header {
+            position: fixed;
+            top: 0;
+            left: var(--sidebar-width);
+            right: 0;
+            height: var(--header-height);
+            z-index: 20;
+            border-bottom: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(6px);
+            padding: 14px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        #activeTitle {
+            margin: 0;
+            font-size: 17px;
+            font-weight: 700;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        #messages {
+            position: fixed;
+            left: var(--sidebar-width);
+            right: 0;
+            top: var(--header-height);
+            bottom: var(--composer-height);
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        #messages::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        #messages::-webkit-scrollbar-thumb {
+            background: #bdd8c8;
+            border-radius: 8px;
+        }
+
+        .msg {
+            display: flex;
+            flex-direction: column;
+            max-width: 920px;
+            width: fit-content;
+        }
+
+        .msg.user {
+            align-self: flex-end;
+        }
+
+        .msg.assistant, .msg.system {
+            align-self: flex-start;
+        }
+
+        .role {
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        .bubble {
+            border: 1px solid var(--line);
+            background: var(--assistant-bubble);
+            border-radius: 12px;
+            padding: 10px 12px;
+        }
+
+        .msg.user .bubble {
+            background: var(--user-bubble);
+        }
+
+        .msg.system .bubble {
+            background: var(--system-bubble);
+        }
+
+        .bubble pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .composer {
+            position: fixed;
+            left: var(--sidebar-width);
+            right: 0;
+            bottom: 0;
+            min-height: var(--composer-height);
+            z-index: 20;
+            border-top: 1px solid var(--line);
+            padding: 12px 20px 16px;
+            background: rgba(255, 255, 255, 0.86);
+        }
+
+        .composer-inner {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        #commandInput {
+            width: 100%;
+            min-height: 120px;
+            height: 120px;
+            max-height: 300px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 11px 12px;
+            resize: none;
+            font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+            font-size: 13px;
+            background: #fff;
+        }
+
+        #sendBtn[disabled] {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 900px) {
+            body {
+                height: auto;
+                overflow: auto;
+            }
+
+            .sidebar {
+                position: static;
+                width: auto;
+                z-index: auto;
+                border-right: none;
+                border-bottom: 1px solid var(--line);
+                max-height: 42vh;
+            }
+
+            .main {
+                margin-left: 0;
+                min-height: 58vh;
+                height: auto;
+                display: grid;
+                grid-template-rows: auto 1fr auto;
+            }
+
+            .header {
+                position: static;
+                height: auto;
+            }
+
+            #messages {
+                position: static;
+                min-height: 42vh;
+                max-height: 42vh;
+            }
+
+            .composer {
+                position: static;
+                min-height: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="brand">MANYOYO Web</div>
+            <form class="new-session" id="newSessionForm">
+                <input id="newSessionName" placeholder="容器名 (例如 myy-dev)" />
+                <button type="submit">新建</button>
+            </form>
+            <div id="sessionList"></div>
+        </aside>
+        <main class="main">
+            <header class="header">
+                <h1 id="activeTitle">未选择会话</h1>
+                <div class="header-actions">
+                    <button type="button" id="refreshBtn" class="secondary">刷新</button>
+                    <button type="button" id="removeBtn" class="secondary">删除容器</button>
+                    <button type="button" id="removeAllBtn" class="secondary">删除容器与聊天记录</button>
+                </div>
+            </header>
+            <section id="messages"></section>
+            <form class="composer" id="composer">
+                <div class="composer-inner">
+                    <textarea id="commandInput" placeholder="输入容器命令，例如: ls -la"></textarea>
+                    <button type="submit" id="sendBtn">发送</button>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    <script>
+        (function () {
+            const state = {
+                sessions: [],
+                active: '',
+                messages: [],
+                sending: false
+            };
+
+            const sessionList = document.getElementById('sessionList');
+            const activeTitle = document.getElementById('activeTitle');
+            const messagesNode = document.getElementById('messages');
+            const newSessionForm = document.getElementById('newSessionForm');
+            const newSessionName = document.getElementById('newSessionName');
+            const composer = document.getElementById('composer');
+            const commandInput = document.getElementById('commandInput');
+            const sendBtn = document.getElementById('sendBtn');
+            const refreshBtn = document.getElementById('refreshBtn');
+            const removeBtn = document.getElementById('removeBtn');
+            const removeAllBtn = document.getElementById('removeAllBtn');
+
+            function roleName(role) {
+                if (role === 'user') return '你';
+                if (role === 'assistant') return '容器输出';
+                return '系统';
+            }
+
+            function formatStatus(status) {
+                if (!status) return 'history';
+                return status;
+            }
+
+            async function api(url, options) {
+                const requestOptions = Object.assign(
+                    { headers: { 'Content-Type': 'application/json' } },
+                    options || {}
+                );
+                const response = await fetch(url, requestOptions);
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = {};
+                }
+                if (!response.ok) {
+                    throw new Error(data.error || '请求失败');
+                }
+                return data;
+            }
+
+            function setSending(value) {
+                state.sending = value;
+                sendBtn.disabled = value || !state.active;
+                commandInput.disabled = !state.active;
+            }
+
+            function updateHeader() {
+                if (!state.active) {
+                    activeTitle.textContent = '未选择会话';
+                    removeBtn.disabled = true;
+                    removeAllBtn.disabled = true;
+                    setSending(false);
+                    commandInput.value = '';
+                    return;
+                }
+                activeTitle.textContent = state.active;
+                removeBtn.disabled = false;
+                removeAllBtn.disabled = false;
+                setSending(state.sending);
+            }
+
+            function renderSessions() {
+                sessionList.innerHTML = '';
+                if (!state.sessions.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'empty';
+                    empty.textContent = '暂无 manyoyo 会话';
+                    sessionList.appendChild(empty);
+                    return;
+                }
+
+                state.sessions.forEach(function (session) {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'session-item' + (state.active === session.name ? ' active' : '');
+                    btn.innerHTML =
+                        '<div class="session-name">' + session.name + '</div>' +
+                        '<div class="session-meta">' + formatStatus(session.status) + '</div>';
+                    btn.addEventListener('click', function () {
+                        state.active = session.name;
+                        updateHeader();
+                        renderSessions();
+                        loadMessages();
+                    });
+                    sessionList.appendChild(btn);
+                });
+            }
+
+            function renderMessages(messages) {
+                messagesNode.innerHTML = '';
+                if (!messages.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'empty';
+                    empty.textContent = '输入命令后，容器输出会显示在这里。';
+                    messagesNode.appendChild(empty);
+                    return;
+                }
+
+                messages.forEach(function (msg) {
+                    const row = document.createElement('article');
+                    row.className = 'msg ' + (msg.role || 'system');
+
+                    const role = document.createElement('div');
+                    role.className = 'role';
+                    role.textContent = roleName(msg.role);
+
+                    const bubble = document.createElement('div');
+                    bubble.className = 'bubble';
+
+                    const pre = document.createElement('pre');
+                    pre.textContent = msg.content || '';
+                    bubble.appendChild(pre);
+
+                    row.appendChild(role);
+                    row.appendChild(bubble);
+                    messagesNode.appendChild(row);
+                });
+
+                messagesNode.scrollTop = messagesNode.scrollHeight;
+            }
+
+            async function loadSessions(preferredName) {
+                const data = await api('/api/sessions');
+                state.sessions = Array.isArray(data.sessions) ? data.sessions : [];
+
+                if (preferredName) {
+                    state.active = preferredName;
+                }
+
+                if (state.active && !state.sessions.some(function (s) { return s.name === state.active; })) {
+                    state.active = '';
+                }
+
+                if (!state.active && state.sessions.length) {
+                    state.active = state.sessions[0].name;
+                }
+
+                updateHeader();
+                renderSessions();
+                await loadMessages();
+            }
+
+            async function loadMessages() {
+                if (!state.active) {
+                    state.messages = [];
+                    renderMessages(state.messages);
+                    return;
+                }
+                const data = await api('/api/sessions/' + encodeURIComponent(state.active) + '/messages');
+                state.messages = Array.isArray(data.messages) ? data.messages : [];
+                renderMessages(state.messages);
+            }
+
+            newSessionForm.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                try {
+                    const name = (newSessionName.value || '').trim();
+                    const data = await api('/api/sessions', {
+                        method: 'POST',
+                        body: JSON.stringify({ name: name })
+                    });
+                    newSessionName.value = '';
+                    await loadSessions(data.name);
+                } catch (e) {
+                    alert(e.message);
+                }
+            });
+
+            composer.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                if (!state.active) return;
+                if (state.sending) return;
+                const command = (commandInput.value || '').trim();
+                if (!command) return;
+
+                const submitSession = state.active;
+                const previousMessages = state.messages.slice();
+                state.messages = state.messages.concat([{
+                    role: 'user',
+                    content: command,
+                    timestamp: new Date().toISOString(),
+                    pending: true
+                }]);
+                renderMessages(state.messages);
+
+                setSending(true);
+                try {
+                    commandInput.value = '';
+                    commandInput.focus();
+                    await api('/api/sessions/' + encodeURIComponent(submitSession) + '/run', {
+                        method: 'POST',
+                        body: JSON.stringify({ command: command })
+                    });
+                    await loadSessions(submitSession);
+                } catch (e) {
+                    if (state.active === submitSession) {
+                        state.messages = previousMessages;
+                        renderMessages(state.messages);
+                    }
+                    alert(e.message);
+                } finally {
+                    setSending(false);
+                    commandInput.focus();
+                }
+            });
+
+            commandInput.addEventListener('keydown', function (event) {
+                if (event.key !== 'Enter' || event.isComposing) {
+                    return;
+                }
+
+                // Shift+Enter / Option(Alt)+Enter: 换行
+                if (event.shiftKey || event.altKey) {
+                    return;
+                }
+
+                // Enter / Ctrl+Enter: 发送
+                event.preventDefault();
+                if (!state.active || state.sending) {
+                    return;
+                }
+                composer.requestSubmit();
+            });
+
+            refreshBtn.addEventListener('click', function () {
+                loadSessions(state.active).catch(function (e) { alert(e.message); });
+            });
+
+            removeBtn.addEventListener('click', async function () {
+                if (!state.active) return;
+                const yes = confirm('确认删除容器 ' + state.active + ' ? 仅删除容器，历史消息仍保留。');
+                if (!yes) return;
+                try {
+                    const current = state.active;
+                    await api('/api/sessions/' + encodeURIComponent(current) + '/remove', {
+                        method: 'POST'
+                    });
+                    await loadSessions('');
+                } catch (e) {
+                    alert(e.message);
+                }
+            });
+
+            removeAllBtn.addEventListener('click', async function () {
+                if (!state.active) return;
+                const yes = confirm('确认删除容器和聊天记录 ' + state.active + ' ? 删除后无法恢复。');
+                if (!yes) return;
+                try {
+                    const current = state.active;
+                    await api('/api/sessions/' + encodeURIComponent(current) + '/remove-with-history', {
+                        method: 'POST'
+                    });
+                    await loadSessions('');
+                } catch (e) {
+                    alert(e.message);
+                }
+            });
+
+            setSending(false);
+            loadSessions().catch(function (e) {
+                alert(e.message);
+            });
+        })();
+    </script>
+</body>
+</html>`;
+}
+
+async function handleWebApi(req, res, pathname) {
+    if (req.method === 'GET' && pathname === '/api/sessions') {
+        const containerMap = listWebManyoyoContainers();
+        const names = new Set([...Object.keys(containerMap), ...listWebHistorySessionNames()]);
+        const sessions = Array.from(names)
+            .map(name => buildSessionSummary(containerMap, name))
+            .sort((a, b) => {
+                const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+                const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+                return timeB - timeA;
+            });
+        sendJson(res, 200, { sessions });
+        return true;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/sessions') {
+        const payload = await readJsonBody(req);
+        let containerName = (payload.name || '').trim();
+        if (!containerName) {
+            containerName = `myy-${formatDate()}`;
+        }
+        if (!isValidContainerName(containerName)) {
+            sendJson(res, 400, { error: `containerName 非法: ${containerName}` });
+            return true;
+        }
+
+        await ensureWebContainer(containerName);
+        sendJson(res, 200, { name: containerName });
+        return true;
+    }
+
+    const messagesMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+    if (req.method === 'GET' && messagesMatch) {
+        const containerName = decodeSessionName(messagesMatch[1]);
+        if (!isValidContainerName(containerName)) {
+            sendJson(res, 400, { error: `containerName 非法: ${containerName}` });
+            return true;
+        }
+        const history = loadWebSessionHistory(containerName);
+        sendJson(res, 200, { name: containerName, messages: history.messages });
+        return true;
+    }
+
+    const runMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/run$/);
+    if (req.method === 'POST' && runMatch) {
+        const containerName = decodeSessionName(runMatch[1]);
+        if (!isValidContainerName(containerName)) {
+            sendJson(res, 400, { error: `containerName 非法: ${containerName}` });
+            return true;
+        }
+
+        const payload = await readJsonBody(req);
+        const command = (payload.command || '').trim();
+        if (!command) {
+            sendJson(res, 400, { error: 'command 不能为空' });
+            return true;
+        }
+
+        await ensureWebContainer(containerName);
+        appendWebSessionMessage(containerName, 'user', command);
+        const result = execCommandInWebContainer(containerName, command);
+        appendWebSessionMessage(containerName, 'assistant', `${result.output}\n\n[exit ${result.exitCode}]`, { exitCode: result.exitCode });
+        sendJson(res, 200, { exitCode: result.exitCode, output: result.output });
+        return true;
+    }
+
+    const removeMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/remove$/);
+    if (req.method === 'POST' && removeMatch) {
+        const containerName = decodeSessionName(removeMatch[1]);
+        if (!isValidContainerName(containerName)) {
+            sendJson(res, 400, { error: `containerName 非法: ${containerName}` });
+            return true;
+        }
+
+        if (containerExists(containerName)) {
+            removeContainer(containerName);
+            appendWebSessionMessage(containerName, 'system', `容器 ${containerName} 已删除。`);
+        }
+
+        sendJson(res, 200, { removed: true, name: containerName });
+        return true;
+    }
+
+    const removeAllMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/remove-with-history$/);
+    if (req.method === 'POST' && removeAllMatch) {
+        const containerName = decodeSessionName(removeAllMatch[1]);
+        if (!isValidContainerName(containerName)) {
+            sendJson(res, 400, { error: `containerName 非法: ${containerName}` });
+            return true;
+        }
+
+        if (containerExists(containerName)) {
+            removeContainer(containerName);
+        }
+        removeWebSessionHistory(containerName);
+
+        sendJson(res, 200, { removed: true, removedHistory: true, name: containerName });
+        return true;
+    }
+
+    return false;
+}
+
+async function startWebServer() {
+    validateHostPath();
+    ensureWebHistoryDir();
+
+    const server = http.createServer(async (req, res) => {
+        try {
+            const url = new URL(req.url, `http://${req.headers.host || `127.0.0.1:${SERVER_PORT}`}`);
+            const pathname = url.pathname;
+
+            if (req.method === 'GET' && pathname === '/') {
+                sendHtml(res, 200, getWebServerHtml());
+                return;
+            }
+
+            if (pathname === '/healthz') {
+                sendJson(res, 200, { ok: true });
+                return;
+            }
+
+            if (pathname.startsWith('/api/')) {
+                const handled = await handleWebApi(req, res, pathname);
+                if (!handled) {
+                    sendJson(res, 404, { error: 'Not Found' });
+                }
+                return;
+            }
+
+            sendHtml(res, 404, '<h1>404 Not Found</h1>');
+        } catch (e) {
+            if ((req.url || '').startsWith('/api/')) {
+                sendJson(res, 500, { error: e.message || 'Server Error' });
+            } else {
+                sendHtml(res, 500, '<h1>500 Server Error</h1>');
+            }
+        }
+    });
+
+    await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(SERVER_PORT, '127.0.0.1', () => {
+            console.log(`${GREEN}✅ MANYOYO Web 服务已启动: http://127.0.0.1:${SERVER_PORT}${NC}`);
+            console.log(`${CYAN}提示: 左侧是 manyoyo 容器会话列表，右侧可发送命令并查看输出。${NC}`);
+            resolve();
+        });
+    });
+}
+
+// ==============================================================================
 // Main Function
 // ==============================================================================
 
@@ -1301,25 +2351,31 @@ async function main() {
         // 1. Setup commander and parse arguments
         setupCommander();
 
-        // 2. Handle image build operation
+        // 2. Start web server mode
+        if (SERVER_MODE) {
+            await startWebServer();
+            return;
+        }
+
+        // 3. Handle image build operation
         if (IMAGE_BUILD_NEED) {
             await buildImage(IMAGE_BUILD_ARGS, IMAGE_NAME, IMAGE_VERSION.split('-')[0]);
             process.exit(0);
         }
 
-        // 3. Handle remove container operation
+        // 4. Handle remove container operation
         handleRemoveContainer();
 
-        // 4. Validate host path safety
+        // 5. Validate host path safety
         validateHostPath();
 
-        // 5. Setup container (create or connect)
+        // 6. Setup container (create or connect)
         const defaultCommand = await setupContainer();
 
-        // 6. Execute command in container
+        // 7. Execute command in container
         executeInContainer(defaultCommand);
 
-        // 7. Handle post-exit interactions
+        // 8. Handle post-exit interactions
         await handlePostExit(defaultCommand);
 
     } catch (e) {

@@ -275,6 +275,24 @@ describe('MANYOYO CLI', () => {
             expect(output).toContain('--ss');
         });
 
+        test('--server option should be accepted', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --help`,
+                { encoding: 'utf-8' }
+            );
+            expect(output).toContain('--server');
+        });
+
+        test('--show-config should include server mode and port', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --show-config --server 39001`,
+                { encoding: 'utf-8' }
+            );
+            const config = JSON.parse(output);
+            expect(config.server).toBe(true);
+            expect(config.serverPort).toBe(39001);
+        });
+
         test('quiet options should work', () => {
             const output = execSync(
                 `node ${BIN_PATH} --show-config -q tip -q cmd`,
