@@ -71,12 +71,17 @@ RUN <<EOX
     # 配置 APT 镜像源
     sed -i "s|http://[^/]*\.ubuntu\.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
 
-    # 安装所有基础依赖（单次 apt-get 操作）
+    # 安装所有基础依赖
+    # 网络与连接
+    # 开发与构建
+    # 系统管理
+    # 通用工具
     apt-get -o Acquire::https::Verify-Peer=false update -y
     apt-get -o Acquire::https::Verify-Peer=false install -y --no-install-recommends \
-        ca-certificates openssl curl wget net-tools iputils-ping \
-        git lsof socat ncat dnsutils ssh nano jq file tree ripgrep less bc xxd \
-        tar zip unzip gzip make sqlite3 supervisor
+        ca-certificates openssl curl wget net-tools iputils-ping dnsutils socat ncat ssh \
+        git gh g++ make sqlite3 \
+        procps psmisc lsof supervisor man-db \
+        nano jq file tree ripgrep less bc xxd tar zip unzip gzip
 
     # 更新 CA 证书
     update-ca-certificates
@@ -145,21 +150,25 @@ EOF
     # 安装 Gemini CLI
     case ",$TOOL," in *,full,*|*,gemini,*)
         npm install -g @google/gemini-cli
-        mkdir -p ~/.gemini/
+        mkdir -p ~/.gemini/ ~/.gemini/tmp/bin
+        ln -s $(which rg) ~/.gemini/tmp/bin/rg
         cat > ~/.gemini/settings.json <<EOF
 {
     "privacy": {
         "usageStatisticsEnabled": false
     },
+    "general": {
+        "previewFeatures": true,
+        "enableAutoUpdate": false,
+        "enableAutoUpdateNotification": false
+    },
+    "ui": {
+        "showLineNumbers": false
+    },
     "security": {
         "auth": {
             "selectedType": "oauth-personal"
         }
-    },
-    "general": {
-        "previewFeatures": true,
-        "disableAutoUpdate": true,
-        "disableUpdateNag": true
     },
     "model": {
         "name": "gemini-3-pro-preview"
@@ -200,9 +209,9 @@ EOF
 {
     "\$schema": "https://opencode.ai/config.json",
     "autoupdate": false,
-    "model": "Custom-Provider/{env:OPENAI_MODEL}",
+    "model": "Custom_Provider/{env:OPENAI_MODEL}",
     "provider": {
-        "Custom-Provider": {
+        "Custom_Provider": {
             "npm": "@ai-sdk/openai-compatible",
             "options": {
                 "baseURL": "{env:OPENAI_BASE_URL}",
