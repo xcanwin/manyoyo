@@ -66,7 +66,7 @@ body::after {
     width: min(430px, calc(100vw - 30px));
     padding: 24px 24px 20px;
     border: 1px solid var(--line);
-    border-radius: 18px;
+    border-radius: 12px;
     background: var(--panel);
     backdrop-filter: blur(8px);
     box-shadow: var(--shadow-soft);
@@ -76,7 +76,7 @@ body::after {
 .badge {
     display: inline-flex;
     align-items: center;
-    border-radius: 999px;
+    border-radius: 6px;
     padding: 4px 10px;
     background: #e4f5eb;
     color: #0a7b48;
@@ -108,7 +108,7 @@ label {
 input {
     width: 100%;
     border: 1px solid var(--line);
-    border-radius: 11px;
+    border-radius: 8px;
     padding: 10px 11px;
     font-size: 14px;
     color: var(--text);
@@ -125,7 +125,7 @@ button {
     width: 100%;
     margin-top: 14px;
     border: 1px solid transparent;
-    border-radius: 11px;
+    border-radius: 8px;
     padding: 10px 12px;
     font-size: 14px;
     font-weight: 700;
