@@ -483,27 +483,12 @@ function collectClaudeInitData(homeDir) {
 
     const claudeDir = path.join(homeDir, '.claude');
     const claudeSettingsPath = path.join(claudeDir, 'settings.json');
-    const claudeJsonPath = path.join(homeDir, '.claude.json');
     const settingsJson = readJsonFileSafely(claudeSettingsPath, 'Claude settings');
-    const claudeJson = readJsonFileSafely(claudeJsonPath, 'Claude config');
 
     keys.forEach(key => setInitValue(values, key, process.env[key]));
 
-    if (claudeJson && claudeJson.env && typeof claudeJson.env === 'object') {
-        keys.forEach(key => setInitValue(values, key, claudeJson.env[key]));
-    }
     if (settingsJson && settingsJson.env && typeof settingsJson.env === 'object') {
         keys.forEach(key => setInitValue(values, key, settingsJson.env[key]));
-    }
-
-    if (fs.existsSync(claudeDir)) {
-        volumes.push(`${claudeDir}:/root/.claude`);
-    }
-    if (fs.existsSync(claudeJsonPath)) {
-        volumes.push(`${claudeJsonPath}:/root/.claude.json`);
-    }
-    if (!fs.existsSync(claudeDir) && !fs.existsSync(claudeJsonPath)) {
-        notes.push('未检测到 Claude 本地配置（~/.claude 或 ~/.claude.json），已生成占位模板。');
     }
 
     return { keys, values, notes, volumes: dedupeList(volumes) };
