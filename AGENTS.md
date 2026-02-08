@@ -119,6 +119,7 @@
 - 新增网页接口/页面时，默认走全局认证网关；仅登录相关路由允许匿名访问。
 - 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`）；其余路由默认要求认证。
 - 禁止在业务路由里零散补认证，优先在统一入口做认证兜底，避免后续漏校验。
+- 网页前端默认避免常驻高开销视觉效果：不要在常驻元素使用 `animation: ... infinite`，避免大面积叠加 `backdrop-filter` / `filter` 模糊；确需使用时仅限短时场景，并提供 `prefers-reduced-motion` 降级。
 - 当使用 `--server 0.0.0.0:<port>` 对外监听时，必须设置强密码，并通过防火墙限制访问来源。
 - 新增容器模式或挂载选项时，不放宽安全校验。
 - `sock` 容器模式需明确安全风险提示（可访问宿主机 Docker socket）。
