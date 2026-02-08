@@ -39,7 +39,7 @@
 - `npm test`: 运行全部测试并生成覆盖率（输出到 `coverage/`）。
 - `npm run test:unit`: 仅跑 `test/` 下的单元测试。
 - `npm run lint`: 占位的 lint 检查（不做风格约束）。
-- `npm run docs:dev|build|preview`: 启动/构建/预览文档站点（先执行 `npm ci --include=optional`，再执行 `npm run docs:build`，不要并行）。
+- `npm run docs:dev|build|preview`: 启动/构建/预览文档站点。提交前或文档校验时先执行 `npm ci --include=optional`，再执行 `npm run docs:build`（不要并行）。
 - `npm install -g .` / `npm link` / `npm run install-link`: 本地全局安装或软链 CLI。
 
 ## 编码风格与命名约定
@@ -110,7 +110,7 @@
 - 配置模板见 `config.example.json`；用户配置默认在 `~/.manyoyo/`。
 - 新增配置项或 CLI 选项时，同步更新 `config.example.json`、`docs/zh/` 与 `docs/en/`；必要时同步 `README.md` 示例。
 - 新增网页接口/页面时，默认走全局认证网关；仅登录相关路由允许匿名访问。
-- 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login` 与 `/auth/frontend/*`）；其余路由默认要求认证。
+- 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login`、`/auth/logout` 与 `/auth/frontend/*`）；其余路由默认要求认证。
 - 禁止在业务路由里零散补认证，优先在统一入口做认证兜底，避免后续漏校验。
 - 当使用 `--server 0.0.0.0:<port>` 对外监听时，必须设置强密码，并通过防火墙限制访问来源。
 - 新增容器模式或挂载选项时，不放宽安全校验。

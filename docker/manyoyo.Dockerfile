@@ -65,6 +65,9 @@ ARG TOOL="full"
 ARG APT_MIRROR=https://mirrors.aliyun.com
 ARG NPM_REGISTRY=https://mirrors.tencent.com/npm/
 ARG PIP_INDEX_URL=https://mirrors.tencent.com/pypi/simple
+# 轻量级文本解析依赖（可通过 --build-arg 覆盖）
+ARG PY_TEXT_PIP_PACKAGES="PyYAML python-dotenv tomlkit pyjson5 jsonschema"
+ARG PY_TEXT_EXTRA_PIP_PACKAGES=""
 
 # 合并系统依赖安装为单层，减少镜像体积
 RUN <<EOX
@@ -108,6 +111,10 @@ RUN <<EOX
     ln -sf /usr/bin/python3 /usr/bin/python
     ln -sf /usr/bin/pip3 /usr/bin/pip
     pip config set global.index-url "${PIP_INDEX_URL}"
+    pip install --no-cache-dir --break-system-packages ${PY_TEXT_PIP_PACKAGES}
+    if [ -n "${PY_TEXT_EXTRA_PIP_PACKAGES}" ]; then
+        pip install --no-cache-dir --break-system-packages ${PY_TEXT_EXTRA_PIP_PACKAGES}
+    fi
 
     # 清理
     apt-get clean
