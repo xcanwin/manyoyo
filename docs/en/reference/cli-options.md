@@ -32,6 +32,8 @@ description: MANYOYO CLI option reference for container management, env injectio
 | `--iv` | Specify image version |
 | `--iba` | Pass image build arguments (e.g., `TOOL=common`) |
 | `--server [port]` | Start web interaction server (default `3000`) |
+| `--server-user <username>` | Web login username |
+| `--server-pass <password>` | Web login password |
 | `-q` | Silent output (can be used multiple times) |
 
 ## Configuration File Rules

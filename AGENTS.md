@@ -16,6 +16,7 @@
 - 文档语言策略：中文主维护 `docs/zh/`，英文 `docs/en/`。
 - 根目录历史中文页按需保留为兼容跳转页。
 - 配置优先级：命令行参数 > 运行配置 > 全局配置 > 默认值。
+- `--server` 网页模式采用全局认证网关；除登录路由外默认所有页面与接口都需认证。
 
 ## 项目结构与模块组织
 - `bin/manyoyo.js`: 单文件 CLI 入口与核心逻辑（CommonJS）。改动尽量就近、可读，避免跨区重排。
@@ -49,6 +50,7 @@
 - 框架为 Jest（见 `package.json` 的 `jest` 配置）。
 - 新增功能优先补充 `test/manyoyo.test.js` 的关键分支与异常路径。
 - 修复 bug 时建议加入回归测试，并注明 case。
+- 涉及网页服务认证时，至少验证未登录 `401`、登录成功可访问、登出后失效。
 
 ## TDD 模式
 - 默认适用：新增功能、行为变更、bug 修复；纯文档改动可例外。
@@ -69,12 +71,17 @@
 - 环境文件解析：`manyoyo --ef <name> --show-config`。
 - 容器调试：`manyoyo -n <name> -x /bin/bash`。
 - 镜像构建：`manyoyo --ib --iv <version>`，可加 `--iba TOOL=common`。
+- 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"123456"}'`。
+- 带认证访问接口：`curl --noproxy '*' -b /tmp/manyoyo.cookie http://127.0.0.1:3000/api/sessions`。
+- 删除容器与聊天记录：`curl --noproxy '*' -b /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/api/sessions/<name>/remove-with-history`。
 
 ## 配置与路径提示
 - 配置模板：`config.example.json`。
 - 全局配置：`~/.manyoyo/manyoyo.json`（JSON5）。
 - 运行配置：`~/.manyoyo/run/<name>.json`。
 - 环境文件：`~/.manyoyo/env/<name>.env`。
+- 网页认证配置：`serverUser`、`serverPass`（支持环境变量 `MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`）。
+- 网页认证参数优先级：命令行参数 > 运行配置 > 全局配置 > 环境变量 > 默认值。
 - 缓存目录：`docker/cache/`，覆盖率：`coverage/`。
 
 ## 环境与兼容性
@@ -97,6 +104,8 @@
 - 文档修改后运行 `npm run docs:build`，检查 dead links 与导航行为。
 - 配置模板见 `config.example.json`；用户配置默认在 `~/.manyoyo/`。
 - 新增配置项或 CLI 选项时，同步更新 `config.example.json`、`docs/zh/` 与 `docs/en/`；必要时同步 `README.md` 示例。
+- 新增网页接口/页面时，默认走全局认证网关；仅登录相关路由允许匿名访问。
+- 禁止在业务路由里零散补认证，优先在统一入口做认证兜底，避免后续漏校验。
 - 新增容器模式或挂载选项时，不放宽安全校验。
 - `sock` 容器模式需明确安全风险提示（可访问宿主机 Docker socket）。
 - 涉及命令执行时优先使用参数数组，避免拼接 shell 字符串；新增输出涉及敏感信息时需脱敏。

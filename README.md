@@ -121,6 +121,7 @@ manyoyo -l
 manyoyo -n myy-dev -x /bin/bash
 manyoyo -n myy-dev --crm
 manyoyo --server 3000
+manyoyo --server 3000 --server-user admin --server-pass 123456
 
 # 调试配置与命令拼装
 manyoyo --show-config

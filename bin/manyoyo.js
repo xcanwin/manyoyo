@@ -60,6 +60,9 @@ let YES_MODE = false;
 let RM_ON_EXIT = false;
 let SERVER_MODE = false;
 let SERVER_PORT = 3000;
+let SERVER_AUTH_USER = "";
+let SERVER_AUTH_PASS = "";
+let SERVER_AUTH_PASS_AUTO = false;
 const SAFE_CONTAINER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
 // Color definitions using ANSI codes
@@ -107,6 +110,21 @@ function parseServerPort(rawPort) {
     return port;
 }
 
+function ensureWebServerAuthCredentials() {
+    if (!SERVER_AUTH_USER) {
+        try {
+            SERVER_AUTH_USER = os.userInfo().username || process.env.USER || 'manyoyo';
+        } catch (e) {
+            SERVER_AUTH_USER = process.env.USER || 'manyoyo';
+        }
+    }
+
+    if (!SERVER_AUTH_PASS) {
+        SERVER_AUTH_PASS = crypto.randomBytes(12).toString('hex');
+        SERVER_AUTH_PASS_AUTO = true;
+    }
+}
+
 /**
  * 计算文件的 SHA256 哈希值（跨平台）
  * @param {string} filePath - 文件路径
@@ -125,7 +143,7 @@ function getFileSha256(filePath) {
  * @returns {Object} 脱敏后的配置对象
  */
 function sanitizeSensitiveData(obj) {
-    const sensitiveKeys = ['KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'AUTH', 'CREDENTIAL'];
+    const sensitiveKeys = ['KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'PASS', 'AUTH', 'CREDENTIAL'];
 
     function sanitizeValue(key, value) {
         if (typeof value !== 'string') return value;
@@ -886,6 +904,7 @@ function setupCommander() {
   ${MANYOYO_NAME} -n test --ef ./myenv.env -y c       使用当前目录 ./myenv.env 环境变量文件
   ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
   ${MANYOYO_NAME} -x echo 123                         指定命令执行
+  ${MANYOYO_NAME} --server --server-user admin --server-pass 123456   启动带登录认证的网页服务
   ${MANYOYO_NAME} --server 3000                       启动网页交互服务
   ${MANYOYO_NAME} -n test -q tip -q cmd               多次使用静默选项
         `);
@@ -916,6 +935,8 @@ function setupCommander() {
         .option('--show-config', '显示最终生效配置并退出')
         .option('--show-command', '显示将执行的 docker run 命令并退出')
         .option('--server [port]', '启动网页交互服务 (默认端口: 3000)')
+        .option('--server-user <username>', '网页服务登录用户名 (默认当前系统用户)')
+        .option('--server-pass <password>', '网页服务登录密码 (默认自动生成随机密码)')
         .option('--yes', '所有提示自动确认 (用于CI/脚本)')
         .option('--rm-on-exit', '退出后自动删除容器 (一次性模式)')
         .option('-q, --quiet <item>', '静默显示 (可多次使用: cnew,crm,tip,cmd,full)', (value, previous) => [...(previous || []), value], []);
@@ -1045,6 +1066,21 @@ function setupCommander() {
         SERVER_PORT = parseServerPort(options.server);
     }
 
+    const serverUserValue = options.serverUser || runConfig.serverUser || config.serverUser || process.env.MANYOYO_SERVER_USER;
+    if (serverUserValue) {
+        SERVER_AUTH_USER = String(serverUserValue);
+    }
+
+    const serverPassValue = options.serverPass || runConfig.serverPass || config.serverPass || process.env.MANYOYO_SERVER_PASS;
+    if (serverPassValue) {
+        SERVER_AUTH_PASS = String(serverPassValue);
+        SERVER_AUTH_PASS_AUTO = false;
+    }
+
+    if (SERVER_MODE) {
+        ensureWebServerAuthCredentials();
+    }
+
     if (options.showConfig) {
         const finalConfig = {
             hostPath: HOST_PATH,
@@ -1064,6 +1100,8 @@ function setupCommander() {
             quiet: quietValue || [],
             server: SERVER_MODE,
             serverPort: SERVER_MODE ? SERVER_PORT : null,
+            serverUser: SERVER_AUTH_USER || "",
+            serverPass: SERVER_AUTH_PASS || "",
             exec: {
                 prefix: EXEC_COMMAND_PREFIX,
                 shell: EXEC_COMMAND,
@@ -1336,6 +1374,9 @@ async function handlePostExit(defaultCommand) {
 const WEB_HISTORY_DIR = path.join(os.homedir(), '.manyoyo', 'web-history');
 const WEB_HISTORY_MAX_MESSAGES = 500;
 const WEB_OUTPUT_MAX_CHARS = 16000;
+const WEB_AUTH_COOKIE_NAME = 'manyoyo_web_auth';
+const WEB_AUTH_TTL_SECONDS = 12 * 60 * 60;
+const WEB_AUTH_SESSIONS = new Map();
 
 function ensureWebHistoryDir() {
     fs.mkdirSync(WEB_HISTORY_DIR, { recursive: true });
@@ -1414,6 +1455,92 @@ function clipText(text, maxChars = WEB_OUTPUT_MAX_CHARS) {
     if (typeof text !== 'string') return '';
     if (text.length <= maxChars) return text;
     return `${text.slice(0, maxChars)}\n...[truncated]`;
+}
+
+function secureStringEqual(a, b) {
+    const aStr = String(a || '');
+    const bStr = String(b || '');
+    const aBuffer = Buffer.from(aStr, 'utf-8');
+    const bBuffer = Buffer.from(bStr, 'utf-8');
+    if (aBuffer.length !== bBuffer.length) {
+        return false;
+    }
+    return crypto.timingSafeEqual(aBuffer, bBuffer);
+}
+
+function parseCookies(req) {
+    const cookieHeader = req.headers.cookie || '';
+    if (!cookieHeader) {
+        return {};
+    }
+
+    const cookies = {};
+    cookieHeader.split(';').forEach(part => {
+        const index = part.indexOf('=');
+        if (index <= 0) return;
+        const key = part.slice(0, index).trim();
+        const value = part.slice(index + 1).trim();
+        if (!key) return;
+        try {
+            cookies[key] = decodeURIComponent(value);
+        } catch (e) {
+            cookies[key] = value;
+        }
+    });
+    return cookies;
+}
+
+function pruneExpiredWebAuthSessions() {
+    const now = Date.now();
+    for (const [sessionId, session] of WEB_AUTH_SESSIONS.entries()) {
+        if (!session || session.expiresAt <= now) {
+            WEB_AUTH_SESSIONS.delete(sessionId);
+        }
+    }
+}
+
+function createWebAuthSession(username) {
+    pruneExpiredWebAuthSessions();
+    const sessionId = crypto.randomBytes(24).toString('hex');
+    WEB_AUTH_SESSIONS.set(sessionId, {
+        username,
+        expiresAt: Date.now() + WEB_AUTH_TTL_SECONDS * 1000
+    });
+    return sessionId;
+}
+
+function getWebAuthSession(req) {
+    pruneExpiredWebAuthSessions();
+    const cookies = parseCookies(req);
+    const sessionId = cookies[WEB_AUTH_COOKIE_NAME];
+    if (!sessionId) return null;
+
+    const session = WEB_AUTH_SESSIONS.get(sessionId);
+    if (!session) return null;
+    if (session.expiresAt <= Date.now()) {
+        WEB_AUTH_SESSIONS.delete(sessionId);
+        return null;
+    }
+
+    // Sliding session expiration
+    session.expiresAt = Date.now() + WEB_AUTH_TTL_SECONDS * 1000;
+    return { sessionId, username: session.username };
+}
+
+function clearWebAuthSession(req) {
+    const cookies = parseCookies(req);
+    const sessionId = cookies[WEB_AUTH_COOKIE_NAME];
+    if (sessionId) {
+        WEB_AUTH_SESSIONS.delete(sessionId);
+    }
+}
+
+function getWebAuthCookie(sessionId) {
+    return `${WEB_AUTH_COOKIE_NAME}=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${WEB_AUTH_TTL_SECONDS}`;
+}
+
+function getWebAuthClearCookie() {
+    return `${WEB_AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
 function listWebManyoyoContainers() {
@@ -1523,18 +1650,20 @@ async function readJsonBody(req) {
     }
 }
 
-function sendJson(res, statusCode, payload) {
+function sendJson(res, statusCode, payload, extraHeaders = {}) {
     res.writeHead(statusCode, {
         'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'no-store'
+        'Cache-Control': 'no-store',
+        ...extraHeaders
     });
     res.end(JSON.stringify(payload));
 }
 
-function sendHtml(res, statusCode, html) {
+function sendHtml(res, statusCode, html, extraHeaders = {}) {
     res.writeHead(statusCode, {
         'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store'
+        'Cache-Control': 'no-store',
+        ...extraHeaders
     });
     res.end(html);
 }
@@ -1559,6 +1688,139 @@ function buildSessionSummary(containerMap, name) {
         updatedAt,
         messageCount: history.messages.length
     };
+}
+
+function escapeHtml(text) {
+    return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getWebLoginHtml() {
+    return `<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MANYOYO Web Login</title>
+    <style>
+        :root {
+            --bg: #f4f7f5;
+            --panel: #ffffff;
+            --line: #dbe4de;
+            --text: #0f2f20;
+            --muted: #4a6256;
+            --accent: #0f9d58;
+            --accent-strong: #087f45;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            color: var(--text);
+            background: radial-gradient(circle at 0 0, #d8efe2 0%, var(--bg) 45%, #f5f8f6 100%);
+        }
+        .card {
+            width: min(420px, calc(100vw - 32px));
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 24px;
+        }
+        h1 {
+            margin: 0 0 6px;
+            font-size: 22px;
+        }
+        p {
+            margin: 0 0 18px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+        label {
+            display: block;
+            margin: 10px 0 6px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        input {
+            width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px 11px;
+            font-size: 14px;
+        }
+        button {
+            width: 100%;
+            margin-top: 14px;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+            background: var(--accent);
+            cursor: pointer;
+        }
+        button:hover {
+            background: var(--accent-strong);
+        }
+        .error {
+            margin-top: 10px;
+            min-height: 20px;
+            font-size: 13px;
+            color: #b00020;
+        }
+    </style>
+</head>
+<body>
+    <form class="card" id="loginForm">
+        <h1>MANYOYO Web</h1>
+        <p>请先登录后使用网页交互服务。</p>
+        <label for="username">用户名</label>
+        <input id="username" name="username" autocomplete="username" />
+        <label for="password">密码</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" />
+        <button type="submit">登录</button>
+        <div class="error" id="error"></div>
+    </form>
+    <script>
+        (function () {
+            const form = document.getElementById('loginForm');
+            const userNode = document.getElementById('username');
+            const passNode = document.getElementById('password');
+            const errorNode = document.getElementById('error');
+
+            form.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                errorNode.textContent = '';
+                try {
+                    const response = await fetch('/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            username: (userNode.value || '').trim(),
+                            password: passNode.value || ''
+                        })
+                    });
+                    const payload = await response.json().catch(function () { return {}; });
+                    if (!response.ok) {
+                        throw new Error(payload.error || '登录失败');
+                    }
+                    window.location.href = '/';
+                } catch (e) {
+                    errorNode.textContent = e.message || '登录失败';
+                }
+            });
+        })();
+    </script>
+</body>
+</html>`;
 }
 
 function getWebServerHtml() {
@@ -1952,6 +2214,10 @@ function getWebServerHtml() {
                     options || {}
                 );
                 const response = await fetch(url, requestOptions);
+                if (response.status === 401) {
+                    window.location.href = '/';
+                    throw new Error('未登录或登录已过期');
+                }
                 let data = {};
                 try {
                     data = await response.json();
@@ -2192,6 +2458,66 @@ function getWebServerHtml() {
 </html>`;
 }
 
+async function handleWebAuthRoutes(req, res, pathname) {
+    if (req.method === 'GET' && pathname === '/auth/login') {
+        sendHtml(res, 200, getWebLoginHtml());
+        return true;
+    }
+
+    if (req.method === 'POST' && pathname === '/auth/login') {
+        const payload = await readJsonBody(req);
+        const username = String(payload.username || '').trim();
+        const password = String(payload.password || '');
+
+        if (!username || !password) {
+            sendJson(res, 400, { error: '用户名和密码不能为空' });
+            return true;
+        }
+
+        const userOk = secureStringEqual(username, SERVER_AUTH_USER);
+        const passOk = secureStringEqual(password, SERVER_AUTH_PASS);
+        if (!(userOk && passOk)) {
+            sendJson(res, 401, { error: '用户名或密码错误' });
+            return true;
+        }
+
+        const sessionId = createWebAuthSession(username);
+        sendJson(
+            res,
+            200,
+            { ok: true, username },
+            { 'Set-Cookie': getWebAuthCookie(sessionId) }
+        );
+        return true;
+    }
+
+    if (req.method === 'POST' && pathname === '/auth/logout') {
+        clearWebAuthSession(req);
+        sendJson(
+            res,
+            200,
+            { ok: true },
+            { 'Set-Cookie': getWebAuthClearCookie() }
+        );
+        return true;
+    }
+
+    return false;
+}
+
+function sendWebUnauthorized(req, res, pathname) {
+    if (pathname.startsWith('/api/') || pathname.startsWith('/auth/')) {
+        sendJson(res, 401, { error: 'UNAUTHORIZED' });
+        return;
+    }
+    sendHtml(
+        res,
+        401,
+        getWebLoginHtml(),
+        { 'Set-Cookie': getWebAuthClearCookie() }
+    );
+}
+
 async function handleWebApi(req, res, pathname) {
     if (req.method === 'GET' && pathname === '/api/sessions') {
         const containerMap = listWebManyoyoContainers();
@@ -2298,11 +2624,23 @@ async function handleWebApi(req, res, pathname) {
 async function startWebServer() {
     validateHostPath();
     ensureWebHistoryDir();
+    ensureWebServerAuthCredentials();
 
     const server = http.createServer(async (req, res) => {
         try {
             const url = new URL(req.url, `http://${req.headers.host || `127.0.0.1:${SERVER_PORT}`}`);
             const pathname = url.pathname;
+
+            // 全局认证入口：除登录接口外，默认全部请求都要求认证
+            if (await handleWebAuthRoutes(req, res, pathname)) {
+                return;
+            }
+
+            const authSession = getWebAuthSession(req);
+            if (!authSession) {
+                sendWebUnauthorized(req, res, pathname);
+                return;
+            }
 
             if (req.method === 'GET' && pathname === '/') {
                 sendHtml(res, 200, getWebServerHtml());
@@ -2337,6 +2675,12 @@ async function startWebServer() {
         server.listen(SERVER_PORT, '127.0.0.1', () => {
             console.log(`${GREEN}✅ MANYOYO Web 服务已启动: http://127.0.0.1:${SERVER_PORT}${NC}`);
             console.log(`${CYAN}提示: 左侧是 manyoyo 容器会话列表，右侧可发送命令并查看输出。${NC}`);
+            console.log(`${CYAN}🔐 登录用户名: ${YELLOW}${SERVER_AUTH_USER}${NC}`);
+            if (SERVER_AUTH_PASS_AUTO) {
+                console.log(`${CYAN}🔐 登录密码(本次随机): ${YELLOW}${SERVER_AUTH_PASS}${NC}`);
+            } else {
+                console.log(`${CYAN}🔐 登录密码: 使用你配置的 --server-pass / serverPass / MANYOYO_SERVER_PASS${NC}`);
+            }
             resolve();
         });
     });

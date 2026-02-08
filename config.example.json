@@ -12,6 +12,8 @@
     "shell": "",
     "shellSuffix": "",
     "yolo": "",
+    "serverUser": "admin",
+    "serverPass": "change-this-password",
 
     // 合并型参数（配置文件和命令行会累加）
     "env": ["IS_SANDBOX=1"],

@@ -283,6 +283,15 @@ describe('MANYOYO CLI', () => {
             expect(output).toContain('--server');
         });
 
+        test('--server-user and --server-pass options should be accepted', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --help`,
+                { encoding: 'utf-8' }
+            );
+            expect(output).toContain('--server-user');
+            expect(output).toContain('--server-pass');
+        });
+
         test('--show-config should include server mode and port', () => {
             const output = execSync(
                 `node ${BIN_PATH} --show-config --server 39001`,
@@ -291,6 +300,17 @@ describe('MANYOYO CLI', () => {
             const config = JSON.parse(output);
             expect(config.server).toBe(true);
             expect(config.serverPort).toBe(39001);
+        });
+
+        test('--show-config should include server auth config', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --show-config --server --server-user webadmin --server-pass topsecret`,
+                { encoding: 'utf-8' }
+            );
+            const config = JSON.parse(output);
+            expect(config.serverUser).toBe('webadmin');
+            expect(config.serverPass).toContain('****');
+            expect(config.serverPass).not.toBe('topsecret');
         });
 
         test('quiet options should work', () => {

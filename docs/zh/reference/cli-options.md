@@ -32,6 +32,8 @@ description: MANYOYO 命令行参数与常用命令速查，覆盖容器管理�
 | `--iv` | 指定镜像版本 |
 | `--iba` | 传递镜像构建参数（如 `TOOL=common`） |
 | `--server [port]` | 启动网页交互服务（默认 `3000`） |
+| `--server-user <username>` | 网页服务登录用户名 |
+| `--server-pass <password>` | 网页服务登录密码 |
 | `-q` | 静默输出（可多次使用） |
 
 ## 配置文件规则
