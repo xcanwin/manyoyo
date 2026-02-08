@@ -15,7 +15,7 @@
 - 文档栈：VitePress（`npm run docs:dev|build|preview`）。
 - 文档语言策略：中文主维护 `docs/zh/`，英文 `docs/en/`。
 - 根目录历史中文页按需保留为兼容跳转页。
-- 配置优先级：命令行参数 > 运行配置 > 全局配置 > 默认值。
+- 配置合并规则：标量配置按“命令行参数 > 运行配置 > 全局配置 > 默认值”覆盖；数组配置（`envFile`/`env`/`volumes`/`imageBuildArgs`）按“全局配置 → 运行配置 → 命令行参数”追加合并。
 - `--server` 网页模式采用全局认证网关；除登录路由外默认所有页面与接口都需认证。
 
 ## 项目结构与模块组织
@@ -75,7 +75,8 @@
 - 容器调试：`manyoyo -n <name> -x /bin/bash`。
 - 镜像构建：`manyoyo --ib --iv <version>`，可加 `--iba TOOL=common`。
 - 局域网监听网页服务：`manyoyo --server 0.0.0.0:3000 --server-user <user> --server-pass <pass>`。
-- 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"123456"}'`。
+- 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`（需与启动参数/配置一致）。
+- 若未显式设置 `--server-pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。
 - 带认证访问接口：`curl --noproxy '*' -b /tmp/manyoyo.cookie http://127.0.0.1:3000/api/sessions`。
 - 删除对话历史（保留容器）：`curl --noproxy '*' -b /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/api/sessions/<name>/remove-with-history`。
 
@@ -103,6 +104,7 @@
 2. 涉及文档改动时运行 `npm run docs:build`。
 3. 检查 dead links 与 sidebar/nav 行为。
 4. 反馈保持简洁，并附可选 commit 命令/message。
+5. 校对 `README.md` 与 `docs/zh/`、`docs/en/` 示例版本号，确保与 `package.json` 的 `version` / `imageVersion` 一致。
 
 ## 文档与安全提示
 - 侧边栏在 `/zh/` 与 `/en/` 统一展示全章节导航；首页卡片需可点击跳转。
@@ -110,7 +112,7 @@
 - 配置模板见 `config.example.json`；用户配置默认在 `~/.manyoyo/`。
 - 新增配置项或 CLI 选项时，同步更新 `config.example.json`、`docs/zh/` 与 `docs/en/`；必要时同步 `README.md` 示例。
 - 新增网页接口/页面时，默认走全局认证网关；仅登录相关路由允许匿名访问。
-- 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login`、`/auth/logout` 与 `/auth/frontend/*`）；其余路由默认要求认证。
+- 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`）；其余路由默认要求认证。
 - 禁止在业务路由里零散补认证，优先在统一入口做认证兜底，避免后续漏校验。
 - 当使用 `--server 0.0.0.0:<port>` 对外监听时，必须设置强密码，并通过防火墙限制访问来源。
 - 新增容器模式或挂载选项时，不放宽安全校验。
