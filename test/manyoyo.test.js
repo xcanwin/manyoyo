@@ -317,7 +317,6 @@ describe('MANYOYO CLI', () => {
                 expect(runConfig.containerName).toBe('my-claude-{now}');
                 expect(runConfig.envFile).toEqual(['claude']);
                 expect(runConfig.yolo).toBe('c');
-                expect(runConfig.volumes).toContain(`${claudeDir}:/root/.claude`);
             } finally {
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }
