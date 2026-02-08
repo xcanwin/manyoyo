@@ -147,12 +147,16 @@ RUN <<EOX
     }
 }
 EOF
-    GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY claude plugin marketplace add anthropics/claude-plugins-official
+    GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY claude plugin marketplace add https://github.com/anthropics/claude-plugins-official
     claude plugin install ralph-loop@claude-plugins-official
     claude plugin install typescript-lsp@claude-plugins-official
     claude plugin install pyright-lsp@claude-plugins-official
     claude plugin install gopls-lsp@claude-plugins-official
     claude plugin install jdtls-lsp@claude-plugins-official
+
+    GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY claude plugin marketplace add https://github.com/anthropics/skills
+    claude plugin install example-skills@anthropic-agent-skills
+    claude plugin install document-skills@anthropic-agent-skills
 
     # 安装 Gemini CLI
     case ",$TOOL," in *,full,*|*,gemini,*)

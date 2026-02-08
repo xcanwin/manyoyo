@@ -533,7 +533,7 @@ function showImagePullHint(err) {
     }
     const image = `${IMAGE_NAME}:${IMAGE_VERSION}`;
     console.log(`${YELLOW}💡 提示: 本地未找到镜像 ${image}，并且从 localhost 注册表拉取失败。${NC}`);
-    console.log(`${YELLOW}   你可以: 1) 更新 ~/.manyoyo/manyoyo.json 的 imageVersion 2) 或先执行 manyoyo --ib --iv <version> 构建镜像。${NC}`);
+    console.log(`${YELLOW}   你可以: (1) 更新 ~/.manyoyo/manyoyo.json 的 imageVersion。 (2) 或先执行 manyoyo --ib --iv <version> 构建镜像。${NC}`);
 }
 
 function runCmd(cmd, args, options = {}) {
