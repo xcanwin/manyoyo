@@ -1416,7 +1416,7 @@ async function setupCommander() {
   ${MANYOYO_NAME} -x echo 123                         指定命令执行
   ${MANYOYO_NAME} --server --server-user admin --server-pass 123456   启动带登录认证的网页服务
   ${MANYOYO_NAME} --server 3000                       启动网页交互服务
-  ${MANYOYO_NAME} --server 0.0.0.0:3000              监听全部网卡，便于局域网访问
+  ${MANYOYO_NAME} --server 0.0.0.0:3000               监听全部网卡，便于局域网访问
   ${MANYOYO_NAME} -n test -q tip -q cmd               多次使用静默选项
         `);
 
