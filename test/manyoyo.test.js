@@ -302,6 +302,22 @@ describe('MANYOYO CLI', () => {
             expect(config.serverPort).toBe(39001);
         });
 
+        test('--show-config should default server user to admin', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --show-config --server`,
+                {
+                    encoding: 'utf-8',
+                    env: {
+                        ...process.env,
+                        MANYOYO_SERVER_USER: '',
+                        MANYOYO_SERVER_PASS: ''
+                    }
+                }
+            );
+            const config = JSON.parse(output);
+            expect(config.serverUser).toBe('admin');
+        });
+
         test('--show-config should include server auth config', () => {
             const output = execSync(
                 `node ${BIN_PATH} --show-config --server --server-user webadmin --server-pass topsecret`,

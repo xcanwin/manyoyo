@@ -112,11 +112,7 @@ function parseServerPort(rawPort) {
 
 function ensureWebServerAuthCredentials() {
     if (!SERVER_AUTH_USER) {
-        try {
-            SERVER_AUTH_USER = os.userInfo().username || process.env.USER || 'manyoyo';
-        } catch (e) {
-            SERVER_AUTH_USER = process.env.USER || 'manyoyo';
-        }
+        SERVER_AUTH_USER = 'admin';
     }
 
     if (!SERVER_AUTH_PASS) {
@@ -935,7 +931,7 @@ function setupCommander() {
         .option('--show-config', '显示最终生效配置并退出')
         .option('--show-command', '显示将执行的 docker run 命令并退出')
         .option('--server [port]', '启动网页交互服务 (默认端口: 3000)')
-        .option('--server-user <username>', '网页服务登录用户名 (默认当前系统用户)')
+        .option('--server-user <username>', '网页服务登录用户名 (默认 admin)')
         .option('--server-pass <password>', '网页服务登录密码 (默认自动生成随机密码)')
         .option('--yes', '所有提示自动确认 (用于CI/脚本)')
         .option('--rm-on-exit', '退出后自动删除容器 (一次性模式)')
