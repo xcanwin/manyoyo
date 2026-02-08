@@ -1,0 +1,4 @@
+interface:
+  display_name: "预装软件兜底"
+  short_description: "先执行业务命令，缺工具时再最小探测与安装"
+  default_prompt: "使用 $fallback-tool-check，默认先按业务直接执行；若出现 command not found、依赖缺失或环境不确定，再按任务最小范围做 command -v 探测，并仅安装必需工具后回到原任务命令验证。"
