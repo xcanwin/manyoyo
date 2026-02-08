@@ -48,7 +48,7 @@ body::before {
     left: -120px;
     top: -140px;
     background: radial-gradient(circle at 30% 35%, rgba(96, 190, 143, 0.28) 0%, rgba(96, 190, 143, 0) 70%);
-    animation: orbA 14s ease-in-out infinite;
+    animation: none;
 }
 
 body::after {
@@ -57,7 +57,7 @@ body::after {
     right: -90px;
     bottom: -130px;
     background: radial-gradient(circle at 60% 40%, rgba(33, 130, 86, 0.2) 0%, rgba(33, 130, 86, 0) 72%);
-    animation: orbB 16s ease-in-out infinite;
+    animation: none;
 }
 
 .card {
@@ -68,7 +68,6 @@ body::after {
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--panel);
-    backdrop-filter: blur(8px);
     box-shadow: var(--shadow-soft);
     animation: cardIn 360ms ease both;
 }
