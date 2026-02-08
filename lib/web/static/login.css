@@ -1,0 +1,81 @@
+:root {
+    --bg: #f4f7f5;
+    --panel: #ffffff;
+    --line: #dbe4de;
+    --text: #0f2f20;
+    --muted: #4a6256;
+    --accent: #0f9d58;
+    --accent-strong: #087f45;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--text);
+    background: radial-gradient(circle at 0 0, #d8efe2 0%, var(--bg) 45%, #f5f8f6 100%);
+}
+
+.card {
+    width: min(420px, calc(100vw - 32px));
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px;
+}
+
+h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+}
+
+p {
+    margin: 0 0 18px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+label {
+    display: block;
+    margin: 10px 0 6px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+input {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 11px;
+    font-size: 14px;
+}
+
+button {
+    width: 100%;
+    margin-top: 14px;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--accent);
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--accent-strong);
+}
+
+.error {
+    margin-top: 10px;
+    min-height: 20px;
+    font-size: 13px;
+    color: #b00020;
+}

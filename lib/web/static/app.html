@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MANYOYO Web</title>
+    <link rel="stylesheet" href="/app/static/app.css" />
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="brand">MANYOYO Web</div>
+            <form class="new-session" id="newSessionForm">
+                <input id="newSessionName" placeholder="容器名 (例如 myy-dev)" />
+                <button type="submit">新建</button>
+            </form>
+            <div id="sessionList"></div>
+        </aside>
+        <main class="main">
+            <header class="header">
+                <h1 id="activeTitle">未选择会话</h1>
+                <div class="header-actions">
+                    <button type="button" id="refreshBtn" class="secondary">刷新</button>
+                    <button type="button" id="removeBtn" class="secondary">删除容器</button>
+                    <button type="button" id="removeAllBtn" class="secondary">删除容器与聊天记录</button>
+                </div>
+            </header>
+            <section id="messages"></section>
+            <form class="composer" id="composer">
+                <div class="composer-inner">
+                    <textarea id="commandInput" placeholder="输入容器命令，例如: ls -la"></textarea>
+                    <button type="submit" id="sendBtn">发送</button>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    <script src="/app/static/app.js"></script>
+</body>
+</html>
