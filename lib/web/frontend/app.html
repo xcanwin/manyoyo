@@ -8,6 +8,7 @@
     />
     <title>MANYOYO Web</title>
     <link rel="stylesheet" href="/app/frontend/app.css" />
+    <link rel="stylesheet" href="/app/vendor/xterm.css" />
 </head>
 <body>
     <div class="app">
@@ -62,7 +63,22 @@
                     <button type="button" id="removeAllBtn" class="danger">删除对话</button>
                 </div>
             </header>
+            <section class="mode-switch" id="modeSwitch">
+                <button type="button" id="modeCommandBtn" class="secondary is-active">命令模式</button>
+                <button type="button" id="modeTerminalBtn" class="secondary">交互终端</button>
+            </section>
             <section id="messages"></section>
+            <section id="terminalPanel" hidden>
+                <div class="terminal-toolbar">
+                    <div class="terminal-actions">
+                        <button type="button" id="terminalConnectBtn">连接终端</button>
+                        <button type="button" id="terminalDisconnectBtn" class="secondary">断开终端</button>
+                    </div>
+                    <span id="terminalStatus" class="terminal-status">未连接</span>
+                </div>
+                <div id="terminalScreen" aria-label="终端输出区域"></div>
+                <div class="terminal-foot">点击终端后可直接输入；适用于 codex / claude 等交互式 agent。</div>
+            </section>
             <form class="composer" id="composer">
                 <div class="composer-inner">
                     <textarea id="commandInput" placeholder="输入容器命令，例如: ls -la"></textarea>
@@ -77,6 +93,8 @@
         <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
     </div>
 
+    <script src="/app/vendor/xterm.js"></script>
+    <script src="/app/vendor/xterm-addon-fit.js"></script>
     <script src="/app/frontend/app.js"></script>
 </body>
 </html>

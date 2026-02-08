@@ -362,7 +362,7 @@ button.danger:hover {
     min-height: 0;
     padding: 12px 14px 10px;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     gap: 0;
     animation: panelIn 380ms ease 80ms both;
 }
@@ -416,6 +416,33 @@ button.danger:hover {
     flex-wrap: wrap;
 }
 
+.mode-switch {
+    display: inline-flex;
+    gap: 8px;
+    margin: 10px 8px 2px;
+    align-items: center;
+}
+
+.mode-switch button {
+    min-width: 98px;
+    color: var(--text);
+    background: #eef4f0;
+    border-color: var(--line);
+}
+
+.mode-switch button.is-active {
+    color: #ffffff;
+    background: var(--accent);
+    border-color: var(--accent-strong);
+}
+
+body.command-mode #modeCommandBtn,
+body.terminal-mode #modeTerminalBtn {
+    color: #ffffff;
+    background: var(--accent);
+    border-color: var(--accent-strong);
+}
+
 #messages {
     min-height: 0;
     overflow-y: auto;
@@ -424,6 +451,83 @@ button.danger:hover {
     flex-direction: column;
     gap: 14px;
     scroll-behavior: smooth;
+}
+
+#terminalPanel {
+    min-height: 0;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 8px 8px;
+}
+
+.terminal-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.terminal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.terminal-status {
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+#terminalScreen {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    border-radius: 10px;
+    border: 1px solid #2a3d34;
+    box-shadow: inset 0 0 0 1px rgba(123, 161, 146, 0.12);
+    overflow: hidden;
+    background: radial-gradient(circle at 10% 8%, #1a2832 0%, #0c131a 64%);
+}
+
+#terminalScreen .xterm {
+    width: 100%;
+    height: 100%;
+    padding: 8px 6px;
+}
+
+#terminalScreen .xterm-screen {
+    width: 100%;
+}
+
+.terminal-foot {
+    color: #556961;
+    font-size: 12px;
+}
+
+body.command-mode #messages {
+    display: flex;
+}
+
+body.command-mode #terminalPanel {
+    display: none;
+}
+
+body.command-mode .composer {
+    display: block;
+}
+
+body.terminal-mode #messages {
+    display: none;
+}
+
+body.terminal-mode #terminalPanel {
+    display: flex;
+}
+
+body.terminal-mode .composer {
+    display: none;
 }
 
 .msg {
@@ -652,6 +756,10 @@ button.danger:hover {
         max-height: none;
     }
 
+    #terminalPanel {
+        min-height: 0;
+    }
+
     .composer {
         position: sticky;
         bottom: 0;
@@ -738,6 +846,32 @@ button.danger:hover {
 
     .composer-inner {
         grid-template-columns: 1fr auto;
+    }
+
+    .mode-switch {
+        margin: 8px 10px 2px;
+        overflow-x: auto;
+        padding-bottom: 2px;
+    }
+
+    .mode-switch button {
+        min-width: 90px;
+        flex: 0 0 auto;
+    }
+
+    .terminal-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .terminal-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .terminal-status {
+        white-space: normal;
     }
 
     #commandInput {
