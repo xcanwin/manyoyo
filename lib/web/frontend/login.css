@@ -1,15 +1,24 @@
 :root {
-    --bg: #f4f7f5;
-    --panel: #ffffff;
-    --line: #dbe4de;
-    --text: #0f2f20;
-    --muted: #4a6256;
-    --accent: #0f9d58;
-    --accent-strong: #087f45;
+    --bg-top: #e8efe8;
+    --bg-bottom: #f8fbf9;
+    --panel: rgba(255, 255, 255, 0.86);
+    --line: #cfddd3;
+    --line-focus: #84bda1;
+    --text: #10281e;
+    --muted: #4e6458;
+    --accent: #0a8b54;
+    --accent-strong: #08784a;
+    --danger: #b63f31;
+    --shadow-soft: 0 18px 40px rgba(15, 46, 30, 0.14);
 }
 
 * {
     box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
 }
 
 body {
@@ -17,33 +26,80 @@ body {
     min-height: 100vh;
     display: grid;
     place-items: center;
+    position: relative;
+    overflow: hidden;
     font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
     color: var(--text);
-    background: radial-gradient(circle at 0 0, #d8efe2 0%, var(--bg) 45%, #f5f8f6 100%);
+    background: linear-gradient(170deg, var(--bg-top) 0%, var(--bg-bottom) 72%);
+}
+
+body::before,
+body::after {
+    content: "";
+    position: absolute;
+    border-radius: 999px;
+    pointer-events: none;
+}
+
+body::before {
+    width: 360px;
+    height: 360px;
+    left: -120px;
+    top: -140px;
+    background: radial-gradient(circle at 30% 35%, rgba(96, 190, 143, 0.28) 0%, rgba(96, 190, 143, 0) 70%);
+    animation: orbA 14s ease-in-out infinite;
+}
+
+body::after {
+    width: 300px;
+    height: 300px;
+    right: -90px;
+    bottom: -130px;
+    background: radial-gradient(circle at 60% 40%, rgba(33, 130, 86, 0.2) 0%, rgba(33, 130, 86, 0) 72%);
+    animation: orbB 16s ease-in-out infinite;
 }
 
 .card {
-    width: min(420px, calc(100vw - 32px));
-    background: var(--panel);
+    position: relative;
+    z-index: 1;
+    width: min(430px, calc(100vw - 30px));
+    padding: 24px 24px 20px;
     border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 24px;
+    border-radius: 18px;
+    background: var(--panel);
+    backdrop-filter: blur(8px);
+    box-shadow: var(--shadow-soft);
+    animation: cardIn 360ms ease both;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 10px;
+    background: #e4f5eb;
+    color: #0a7b48;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
 }
 
 h1 {
     margin: 0 0 6px;
-    font-size: 22px;
+    font-size: 24px;
+    line-height: 1.2;
 }
 
 p {
-    margin: 0 0 18px;
+    margin: 0 0 16px;
     color: var(--muted);
     font-size: 13px;
 }
 
 label {
     display: block;
-    margin: 10px 0 6px;
+    margin: 11px 0 6px;
     font-size: 13px;
     font-weight: 600;
 }
@@ -51,31 +107,88 @@ label {
 input {
     width: 100%;
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: 11px;
     padding: 10px 11px;
     font-size: 14px;
+    color: var(--text);
+    background: #ffffff;
+}
+
+input:focus {
+    outline: none;
+    border-color: var(--line-focus);
+    box-shadow: 0 0 0 3px rgba(10, 139, 84, 0.14);
 }
 
 button {
     width: 100%;
     margin-top: 14px;
-    border: none;
-    border-radius: 10px;
+    border: 1px solid transparent;
+    border-radius: 11px;
     padding: 10px 12px;
     font-size: 14px;
     font-weight: 700;
-    color: #fff;
+    color: #ffffff;
     background: var(--accent);
     cursor: pointer;
+    transition: transform 140ms ease, background-color 140ms ease;
 }
 
 button:hover {
+    transform: translateY(-1px);
     background: var(--accent-strong);
+}
+
+button:disabled {
+    opacity: 0.62;
+    cursor: not-allowed;
+    transform: none;
 }
 
 .error {
     margin-top: 10px;
     min-height: 20px;
     font-size: 13px;
-    color: #b00020;
+    color: var(--danger);
+}
+
+@keyframes cardIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes orbA {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+        transform: translate3d(16px, 18px, 0) scale(1.07);
+    }
+}
+
+@keyframes orbB {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+        transform: translate3d(-14px, -12px, 0) scale(1.08);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }

@@ -8,14 +8,15 @@
 </head>
 <body>
     <form class="card" id="loginForm">
-        <h1>MANYOYO Web</h1>
-        <p>请先登录后使用网页交互服务。</p>
+        <div class="badge">MANYOYO</div>
+        <h1>Web 登录</h1>
+        <p>登录后可访问容器会话与对话管理。</p>
         <label for="username">用户名</label>
-        <input id="username" name="username" autocomplete="username" />
+        <input id="username" name="username" autocomplete="username" required />
         <label for="password">密码</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" />
-        <button type="submit">登录</button>
-        <div class="error" id="error"></div>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <button type="submit" id="loginBtn">登录</button>
+        <div class="error" id="error" role="alert"></div>
     </form>
     <script src="/auth/frontend/login.js"></script>
 </body>

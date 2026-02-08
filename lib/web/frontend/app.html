@@ -9,20 +9,45 @@
 <body>
     <div class="app">
         <aside class="sidebar">
-            <div class="brand">MANYOYO Web</div>
+            <div class="sidebar-top">
+                <div class="brand-wrap">
+                    <div class="brand">MANYOYO Web</div>
+                    <div class="brand-sub">Container Session Console</div>
+                </div>
+                <button
+                    type="button"
+                    id="mobileSidebarClose"
+                    class="secondary mobile-sidebar-close"
+                    aria-label="关闭会话列表"
+                >关闭</button>
+            </div>
             <form class="new-session" id="newSessionForm">
                 <input id="newSessionName" placeholder="容器名 (例如 myy-dev)" />
                 <button type="submit">新建</button>
             </form>
+            <div class="session-head">
+                <span>会话</span>
+                <span id="sessionCount">0 个</span>
+            </div>
             <div id="sessionList"></div>
         </aside>
         <main class="main">
             <header class="header">
-                <h1 id="activeTitle">未选择会话</h1>
+                <div class="header-main">
+                    <button
+                        type="button"
+                        id="mobileSessionToggle"
+                        class="secondary mobile-session-toggle"
+                        aria-expanded="false"
+                        aria-controls="sessionList"
+                    >会话</button>
+                    <h1 id="activeTitle">未选择会话</h1>
+                    <div id="activeMeta">请选择左侧会话</div>
+                </div>
                 <div class="header-actions">
                     <button type="button" id="refreshBtn" class="secondary">刷新</button>
-                    <button type="button" id="removeBtn" class="secondary">删除容器</button>
-                    <button type="button" id="removeAllBtn" class="secondary">删除对话</button>
+                    <button type="button" id="removeBtn" class="danger-outline">删除容器</button>
+                    <button type="button" id="removeAllBtn" class="danger">删除对话</button>
                 </div>
             </header>
             <section id="messages"></section>
@@ -31,8 +56,13 @@
                     <textarea id="commandInput" placeholder="输入容器命令，例如: ls -la"></textarea>
                     <button type="submit" id="sendBtn">发送</button>
                 </div>
+                <div class="composer-foot">
+                    <span>Enter 发送 · Shift/Alt + Enter 换行</span>
+                    <span id="sendState" class="send-state">未选择会话</span>
+                </div>
             </form>
         </main>
+        <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
     </div>
 
     <script src="/app/frontend/app.js"></script>
