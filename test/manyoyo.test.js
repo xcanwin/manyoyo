@@ -302,6 +302,17 @@ describe('MANYOYO CLI', () => {
             expect(config.serverPort).toBe(39001);
         });
 
+        test('--show-config should parse server host and port', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --show-config --server 0.0.0.0:39001`,
+                { encoding: 'utf-8' }
+            );
+            const config = JSON.parse(output);
+            expect(config.server).toBe(true);
+            expect(config.serverHost).toBe('0.0.0.0');
+            expect(config.serverPort).toBe(39001);
+        });
+
         test('--show-config should default server user to admin', () => {
             const output = execSync(
                 `node ${BIN_PATH} --show-config --server`,

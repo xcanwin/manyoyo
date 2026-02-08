@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const net = require('net');
 const readline = require('readline');
 const { Command } = require('commander');
 const JSON5 = require('json5');
@@ -59,6 +60,7 @@ let SHOW_COMMAND = false;
 let YES_MODE = false;
 let RM_ON_EXIT = false;
 let SERVER_MODE = false;
+let SERVER_HOST = '127.0.0.1';
 let SERVER_PORT = 3000;
 let SERVER_AUTH_USER = "";
 let SERVER_AUTH_PASS = "";
@@ -90,24 +92,62 @@ function normalizeCommandSuffix(suffix) {
     return trimmed ? ` ${trimmed}` : "";
 }
 
-function parseServerPort(rawPort) {
-    if (rawPort === true || rawPort === undefined || rawPort === null || rawPort === '') {
-        return 3000;
+function validateServerHost(host, rawServer) {
+    const value = String(host || '').trim();
+    const isIp = net.isIP(value) !== 0;
+    const isHostName = /^[A-Za-z0-9.-]+$/.test(value);
+
+    if (isIp || isHostName) {
+        return value;
     }
 
-    const value = String(rawPort).trim();
-    if (!/^\d+$/.test(value)) {
-        console.error(`${RED}⚠️  错误: --server 端口必须是 1-65535 的整数: ${rawPort}${NC}`);
+    console.error(`${RED}⚠️  错误: --server 地址格式应为 端口 或 host:port (例如 3000 / 0.0.0.0:3000): ${rawServer}${NC}`);
+    process.exit(1);
+}
+
+function parseServerListen(rawServer) {
+    if (rawServer === true || rawServer === undefined || rawServer === null || rawServer === '') {
+        return { host: '127.0.0.1', port: 3000 };
+    }
+
+    const value = String(rawServer).trim();
+    if (!value) {
+        return { host: '127.0.0.1', port: 3000 };
+    }
+
+    let host = '127.0.0.1';
+    let portText = value;
+
+    const ipv6Match = value.match(/^\[([^\]]+)\]:(\d+)$/);
+    if (ipv6Match) {
+        host = ipv6Match[1].trim();
+        portText = ipv6Match[2].trim();
+    } else {
+        const lastColonIndex = value.lastIndexOf(':');
+        if (lastColonIndex > 0) {
+            const maybePort = value.slice(lastColonIndex + 1).trim();
+            if (/^\d+$/.test(maybePort)) {
+                host = value.slice(0, lastColonIndex).trim();
+                portText = maybePort;
+            }
+        }
+    }
+
+    if (!/^\d+$/.test(portText)) {
+        console.error(`${RED}⚠️  错误: --server 端口必须是 1-65535 的整数: ${rawServer}${NC}`);
         process.exit(1);
     }
 
-    const port = Number(value);
+    const port = Number(portText);
     if (port < 1 || port > 65535) {
-        console.error(`${RED}⚠️  错误: --server 端口超出范围 (1-65535): ${rawPort}${NC}`);
+        console.error(`${RED}⚠️  错误: --server 端口超出范围 (1-65535): ${rawServer}${NC}`);
         process.exit(1);
     }
 
-    return port;
+    return {
+        host: validateServerHost(host, rawServer),
+        port
+    };
 }
 
 function ensureWebServerAuthCredentials() {
@@ -902,6 +942,7 @@ function setupCommander() {
   ${MANYOYO_NAME} -x echo 123                         指定命令执行
   ${MANYOYO_NAME} --server --server-user admin --server-pass 123456   启动带登录认证的网页服务
   ${MANYOYO_NAME} --server 3000                       启动网页交互服务
+  ${MANYOYO_NAME} --server 0.0.0.0:3000              监听全部网卡，便于局域网访问
   ${MANYOYO_NAME} -n test -q tip -q cmd               多次使用静默选项
         `);
 
@@ -930,7 +971,7 @@ function setupCommander() {
         .option('--install <name>', '安装manyoyo命令 (docker-cli-plugin)')
         .option('--show-config', '显示最终生效配置并退出')
         .option('--show-command', '显示将执行的 docker run 命令并退出')
-        .option('--server [port]', '启动网页交互服务 (默认端口: 3000)')
+        .option('--server [port]', '启动网页交互服务 (默认 127.0.0.1:3000，支持 host:port)')
         .option('--server-user <username>', '网页服务登录用户名 (默认 admin)')
         .option('--server-pass <password>', '网页服务登录密码 (默认自动生成随机密码)')
         .option('--yes', '所有提示自动确认 (用于CI/脚本)')
@@ -1059,7 +1100,9 @@ function setupCommander() {
 
     if (options.server !== undefined) {
         SERVER_MODE = true;
-        SERVER_PORT = parseServerPort(options.server);
+        const serverListen = parseServerListen(options.server);
+        SERVER_HOST = serverListen.host;
+        SERVER_PORT = serverListen.port;
     }
 
     const serverUserValue = options.serverUser || runConfig.serverUser || config.serverUser || process.env.MANYOYO_SERVER_USER;
@@ -1095,6 +1138,7 @@ function setupCommander() {
             yolo: yoloValue || "",
             quiet: quietValue || [],
             server: SERVER_MODE,
+            serverHost: SERVER_MODE ? SERVER_HOST : null,
             serverPort: SERVER_MODE ? SERVER_PORT : null,
             serverUser: SERVER_AUTH_USER || "",
             serverPass: SERVER_AUTH_PASS || "",
@@ -1371,6 +1415,7 @@ async function runWebServerMode() {
     ensureWebServerAuthCredentials();
 
     await startWebServer({
+        serverHost: SERVER_HOST,
         serverPort: SERVER_PORT,
         authUser: SERVER_AUTH_USER,
         authPass: SERVER_AUTH_PASS,

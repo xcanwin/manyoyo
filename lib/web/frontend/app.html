@@ -2,7 +2,10 @@
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
     <title>MANYOYO Web</title>
     <link rel="stylesheet" href="/app/frontend/app.css" />
 </head>
@@ -34,17 +37,26 @@
         <main class="main">
             <header class="header">
                 <div class="header-main">
-                    <button
-                        type="button"
-                        id="mobileSessionToggle"
-                        class="secondary mobile-session-toggle"
-                        aria-expanded="false"
-                        aria-controls="sessionList"
-                    >会话</button>
-                    <h1 id="activeTitle">未选择会话</h1>
+                    <div class="header-main-top">
+                        <button
+                            type="button"
+                            id="mobileSessionToggle"
+                            class="secondary mobile-session-toggle"
+                            aria-expanded="false"
+                            aria-controls="sessionList"
+                        >会话</button>
+                        <h1 id="activeTitle">未选择会话</h1>
+                        <button
+                            type="button"
+                            id="mobileActionsToggle"
+                            class="secondary mobile-actions-toggle"
+                            aria-expanded="false"
+                            aria-controls="headerActions"
+                        >更多</button>
+                    </div>
                     <div id="activeMeta">请选择左侧会话</div>
                 </div>
-                <div class="header-actions">
+                <div class="header-actions" id="headerActions">
                     <button type="button" id="refreshBtn" class="secondary">刷新</button>
                     <button type="button" id="removeBtn" class="danger-outline">删除容器</button>
                     <button type="button" id="removeAllBtn" class="danger">删除对话</button>
