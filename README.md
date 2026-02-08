@@ -122,8 +122,8 @@ manyoyo -y oc         # OpenCode（或 opencode）
 
 # 容器管理
 manyoyo -l
-manyoyo -n myy-dev -x /bin/bash
-manyoyo -n myy-dev --crm
+manyoyo -n my-dev -x /bin/bash
+manyoyo -n my-dev --crm
 manyoyo --server 3000
 manyoyo --server 3000 --server-user admin --server-pass 123456
 

@@ -121,7 +121,7 @@ docker ps -a
 ```json5
 // ~/.manyoyo/run/dind.json
 {
-    "containerName": "myy-dind",
+    "containerName": "my-dind",
     "containerMode": "dind",
     "envFile": ["anthropic_claudecode"],
     "volumes": [
@@ -259,7 +259,7 @@ manyoyo -v "/var/run/docker.sock:/var/run/docker.sock:ro" -x /bin/bash
 ```json5
 // ~/.manyoyo/run/sock.json（谨慎使用！）
 {
-    "containerName": "myy-sock",
+    "containerName": "my-sock",
     "containerMode": "sock",  // 危险！
     "envFile": ["anthropic_claudecode"]
 }

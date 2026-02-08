@@ -27,7 +27,7 @@ MANYOYO 支持两种主要的配置方式：
 ```json5
 {
     // 这是注释
-    containerName: "myy-dev",  // 键名可以不加引号
+    containerName: "my-dev",  // 键名可以不加引号
     imageVersion: "1.7.0-full",  // 支持尾随逗号
 }
 ```

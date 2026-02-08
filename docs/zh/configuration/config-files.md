@@ -51,12 +51,12 @@ MANYOYO 支持两种配置文件：
 
 #### containerName
 - **类型**：字符串
-- **默认值**：`myy-{月日-时分}`（自动生成）
+- **默认值**：`my-{月日-时分}`（自动生成）
 - **说明**：容器名称，用于标识和管理容器
 - **示例**：
 ```json5
 {
-    "containerName": "myy-dev"
+    "containerName": "my-dev"
 }
 ```
 
@@ -361,7 +361,7 @@ manyoyo -r /abs/path/config.json
     "containerMode": "dind",
 
     // 容器名称
-    "containerName": "myy-dind",
+    "containerName": "my-dind",
 
     // 额外挂载 Docker 配置
     "volumes": [
@@ -376,7 +376,7 @@ manyoyo -r /abs/path/config.json
 // ./myproject/.manyoyo.json
 {
     // 项目容器名称
-    "containerName": "myy-myproject",
+    "containerName": "my-myproject",
 
     // 项目环境变量
     "env": [

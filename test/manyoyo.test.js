@@ -22,6 +22,18 @@ describe('MANYOYO CLI', () => {
             expect(output).toContain('MANYOYO');
         });
 
+        test('invoked as my should display my in help usage', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-alias-'));
+            const aliasPath = path.join(tempDir, 'my');
+            fs.symlinkSync(BIN_PATH, aliasPath);
+            try {
+                const output = execSync(`"${aliasPath}" --help`, { encoding: 'utf-8' });
+                expect(output).toContain('Usage: my [options]');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
         test('--help should display help message', () => {
             const output = execSync(`node ${BIN_PATH} --help`, { encoding: 'utf-8' });
             expect(output).toContain('MANYOYO');

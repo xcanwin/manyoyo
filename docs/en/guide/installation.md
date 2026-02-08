@@ -463,7 +463,7 @@ rm -rf ~/.manyoyo/
 
 ```bash
 # Delete all MANYOYO containers
-docker ps -a | grep myy | awk '{print $1}' | xargs docker rm
+docker ps -a | grep my | awk '{print $1}' | xargs docker rm
 
 # Delete all MANYOYO images
 docker images | grep manyoyo | awk '{print $3}' | xargs docker rmi

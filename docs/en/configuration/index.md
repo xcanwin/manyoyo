@@ -27,7 +27,7 @@ Example:
 ```json5
 {
     // This is a comment
-    containerName: "myy-dev",  // Keys can be unquoted
+    containerName: "my-dev",  // Keys can be unquoted
     imageVersion: "1.7.0-full",  // Trailing commas are supported
 }
 ```

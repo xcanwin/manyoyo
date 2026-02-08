@@ -24,14 +24,14 @@
 ```bash
 # 自动生成容器名（基于时间戳）
 manyoyo -y c
-# 生成名称如：myy-0204-1430
+# 生成名称如：my-0204-1430
 
 # 查看容器名
 manyoyo -l
 ```
 
-**命名规则**：`myy-{月日}-{时分}`
-- 例如：`myy-0204-1430` 表示 2月4日 14:30 创建
+**命名规则**：`my-{月日}-{时分}`
+- 例如：`my-0204-1430` 表示 2月4日 14:30 创建
 
 ### 命名会话
 
@@ -51,7 +51,7 @@ manyoyo -n my-project -y c
 # 方式 1：运行配置（推荐）
 cat > ~/.manyoyo/run/project-a.json << 'EOF'
 {
-    "containerName": "myy-project-a",
+    "containerName": "my-project-a",
     "envFile": ["anthropic_claudecode"],
     "yolo": "c"
 }
@@ -62,7 +62,7 @@ manyoyo -r project-a
 # 方式 2：项目配置
 cat > ./myproject/.manyoyo.json << 'EOF'
 {
-    "containerName": "myy-myproject",
+    "containerName": "my-myproject",
     "envFile": ["anthropic_claudecode"],
     "yolo": "c"
 }
@@ -224,7 +224,7 @@ manyoyo -n my-session -- --continue
 ```bash
 # 查看所有会话（包括停止的）
 manyoyo -l
-docker ps -a | grep myy
+docker ps -a | grep my
 
 # 容器状态
 docker ps -a --format "table {{.Names}}\t{{.Status}}"
@@ -358,10 +358,10 @@ manyoyo -n temp --rm-on-exit -y c
 
 ```bash
 # 清理所有停止的 MANYOYO 容器
-docker ps -a | grep myy | grep Exited | awk '{print $1}' | xargs docker rm
+docker ps -a | grep my | grep Exited | awk '{print $1}' | xargs docker rm
 
 # 清理所有 MANYOYO 容器（危险！）
-docker ps -a | grep myy | awk '{print $1}' | xargs docker rm -f
+docker ps -a | grep my | awk '{print $1}' | xargs docker rm -f
 ```
 
 ## 会话监控
@@ -376,7 +376,7 @@ manyoyo -l
 docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 # 资源使用情况
-docker stats $(docker ps -q --filter "name=myy")
+docker stats $(docker ps -q --filter "name=my")
 ```
 
 ### 查看会话日志
@@ -414,17 +414,17 @@ $ env | grep ANTHROPIC
 
 ```bash
 # 按项目命名
-myy-webapp
-myy-api
-myy-mobile
+my-webapp
+my-api
+my-mobile
 
 # 按功能命名
-myy-dev
-myy-test
-myy-debug
+my-dev
+my-test
+my-debug
 
 # 按时间命名（自动）
-myy-0204-1430
+my-0204-1430
 ```
 
 ### 2. 配置文件管理
@@ -463,7 +463,7 @@ docker cp my-session:/root/.claude ./claude-backup
 cat > ~/cleanup-manyoyo.sh << 'EOF'
 #!/bin/bash
 # 清理超过 7 天的停止容器
-docker ps -a --filter "name=myy" --filter "status=exited" \
+docker ps -a --filter "name=my" --filter "status=exited" \
     --format "{{.ID}} {{.CreatedAt}}" | \
     awk '{if ($2 < systime() - 604800) print $1}' | \
     xargs -r docker rm
@@ -481,7 +481,7 @@ chmod +x ~/cleanup-manyoyo.sh
 # 创建会话模板
 cat > ~/.manyoyo/run/template.json << 'EOF'
 {
-    "containerName": "myy-template",
+    "containerName": "my-template",
     "envFile": ["base", "secrets"],
     "volumes": [
         "~/.ssh:/root/.ssh:ro",

@@ -47,7 +47,7 @@ docker ps -a
 # Create dind configuration
 cat > ~/.manyoyo/run/dind.json << 'EOF'
 {
-    "containerName": "myy-dind",
+    "containerName": "my-dind",
     "containerMode": "dind",
     "envFile": ["anthropic_claudecode"],
     "yolo": "c"
@@ -139,7 +139,7 @@ docker build -t myapp .
 # 1. Create dind configuration
 cat > ~/.manyoyo/run/dind-dev.json << 'EOF'
 {
-    "containerName": "myy-dind-dev",
+    "containerName": "my-dind-dev",
     "containerMode": "dind",
     "envFile": ["anthropic_claudecode"],
     "volumes": [
@@ -159,7 +159,7 @@ manyoyo -r dind-dev
 #    - Debugging container issues
 
 # 4. Check after exiting
-manyoyo -n myy-dind-dev -x /bin/bash
+manyoyo -n my-dind-dev -x /bin/bash
 
 # 5. View containers and images created by AI
 podman ps -a
@@ -172,7 +172,7 @@ podman images
 # 1. Create project configuration
 cat > ./myproject/.manyoyo.json << 'EOF'
 {
-    "containerName": "myy-ci",
+    "containerName": "my-ci",
     "containerMode": "dind",
     "env": [
         "CI=true",

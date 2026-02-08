@@ -33,8 +33,8 @@ manyoyo -l
 manyoyo --cont-list
 
 # 使用 Docker/Podman 命令查看
-docker ps -a | grep myy
-podman ps -a | grep myy
+docker ps -a | grep my
+podman ps -a | grep my
 ```
 
 ### 创建容器
@@ -44,18 +44,18 @@ podman ps -a | grep myy
 manyoyo -x echo "Hello MANYOYO"
 
 # 指定容器名称
-manyoyo -n myy-dev -x /bin/bash
+manyoyo -n my-dev -x /bin/bash
 
 # 使用时间戳容器名（默认）
-manyoyo -y c  # 自动生成名称如 myy-0204-1430
+manyoyo -y c  # 自动生成名称如 my-0204-1430
 ```
 
 ### 删除容器
 
 ```bash
 # 删除指定容器
-manyoyo -n myy-dev --crm
-manyoyo -n myy-dev --cont-remove
+manyoyo -n my-dev --crm
+manyoyo -n my-dev --cont-remove
 
 # 退出时自动删除（一次性模式）
 manyoyo -n temp --rm-on-exit -x /bin/bash
@@ -97,7 +97,7 @@ manyoyo --sf 'python3 --version'
 manyoyo -x /bin/bash
 
 # 在现有容器中进入 shell
-manyoyo -n myy-dev -x /bin/bash
+manyoyo -n my-dev -x /bin/bash
 
 # 指定工作目录
 manyoyo --hp /path/to/project -x /bin/bash
@@ -495,12 +495,12 @@ manyoyo -n current-container -x /bin/bash
 # 在多个项目中运行命令
 for proj in project1 project2 project3; do
     cd $proj
-    manyoyo -n myy-$proj -y c
+    manyoyo -n my-$proj -y c
     cd ..
 done
 
 # 清理所有测试容器
-docker ps -a | grep myy-test | awk '{print $1}' | xargs docker rm
+docker ps -a | grep my-test | awk '{print $1}' | xargs docker rm
 ```
 
 ## 常见工作流

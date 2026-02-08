@@ -33,8 +33,8 @@ manyoyo -l
 manyoyo --cont-list
 
 # View using Docker/Podman commands
-docker ps -a | grep myy
-podman ps -a | grep myy
+docker ps -a | grep my
+podman ps -a | grep my
 ```
 
 ### Create Container
@@ -44,18 +44,18 @@ podman ps -a | grep myy
 manyoyo -x echo "Hello MANYOYO"
 
 # Specify container name
-manyoyo -n myy-dev -x /bin/bash
+manyoyo -n my-dev -x /bin/bash
 
 # Use timestamp container name (default)
-manyoyo -y c  # Auto-generates name like myy-0204-1430
+manyoyo -y c  # Auto-generates name like my-0204-1430
 ```
 
 ### Delete Container
 
 ```bash
 # Delete specified container
-manyoyo -n myy-dev --crm
-manyoyo -n myy-dev --cont-remove
+manyoyo -n my-dev --crm
+manyoyo -n my-dev --cont-remove
 
 # Auto-delete on exit (one-time mode)
 manyoyo -n temp --rm-on-exit -x /bin/bash
@@ -97,7 +97,7 @@ manyoyo --sf 'python3 --version'
 manyoyo -x /bin/bash
 
 # Enter shell in existing container
-manyoyo -n myy-dev -x /bin/bash
+manyoyo -n my-dev -x /bin/bash
 
 # Specify working directory
 manyoyo --hp /path/to/project -x /bin/bash
@@ -495,12 +495,12 @@ manyoyo -n current-container -x /bin/bash
 # Run commands in multiple projects
 for proj in project1 project2 project3; do
     cd $proj
-    manyoyo -n myy-$proj -y c
+    manyoyo -n my-$proj -y c
     cd ..
 done
 
 # Clean all test containers
-docker ps -a | grep myy-test | awk '{print $1}' | xargs docker rm
+docker ps -a | grep my-test | awk '{print $1}' | xargs docker rm
 ```
 
 ## Common Workflows

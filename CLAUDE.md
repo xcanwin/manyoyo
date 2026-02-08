@@ -440,9 +440,9 @@ npm test 输出结果...
 
 ### CLI 入口别名
 
-- `manyoyo` 和 `myy` 指向同一可执行文件（`bin/manyoyo.js`）
+- `manyoyo` 和 `my` 指向同一可执行文件（`bin/manyoyo.js`）
 - 修改 `bin/manyoyo.js` 时，确保 `package.json` 的 `bin` 字段正确配置
-- 两个命令的行为完全一致，`myy` 仅为便捷简写
+- 两个命令的行为完全一致，`my` 仅为便捷简写
 
 ### 版本同步要求
 
@@ -473,7 +473,7 @@ npm test 输出结果...
    npm run docs:build          # 文档构建成功，无 dead links
    npm install -g .            # 本地安装测试
    manyoyo --version           # 版本号正确
-   myy --version               # 版本号正确
+   my --version               # 版本号正确
    ```
 
 ### 配置文件路径
@@ -586,7 +586,7 @@ if (realHostPath === '/' || realHostPath === '/home' || realHostPath === homeDir
 - [ ] **版本号同步**：`package.json`、`IMAGE_VERSION`、文档示例保持一致
 - [ ] **Node.js 版本**：确保代码兼容 Node.js >= 22
 - [ ] **容器运行时**：Podman 和 Docker 都能正常工作
-- [ ] **CLI 入口**：`manyoyo` 和 `myy` 行为一致
+- [ ] **CLI 入口**：`manyoyo` 和 `my` 行为一致
 
 ### 6. 提交前最后检查
 

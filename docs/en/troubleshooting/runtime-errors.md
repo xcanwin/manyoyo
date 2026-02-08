@@ -46,7 +46,7 @@ docker ps -a
 docker stop <conflicting-container>
 
 # Or use different container name
-manyoyo -n myy-$(date +%m%d-%H%M) -y c
+manyoyo -n my-$(date +%m%d-%H%M) -y c
 ```
 
 #### 3. Check Mount Permissions

@@ -51,7 +51,7 @@ export DEBUG="anthropic:*"
 **Run Configuration** (`~/.manyoyo/run/claude-custom.json`):
 ```json5
 {
-    "containerName": "myy-claude-custom",
+    "containerName": "my-claude-custom",
     "envFile": [
         "anthropic_custom"
     ],
@@ -120,7 +120,7 @@ Baseline template (env vars, run config, shortcuts) is maintained in one place:
 **Run Configuration** (`~/.manyoyo/run/dind.json`):
 ```json5
 {
-    "containerName": "myy-dind",
+    "containerName": "my-dind",
     "containerMode": "dind",
     "envFile": [
         "anthropic_claudecode"
@@ -149,7 +149,7 @@ docker ps -a
 **Run Configuration** (`~/.manyoyo/run/sock.json`):
 ```json5
 {
-    "containerName": "myy-sock",
+    "containerName": "my-sock",
     "containerMode": "sock",  // Dangerous: can access everything on host
     "envFile": [
         "anthropic_claudecode"
@@ -177,7 +177,7 @@ docker ps -a
 **Development Environment** (`~/.manyoyo/run/dev.json`):
 ```json5
 {
-    "containerName": "myy-dev",
+    "containerName": "my-dev",
     "envFile": [
         "anthropic_dev"
     ],
@@ -192,7 +192,7 @@ docker ps -a
 **Test Environment** (`~/.manyoyo/run/test.json`):
 ```json5
 {
-    "containerName": "myy-test",
+    "containerName": "my-test",
     "envFile": [
         "anthropic_test"
     ],
@@ -207,7 +207,7 @@ docker ps -a
 **Production Environment** (`~/.manyoyo/run/prod.json`):
 ```json5
 {
-    "containerName": "myy-prod",
+    "containerName": "my-prod",
     "envFile": [
         "anthropic_prod"
     ],
@@ -233,7 +233,7 @@ manyoyo -r prod  # Production environment
 **Project Configuration** (`./myproject/.manyoyo.json`):
 ```json5
 {
-    "containerName": "myy-webapp",
+    "containerName": "my-webapp",
     "envFile": [
         "anthropic_claudecode"
     ],
@@ -260,7 +260,7 @@ manyoyo -r ./.manyoyo.json
 **Project Configuration** (`./ml-project/.manyoyo.json`):
 ```json5
 {
-    "containerName": "myy-ml",
+    "containerName": "my-ml",
     "envFile": [
         "anthropic_claudecode"
     ],

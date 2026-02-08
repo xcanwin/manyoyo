@@ -25,14 +25,14 @@ Container AI Work Container   Continue  Cleanup
 ```bash
 # Auto-generate container name (based on timestamp)
 manyoyo -y c
-# Generated name like: myy-0204-1430
+# Generated name like: my-0204-1430
 
 # View container name
 manyoyo -l
 ```
 
-**Naming Rule**: `myy-{MMDD}-{HHMM}`
-- Example: `myy-0204-1430` means created on Feb 4 at 14:30
+**Naming Rule**: `my-{MMDD}-{HHMM}`
+- Example: `my-0204-1430` means created on Feb 4 at 14:30
 
 ### Named Sessions
 
@@ -52,7 +52,7 @@ manyoyo -n my-project -y c
 # Method 1: Run configuration (recommended)
 cat > ~/.manyoyo/run/project-a.json << 'EOF'
 {
-    "containerName": "myy-project-a",
+    "containerName": "my-project-a",
     "envFile": ["anthropic_claudecode"],
     "yolo": "c"
 }
@@ -63,7 +63,7 @@ manyoyo -r project-a
 # Method 2: Project configuration
 cat > ./myproject/.manyoyo.json << 'EOF'
 {
-    "containerName": "myy-myproject",
+    "containerName": "my-myproject",
     "envFile": ["anthropic_claudecode"],
     "yolo": "c"
 }
@@ -225,7 +225,7 @@ Container state is managed by Docker/Podman:
 ```bash
 # View all sessions (including stopped)
 manyoyo -l
-docker ps -a | grep myy
+docker ps -a | grep my
 
 # Container status
 docker ps -a --format "table {{.Names}}\t{{.Status}}"
@@ -359,10 +359,10 @@ manyoyo -n temp --rm-on-exit -y c
 
 ```bash
 # Clean up all stopped MANYOYO containers
-docker ps -a | grep myy | grep Exited | awk '{print $1}' | xargs docker rm
+docker ps -a | grep my | grep Exited | awk '{print $1}' | xargs docker rm
 
 # Clean up all MANYOYO containers (dangerous!)
-docker ps -a | grep myy | awk '{print $1}' | xargs docker rm -f
+docker ps -a | grep my | awk '{print $1}' | xargs docker rm -f
 ```
 
 ## Session Monitoring
@@ -377,7 +377,7 @@ manyoyo -l
 docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 # Resource usage
-docker stats $(docker ps -q --filter "name=myy")
+docker stats $(docker ps -q --filter "name=my")
 ```
 
 ### View Session Logs
@@ -415,17 +415,17 @@ $ env | grep ANTHROPIC
 
 ```bash
 # Name by project
-myy-webapp
-myy-api
-myy-mobile
+my-webapp
+my-api
+my-mobile
 
 # Name by function
-myy-dev
-myy-test
-myy-debug
+my-dev
+my-test
+my-debug
 
 # Name by time (automatic)
-myy-0204-1430
+my-0204-1430
 ```
 
 ### 2. Configuration File Management
@@ -464,7 +464,7 @@ docker cp my-session:/root/.claude ./claude-backup
 cat > ~/cleanup-manyoyo.sh << 'EOF'
 #!/bin/bash
 # Clean up stopped containers older than 7 days
-docker ps -a --filter "name=myy" --filter "status=exited" \
+docker ps -a --filter "name=my" --filter "status=exited" \
     --format "{{.ID}} {{.CreatedAt}}" | \
     awk '{if ($2 < systime() - 604800) print $1}' | \
     xargs -r docker rm
@@ -482,7 +482,7 @@ chmod +x ~/cleanup-manyoyo.sh
 # Create session template
 cat > ~/.manyoyo/run/template.json << 'EOF'
 {
-    "containerName": "myy-template",
+    "containerName": "my-template",
     "envFile": ["base", "secrets"],
     "volumes": [
         "~/.ssh:/root/.ssh:ro",

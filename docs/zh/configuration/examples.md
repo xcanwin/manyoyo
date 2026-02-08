@@ -51,7 +51,7 @@ export DEBUG="anthropic:*"
 **运行配置**（`~/.manyoyo/run/claude-custom.json`）：
 ```json5
 {
-    "containerName": "myy-claude-custom",
+    "containerName": "my-claude-custom",
     "envFile": [
         "anthropic_custom"
     ],
@@ -120,7 +120,7 @@ EOF
 **运行配置**（`~/.manyoyo/run/dind.json`）：
 ```json5
 {
-    "containerName": "myy-dind",
+    "containerName": "my-dind",
     "containerMode": "dind",
     "envFile": [
         "anthropic_claudecode"
@@ -149,7 +149,7 @@ docker ps -a
 **运行配置**（`~/.manyoyo/run/sock.json`）：
 ```json5
 {
-    "containerName": "myy-sock",
+    "containerName": "my-sock",
     "containerMode": "sock",  // 危险：可访问宿主机一切
     "envFile": [
         "anthropic_claudecode"
@@ -177,7 +177,7 @@ docker ps -a
 **开发环境**（`~/.manyoyo/run/dev.json`）：
 ```json5
 {
-    "containerName": "myy-dev",
+    "containerName": "my-dev",
     "envFile": [
         "anthropic_dev"
     ],
@@ -192,7 +192,7 @@ docker ps -a
 **测试环境**（`~/.manyoyo/run/test.json`）：
 ```json5
 {
-    "containerName": "myy-test",
+    "containerName": "my-test",
     "envFile": [
         "anthropic_test"
     ],
@@ -207,7 +207,7 @@ docker ps -a
 **生产环境**（`~/.manyoyo/run/prod.json`）：
 ```json5
 {
-    "containerName": "myy-prod",
+    "containerName": "my-prod",
     "envFile": [
         "anthropic_prod"
     ],
@@ -233,7 +233,7 @@ manyoyo -r prod  # 生产环境
 **项目配置**（`./myproject/.manyoyo.json`）：
 ```json5
 {
-    "containerName": "myy-webapp",
+    "containerName": "my-webapp",
     "envFile": [
         "anthropic_claudecode"
     ],
@@ -260,7 +260,7 @@ manyoyo -r ./.manyoyo.json
 **项目配置**（`./ml-project/.manyoyo.json`）：
 ```json5
 {
-    "containerName": "myy-ml",
+    "containerName": "my-ml",
     "envFile": [
         "anthropic_claudecode"
     ],

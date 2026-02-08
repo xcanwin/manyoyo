@@ -121,7 +121,7 @@ For full workflows (architecture, performance, security, CI examples), see:
 ```json5
 // ~/.manyoyo/run/dind.json
 {
-    "containerName": "myy-dind",
+    "containerName": "my-dind",
     "containerMode": "dind",
     "envFile": ["anthropic_claudecode"],
     "volumes": [
@@ -259,7 +259,7 @@ manyoyo -v "/var/run/docker.sock:/var/run/docker.sock:ro" -x /bin/bash
 ```json5
 // ~/.manyoyo/run/sock.json (Use with caution!)
 {
-    "containerName": "myy-sock",
+    "containerName": "my-sock",
     "containerMode": "sock",  // Dangerous!
     "envFile": ["anthropic_claudecode"]
 }

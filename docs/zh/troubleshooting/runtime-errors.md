@@ -46,7 +46,7 @@ docker ps -a
 docker stop <冲突容器>
 
 # 或使用不同的容器名
-manyoyo -n myy-$(date +%m%d-%H%M) -y c
+manyoyo -n my-$(date +%m%d-%H%M) -y c
 ```
 
 #### 3. 检查挂载权限

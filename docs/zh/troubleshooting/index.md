@@ -141,7 +141,7 @@ manyoyo --show-config
 
 # 容器状态
 manyoyo -l
-docker ps -a | grep myy
+docker ps -a | grep my
 ```
 
 ### 2. 查看详细日志

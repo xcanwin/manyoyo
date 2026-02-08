@@ -96,7 +96,7 @@
 
 ## 环境与兼容性
 - 运行环境：`node` >= 22，容器运行时支持 `podman` 或 `docker`。
-- CLI 入口：`manyoyo` 与 `myy` 指向同一可执行文件。
+- CLI 入口：`manyoyo` 与 `my` 指向同一可执行文件。
 - 发布检查：核对 `package.json` 的 `version` 与 `imageVersion` 是否匹配文档。
 - 包含文件：`README.md` `LICENSE` `docker/manyoyo.Dockerfile` `config.example.json` 需与发布一致。
 - 入口脚本：`bin/manyoyo.js` 变更时同步检查 `package.json` 的 `bin` 字段。

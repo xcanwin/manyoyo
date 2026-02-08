@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "4.0.1",
+    "version": "4.0.2",
     "imageVersion": "1.7.4",
     "description": "AI Agent CLI Security Sandbox for Docker and Podman",
     "keywords": [
@@ -26,7 +26,7 @@
     "main": "bin/manyoyo.js",
     "bin": {
         "manyoyo": "bin/manyoyo.js",
-        "myy": "bin/manyoyo.js"
+        "my": "bin/manyoyo.js"
     },
     "scripts": {
         "install-link": "npm link",

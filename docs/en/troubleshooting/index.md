@@ -141,7 +141,7 @@ manyoyo --show-config
 
 # Container status
 manyoyo -l
-docker ps -a | grep myy
+docker ps -a | grep my
 ```
 
 ### 2. View Detailed Logs

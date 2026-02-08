@@ -47,7 +47,7 @@ docker ps -a
 # 创建 dind 配置
 cat > ~/.manyoyo/run/dind.json << 'EOF'
 {
-    "containerName": "myy-dind",
+    "containerName": "my-dind",
     "containerMode": "dind",
     "envFile": ["anthropic_claudecode"],
     "yolo": "c"
@@ -139,7 +139,7 @@ docker build -t myapp .
 # 1. 创建 dind 配置
 cat > ~/.manyoyo/run/dind-dev.json << 'EOF'
 {
-    "containerName": "myy-dind-dev",
+    "containerName": "my-dind-dev",
     "containerMode": "dind",
     "envFile": ["anthropic_claudecode"],
     "volumes": [
@@ -159,7 +159,7 @@ manyoyo -r dind-dev
 #    - 调试容器问题
 
 # 4. 退出后检查
-manyoyo -n myy-dind-dev -x /bin/bash
+manyoyo -n my-dind-dev -x /bin/bash
 
 # 5. 查看 AI 创建的容器和镜像
 podman ps -a
@@ -172,7 +172,7 @@ podman images
 # 1. 创建项目配置
 cat > ./myproject/.manyoyo.json << 'EOF'
 {
-    "containerName": "myy-ci",
+    "containerName": "my-ci",
     "containerMode": "dind",
     "env": [
         "CI=true",

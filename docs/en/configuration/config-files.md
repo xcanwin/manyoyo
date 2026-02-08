@@ -51,12 +51,12 @@ Refer to `config.example.json` to view all configurable items. Below are detaile
 
 #### containerName
 - **Type**: String
-- **Default**: `myy-{MMDD-HHMM}` (auto-generated)
+- **Default**: `my-{MMDD-HHMM}` (auto-generated)
 - **Description**: Container name, used to identify and manage containers
 - **Example**:
 ```json5
 {
-    "containerName": "myy-dev"
+    "containerName": "my-dev"
 }
 ```
 
@@ -361,7 +361,7 @@ Global configuration + Run configuration + Command-line arguments
     "containerMode": "dind",
 
     // Container name
-    "containerName": "myy-dind",
+    "containerName": "my-dind",
 
     // Additional mount Docker configuration
     "volumes": [
@@ -376,7 +376,7 @@ Global configuration + Run configuration + Command-line arguments
 // ./myproject/.manyoyo.json
 {
     // Project container name
-    "containerName": "myy-myproject",
+    "containerName": "my-myproject",
 
     // Project environment variables
     "env": [
