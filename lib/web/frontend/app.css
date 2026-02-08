@@ -417,10 +417,19 @@ button.danger:hover {
 }
 
 .mode-switch {
-    display: inline-flex;
-    gap: 8px;
-    margin: 10px 8px 2px;
+    display: flex;
+    justify-content: space-between;
     align-items: center;
+    gap: 10px;
+    margin: 8px 8px 2px;
+    min-height: 34px;
+}
+
+.mode-switch-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
 }
 
 .mode-switch button {
@@ -443,6 +452,17 @@ body.terminal-mode #modeTerminalBtn {
     border-color: var(--accent-strong);
 }
 
+.mode-terminal-controls {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+body.terminal-mode .mode-terminal-controls {
+    display: inline-flex;
+}
+
 #messages {
     min-height: 0;
     overflow-y: auto;
@@ -458,23 +478,11 @@ body.terminal-mode #modeTerminalBtn {
     display: none;
     flex-direction: column;
     gap: 8px;
-    padding: 12px 8px 8px;
-}
-
-.terminal-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-}
-
-.terminal-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    padding: 6px 8px 8px;
 }
 
 .terminal-status {
+    display: inline-block;
     color: var(--muted);
     font-size: 12px;
     white-space: nowrap;
@@ -852,6 +860,11 @@ body.terminal-mode .composer {
         margin: 8px 10px 2px;
         overflow-x: auto;
         padding-bottom: 2px;
+        gap: 8px;
+    }
+
+    .mode-switch-left {
+        flex: 0 0 auto;
     }
 
     .mode-switch button {
@@ -859,19 +872,15 @@ body.terminal-mode .composer {
         flex: 0 0 auto;
     }
 
-    .terminal-toolbar {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-    }
-
-    .terminal-actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
+    .mode-terminal-controls {
+        flex: 0 0 auto;
+        gap: 6px;
     }
 
     .terminal-status {
-        white-space: normal;
+        max-width: 5.2em;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     #commandInput {
