@@ -256,8 +256,8 @@ button.danger:hover {
 }
 
 .session-item:hover {
-    border-color: #94b6a5;
-    background: #d9e7df;
+    border-color: #88b89d;
+    background: #e2f1e8;
 }
 
 .session-item.active {
