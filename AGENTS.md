@@ -22,6 +22,7 @@
 - `bin/manyoyo.js`: CLI 入口与主流程编排（CommonJS）；参数解析、容器主流程优先就近维护。
 - `lib/web/server.js`: `--server` 网页服务、全局认证网关与 API 路由。
 - `lib/web/frontend/`: 网页前端资源（`app/login` 的 `html/css/js`）。
+- 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docs/`: VitePress 文档；中文主目录 `docs/zh/`，英文 `docs/en/`；结构需保持一致。
 - `test/`: Jest 测试，文件名 `*.test.js`（如 `test/manyoyo.test.js`）。
