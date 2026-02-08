@@ -1393,12 +1393,13 @@ async function setupCommander() {
 
 示例:
   ${MANYOYO_NAME} --ib --iv ${IMAGE_VERSION_BASE || "1.0.0"}                     构建镜像
+  ${MANYOYO_NAME} --init-config all                   从本机 Agent 配置初始化 ~/.manyoyo
+  ${MANYOYO_NAME} -r claude                           使用初始化后的运行配置快速启动
   ${MANYOYO_NAME} -r c                                使用 ~/.manyoyo/run/c.json 配置
   ${MANYOYO_NAME} -r codex --ss "resume --last"       使用命令后缀
   ${MANYOYO_NAME} -r ./myconfig.json                  使用当前目录 ./myconfig.json 配置
   ${MANYOYO_NAME} -n test --ef claude -y c            使用 ~/.manyoyo/env/claude.env 环境变量文件
   ${MANYOYO_NAME} -n test --ef ./myenv.env -y c       使用当前目录 ./myenv.env 环境变量文件
-  ${MANYOYO_NAME} --init-config all                   从本机 Agent 配置初始化 ~/.manyoyo
   ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
   ${MANYOYO_NAME} -x echo 123                         指定命令执行
   ${MANYOYO_NAME} --server --server-user admin --server-pass 123456   启动带登录认证的网页服务
@@ -1420,6 +1421,7 @@ async function setupCommander() {
         .option('--iv, --image-ver <version>', '指定镜像版本')
         .option('--ib, --image-build', '构建镜像')
         .option('--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)', (value, previous) => [...(previous || []), value], [])
+        .option('--init-config [agents]', '初始化 Agent 配置到 ~/.manyoyo (all 或逗号分隔: claude,codex,gemini,opencode)')
         .option('--irm, --image-remove', '清理悬空镜像和 <none> 镜像')
         .option('-e, --env <env>', '设置环境变量 XXX=YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--ef, --env-file <file>', '设置环境变量通过文件 (name → ~/.manyoyo/env/name.env, ./file.env → 当前目录文件)', (value, previous) => [...(previous || []), value], [])
@@ -1429,7 +1431,6 @@ async function setupCommander() {
         .option('--ss, --shell-suffix <command>', '指定命令后缀 (追加到-s之后，等价于 -- <args>)')
         .option('-x, --shell-full <command...>', '指定完整命令执行 (代替--sp和-s和--命令)')
         .option('-y, --yolo <cli>', '使AGENT无需确认 (claude/c, gemini/gm, codex/cx, opencode/oc)')
-        .option('--init-config [agents]', '初始化 Agent 配置到 ~/.manyoyo (all 或逗号分隔: claude,codex,gemini,opencode)')
         .option('--install <name>', '安装manyoyo命令 (docker-cli-plugin)')
         .option('--show-config', '显示最终生效配置并退出')
         .option('--show-command', '显示将执行的 docker run 命令并退出')

@@ -71,6 +71,8 @@
 ## 常见开发任务
 - 配置合并验证：`manyoyo --show-config`，`manyoyo -r <name> --show-config`。
 - 命令预览：`manyoyo -n test --show-command`，用于检查参数拼装。
+- 快速迁移已有 Agent 配置：`manyoyo --init-config all`，然后 `manyoyo -r claude`（或 `codex/gemini/opencode`）。
+- 动态容器名验证（`{now}`）：在运行配置写 `containerName: "my-<agent>-{now}"`，执行 `manyoyo -r <name> --show-config` 查看解析结果。
 - 环境文件解析：`manyoyo --ef <name> --show-config`。
 - 容器调试：`manyoyo -n <name> -x /bin/bash`。
 - 镜像构建：`manyoyo --ib --iv <version>`，可加 `--iba TOOL=common`。
@@ -85,6 +87,8 @@
 - 全局配置：`~/.manyoyo/manyoyo.json`（JSON5）。
 - 运行配置：`~/.manyoyo/run/<name>.json`。
 - 环境文件：`~/.manyoyo/env/<name>.env`。
+- 初始化配置：`manyoyo --init-config [agents]` 会生成 `~/.manyoyo/run/*.json` 与 `~/.manyoyo/env/*.env`。
+- 初始化覆盖行为：目标文件已存在时逐个询问（`json` 与 `env` 分开）；`--yes --init-config ...` 会自动覆盖。
 - 网页认证配置：`serverUser`、`serverPass`（支持环境变量 `MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`）。
 - 网页服务监听：`--server` 支持 `<port>` 或 `<host:port>`，默认 `127.0.0.1:3000`。
 - 网页认证参数优先级：命令行参数 > 运行配置 > 全局配置 > 环境变量 > 默认值。

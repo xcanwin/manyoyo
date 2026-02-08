@@ -11,6 +11,7 @@ description: MANYOYO CLI option reference for container management, env injectio
 | --- | --- |
 | View help | `manyoyo -h` |
 | View version | `manyoyo -V` |
+| Initialize config from local Agent setup | `manyoyo --init-config all` |
 | List containers | `manyoyo -l` |
 | Create container and start Claude Code | `manyoyo -n test --ef .env -y c` |
 | Enter shell | `manyoyo -n test -x /bin/bash` |
@@ -31,6 +32,7 @@ description: MANYOYO CLI option reference for container management, env injectio
 | `--ib` | Build sandbox image |
 | `--iv` | Specify image version |
 | `--iba` | Pass image build arguments (e.g., `TOOL=common`) |
+| `--init-config [agents]` | Initialize `~/.manyoyo` from local Agent configuration |
 | `--server [port]` | Start web interaction server (default `3000`) |
 | `--server-user <username>` | Web login username |
 | `--server-pass <password>` | Web login password |

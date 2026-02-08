@@ -11,6 +11,7 @@ description: MANYOYO 命令行参数与常用命令速查，覆盖容器管理�
 | --- | --- |
 | 查看帮助 | `manyoyo -h` |
 | 查看版本 | `manyoyo -V` |
+| 从本机 Agent 初始化配置 | `manyoyo --init-config all` |
 | 列出容器 | `manyoyo -l` |
 | 创建容器并启动 Claude Code | `manyoyo -n test --ef .env -y c` |
 | 进入 shell | `manyoyo -n test -x /bin/bash` |
@@ -31,6 +32,7 @@ description: MANYOYO 命令行参数与常用命令速查，覆盖容器管理�
 | `--ib` | 构建沙箱镜像 |
 | `--iv` | 指定镜像版本 |
 | `--iba` | 传递镜像构建参数（如 `TOOL=common`） |
+| `--init-config [agents]` | 从本机 Agent 配置初始化 `~/.manyoyo` |
 | `--server [port]` | 启动网页交互服务（默认 `3000`） |
 | `--server-user <username>` | 网页服务登录用户名 |
 | `--server-pass <password>` | 网页服务登录密码 |

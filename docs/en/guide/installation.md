@@ -356,7 +356,14 @@ docker images | grep manyoyo  # or podman images
 # localhost/xcanwin/manyoyo  1.7.0-full  xxx  xxx  xxGB
 ```
 
-### 3. Create Test Container
+### 3. Initialize Agent Config (Recommended)
+
+```bash
+# Migrate existing claude/codex/gemini/opencode setup from host
+manyoyo --init-config all
+```
+
+### 4. Create Test Container
 
 ```bash
 # Create and run test container
@@ -369,10 +376,13 @@ manyoyo -l
 manyoyo -n test-container --crm
 ```
 
-### 4. Test AI CLI Tools
+### 5. Test AI CLI Tools
 
 ```bash
-# Test Claude Code (requires API Key configuration first)
+# Use initialized run config (recommended)
+manyoyo -r claude
+
+# Or only check CLI version
 manyoyo -n test -x claude --version
 
 # Test Python

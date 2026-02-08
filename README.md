@@ -46,8 +46,9 @@
 ```bash
 npm install -g @xcanwin/manyoyo    # 安装
 podman pull ubuntu:24.04           # 仅 Podman 需要
-manyoyo --ib --iv 1.7.0            # 构建镜像
-manyoyo -y c                       # 运行 Claude Code YOLO 模式
+manyoyo --ib --iv 1.7.4            # 构建镜像
+manyoyo --init-config all          # 从本机 Agent 配置迁移到 ~/.manyoyo
+manyoyo -r claude                  # 使用迁移后的运行配置启动
 ```
 
 注意：YOLO/SOLO 会跳过权限确认，请确保在可控环境中使用。
@@ -96,7 +97,7 @@ npm install -g @xcanwin/manyoyo
 
 ```bash
 # 构建完整版本（推荐）
-manyoyo --ib --iv 1.7.0
+manyoyo --ib --iv 1.7.4
 
 # 构建精简版本
 manyoyo --ib --iba TOOL=common
@@ -110,6 +111,9 @@ manyoyo --ib --iba TOOL=go,codex,java,gemini
 ## 常用命令
 
 ```bash
+# 配置迁移（推荐首步）
+manyoyo --init-config all
+
 # 启动常见智能体
 manyoyo -y c          # Claude Code（或 claude / cc）
 manyoyo -y gm         # Gemini（或 gemini / g）
