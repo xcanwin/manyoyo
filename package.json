@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "3.9.3",
+    "version": "3.9.5",
     "imageVersion": "1.7.3",
     "description": "AI Agent CLI Security Sandbox for Docker and Podman",
     "keywords": [
@@ -33,9 +33,9 @@
         "test": "jest --coverage",
         "test:unit": "jest test/",
         "lint": "echo 'Lint check passed'",
-        "docs:dev": "vitepress dev docs --host --port 5173",
+        "docs:dev": "vitepress dev docs --host 127.0.0.1 --port 5173",
         "docs:build": "vitepress build docs",
-        "docs:preview": "vitepress preview docs --host --port 4173"
+        "docs:preview": "vitepress preview docs --host 127.0.0.1 --port 4173"
     },
     "homepage": "https://xcanwin.github.io/manyoyo/",
     "bugs": {
@@ -58,10 +58,12 @@
     },
     "devDependencies": {
         "jest": "^29.7.0",
-        "vitepress": "^1.6.4"
+        "vitepress": "^2.0.0-alpha.16"
     },
     "jest": {
-        "testMatch": ["**/test/**/*.test.js"],
+        "testMatch": [
+            "**/test/**/*.test.js"
+        ],
         "testEnvironment": "node"
     }
 }

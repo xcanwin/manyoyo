@@ -66,5 +66,6 @@ MANYOYO is not a general container tool, but a security sandbox specifically des
 This documentation site uses **VitePress + GitHub Actions + GitHub Pages**:
 
 - Local development: `npm run docs:dev`
+- By default it only listens on `127.0.0.1`; append `--host 0.0.0.0` locally if LAN access is needed
 - Build static site: `npm run docs:build`
 - Automatically deploy to GitHub Pages after pushing to `main` branch

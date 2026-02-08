@@ -21,7 +21,7 @@
 ## 项目结构与模块组织
 - `bin/manyoyo.js`: CLI 入口与主流程编排（CommonJS）；参数解析、容器主流程优先就近维护。
 - `lib/web/server.js`: `--server` 网页服务、全局认证网关与 API 路由。
-- `lib/web/static/`: 网页静态资源（`app/login` 的 `html/css/js`）。
+- `lib/web/frontend/`: 网页前端资源（`app/login` 的 `html/css/js`）。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docs/`: VitePress 文档；中文主目录 `docs/zh/`，英文 `docs/en/`；结构需保持一致。
 - `test/`: Jest 测试，文件名 `*.test.js`（如 `test/manyoyo.test.js`）。
@@ -30,7 +30,7 @@
 ## 目录速查
 - `docs/zh/guide/` `docs/zh/configuration/` `docs/zh/reference/` `docs/zh/advanced/` `docs/zh/troubleshooting/`
 - `docs/en/guide/` `docs/en/configuration/` `docs/en/reference/` `docs/en/advanced/` `docs/en/troubleshooting/`
-- `lib/web/` `lib/web/static/`
+- `lib/web/` `lib/web/frontend/`
 - `docker/` `bin/` `test/` `assets/` `coverage/`
 
 ## 构建、测试与开发命令
@@ -108,7 +108,7 @@
 - 配置模板见 `config.example.json`；用户配置默认在 `~/.manyoyo/`。
 - 新增配置项或 CLI 选项时，同步更新 `config.example.json`、`docs/zh/` 与 `docs/en/`；必要时同步 `README.md` 示例。
 - 新增网页接口/页面时，默认走全局认证网关；仅登录相关路由允许匿名访问。
-- 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login` 与 `/auth/static/*`）；其余路由默认要求认证。
+- 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login` 与 `/auth/frontend/*`）；其余路由默认要求认证。
 - 禁止在业务路由里零散补认证，优先在统一入口做认证兜底，避免后续漏校验。
 - 新增容器模式或挂载选项时，不放宽安全校验。
 - `sock` 容器模式需明确安全风险提示（可访问宿主机 Docker socket）。
