@@ -74,9 +74,10 @@
 - 环境文件解析：`manyoyo --ef <name> --show-config`。
 - 容器调试：`manyoyo -n <name> -x /bin/bash`。
 - 镜像构建：`manyoyo --ib --iv <version>`，可加 `--iba TOOL=common`。
+- 局域网监听网页服务：`manyoyo --server 0.0.0.0:3000 --server-user <user> --server-pass <pass>`。
 - 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"123456"}'`。
 - 带认证访问接口：`curl --noproxy '*' -b /tmp/manyoyo.cookie http://127.0.0.1:3000/api/sessions`。
-- 删除容器与聊天记录：`curl --noproxy '*' -b /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/api/sessions/<name>/remove-with-history`。
+- 删除对话历史（保留容器）：`curl --noproxy '*' -b /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/api/sessions/<name>/remove-with-history`。
 
 ## 配置与路径提示
 - 配置模板：`config.example.json`。
@@ -84,6 +85,7 @@
 - 运行配置：`~/.manyoyo/run/<name>.json`。
 - 环境文件：`~/.manyoyo/env/<name>.env`。
 - 网页认证配置：`serverUser`、`serverPass`（支持环境变量 `MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`）。
+- 网页服务监听：`--server` 支持 `<port>` 或 `<host:port>`，默认 `127.0.0.1:3000`。
 - 网页认证参数优先级：命令行参数 > 运行配置 > 全局配置 > 环境变量 > 默认值。
 - 缓存目录：`docker/cache/`，覆盖率：`coverage/`。
 
@@ -110,6 +112,7 @@
 - 新增网页接口/页面时，默认走全局认证网关；仅登录相关路由允许匿名访问。
 - 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login` 与 `/auth/frontend/*`）；其余路由默认要求认证。
 - 禁止在业务路由里零散补认证，优先在统一入口做认证兜底，避免后续漏校验。
+- 当使用 `--server 0.0.0.0:<port>` 对外监听时，必须设置强密码，并通过防火墙限制访问来源。
 - 新增容器模式或挂载选项时，不放宽安全校验。
 - `sock` 容器模式需明确安全风险提示（可访问宿主机 Docker socket）。
 - 涉及命令执行时优先使用参数数组，避免拼接 shell 字符串；新增输出涉及敏感信息时需脱敏。
