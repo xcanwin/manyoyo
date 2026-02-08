@@ -77,6 +77,7 @@ const NC = '\x1b[0m'; // No Color
 
 // Docker command (will be set by ensure_docker)
 let DOCKER_CMD = 'docker';
+const SUPPORTED_INIT_AGENTS = ['claude', 'codex', 'gemini', 'opencode'];
 
 // ==============================================================================
 // SECTION: Utility Functions
@@ -90,6 +91,14 @@ function normalizeCommandSuffix(suffix) {
     if (typeof suffix !== 'string') return "";
     const trimmed = suffix.trim();
     return trimmed ? ` ${trimmed}` : "";
+}
+
+function resolveContainerNameTemplate(name) {
+    if (typeof name !== 'string') {
+        return name;
+    }
+    const nowValue = formatDate();
+    return name.replace(/\{now\}|\$\{now\}/g, nowValue);
 }
 
 function validateServerHost(host, rawServer) {
@@ -285,6 +294,457 @@ function loadRunConfig(name) {
 
     console.error(`${RED}⚠️  未找到运行配置: ${name}${NC}`);
     return {};
+}
+
+function readJsonFileSafely(filePath, label) {
+    if (!fs.existsSync(filePath)) {
+        return null;
+    }
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    } catch (e) {
+        console.log(`${YELLOW}⚠️  ${label} 解析失败: ${filePath}${NC}`);
+        return null;
+    }
+}
+
+function parseSimpleToml(content) {
+    const result = {};
+    let current = result;
+    const lines = String(content || '').split('\n');
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#')) {
+            continue;
+        }
+
+        const sectionMatch = line.match(/^\[([^\]]+)\]$/);
+        if (sectionMatch) {
+            const parts = sectionMatch[1].split('.').map(p => p.trim()).filter(Boolean);
+            current = result;
+            for (const part of parts) {
+                if (!current[part] || typeof current[part] !== 'object' || Array.isArray(current[part])) {
+                    current[part] = {};
+                }
+                current = current[part];
+            }
+            continue;
+        }
+
+        const keyValueMatch = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*(.+)$/);
+        if (!keyValueMatch) {
+            continue;
+        }
+
+        const key = keyValueMatch[1];
+        let valueText = keyValueMatch[2].trim();
+        if ((valueText.startsWith('"') && valueText.endsWith('"')) || (valueText.startsWith("'") && valueText.endsWith("'"))) {
+            valueText = valueText.slice(1, -1);
+        } else if (valueText === 'true') {
+            valueText = true;
+        } else if (valueText === 'false') {
+            valueText = false;
+        } else if (/^-?\d+(\.\d+)?$/.test(valueText)) {
+            valueText = Number(valueText);
+        }
+
+        current[key] = valueText;
+    }
+
+    return result;
+}
+
+function readTomlFileSafely(filePath, label) {
+    if (!fs.existsSync(filePath)) {
+        return null;
+    }
+    try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        return parseSimpleToml(content);
+    } catch (e) {
+        console.log(`${YELLOW}⚠️  ${label} 解析失败: ${filePath}${NC}`);
+        return null;
+    }
+}
+
+function normalizeInitConfigAgents(rawAgents) {
+    const aliasMap = {
+        all: 'all',
+        claude: 'claude',
+        c: 'claude',
+        cc: 'claude',
+        codex: 'codex',
+        cx: 'codex',
+        gemini: 'gemini',
+        gm: 'gemini',
+        g: 'gemini',
+        opencode: 'opencode',
+        oc: 'opencode'
+    };
+
+    if (rawAgents === true || rawAgents === undefined || rawAgents === null || rawAgents === '') {
+        return [...SUPPORTED_INIT_AGENTS];
+    }
+
+    const tokens = String(rawAgents).split(/[,\s]+/).map(v => v.trim().toLowerCase()).filter(Boolean);
+    if (tokens.length === 0) {
+        return [...SUPPORTED_INIT_AGENTS];
+    }
+
+    const normalized = [];
+    for (const token of tokens) {
+        const mapped = aliasMap[token];
+        if (!mapped) {
+            console.error(`${RED}⚠️  错误: --init-config 不支持的 Agent: ${token}${NC}`);
+            console.error(`${YELLOW}支持: ${SUPPORTED_INIT_AGENTS.join(', ')} 或 all${NC}`);
+            process.exit(1);
+        }
+        if (mapped === 'all') {
+            return [...SUPPORTED_INIT_AGENTS];
+        }
+        if (!normalized.includes(mapped)) {
+            normalized.push(mapped);
+        }
+    }
+    return normalized;
+}
+
+function isSafeInitEnvValue(value) {
+    if (value === undefined || value === null) {
+        return false;
+    }
+    const text = String(value).replace(/[\r\n\0]/g, '').trim();
+    if (!text) {
+        return false;
+    }
+    if (/[\$\(\)\`\|\&\*\{\};<>]/.test(text)) {
+        return false;
+    }
+    if (/^\(/.test(text)) {
+        return false;
+    }
+    return true;
+}
+
+function setInitValue(values, key, value) {
+    if (value === undefined || value === null) {
+        return;
+    }
+    const text = String(value).replace(/[\r\n\0]/g, '').trim();
+    if (!text) {
+        return;
+    }
+    values[key] = text;
+}
+
+function dedupeList(list) {
+    return Array.from(new Set((list || []).filter(Boolean)));
+}
+
+function resolveEnvPlaceholder(value) {
+    if (typeof value !== 'string') {
+        return "";
+    }
+    const match = value.match(/\{env:([A-Za-z_][A-Za-z0-9_]*)\}/);
+    if (!match) {
+        return "";
+    }
+    const envName = match[1];
+    return process.env[envName] ? String(process.env[envName]).trim() : "";
+}
+
+function collectClaudeInitData(homeDir) {
+    const keys = [
+        'ANTHROPIC_AUTH_TOKEN',
+        'CLAUDE_CODE_OAUTH_TOKEN',
+        'ANTHROPIC_BASE_URL',
+        'ANTHROPIC_MODEL',
+        'ANTHROPIC_DEFAULT_OPUS_MODEL',
+        'ANTHROPIC_DEFAULT_SONNET_MODEL',
+        'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+        'CLAUDE_CODE_SUBAGENT_MODEL'
+    ];
+    const values = {};
+    const notes = [];
+    const volumes = [];
+
+    const claudeDir = path.join(homeDir, '.claude');
+    const claudeSettingsPath = path.join(claudeDir, 'settings.json');
+    const claudeJsonPath = path.join(homeDir, '.claude.json');
+    const settingsJson = readJsonFileSafely(claudeSettingsPath, 'Claude settings');
+    const claudeJson = readJsonFileSafely(claudeJsonPath, 'Claude config');
+
+    keys.forEach(key => setInitValue(values, key, process.env[key]));
+
+    if (claudeJson && claudeJson.env && typeof claudeJson.env === 'object') {
+        keys.forEach(key => setInitValue(values, key, claudeJson.env[key]));
+    }
+    if (settingsJson && settingsJson.env && typeof settingsJson.env === 'object') {
+        keys.forEach(key => setInitValue(values, key, settingsJson.env[key]));
+    }
+
+    if (fs.existsSync(claudeDir)) {
+        volumes.push(`${claudeDir}:/root/.claude`);
+    }
+    if (fs.existsSync(claudeJsonPath)) {
+        volumes.push(`${claudeJsonPath}:/root/.claude.json`);
+    }
+    if (!fs.existsSync(claudeDir) && !fs.existsSync(claudeJsonPath)) {
+        notes.push('未检测到 Claude 本地配置（~/.claude 或 ~/.claude.json），已生成占位模板。');
+    }
+
+    return { keys, values, notes, volumes: dedupeList(volumes) };
+}
+
+function collectGeminiInitData(homeDir) {
+    const keys = [
+        'GOOGLE_GEMINI_BASE_URL',
+        'GEMINI_API_KEY',
+        'GEMINI_MODEL'
+    ];
+    const values = {};
+    const notes = [];
+    const volumes = [];
+    const geminiDir = path.join(homeDir, '.gemini');
+
+    keys.forEach(key => setInitValue(values, key, process.env[key]));
+
+    if (fs.existsSync(geminiDir)) {
+        volumes.push(`${geminiDir}:/root/.gemini`);
+    } else {
+        notes.push('未检测到 Gemini 本地配置目录（~/.gemini），已生成占位模板。');
+    }
+
+    return { keys, values, notes, volumes: dedupeList(volumes) };
+}
+
+function collectCodexInitData(homeDir) {
+    const keys = [
+        'OPENAI_API_KEY',
+        'OPENAI_BASE_URL',
+        'OPENAI_MODEL'
+    ];
+    const values = {};
+    const notes = [];
+    const volumes = [];
+
+    const codexDir = path.join(homeDir, '.codex');
+    const authPath = path.join(codexDir, 'auth.json');
+    const configPath = path.join(codexDir, 'config.toml');
+    const authJson = readJsonFileSafely(authPath, 'Codex auth');
+    const configToml = readTomlFileSafely(configPath, 'Codex TOML');
+
+    keys.forEach(key => setInitValue(values, key, process.env[key]));
+
+    if (authJson && typeof authJson === 'object') {
+        setInitValue(values, 'OPENAI_API_KEY', authJson.OPENAI_API_KEY);
+    }
+
+    if (configToml && typeof configToml === 'object') {
+        setInitValue(values, 'OPENAI_MODEL', configToml.model);
+
+        let providerConfig = null;
+        const providers = configToml.model_providers;
+        if (providers && typeof providers === 'object') {
+            if (typeof configToml.model_provider === 'string' && providers[configToml.model_provider]) {
+                providerConfig = providers[configToml.model_provider];
+            } else {
+                const firstProviderName = Object.keys(providers)[0];
+                if (firstProviderName) {
+                    providerConfig = providers[firstProviderName];
+                }
+            }
+        }
+        if (providerConfig && typeof providerConfig === 'object') {
+            setInitValue(values, 'OPENAI_BASE_URL', providerConfig.base_url);
+        }
+    }
+
+    if (fs.existsSync(codexDir)) {
+        volumes.push(`${codexDir}:/root/.codex`);
+    } else {
+        notes.push('未检测到 Codex 本地配置目录（~/.codex），已生成占位模板。');
+    }
+
+    return { keys, values, notes, volumes: dedupeList(volumes) };
+}
+
+function collectOpenCodeInitData(homeDir) {
+    const keys = [
+        'OPENAI_API_KEY',
+        'OPENAI_BASE_URL',
+        'OPENAI_MODEL'
+    ];
+    const values = {};
+    const notes = [];
+    const volumes = [];
+
+    const opencodeDir = path.join(homeDir, '.config', 'opencode');
+    const opencodePath = path.join(opencodeDir, 'opencode.json');
+    const opencodeAuthPath = path.join(homeDir, '.local', 'share', 'opencode', 'auth.json');
+    const opencodeJson = readJsonFileSafely(opencodePath, 'OpenCode config');
+
+    keys.forEach(key => setInitValue(values, key, process.env[key]));
+
+    if (opencodeJson && typeof opencodeJson === 'object') {
+        const providers = opencodeJson.provider && typeof opencodeJson.provider === 'object'
+            ? Object.values(opencodeJson.provider).filter(v => v && typeof v === 'object')
+            : [];
+        const provider = providers[0];
+
+        if (provider) {
+            const options = provider.options && typeof provider.options === 'object' ? provider.options : {};
+            const apiKeyValue = resolveEnvPlaceholder(options.apiKey) || options.apiKey;
+            const baseUrlValue = resolveEnvPlaceholder(options.baseURL) || options.baseURL;
+            setInitValue(values, 'OPENAI_API_KEY', apiKeyValue);
+            setInitValue(values, 'OPENAI_BASE_URL', baseUrlValue);
+
+            if (provider.models && typeof provider.models === 'object') {
+                const firstModelName = Object.keys(provider.models)[0];
+                if (firstModelName) {
+                    setInitValue(values, 'OPENAI_MODEL', firstModelName);
+                }
+            }
+        }
+
+        if (typeof opencodeJson.model === 'string') {
+            const modelFromEnv = resolveEnvPlaceholder(opencodeJson.model);
+            if (modelFromEnv) {
+                setInitValue(values, 'OPENAI_MODEL', modelFromEnv);
+            }
+        }
+    }
+
+    if (fs.existsSync(opencodePath)) {
+        volumes.push(`${opencodePath}:/root/.config/opencode/opencode.json`);
+    } else {
+        notes.push('未检测到 OpenCode 配置文件（~/.config/opencode/opencode.json），已生成占位模板。');
+    }
+    if (fs.existsSync(opencodeAuthPath)) {
+        volumes.push(`${opencodeAuthPath}:/root/.local/share/opencode/auth.json`);
+    }
+
+    return { keys, values, notes, volumes: dedupeList(volumes) };
+}
+
+function writeInitEnvFile(filePath, keys, values) {
+    const lines = [
+        '# Auto-generated by manyoyo --init-config',
+        '# Remove leading # and fill values if missing.',
+        ''
+    ];
+    const missingKeys = [];
+    const unsafeKeys = [];
+
+    for (const key of keys) {
+        const value = values[key];
+        if (isSafeInitEnvValue(value)) {
+            lines.push(`export ${key}=${String(value).replace(/[\r\n\0]/g, '')}`);
+        } else if (value !== undefined && value !== null && String(value).trim() !== '') {
+            lines.push(`# export ${key}=""`);
+            unsafeKeys.push(key);
+        } else {
+            lines.push(`# export ${key}=""`);
+            missingKeys.push(key);
+        }
+    }
+    lines.push('');
+
+    fs.writeFileSync(filePath, lines.join('\n'));
+    return { missingKeys, unsafeKeys };
+}
+
+function writeInitRunFile(filePath, agent, yolo, volumes) {
+    const runConfig = {
+        containerName: `my-${agent}-{now}`,
+        envFile: [agent],
+        yolo
+    };
+    const volumeList = dedupeList(volumes);
+    if (volumeList.length > 0) {
+        runConfig.volumes = volumeList;
+    }
+    fs.writeFileSync(filePath, `${JSON.stringify(runConfig, null, 4)}\n`);
+}
+
+async function shouldOverwriteInitFile(filePath, fileLabel) {
+    if (!fs.existsSync(filePath)) {
+        return true;
+    }
+
+    if (YES_MODE) {
+        console.log(`${YELLOW}⚠️  ${filePath} 已存在，--yes 模式自动覆盖 (${fileLabel})${NC}`);
+        return true;
+    }
+
+    const reply = await askQuestion(`❔ ${filePath} 已存在，是否覆盖? [y/N]: `);
+    const firstChar = String(reply || '').trim().toLowerCase()[0];
+    if (firstChar === 'y') {
+        return true;
+    }
+    console.log(`${YELLOW}⏭️  已保留原文件: ${filePath}${NC}`);
+    return false;
+}
+
+async function initAgentConfigs(rawAgents) {
+    const agents = normalizeInitConfigAgents(rawAgents);
+    const homeDir = os.homedir();
+    const manyoyoHome = path.join(homeDir, '.manyoyo');
+    const runDir = path.join(manyoyoHome, 'run');
+    const envDir = path.join(manyoyoHome, 'env');
+
+    fs.mkdirSync(envDir, { recursive: true });
+    fs.mkdirSync(runDir, { recursive: true });
+
+    const extractors = {
+        claude: collectClaudeInitData,
+        codex: collectCodexInitData,
+        gemini: collectGeminiInitData,
+        opencode: collectOpenCodeInitData
+    };
+    const yoloMap = {
+        claude: 'c',
+        codex: 'cx',
+        gemini: 'gm',
+        opencode: 'oc'
+    };
+
+    console.log(`${CYAN}🧭 正在初始化 MANYOYO 配置: ${agents.join(', ')}${NC}`);
+
+    for (const agent of agents) {
+        const data = extractors[agent](homeDir);
+        const runFilePath = path.join(runDir, `${agent}.json`);
+        const envFilePath = path.join(envDir, `${agent}.env`);
+        const shouldWriteRun = await shouldOverwriteInitFile(runFilePath, `${agent}.json`);
+        const shouldWriteEnv = await shouldOverwriteInitFile(envFilePath, `${agent}.env`);
+
+        let writeResult = { missingKeys: [], unsafeKeys: [] };
+        if (shouldWriteEnv) {
+            writeResult = writeInitEnvFile(envFilePath, data.keys, data.values);
+        }
+        if (shouldWriteRun) {
+            writeInitRunFile(runFilePath, agent, yoloMap[agent], data.volumes);
+        }
+
+        if (shouldWriteEnv || shouldWriteRun) {
+            console.log(`${GREEN}✅ [${agent}] 初始化完成${NC}`);
+        } else {
+            console.log(`${YELLOW}⚠️  [${agent}] 已跳过（文件均保留）${NC}`);
+        }
+        console.log(`   run: ${shouldWriteRun ? '已写入' : '保留'} ${runFilePath}`);
+        console.log(`   env: ${shouldWriteEnv ? '已写入' : '保留'} ${envFilePath}`);
+
+        if (shouldWriteEnv && writeResult.missingKeys.length > 0) {
+            console.log(`${YELLOW}⚠️  [${agent}] 以下变量未找到，请手动填写:${NC} ${writeResult.missingKeys.join(', ')}`);
+        }
+        if (shouldWriteEnv && writeResult.unsafeKeys.length > 0) {
+            console.log(`${YELLOW}⚠️  [${agent}] 以下变量包含不安全字符，已留空模板:${NC} ${writeResult.unsafeKeys.join(', ')}`);
+        }
+        if (data.notes && data.notes.length > 0) {
+            data.notes.forEach(note => console.log(`${YELLOW}⚠️  [${agent}] ${note}${NC}`));
+        }
+    }
 }
 
 // ==============================================================================
@@ -908,7 +1368,7 @@ async function buildImage(IMAGE_BUILD_ARGS, imageName, imageVersion) {
 // SECTION: Command Line Interface
 // ==============================================================================
 
-function setupCommander() {
+async function setupCommander() {
     // Load config file
     const config = loadConfig();
 
@@ -938,6 +1398,7 @@ function setupCommander() {
   ${MANYOYO_NAME} -r ./myconfig.json                  使用当前目录 ./myconfig.json 配置
   ${MANYOYO_NAME} -n test --ef claude -y c            使用 ~/.manyoyo/env/claude.env 环境变量文件
   ${MANYOYO_NAME} -n test --ef ./myenv.env -y c       使用当前目录 ./myenv.env 环境变量文件
+  ${MANYOYO_NAME} --init-config all                   从本机 Agent 配置初始化 ~/.manyoyo
   ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
   ${MANYOYO_NAME} -x echo 123                         指定命令执行
   ${MANYOYO_NAME} --server --server-user admin --server-pass 123456   启动带登录认证的网页服务
@@ -968,6 +1429,7 @@ function setupCommander() {
         .option('--ss, --shell-suffix <command>', '指定命令后缀 (追加到-s之后，等价于 -- <args>)')
         .option('-x, --shell-full <command...>', '指定完整命令执行 (代替--sp和-s和--命令)')
         .option('-y, --yolo <cli>', '使AGENT无需确认 (claude/c, gemini/gm, codex/cx, opencode/oc)')
+        .option('--init-config [agents]', '初始化 Agent 配置到 ~/.manyoyo (all 或逗号分隔: claude,codex,gemini,opencode)')
         .option('--install <name>', '安装manyoyo命令 (docker-cli-plugin)')
         .option('--show-config', '显示最终生效配置并退出')
         .option('--show-command', '显示将执行的 docker run 命令并退出')
@@ -1000,8 +1462,12 @@ function setupCommander() {
         program.help();
     }
 
-    // Ensure docker/podman is available
-    ensureDocker();
+    const isInitConfigMode = process.argv.some(arg => arg === '--init-config' || arg.startsWith('--init-config='));
+    // init-config 只处理本地文件，不依赖 docker/podman
+    if (!isInitConfigMode) {
+        // Ensure docker/podman is available
+        ensureDocker();
+    }
 
     // Pre-handle -x/--shell-full: treat all following args as a single command
     const shellFullIndex = process.argv.findIndex(arg => arg === '-x' || arg === '--shell-full');
@@ -1016,6 +1482,15 @@ function setupCommander() {
 
     const options = program.opts();
 
+    if (options.yes) {
+        YES_MODE = true;
+    }
+
+    if (options.initConfig !== undefined) {
+        await initAgentConfigs(options.initConfig);
+        process.exit(0);
+    }
+
     // Load run config if specified
     const runConfig = options.run ? loadRunConfig(options.run) : {};
 
@@ -1025,6 +1500,7 @@ function setupCommander() {
     if (options.contName || runConfig.containerName || config.containerName) {
         CONTAINER_NAME = options.contName || runConfig.containerName || config.containerName;
     }
+    CONTAINER_NAME = resolveContainerNameTemplate(CONTAINER_NAME);
     if (options.contPath || runConfig.containerPath || config.containerPath) {
         CONTAINER_PATH = options.contPath || runConfig.containerPath || config.containerPath;
     }
@@ -1459,7 +1935,7 @@ async function runWebServerMode() {
 async function main() {
     try {
         // 1. Setup commander and parse arguments
-        setupCommander();
+        await setupCommander();
 
         // 2. Start web server mode
         if (SERVER_MODE) {

@@ -197,6 +197,25 @@ describe('MANYOYO CLI', () => {
             const config = JSON.parse(output);
             expect(config.shellSuffix).toBe(' resume --last');
         });
+
+        test('containerName should resolve {now} template from run config', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-contname-'));
+            const runConfigPath = path.join(tempDir, 'opencode.json');
+            fs.writeFileSync(runConfigPath, JSON.stringify({
+                containerName: 'my-opencode-{now}'
+            }, null, 4));
+
+            try {
+                const output = execSync(
+                    `node ${BIN_PATH} --show-config -r "${runConfigPath}"`,
+                    { encoding: 'utf-8' }
+                );
+                const config = JSON.parse(output);
+                expect(config.containerName).toMatch(/^my-opencode-\d{4}-\d{4}$/);
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
     });
 
     // ==============================================================================
@@ -247,6 +266,161 @@ describe('MANYOYO CLI', () => {
     });
 
     // ==============================================================================
+    // 初始化配置测试
+    // ==============================================================================
+
+    describe('Init Config', () => {
+        test('--init-config claude should extract existing claude settings', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
+            const claudeDir = path.join(tempHome, '.claude');
+            const claudeSettingsPath = path.join(claudeDir, 'settings.json');
+
+            fs.mkdirSync(claudeDir, { recursive: true });
+            fs.writeFileSync(claudeSettingsPath, JSON.stringify({
+                env: {
+                    ANTHROPIC_AUTH_TOKEN: 'sk-claude-test-token',
+                    ANTHROPIC_BASE_URL: 'https://llm.example.com',
+                    ANTHROPIC_MODEL: 'claude-sonnet-4-5'
+                }
+            }, null, 4));
+
+            try {
+                execSync(`node "${BIN_PATH}" --init-config claude`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome }
+                });
+
+                const envFilePath = path.join(tempHome, '.manyoyo', 'env', 'claude.env');
+                const runFilePath = path.join(tempHome, '.manyoyo', 'run', 'claude.json');
+
+                expect(fs.existsSync(envFilePath)).toBe(true);
+                expect(fs.existsSync(runFilePath)).toBe(true);
+
+                const envContent = fs.readFileSync(envFilePath, 'utf-8');
+                expect(envContent).toContain('ANTHROPIC_AUTH_TOKEN');
+                expect(envContent).toContain('sk-claude-test-token');
+                expect(envContent).toContain('ANTHROPIC_BASE_URL');
+
+                const runConfig = JSON.parse(fs.readFileSync(runFilePath, 'utf-8'));
+                expect(runConfig.containerName).toBe('my-claude-{now}');
+                expect(runConfig.envFile).toEqual(['claude']);
+                expect(runConfig.yolo).toBe('c');
+                expect(runConfig.volumes).toContain(`${claudeDir}:/root/.claude`);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('--init-config codex should create template when source config is missing', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
+
+            try {
+                execSync(`node "${BIN_PATH}" --init-config codex`, {
+                    encoding: 'utf-8',
+                    env: {
+                        ...process.env,
+                        HOME: tempHome,
+                        OPENAI_API_KEY: '',
+                        OPENAI_BASE_URL: '',
+                        OPENAI_MODEL: ''
+                    }
+                });
+
+                const envFilePath = path.join(tempHome, '.manyoyo', 'env', 'codex.env');
+                const runFilePath = path.join(tempHome, '.manyoyo', 'run', 'codex.json');
+
+                expect(fs.existsSync(envFilePath)).toBe(true);
+                expect(fs.existsSync(runFilePath)).toBe(true);
+
+                const envContent = fs.readFileSync(envFilePath, 'utf-8');
+                expect(envContent).toContain('# export OPENAI_API_KEY=""');
+                expect(envContent).toContain('# export OPENAI_BASE_URL=""');
+                expect(envContent).toContain('# export OPENAI_MODEL=""');
+
+                const runConfig = JSON.parse(fs.readFileSync(runFilePath, 'utf-8'));
+                expect(runConfig.envFile).toEqual(['codex']);
+                expect(runConfig.yolo).toBe('cx');
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('--init-config opencode should map local auth.json when it exists', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
+            const opencodeConfigDir = path.join(tempHome, '.config', 'opencode');
+            const opencodeLocalShareDir = path.join(tempHome, '.local', 'share', 'opencode');
+            const opencodeConfigPath = path.join(opencodeConfigDir, 'opencode.json');
+            const opencodeAuthPath = path.join(opencodeLocalShareDir, 'auth.json');
+
+            fs.mkdirSync(opencodeConfigDir, { recursive: true });
+            fs.mkdirSync(opencodeLocalShareDir, { recursive: true });
+            fs.writeFileSync(opencodeConfigPath, JSON.stringify({
+                provider: {
+                    s: {
+                        npm: '@ai-sdk/openai-compatible',
+                        options: {
+                            apiKey: 'sk-opencode-test',
+                            baseURL: 'https://llm.example.com'
+                        },
+                        models: {
+                            'gpt-5.2-codex': {}
+                        }
+                    }
+                }
+            }, null, 4));
+            fs.writeFileSync(opencodeAuthPath, JSON.stringify({ token: 'demo' }, null, 4));
+
+            try {
+                execSync(`node "${BIN_PATH}" --init-config opencode`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome }
+                });
+
+                const runFilePath = path.join(tempHome, '.manyoyo', 'run', 'opencode.json');
+                expect(fs.existsSync(runFilePath)).toBe(true);
+
+                const runConfig = JSON.parse(fs.readFileSync(runFilePath, 'utf-8'));
+                expect(runConfig.envFile).toEqual(['opencode']);
+                expect(runConfig.yolo).toBe('oc');
+                expect(runConfig.volumes).toContain(`${opencodeConfigPath}:/root/.config/opencode/opencode.json`);
+                expect(runConfig.volumes).toContain(`${opencodeAuthPath}:/root/.local/share/opencode/auth.json`);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('--init-config should prompt and keep existing env/json when answering no', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
+            const manyoyoEnvDir = path.join(tempHome, '.manyoyo', 'env');
+            const manyoyoRunDir = path.join(tempHome, '.manyoyo', 'run');
+            const targetEnvPath = path.join(manyoyoEnvDir, 'claude.env');
+            const targetRunPath = path.join(manyoyoRunDir, 'claude.json');
+            const originalEnvContent = 'export ORIGINAL_ONLY=1\n';
+            const originalRunContent = '{\n    "keep": true\n}\n';
+
+            fs.mkdirSync(manyoyoEnvDir, { recursive: true });
+            fs.mkdirSync(manyoyoRunDir, { recursive: true });
+            fs.writeFileSync(targetEnvPath, originalEnvContent);
+            fs.writeFileSync(targetRunPath, originalRunContent);
+
+            try {
+                const output = execSync(`node "${BIN_PATH}" --init-config claude`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome },
+                    input: 'n\nn\n'
+                });
+
+                expect(output).toContain(`${targetEnvPath} 已存在`);
+                expect(output).toContain(`${targetRunPath} 已存在`);
+                expect(fs.readFileSync(targetEnvPath, 'utf-8')).toBe(originalEnvContent);
+                expect(fs.readFileSync(targetRunPath, 'utf-8')).toBe(originalRunContent);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+    });
+
+    // ==============================================================================
     // 选项测试
     // ==============================================================================
 
@@ -290,6 +464,14 @@ describe('MANYOYO CLI', () => {
             );
             expect(output).toContain('--server-user');
             expect(output).toContain('--server-pass');
+        });
+
+        test('--init-config option should be accepted', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --help`,
+                { encoding: 'utf-8' }
+            );
+            expect(output).toContain('--init-config');
         });
 
         test('--show-config should include server mode and port', () => {
