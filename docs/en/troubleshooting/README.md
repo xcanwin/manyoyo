@@ -22,7 +22,7 @@ This page provides a quick index and solutions for common MANYOYO issues.
 | Symptom | Possible Cause | Quick Solution | Detailed Documentation |
 |---------|---------------|----------------|------------------------|
 | `manyoyo --ib` build fails | Network issues, insufficient disk space | Check network and disk space | [Build Issues](./build-errors.md) |
-| `pinging container registry failed` | Image not built | Run `manyoyo --ib --iv 1.7.0` | [Image Pull Failures](./build-errors.md#image-pull-failures) |
+| `pinging container registry failed` | Image not built | Run `manyoyo --ib --iv 1.7.0-common` | [Image Pull Failures](./build-errors.md#image-pull-failures) |
 | Container won't start | Port conflicts, permission issues | Check logs and permissions | [Container Startup Failures](./runtime-errors.md#container-startup-failures) |
 | `permission denied` | Insufficient Docker/Podman permissions | Add user to docker group | [Permission Denied](./runtime-errors.md#permission-denied) |
 | Environment variables not working | File format errors, path errors | Check environment file format | [Environment Variables Not Taking Effect](./runtime-errors.md#environment-variables-not-taking-effect) |
@@ -151,7 +151,7 @@ docker ps -a | grep my
 docker logs <container-name> 2>&1 | tee manyoyo-error.log
 
 # If build failed
-manyoyo --ib --iv 1.7.0 2>&1 | tee build-error.log
+manyoyo --ib --iv 1.7.0-common 2>&1 | tee build-error.log
 ```
 
 ### 3. Submit an Issue

@@ -366,7 +366,7 @@ manyoyo -r claude -e "LOG_LEVEL=debug"
 
 **Build Custom Image**:
 ```bash
-manyoyo --ib --in myuser/custom-manyoyo --iv 2.0.0 --iba TOOL=full
+manyoyo --ib --in myuser/custom-manyoyo --iv 2.0.0-full --iba TOOL=full
 ```
 
 ### Minimized Image Configuration
@@ -380,7 +380,7 @@ manyoyo --ib --in myuser/custom-manyoyo --iv 2.0.0 --iba TOOL=full
 
 **Build Minimal Image**:
 ```bash
-manyoyo --ib --iv 1.7.0 --iba TOOL=common
+manyoyo --ib --iv 1.7.0-common --iba TOOL=common
 ```
 
 ## Team Collaboration Configuration Examples

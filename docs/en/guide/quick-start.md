@@ -27,7 +27,7 @@ Container runtime install/switch references:
 ## 3. Build sandbox image
 
 ```bash
-manyoyo --ib --iv 1.7.0
+manyoyo --ib --iv 1.7.0-common
 ```
 
 ## 4. Migrate existing configs now

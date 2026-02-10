@@ -76,7 +76,7 @@
 - 动态容器名验证（`{now}`）：在运行配置写 `containerName: "my-<agent>-{now}"`，执行 `manyoyo -r <name> --show-config` 查看解析结果。
 - 环境文件解析：`manyoyo --ef /abs/path/myenv.env --show-config`。
 - 容器调试：`manyoyo -n <name> -x /bin/bash`。
-- 镜像构建：`manyoyo --ib --iv <version>`，可加 `--iba TOOL=common`。
+- 镜像构建：`manyoyo --ib --iv <x.y.z-后缀>`（如 `1.7.4-common`），可加 `--iba TOOL=common`。
 - 局域网监听网页服务：`manyoyo --server 0.0.0.0:3000 --server-user <user> --server-pass <pass>`。
 - 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`（需与启动参数/配置一致）。
 - 若未显式设置 `--server-pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。
@@ -93,6 +93,7 @@
 - 网页认证配置：`serverUser`、`serverPass`（支持环境变量 `MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`）。
 - 网页服务监听：`--server` 支持 `<port>` 或 `<host:port>`，默认 `127.0.0.1:3000`。
 - 网页认证参数优先级：命令行参数 > 运行配置 > 全局配置 > 环境变量 > 默认值。
+- 镜像版本格式：`imageVersion` 与 `--iv/--image-ver` 必须为 `x.y.z-后缀`（如 `1.7.4-common`）。
 - 缓存目录：`docker/cache/`，覆盖率：`coverage/`。
 
 ## 环境与兼容性
@@ -109,7 +110,7 @@
 2. 涉及文档改动时运行 `npm run docs:build`。
 3. 检查 dead links 与 sidebar/nav 行为。
 4. 反馈保持简洁，并附可选 commit 命令/message。
-5. 校对 `README.md` 与 `docs/zh/`、`docs/en/` 示例版本号，确保与 `package.json` 的 `version` / `imageVersion` 一致。
+5. 校对版本示例：`README.md` 的快速开始与主流程示例应与 `package.json` 的 `version` / `imageVersion` 对齐；`docs/zh/`、`docs/en/` 的历史/场景示例可使用其他版本，但必须保持 `x.y.z-后缀` 格式并标注用途。
 
 ## 文档与安全提示
 - 侧边栏在 `/zh/` 与 `/en/` 统一展示全章节导航；首页卡片需可点击跳转。

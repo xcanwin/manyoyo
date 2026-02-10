@@ -355,7 +355,7 @@ manyoyo -q tip -q cmd -x echo "Hello"
 
 ```bash
 # 跳过所有交互式确认（用于脚本）
-manyoyo --yes --ib --iv 1.7.0
+manyoyo --yes --ib --iv 1.7.0-common
 
 # 组合使用
 manyoyo --yes -q full -x echo "Automated"
@@ -370,7 +370,7 @@ manyoyo --yes -q full -x echo "Automated"
 manyoyo --iv 1.7.0-full -y c
 
 # 使用自定义镜像
-manyoyo --in myuser/sandbox --iv 1.0.0 -y c
+manyoyo --in myuser/sandbox --iv 1.0.0-common -y c
 
 # 完整镜像标识
 manyoyo --in localhost/xcanwin/manyoyo --iv 1.7.0-full -y c
@@ -380,10 +380,10 @@ manyoyo --in localhost/xcanwin/manyoyo --iv 1.7.0-full -y c
 
 ```bash
 # 构建默认镜像
-manyoyo --ib --iv 1.7.0
+manyoyo --ib --iv 1.7.0-common
 
 # 构建自定义镜像
-manyoyo --ib --in mysandbox --iv 1.0.0
+manyoyo --ib --in mysandbox --iv 1.0.0-common
 
 # 构建精简版本
 manyoyo --ib --iba TOOL=common

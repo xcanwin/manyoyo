@@ -46,7 +46,7 @@
 ```bash
 npm install -g @xcanwin/manyoyo    # 安装
 podman pull ubuntu:24.04           # 仅 Podman 需要
-manyoyo --ib --iv 1.7.4            # 构建镜像
+manyoyo --ib --iv 1.7.4-common     # 构建镜像
 manyoyo --init-config all          # 从本机 Agent 配置迁移到 ~/.manyoyo
 manyoyo -r claude                  # 使用 manyoyo.json 的 runs.claude 启动
 ```
@@ -96,11 +96,11 @@ npm install -g @xcanwin/manyoyo
 ## 构建镜像
 
 ```bash
-# 构建完整版本（推荐）
-manyoyo --ib --iv 1.7.4
+# 构建 common 版本（推荐）
+manyoyo --ib --iv 1.7.4-common
 
-# 构建精简版本
-manyoyo --ib --iba TOOL=common
+# 构建 full 版本
+manyoyo --ib --iv 1.7.4-full
 
 # 构建自定义版本
 manyoyo --ib --iba TOOL=go,codex,java,gemini

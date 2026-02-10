@@ -7,6 +7,7 @@ const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { imageVersion: PACKAGE_IMAGE_VERSION } = require('../package.json');
 
 const BIN_PATH = path.join(__dirname, '../bin/manyoyo.js');
 
@@ -62,6 +63,12 @@ describe('MANYOYO CLI', () => {
             expect(config).toHaveProperty('containerName');
             expect(config).toHaveProperty('imageName');
             expect(config).toHaveProperty('imageVersion');
+        });
+
+        test('default imageVersion should match package imageVersion', () => {
+            const output = execSync(`node ${BIN_PATH} --show-config`, { encoding: 'utf-8' });
+            const config = JSON.parse(output);
+            expect(config.imageVersion).toBe(PACKAGE_IMAGE_VERSION);
         });
     });
 
@@ -228,12 +235,21 @@ describe('MANYOYO CLI', () => {
     describe('Configuration Merging', () => {
         test('command line should override defaults', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config --in custom-image --iv 2.0.0`,
+                `node ${BIN_PATH} --show-config --in custom-image --iv 2.0.0-common`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
             expect(config.imageName).toBe('custom-image');
-            expect(config.imageVersion).toBe('2.0.0');
+            expect(config.imageVersion).toBe('2.0.0-common');
+        });
+
+        test('should reject imageVersion without suffix', () => {
+            expect(() => {
+                execSync(`node ${BIN_PATH} --show-config --iv 2.0.0`, {
+                    encoding: 'utf-8',
+                    stdio: 'pipe'
+                });
+            }).toThrow();
         });
 
         test('multiple env values should be merged into env map', () => {

@@ -355,7 +355,7 @@ manyoyo -q tip -q cmd -x echo "Hello"
 
 ```bash
 # Skip all interactive confirmations (for scripts)
-manyoyo --yes --ib --iv 1.7.0
+manyoyo --yes --ib --iv 1.7.0-common
 
 # Combined usage
 manyoyo --yes -q full -x echo "Automated"
@@ -370,7 +370,7 @@ manyoyo --yes -q full -x echo "Automated"
 manyoyo --iv 1.7.0-full -y c
 
 # Use custom image
-manyoyo --in myuser/sandbox --iv 1.0.0 -y c
+manyoyo --in myuser/sandbox --iv 1.0.0-common -y c
 
 # Full image identifier
 manyoyo --in localhost/xcanwin/manyoyo --iv 1.7.0-full -y c
@@ -380,10 +380,10 @@ manyoyo --in localhost/xcanwin/manyoyo --iv 1.7.0-full -y c
 
 ```bash
 # Build default image
-manyoyo --ib --iv 1.7.0
+manyoyo --ib --iv 1.7.0-common
 
 # Build custom image
-manyoyo --ib --in mysandbox --iv 1.0.0
+manyoyo --ib --in mysandbox --iv 1.0.0-common
 
 # Build minimal version
 manyoyo --ib --iba TOOL=common

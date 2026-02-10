@@ -66,7 +66,7 @@ manyoyo --irm
 
 ```bash
 # Skip all interactive confirmations
-manyoyo --ib --iv 1.7.0 --yes
+manyoyo --ib --iv 1.7.0-common --yes
 ```
 
 #### 4. Modify Mirror Sources for International Users
@@ -81,24 +81,24 @@ Edit `docker/manyoyo.Dockerfile`, comment out mirror source related ARGs:
 
 Or use empty values:
 ```bash
-manyoyo --ib --iv 1.7.0 --iba NODE_MIRROR= --iba NPM_REGISTRY=
+manyoyo --ib --iv 1.7.0-common --iba NODE_MIRROR= --iba NPM_REGISTRY=
 ```
 
 #### 5. Step-by-Step Build Debugging
 
 ```bash
 # First build basic version (faster, fewer issues)
-manyoyo --ib --iv 1.7.0 --iba TOOL=common
+manyoyo --ib --iv 1.7.0-common --iba TOOL=common
 
 # After basic version succeeds, build full version
-manyoyo --ib --iv 1.7.0 --iba TOOL=full
+manyoyo --ib --iv 1.7.0-full --iba TOOL=full
 ```
 
 #### 6. View Detailed Build Logs
 
 ```bash
 # Save build logs
-manyoyo --ib --iv 1.7.0 2>&1 | tee build.log
+manyoyo --ib --iv 1.7.0-common 2>&1 | tee build.log
 
 # Search for error keywords
 grep -i "error\|failed\|fatal" build.log
@@ -132,7 +132,7 @@ sudo systemctl restart docker
 **Solution**:
 ```bash
 # Skip Git SSL verification during build (not recommended, dev environments only)
-manyoyo --ib --iv 1.7.0 --iba GIT_SSL_NO_VERIFY=true
+manyoyo --ib --iv 1.7.0-common --iba GIT_SSL_NO_VERIFY=true
 ```
 
 ## Image Pull Failures
@@ -154,7 +154,7 @@ MANYOYO uses local images by default (`localhost/xcanwin/manyoyo`), which need t
 
 ```bash
 # Build image
-manyoyo --ib --iv 1.7.0
+manyoyo --ib --iv 1.7.0-common
 
 # Verify image
 docker images | grep manyoyo  # or podman images
@@ -193,10 +193,10 @@ manyoyo --iv 1.6.0-full -y c
 docker images | grep manyoyo
 
 # Use existing version
-manyoyo --iv <existing-version> -y c
+manyoyo --iv <x.y.z-suffix> -y c
 
 # Or build new version
-manyoyo --ib --iv 1.7.0
+manyoyo --ib --iv 1.7.0-common
 ```
 
 ## Network Connection Issues
@@ -265,7 +265,7 @@ export HTTPS_PROXY=http://proxy.example.com:8080
 export NO_PROXY=localhost,127.0.0.1
 
 # Rebuild
-manyoyo --ib --iv 1.7.0
+manyoyo --ib --iv 1.7.0-common
 ```
 
 ## Insufficient Disk Space
@@ -364,7 +364,7 @@ newgrp docker
 docker ps
 
 # Solution 2: Use sudo (not recommended)
-sudo manyoyo --ib --iv 1.7.0
+sudo manyoyo --ib --iv 1.7.0-common
 ```
 
 ### File Permission Issues
@@ -431,7 +431,7 @@ docker version
 rm -rf docker/cache/
 
 # Rebuild (will re-download)
-manyoyo --ib --iv 1.7.0
+manyoyo --ib --iv 1.7.0-common
 ```
 
 ### Cache Not Taking Effect
@@ -456,7 +456,7 @@ touch docker/cache/*
 
 ```bash
 # View detailed build process
-manyoyo --ib --iv 1.7.0 2>&1 | tee build.log
+manyoyo --ib --iv 1.7.0-common 2>&1 | tee build.log
 
 # Enable debugging in Docker
 export DOCKER_BUILDKIT=0  # Use traditional builder for more verbose output
@@ -481,7 +481,7 @@ podman build -t localhost/xcanwin/manyoyo:test-full \
 podman build --target=base -f docker/manyoyo.Dockerfile .
 
 # Test specific build arguments
-manyoyo --ib --iv 1.7.0 --iba TOOL=common --yes
+manyoyo --ib --iv 1.7.0-common --iba TOOL=common --yes
 ```
 
 ## Related Documentation

@@ -366,7 +366,7 @@ manyoyo -r claude -e "LOG_LEVEL=debug"
 
 **构建自定义镜像**：
 ```bash
-manyoyo --ib --in myuser/custom-manyoyo --iv 2.0.0 --iba TOOL=full
+manyoyo --ib --in myuser/custom-manyoyo --iv 2.0.0-full --iba TOOL=full
 ```
 
 ### 最小化镜像配置
@@ -380,7 +380,7 @@ manyoyo --ib --in myuser/custom-manyoyo --iv 2.0.0 --iba TOOL=full
 
 **构建精简镜像**：
 ```bash
-manyoyo --ib --iv 1.7.0 --iba TOOL=common
+manyoyo --ib --iv 1.7.0-common --iba TOOL=common
 ```
 
 ## 团队协作配置示例

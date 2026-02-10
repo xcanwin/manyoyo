@@ -30,7 +30,7 @@ description: MANYOYO CLI option reference for container management, env injectio
 | `--ef` | Read environment variable file (absolute path only) |
 | `-r` | Read `runs.<name>` from `~/.manyoyo/manyoyo.json` |
 | `--ib` | Build sandbox image |
-| `--iv` | Specify image version |
+| `--iv` | Specify image version tag (format: `x.y.z-suffix`, e.g. `1.7.4-common`) |
 | `--iba` | Pass image build arguments (e.g., `TOOL=common`) |
 | `--init-config [agents]` | Initialize `~/.manyoyo` from local Agent configuration |
 | `--server [port]` | Start web interaction server (default `3000`) |

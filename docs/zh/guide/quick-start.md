@@ -27,7 +27,7 @@ manyoyo -V
 ## 3. 构建沙箱镜像
 
 ```bash
-manyoyo --ib --iv 1.7.0
+manyoyo --ib --iv 1.7.0-common
 ```
 
 ## 4. 立即迁移配置

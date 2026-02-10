@@ -14,7 +14,9 @@ const readline = require('readline');
 const { Command } = require('commander');
 const JSON5 = require('json5');
 const { startWebServer } = require('../lib/web/server');
-const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_BASE } = require('../package.json');
+const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_DEFAULT } = require('../package.json');
+const IMAGE_VERSION_BASE = String(IMAGE_VERSION_DEFAULT || '1.0.0').split('-')[0];
+const IMAGE_VERSION_HELP_EXAMPLE = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
 
 // Helper function to format date like bash $(date +%m%d-%H%M)
 function formatDate() {
@@ -54,7 +56,7 @@ let CONTAINER_NAME = `my-${formatDate()}`;
 let HOST_PATH = process.cwd();
 let CONTAINER_PATH = HOST_PATH;
 let IMAGE_NAME = "localhost/xcanwin/manyoyo";
-let IMAGE_VERSION = `${IMAGE_VERSION_BASE}-full`;
+let IMAGE_VERSION = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
 let EXEC_COMMAND = "";
 let EXEC_COMMAND_PREFIX = "";
 let EXEC_COMMAND_SUFFIX = "";
@@ -86,6 +88,7 @@ const YELLOW = '\x1b[1;33m';
 const BLUE = '\x1b[0;34m';
 const CYAN = '\x1b[0;36m';
 const NC = '\x1b[0m'; // No Color
+const IMAGE_VERSION_TAG_PATTERN = /^(\d+\.\d+\.\d+)-([A-Za-z0-9][A-Za-z0-9_.-]*)$/;
 
 // Docker command (will be set by ensure_docker)
 let DOCKER_CMD = 'docker';
@@ -807,6 +810,25 @@ function validateName(label, value, pattern) {
     }
 }
 
+function parseImageVersionTag(version) {
+    const match = String(version || '').trim().match(IMAGE_VERSION_TAG_PATTERN);
+    if (!match) {
+        return null;
+    }
+    return {
+        baseVersion: match[1],
+        tool: match[2]
+    };
+}
+
+function validateImageVersion(value) {
+    validateName('imageVersion', value, /^[A-Za-z0-9][A-Za-z0-9_.-]*$/);
+    if (!parseImageVersionTag(value)) {
+        console.error(`${RED}⚠️  错误: imageVersion 格式必须为 <x.y.z-后缀>，例如 1.7.4-common。当前值: ${value}${NC}`);
+        process.exit(1);
+    }
+}
+
 function isValidContainerName(value) {
     return typeof value === 'string' && SAFE_CONTAINER_NAME_PATTERN.test(value);
 }
@@ -1030,7 +1052,7 @@ function showImagePullHint(err) {
     }
     const image = `${IMAGE_NAME}:${IMAGE_VERSION}`;
     console.log(`${YELLOW}💡 提示: 本地未找到镜像 ${image}，并且从 localhost 注册表拉取失败。${NC}`);
-    console.log(`${YELLOW}   你可以: (1) 更新 ~/.manyoyo/manyoyo.json 的 imageVersion。 (2) 或先执行 ${MANYOYO_NAME} --ib --iv <version> 构建镜像。${NC}`);
+    console.log(`${YELLOW}   你可以: (1) 更新 ~/.manyoyo/manyoyo.json 的 imageVersion。 (2) 或先执行 ${MANYOYO_NAME} --ib --iv <x.y.z-后缀> 构建镜像。${NC}`);
 }
 
 function runCmd(cmd, args, options = {}) {
@@ -1351,15 +1373,24 @@ function addImageBuildArg(string) {
     IMAGE_BUILD_ARGS.push("--build-arg", string);
 }
 
-async function buildImage(IMAGE_BUILD_ARGS, imageName, imageVersion) {
-    let imageTool = "full";
-    if (IMAGE_BUILD_ARGS.length === 0) {
-        IMAGE_BUILD_ARGS = ["--build-arg", `TOOL=${imageTool}`];
-    } else {
-        imageTool = IMAGE_BUILD_ARGS.filter(v => v.startsWith("TOOL=")).at(-1)?.slice("TOOL=".length) ?? imageTool;
+async function buildImage(IMAGE_BUILD_ARGS, imageName, imageVersionTag) {
+    const versionTag = imageVersionTag || IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
+    const parsedVersion = parseImageVersionTag(versionTag);
+    if (!parsedVersion) {
+        console.error(`${RED}错误: 镜像版本格式错误，必须为 <x.y.z-后缀>，例如 1.7.4-common: ${versionTag}${NC}`);
+        process.exit(1);
     }
-    // Use package.json imageVersion if not specified
-    const version = imageVersion || IMAGE_VERSION_BASE;
+
+    const version = parsedVersion.baseVersion;
+    let imageTool = parsedVersion.tool;
+    const toolFromArgs = IMAGE_BUILD_ARGS.filter(v => v.startsWith("TOOL=")).at(-1)?.slice("TOOL=".length);
+
+    if (!toolFromArgs) {
+        IMAGE_BUILD_ARGS = [...IMAGE_BUILD_ARGS, "--build-arg", `TOOL=${imageTool}`];
+    } else {
+        imageTool = toolFromArgs;
+    }
+
     const fullImageTag = `${imageName}:${version}-${imageTool}`;
 
     console.log(`${CYAN}🔨 正在构建镜像: ${YELLOW}${fullImageTag}${NC}`);
@@ -1427,7 +1458,7 @@ async function setupCommander() {
   -- <args...>  → 直接透传命令后缀（优先级最高）
 
 示例:
-  ${MANYOYO_NAME} --ib --iv ${IMAGE_VERSION_BASE || "1.0.0"}                     构建镜像
+  ${MANYOYO_NAME} --ib --iv ${IMAGE_VERSION_HELP_EXAMPLE}              构建镜像
   ${MANYOYO_NAME} --init-config all                   从本机 Agent 配置初始化 ~/.manyoyo
   ${MANYOYO_NAME} -r claude                           使用 manyoyo.json 的 runs.claude 快速启动
   ${MANYOYO_NAME} -r codex --ss "resume --last"       使用命令后缀
@@ -1450,7 +1481,7 @@ async function setupCommander() {
         .option('--crm, --cont-remove', '删除-n指定容器')
         .option('-m, --cont-mode <mode>', '设置容器嵌套容器模式 (common, dind, sock)')
         .option('--in, --image-name <name>', '指定镜像名称')
-        .option('--iv, --image-ver <version>', '指定镜像版本')
+        .option('--iv, --image-ver <version>', '指定镜像版本 (格式: x.y.z-后缀，如 1.7.4-common)')
         .option('--ib, --image-build', '构建镜像')
         .option('--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--init-config [agents]', '初始化 Agent 配置到 ~/.manyoyo (all 或逗号分隔: claude,codex,gemini,opencode)')
@@ -1554,7 +1585,7 @@ async function setupCommander() {
     // Basic name validation to reduce injection risk
     validateName('containerName', CONTAINER_NAME, SAFE_CONTAINER_NAME_PATTERN);
     validateName('imageName', IMAGE_NAME, /^[A-Za-z0-9][A-Za-z0-9._/:-]*$/);
-    validateName('imageVersion', IMAGE_VERSION, /^[A-Za-z0-9][A-Za-z0-9_.-]*$/);
+    validateImageVersion(IMAGE_VERSION);
 
     // Merge mode (array values): concatenate all sources
     const toArray = (val) => Array.isArray(val) ? val : (val ? [val] : []);
@@ -1983,7 +2014,7 @@ async function main() {
 
         // 3. Handle image build operation
         if (IMAGE_BUILD_NEED) {
-            await buildImage(IMAGE_BUILD_ARGS, IMAGE_NAME, IMAGE_VERSION.split('-')[0]);
+            await buildImage(IMAGE_BUILD_ARGS, IMAGE_NAME, IMAGE_VERSION);
             process.exit(0);
         }
 
