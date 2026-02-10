@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 
-// ==============================================================================
-// manyoyo - AI Agent CLI Sandbox - xcanwin
-// ==============================================================================
-
 const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -15,6 +11,8 @@ const { Command } = require('commander');
 const JSON5 = require('json5');
 const { startWebServer } = require('../lib/web/server');
 const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/container-run');
+const { initAgentConfigs } = require('../lib/init-config');
+const { buildImage } = require('../lib/image-build');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_DEFAULT } = require('../package.json');
 const IMAGE_VERSION_BASE = String(IMAGE_VERSION_DEFAULT || '1.0.0').split('-')[0];
 const IMAGE_VERSION_HELP_EXAMPLE = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
@@ -41,12 +39,7 @@ function detectCommandName() {
     return baseName || 'manyoyo';
 }
 
-// ==============================================================================
-// Configuration Constants
-// ==============================================================================
-
 const CONFIG = {
-    CACHE_TTL_DAYS: 2,                    // 缓存过期天数
     CONTAINER_READY_MAX_RETRIES: 30,      // 容器就绪最大重试次数
     CONTAINER_READY_INITIAL_DELAY: 100,   // 容器就绪初始延迟(ms)
     CONTAINER_READY_MAX_DELAY: 2000,      // 容器就绪最大延迟(ms)
@@ -92,10 +85,6 @@ const IMAGE_VERSION_TAG_PATTERN = /^(\d+\.\d+\.\d+)-([A-Za-z0-9][A-Za-z0-9_.-]*)
 // Docker command (will be set by ensure_docker)
 let DOCKER_CMD = 'docker';
 const SUPPORTED_INIT_AGENTS = ['claude', 'codex', 'gemini', 'opencode'];
-
-// ==============================================================================
-// SECTION: Utility Functions
-// ==============================================================================
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -198,18 +187,6 @@ function ensureWebServerAuthCredentials() {
 }
 
 /**
- * 计算文件的 SHA256 哈希值（跨平台）
- * @param {string} filePath - 文件路径
- * @returns {string} SHA256 哈希值（十六进制）
- */
-function getFileSha256(filePath) {
-    const fileBuffer = fs.readFileSync(filePath);
-    const hashSum = crypto.createHash('sha256');
-    hashSum.update(fileBuffer);
-    return hashSum.digest('hex');
-}
-
-/**
  * 敏感信息脱敏（用于 --show-config 输出）
  * @param {Object} obj - 配置对象
  * @returns {Object} 脱敏后的配置对象
@@ -251,10 +228,6 @@ function sanitizeSensitiveData(obj) {
     }
     return result;
 }
-
-// ==============================================================================
-// SECTION: Configuration Management
-// ==============================================================================
 
 /**
  * @typedef {Object} Config
@@ -316,460 +289,6 @@ function loadRunConfig(name, config) {
 
     return runConfig;
 }
-
-function readJsonFileSafely(filePath, label) {
-    if (!fs.existsSync(filePath)) {
-        return null;
-    }
-    try {
-        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    } catch (e) {
-        console.log(`${YELLOW}⚠️  ${label} 解析失败: ${filePath}${NC}`);
-        return null;
-    }
-}
-
-function parseSimpleToml(content) {
-    const result = {};
-    let current = result;
-    const lines = String(content || '').split('\n');
-
-    for (const rawLine of lines) {
-        const line = rawLine.trim();
-        if (!line || line.startsWith('#')) {
-            continue;
-        }
-
-        const sectionMatch = line.match(/^\[([^\]]+)\]$/);
-        if (sectionMatch) {
-            const parts = sectionMatch[1].split('.').map(p => p.trim()).filter(Boolean);
-            current = result;
-            for (const part of parts) {
-                if (!current[part] || typeof current[part] !== 'object' || Array.isArray(current[part])) {
-                    current[part] = {};
-                }
-                current = current[part];
-            }
-            continue;
-        }
-
-        const keyValueMatch = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*(.+)$/);
-        if (!keyValueMatch) {
-            continue;
-        }
-
-        const key = keyValueMatch[1];
-        let valueText = keyValueMatch[2].trim();
-        if ((valueText.startsWith('"') && valueText.endsWith('"')) || (valueText.startsWith("'") && valueText.endsWith("'"))) {
-            valueText = valueText.slice(1, -1);
-        } else if (valueText === 'true') {
-            valueText = true;
-        } else if (valueText === 'false') {
-            valueText = false;
-        } else if (/^-?\d+(\.\d+)?$/.test(valueText)) {
-            valueText = Number(valueText);
-        }
-
-        current[key] = valueText;
-    }
-
-    return result;
-}
-
-function readTomlFileSafely(filePath, label) {
-    if (!fs.existsSync(filePath)) {
-        return null;
-    }
-    try {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        return parseSimpleToml(content);
-    } catch (e) {
-        console.log(`${YELLOW}⚠️  ${label} 解析失败: ${filePath}${NC}`);
-        return null;
-    }
-}
-
-function normalizeInitConfigAgents(rawAgents) {
-    const aliasMap = {
-        all: 'all',
-        claude: 'claude',
-        c: 'claude',
-        cc: 'claude',
-        codex: 'codex',
-        cx: 'codex',
-        gemini: 'gemini',
-        gm: 'gemini',
-        g: 'gemini',
-        opencode: 'opencode',
-        oc: 'opencode'
-    };
-
-    if (rawAgents === true || rawAgents === undefined || rawAgents === null || rawAgents === '') {
-        return [...SUPPORTED_INIT_AGENTS];
-    }
-
-    const tokens = String(rawAgents).split(/[,\s]+/).map(v => v.trim().toLowerCase()).filter(Boolean);
-    if (tokens.length === 0) {
-        return [...SUPPORTED_INIT_AGENTS];
-    }
-
-    const normalized = [];
-    for (const token of tokens) {
-        const mapped = aliasMap[token];
-        if (!mapped) {
-            console.error(`${RED}⚠️  错误: --init-config 不支持的 Agent: ${token}${NC}`);
-            console.error(`${YELLOW}支持: ${SUPPORTED_INIT_AGENTS.join(', ')} 或 all${NC}`);
-            process.exit(1);
-        }
-        if (mapped === 'all') {
-            return [...SUPPORTED_INIT_AGENTS];
-        }
-        if (!normalized.includes(mapped)) {
-            normalized.push(mapped);
-        }
-    }
-    return normalized;
-}
-
-function isSafeInitEnvValue(value) {
-    if (value === undefined || value === null) {
-        return false;
-    }
-    const text = String(value).replace(/[\r\n\0]/g, '').trim();
-    if (!text) {
-        return false;
-    }
-    if (/[\$\(\)\`\|\&\*\{\};<>]/.test(text)) {
-        return false;
-    }
-    if (/^\(/.test(text)) {
-        return false;
-    }
-    return true;
-}
-
-function setInitValue(values, key, value) {
-    if (value === undefined || value === null) {
-        return;
-    }
-    const text = String(value).replace(/[\r\n\0]/g, '').trim();
-    if (!text) {
-        return;
-    }
-    values[key] = text;
-}
-
-function dedupeList(list) {
-    return Array.from(new Set((list || []).filter(Boolean)));
-}
-
-function resolveEnvPlaceholder(value) {
-    if (typeof value !== 'string') {
-        return "";
-    }
-    const match = value.match(/\{env:([A-Za-z_][A-Za-z0-9_]*)\}/);
-    if (!match) {
-        return "";
-    }
-    const envName = match[1];
-    return process.env[envName] ? String(process.env[envName]).trim() : "";
-}
-
-function collectClaudeInitData(homeDir) {
-    const keys = [
-        'ANTHROPIC_AUTH_TOKEN',
-        'CLAUDE_CODE_OAUTH_TOKEN',
-        'ANTHROPIC_BASE_URL',
-        'ANTHROPIC_MODEL',
-        'ANTHROPIC_DEFAULT_OPUS_MODEL',
-        'ANTHROPIC_DEFAULT_SONNET_MODEL',
-        'ANTHROPIC_DEFAULT_HAIKU_MODEL',
-        'CLAUDE_CODE_SUBAGENT_MODEL'
-    ];
-    const values = {};
-    const notes = [];
-    const volumes = [];
-
-    const claudeDir = path.join(homeDir, '.claude');
-    const claudeSettingsPath = path.join(claudeDir, 'settings.json');
-    const settingsJson = readJsonFileSafely(claudeSettingsPath, 'Claude settings');
-
-    keys.forEach(key => setInitValue(values, key, process.env[key]));
-
-    if (settingsJson && settingsJson.env && typeof settingsJson.env === 'object') {
-        keys.forEach(key => setInitValue(values, key, settingsJson.env[key]));
-    }
-
-    return { keys, values, notes, volumes: dedupeList(volumes) };
-}
-
-function collectGeminiInitData(homeDir) {
-    const keys = [
-        'GOOGLE_GEMINI_BASE_URL',
-        'GEMINI_API_KEY',
-        'GEMINI_MODEL'
-    ];
-    const values = {};
-    const notes = [];
-    const volumes = [];
-    const geminiDir = path.join(homeDir, '.gemini');
-
-    keys.forEach(key => setInitValue(values, key, process.env[key]));
-
-    if (fs.existsSync(geminiDir)) {
-        volumes.push(`${geminiDir}:/root/.gemini`);
-    } else {
-        notes.push('未检测到 Gemini 本地配置目录（~/.gemini），已生成占位模板。');
-    }
-
-    return { keys, values, notes, volumes: dedupeList(volumes) };
-}
-
-function collectCodexInitData(homeDir) {
-    const keys = [
-        'OPENAI_API_KEY',
-        'OPENAI_BASE_URL',
-        'OPENAI_MODEL'
-    ];
-    const values = {};
-    const notes = [];
-    const volumes = [];
-
-    const codexDir = path.join(homeDir, '.codex');
-    const authPath = path.join(codexDir, 'auth.json');
-    const configPath = path.join(codexDir, 'config.toml');
-    const authJson = readJsonFileSafely(authPath, 'Codex auth');
-    const configToml = readTomlFileSafely(configPath, 'Codex TOML');
-
-    keys.forEach(key => setInitValue(values, key, process.env[key]));
-
-    if (authJson && typeof authJson === 'object') {
-        setInitValue(values, 'OPENAI_API_KEY', authJson.OPENAI_API_KEY);
-    }
-
-    if (configToml && typeof configToml === 'object') {
-        setInitValue(values, 'OPENAI_MODEL', configToml.model);
-
-        let providerConfig = null;
-        const providers = configToml.model_providers;
-        if (providers && typeof providers === 'object') {
-            if (typeof configToml.model_provider === 'string' && providers[configToml.model_provider]) {
-                providerConfig = providers[configToml.model_provider];
-            } else {
-                const firstProviderName = Object.keys(providers)[0];
-                if (firstProviderName) {
-                    providerConfig = providers[firstProviderName];
-                }
-            }
-        }
-        if (providerConfig && typeof providerConfig === 'object') {
-            setInitValue(values, 'OPENAI_BASE_URL', providerConfig.base_url);
-        }
-    }
-
-    if (fs.existsSync(codexDir)) {
-        volumes.push(`${codexDir}:/root/.codex`);
-    } else {
-        notes.push('未检测到 Codex 本地配置目录（~/.codex），已生成占位模板。');
-    }
-
-    return { keys, values, notes, volumes: dedupeList(volumes) };
-}
-
-function collectOpenCodeInitData(homeDir) {
-    const keys = [
-        'OPENAI_API_KEY',
-        'OPENAI_BASE_URL',
-        'OPENAI_MODEL'
-    ];
-    const values = {};
-    const notes = [];
-    const volumes = [];
-
-    const opencodeDir = path.join(homeDir, '.config', 'opencode');
-    const opencodePath = path.join(opencodeDir, 'opencode.json');
-    const opencodeAuthPath = path.join(homeDir, '.local', 'share', 'opencode', 'auth.json');
-    const opencodeJson = readJsonFileSafely(opencodePath, 'OpenCode config');
-
-    keys.forEach(key => setInitValue(values, key, process.env[key]));
-
-    if (opencodeJson && typeof opencodeJson === 'object') {
-        const providers = opencodeJson.provider && typeof opencodeJson.provider === 'object'
-            ? Object.values(opencodeJson.provider).filter(v => v && typeof v === 'object')
-            : [];
-        const provider = providers[0];
-
-        if (provider) {
-            const options = provider.options && typeof provider.options === 'object' ? provider.options : {};
-            const apiKeyValue = resolveEnvPlaceholder(options.apiKey) || options.apiKey;
-            const baseUrlValue = resolveEnvPlaceholder(options.baseURL) || options.baseURL;
-            setInitValue(values, 'OPENAI_API_KEY', apiKeyValue);
-            setInitValue(values, 'OPENAI_BASE_URL', baseUrlValue);
-
-            if (provider.models && typeof provider.models === 'object') {
-                const firstModelName = Object.keys(provider.models)[0];
-                if (firstModelName) {
-                    setInitValue(values, 'OPENAI_MODEL', firstModelName);
-                }
-            }
-        }
-
-        if (typeof opencodeJson.model === 'string') {
-            const modelFromEnv = resolveEnvPlaceholder(opencodeJson.model);
-            if (modelFromEnv) {
-                setInitValue(values, 'OPENAI_MODEL', modelFromEnv);
-            }
-        }
-    }
-
-    if (fs.existsSync(opencodePath)) {
-        volumes.push(`${opencodePath}:/root/.config/opencode/opencode.json`);
-    } else {
-        notes.push('未检测到 OpenCode 配置文件（~/.config/opencode/opencode.json），已生成占位模板。');
-    }
-    if (fs.existsSync(opencodeAuthPath)) {
-        volumes.push(`${opencodeAuthPath}:/root/.local/share/opencode/auth.json`);
-    }
-
-    return { keys, values, notes, volumes: dedupeList(volumes) };
-}
-
-function buildInitRunEnv(keys, values) {
-    const envMap = {};
-    const missingKeys = [];
-    const unsafeKeys = [];
-
-    for (const key of keys) {
-        const value = values[key];
-        if (isSafeInitEnvValue(value)) {
-            envMap[key] = String(value).replace(/[\r\n\0]/g, '');
-        } else if (value !== undefined && value !== null && String(value).trim() !== '') {
-            envMap[key] = "";
-            unsafeKeys.push(key);
-        } else {
-            envMap[key] = "";
-            missingKeys.push(key);
-        }
-    }
-    return { envMap, missingKeys, unsafeKeys };
-}
-
-function buildInitRunProfile(agent, yolo, volumes, keys, values) {
-    const envBuildResult = buildInitRunEnv(keys, values);
-    const runProfile = {
-        containerName: `my-${agent}-{now}`,
-        env: envBuildResult.envMap,
-        yolo
-    };
-    const volumeList = dedupeList(volumes);
-    if (volumeList.length > 0) {
-        runProfile.volumes = volumeList;
-    }
-    return {
-        runProfile,
-        missingKeys: envBuildResult.missingKeys,
-        unsafeKeys: envBuildResult.unsafeKeys
-    };
-}
-
-async function shouldOverwriteInitRunEntry(runName, exists) {
-    if (!exists) {
-        return true;
-    }
-
-    if (YES_MODE) {
-        console.log(`${YELLOW}⚠️  runs.${runName} 已存在，--yes 模式自动覆盖${NC}`);
-        return true;
-    }
-
-    const reply = await askQuestion(`❔ runs.${runName} 已存在，是否覆盖? [y/N]: `);
-    const firstChar = String(reply || '').trim().toLowerCase()[0];
-    if (firstChar === 'y') {
-        return true;
-    }
-    console.log(`${YELLOW}⏭️  已保留原配置: runs.${runName}${NC}`);
-    return false;
-}
-
-async function initAgentConfigs(rawAgents) {
-    const agents = normalizeInitConfigAgents(rawAgents);
-    const homeDir = os.homedir();
-    const manyoyoHome = path.join(homeDir, '.manyoyo');
-    const manyoyoConfigPath = path.join(manyoyoHome, 'manyoyo.json');
-
-    fs.mkdirSync(manyoyoHome, { recursive: true });
-
-    const manyoyoConfig = loadConfig();
-    let runsMap = {};
-    if (manyoyoConfig.runs !== undefined) {
-        if (typeof manyoyoConfig.runs !== 'object' || manyoyoConfig.runs === null || Array.isArray(manyoyoConfig.runs)) {
-            console.error(`${RED}⚠️  错误: ~/.manyoyo/manyoyo.json 的 runs 必须是对象(map)${NC}`);
-            process.exit(1);
-        }
-        runsMap = { ...manyoyoConfig.runs };
-    }
-    let hasConfigChanged = false;
-
-    const extractors = {
-        claude: collectClaudeInitData,
-        codex: collectCodexInitData,
-        gemini: collectGeminiInitData,
-        opencode: collectOpenCodeInitData
-    };
-    const yoloMap = {
-        claude: 'c',
-        codex: 'cx',
-        gemini: 'gm',
-        opencode: 'oc'
-    };
-
-    console.log(`${CYAN}🧭 正在初始化 MANYOYO 配置: ${agents.join(', ')}${NC}`);
-
-    for (const agent of agents) {
-        const data = extractors[agent](homeDir);
-        const shouldWriteRun = await shouldOverwriteInitRunEntry(
-            agent,
-            Object.prototype.hasOwnProperty.call(runsMap, agent)
-        );
-
-        let writeResult = { missingKeys: [], unsafeKeys: [] };
-        if (shouldWriteRun) {
-            const buildResult = buildInitRunProfile(agent, yoloMap[agent], data.volumes, data.keys, data.values);
-            runsMap[agent] = buildResult.runProfile;
-            writeResult = {
-                missingKeys: buildResult.missingKeys,
-                unsafeKeys: buildResult.unsafeKeys
-            };
-            hasConfigChanged = true;
-        }
-
-        if (shouldWriteRun) {
-            console.log(`${GREEN}✅ [${agent}] 初始化完成${NC}`);
-        } else {
-            console.log(`${YELLOW}⚠️  [${agent}] 已跳过（配置保留）${NC}`);
-        }
-        console.log(`   run: ${shouldWriteRun ? '已写入' : '保留'} runs.${agent}`);
-
-        if (shouldWriteRun && writeResult.missingKeys.length > 0) {
-            console.log(`${YELLOW}⚠️  [${agent}] 以下变量未找到，请手动填写:${NC} ${writeResult.missingKeys.join(', ')}`);
-        }
-        if (shouldWriteRun && writeResult.unsafeKeys.length > 0) {
-            console.log(`${YELLOW}⚠️  [${agent}] 以下变量包含不安全字符，已留空 env 键:${NC} ${writeResult.unsafeKeys.join(', ')}`);
-        }
-        if (data.notes && data.notes.length > 0) {
-            data.notes.forEach(note => console.log(`${YELLOW}⚠️  [${agent}] ${note}${NC}`));
-        }
-    }
-
-    if (hasConfigChanged || !fs.existsSync(manyoyoConfigPath)) {
-        manyoyoConfig.runs = runsMap;
-        fs.writeFileSync(manyoyoConfigPath, `${JSON.stringify(manyoyoConfig, null, 4)}\n`);
-    }
-}
-
-// ==============================================================================
-// SECTION: UI Functions
-// ==============================================================================
 
 function getHelloTip(containerName, defaultCommand) {
     if ( !(QUIET.tip || QUIET.full) ) {
@@ -845,10 +364,6 @@ function isValidContainerName(value) {
     return typeof value === 'string' && SAFE_CONTAINER_NAME_PATTERN.test(value);
 }
 
-// ==============================================================================
-// SECTION: Environment Variables and Volume Handling
-// ==============================================================================
-
 async function askQuestion(prompt) {
     const rl = readline.createInterface({
         input: process.stdin,
@@ -862,10 +377,6 @@ async function askQuestion(prompt) {
         });
     });
 }
-
-// ==============================================================================
-// Configuration Functions
-// ==============================================================================
 
 /**
  * 添加环境变量
@@ -973,34 +484,31 @@ function addVolume(volume) {
     CONTAINER_VOLUMES.push("--volume", volume);
 }
 
-// ==============================================================================
-// SECTION: YOLO Mode and Container Mode Configuration
-// ==============================================================================
+function addImageBuildArg(value) {
+    IMAGE_BUILD_ARGS.push("--build-arg", value);
+}
+
+const YOLO_COMMAND_MAP = {
+    claude: "IS_SANDBOX=1 claude --dangerously-skip-permissions",
+    cc: "IS_SANDBOX=1 claude --dangerously-skip-permissions",
+    c: "IS_SANDBOX=1 claude --dangerously-skip-permissions",
+    gemini: "gemini --yolo",
+    gm: "gemini --yolo",
+    g: "gemini --yolo",
+    codex: "codex --dangerously-bypass-approvals-and-sandbox",
+    cx: "codex --dangerously-bypass-approvals-and-sandbox",
+    opencode: "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode",
+    oc: "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
+};
 
 function setYolo(cli) {
-    switch (cli) {
-        case 'claude':
-        case 'cc':
-        case 'c':
-            EXEC_COMMAND = "IS_SANDBOX=1 claude --dangerously-skip-permissions";
-            break;
-        case 'gemini':
-        case 'gm':
-        case 'g':
-            EXEC_COMMAND = "gemini --yolo";
-            break;
-        case 'codex':
-        case 'cx':
-            EXEC_COMMAND = "codex --dangerously-bypass-approvals-and-sandbox";
-            break;
-        case 'opencode':
-        case 'oc':
-            EXEC_COMMAND = "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode";
-            break;
-        default:
-            console.log(`${RED}⚠️  未知LLM CLI: ${cli}${NC}`);
-            process.exit(0);
+    const key = String(cli || '').trim().toLowerCase();
+    const mappedCommand = YOLO_COMMAND_MAP[key];
+    if (!mappedCommand) {
+        console.log(`${RED}⚠️  未知LLM CLI: ${cli}${NC}`);
+        process.exit(0);
     }
+    EXEC_COMMAND = mappedCommand;
 }
 
 /**
@@ -1008,36 +516,42 @@ function setYolo(cli) {
  * @param {string} mode - 模式名称 (common, dind, sock)
  */
 function setContMode(mode) {
-    switch (mode) {
-        case 'common':
-            CONT_MODE_ARGS = [];
-            break;
-        case 'docker-in-docker':
-        case 'dind':
-        case 'd':
-            CONT_MODE_ARGS = ['--privileged'];
-            console.log(`${GREEN}✅ 开启安全的容器嵌套容器模式, 手动在容器内启动服务: nohup dockerd &${NC}`);
-            break;
-        case 'mount-docker-socket':
-        case 'sock':
-        case 's':
-            CONT_MODE_ARGS = [
-                '--privileged',
-                '--volume', '/var/run/docker.sock:/var/run/docker.sock',
-                '--env', 'DOCKER_HOST=unix:///var/run/docker.sock',
-                '--env', 'CONTAINER_HOST=unix:///var/run/docker.sock'
-            ];
-            console.log(`${RED}⚠️  开启危险的容器嵌套容器模式, 危害: 容器可访问宿主机文件${NC}`);
-            break;
-        default:
-            console.log(`${RED}⚠️  未知模式: ${mode}${NC}`);
-            process.exit(0);
-    }
-}
+    const modeAliasMap = {
+        common: 'common',
+        'docker-in-docker': 'dind',
+        dind: 'dind',
+        d: 'dind',
+        'mount-docker-socket': 'sock',
+        sock: 'sock',
+        s: 'sock'
+    };
+    const normalizedMode = modeAliasMap[String(mode || '').trim().toLowerCase()];
 
-// ==============================================================================
-// Docker Helper Functions
-// ==============================================================================
+    if (normalizedMode === 'common') {
+        CONT_MODE_ARGS = [];
+        return;
+    }
+
+    if (normalizedMode === 'dind') {
+        CONT_MODE_ARGS = ['--privileged'];
+        console.log(`${GREEN}✅ 开启安全的容器嵌套容器模式, 手动在容器内启动服务: nohup dockerd &${NC}`);
+        return;
+    }
+
+    if (normalizedMode === 'sock') {
+        CONT_MODE_ARGS = [
+            '--privileged',
+            '--volume', '/var/run/docker.sock:/var/run/docker.sock',
+            '--env', 'DOCKER_HOST=unix:///var/run/docker.sock',
+            '--env', 'CONTAINER_HOST=unix:///var/run/docker.sock'
+        ];
+        console.log(`${RED}⚠️  开启危险的容器嵌套容器模式, 危害: 容器可访问宿主机文件${NC}`);
+        return;
+    }
+
+    console.log(`${RED}⚠️  未知模式: ${mode}${NC}`);
+    process.exit(0);
+}
 
 function showImagePullHint(err) {
     const stderr = err && err.stderr ? err.stderr.toString() : '';
@@ -1088,10 +602,6 @@ function removeContainer(name) {
     dockerExecArgs(['rm', '-f', name], { stdio: 'pipe' });
     if ( !(QUIET.crm || QUIET.full) ) console.log(`${GREEN}✅ 已彻底删除。${NC}`);
 }
-
-// ==============================================================================
-// SECTION: Docker Operations
-// ==============================================================================
 
 function ensureDocker() {
     const commands = ['docker', 'podman'];
@@ -1159,297 +669,6 @@ function pruneDanglingImages() {
 
     console.log(`${GREEN}✅ 清理完成${NC}`);
 }
-
-// ==============================================================================
-// SECTION: Image Build System
-// ==============================================================================
-
-/**
- * 准备构建缓存（Node.js、JDT LSP、gopls）
- * @param {string} imageTool - 构建工具类型
- */
-function ensureDirectoryIfMissing(dirPath) {
-    if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
-    }
-}
-
-function loadBuildCacheTimestamps(timestampFile) {
-    if (!fs.existsSync(timestampFile)) {
-        return {};
-    }
-    try {
-        return JSON.parse(fs.readFileSync(timestampFile, 'utf-8'));
-    } catch (e) {
-        return {};
-    }
-}
-
-function saveBuildCacheTimestamps(timestampFile, timestamps) {
-    fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
-}
-
-function createBuildCacheContext() {
-    const cacheDir = path.join(__dirname, '../docker/cache');
-    const timestampFile = path.join(cacheDir, '.timestamps.json');
-    ensureDirectoryIfMissing(cacheDir);
-
-    const config = loadConfig();
-    return {
-        cacheDir,
-        timestampFile,
-        cacheTTLDays: config.cacheTTL || CONFIG.CACHE_TTL_DAYS,
-        nodeMirrors: [
-            config.nodeMirror,
-            'https://mirrors.tencent.com/nodejs-release',
-            'https://nodejs.org/dist'
-        ].filter(Boolean),
-        timestamps: loadBuildCacheTimestamps(timestampFile),
-        now: new Date()
-    };
-}
-
-function isBuildCacheExpired(cache, key) {
-    if (!cache.timestamps[key]) return true;
-    const cachedTime = new Date(cache.timestamps[key]);
-    const diffDays = (cache.now - cachedTime) / (1000 * 60 * 60 * 24);
-    return diffDays > cache.cacheTTLDays;
-}
-
-function touchBuildCache(cache, key) {
-    cache.timestamps[key] = cache.now.toISOString();
-    saveBuildCacheTimestamps(cache.timestampFile, cache.timestamps);
-}
-
-function resolveBuildCacheArch() {
-    const arch = process.arch === 'x64' ? 'amd64' : process.arch === 'arm64' ? 'arm64' : process.arch;
-    const archNode = arch === 'amd64' ? 'x64' : 'arm64';
-    return { arch, archNode };
-}
-
-function prepareNodeBuildCache(cache, archNode) {
-    const nodeCacheDir = path.join(cache.cacheDir, 'node');
-    const nodeVersion = 24;
-    const nodeKey = 'node/';
-
-    ensureDirectoryIfMissing(nodeCacheDir);
-
-    const hasNodeCache = fs.readdirSync(nodeCacheDir).some(fileName => (
-        fileName.startsWith('node-') && fileName.includes(`linux-${archNode}`)
-    ));
-
-    if (hasNodeCache && !isBuildCacheExpired(cache, nodeKey)) {
-        console.log(`${GREEN}✓ Node.js 缓存已存在${NC}`);
-        return;
-    }
-
-    console.log(`${YELLOW}下载 Node.js ${nodeVersion} (${archNode})...${NC}`);
-
-    for (const mirror of cache.nodeMirrors) {
-        try {
-            console.log(`${BLUE}尝试镜像源: ${mirror}${NC}`);
-            const shasumUrl = `${mirror}/latest-v${nodeVersion}.x/SHASUMS256.txt`;
-            const shasumContent = execSync(`curl -sL ${shasumUrl}`, { encoding: 'utf-8' });
-            const shasumLine = shasumContent.split('\n').find(line => line.includes(`linux-${archNode}.tar.gz`));
-            if (!shasumLine) {
-                continue;
-            }
-
-            const [expectedHash, fileName] = shasumLine.trim().split(/\s+/);
-            const nodeUrl = `${mirror}/latest-v${nodeVersion}.x/${fileName}`;
-            const nodeTargetPath = path.join(nodeCacheDir, fileName);
-            runCmd('curl', ['-fsSL', nodeUrl, '-o', nodeTargetPath], { stdio: 'inherit' });
-
-            const actualHash = getFileSha256(nodeTargetPath);
-            if (actualHash !== expectedHash) {
-                console.log(`${RED}SHA256 校验失败，删除文件${NC}`);
-                fs.unlinkSync(nodeTargetPath);
-                continue;
-            }
-
-            console.log(`${GREEN}✓ SHA256 校验通过${NC}`);
-            touchBuildCache(cache, nodeKey);
-            console.log(`${GREEN}✓ Node.js 下载完成${NC}`);
-            return;
-        } catch (e) {
-            console.log(`${YELLOW}镜像源 ${mirror} 失败，尝试下一个...${NC}`);
-        }
-    }
-
-    console.error(`${RED}错误: Node.js 下载失败（所有镜像源均不可用）${NC}`);
-    throw new Error('Node.js download failed');
-}
-
-function prepareJdtlsBuildCache(cache, imageTool) {
-    if (!(imageTool === 'full' || imageTool.includes('java'))) {
-        return;
-    }
-
-    const jdtlsCacheDir = path.join(cache.cacheDir, 'jdtls');
-    const jdtlsKey = 'jdtls/jdt-language-server-latest.tar.gz';
-    const jdtlsPath = path.join(cache.cacheDir, jdtlsKey);
-
-    ensureDirectoryIfMissing(jdtlsCacheDir);
-
-    if (fs.existsSync(jdtlsPath) && !isBuildCacheExpired(cache, jdtlsKey)) {
-        console.log(`${GREEN}✓ JDT LSP 缓存已存在${NC}`);
-        return;
-    }
-
-    console.log(`${YELLOW}下载 JDT Language Server...${NC}`);
-    const apkUrl = 'https://mirrors.tencent.com/alpine/latest-stable/community/x86_64/jdtls-1.53.0-r0.apk';
-    const tmpDir = path.join(jdtlsCacheDir, '.tmp-apk');
-    const apkPath = path.join(tmpDir, 'jdtls.apk');
-
-    try {
-        ensureDirectoryIfMissing(tmpDir);
-        runCmd('curl', ['-fsSL', apkUrl, '-o', apkPath], { stdio: 'inherit' });
-        runCmd('tar', ['-xzf', apkPath, '-C', tmpDir], { stdio: 'inherit' });
-        const srcDir = path.join(tmpDir, 'usr', 'share', 'jdtls');
-        runCmd('tar', ['-czf', jdtlsPath, '-C', srcDir, '.'], { stdio: 'inherit' });
-        touchBuildCache(cache, jdtlsKey);
-        console.log(`${GREEN}✓ JDT LSP 下载完成${NC}`);
-    } catch (e) {
-        console.error(`${RED}错误: JDT LSP 下载失败${NC}`);
-        throw e;
-    } finally {
-        try { runCmd('rm', ['-rf', tmpDir], { stdio: 'inherit', ignoreError: true }); } catch (e) {}
-    }
-}
-
-function cleanupGoTmpPath(tmpGoPath, warnOnError) {
-    if (!fs.existsSync(tmpGoPath)) {
-        return;
-    }
-    try {
-        execSync(`GOPATH="${tmpGoPath}" go clean -modcache 2>/dev/null || true`, { stdio: 'inherit' });
-        execSync(`chmod -R u+w "${tmpGoPath}" 2>/dev/null || true`, { stdio: 'inherit' });
-        execSync(`rm -rf "${tmpGoPath}"`, { stdio: 'inherit' });
-    } catch (e) {
-        if (warnOnError) {
-            console.log(`${YELLOW}提示: 临时目录清理失败，可手动删除 ${tmpGoPath}${NC}`);
-        }
-    }
-}
-
-function prepareGoplsBuildCache(cache, imageTool, arch) {
-    if (!(imageTool === 'full' || imageTool.includes('go'))) {
-        return;
-    }
-
-    const goplsCacheDir = path.join(cache.cacheDir, 'gopls');
-    const goplsKey = `gopls/gopls-linux-${arch}`;
-    const goplsPath = path.join(cache.cacheDir, goplsKey);
-
-    ensureDirectoryIfMissing(goplsCacheDir);
-
-    if (fs.existsSync(goplsPath) && !isBuildCacheExpired(cache, goplsKey)) {
-        console.log(`${GREEN}✓ gopls 缓存已存在${NC}`);
-        return;
-    }
-
-    console.log(`${YELLOW}下载 gopls (${arch})...${NC}`);
-    const tmpGoPath = path.join(cache.cacheDir, '.tmp-go');
-
-    try {
-        cleanupGoTmpPath(tmpGoPath, false);
-        ensureDirectoryIfMissing(tmpGoPath);
-
-        runCmd('go', ['install', 'golang.org/x/tools/gopls@latest'], {
-            stdio: 'inherit',
-            env: { ...process.env, GOPATH: tmpGoPath, GOOS: 'linux', GOARCH: arch }
-        });
-        execSync(`cp "${tmpGoPath}/bin/linux_${arch}/gopls" "${goplsPath}" || cp "${tmpGoPath}/bin/gopls" "${goplsPath}"`, { stdio: 'inherit' });
-        runCmd('chmod', ['+x', goplsPath], { stdio: 'inherit' });
-        touchBuildCache(cache, goplsKey);
-        console.log(`${GREEN}✓ gopls 下载完成${NC}`);
-        cleanupGoTmpPath(tmpGoPath, true);
-    } catch (e) {
-        console.error(`${RED}错误: gopls 下载失败${NC}`);
-        throw e;
-    }
-}
-
-async function prepareBuildCache(imageTool) {
-    const cache = createBuildCacheContext();
-    const { arch, archNode } = resolveBuildCacheArch();
-
-    console.log(`\n${CYAN}准备构建缓存...${NC}`);
-
-    prepareNodeBuildCache(cache, archNode);
-    prepareJdtlsBuildCache(cache, imageTool);
-    prepareGoplsBuildCache(cache, imageTool, arch);
-
-    saveBuildCacheTimestamps(cache.timestampFile, cache.timestamps);
-    console.log(`${GREEN}✅ 构建缓存准备完成${NC}\n`);
-}
-
-function addImageBuildArg(string) {
-    IMAGE_BUILD_ARGS.push("--build-arg", string);
-}
-
-async function buildImage(IMAGE_BUILD_ARGS, imageName, imageVersionTag) {
-    const versionTag = imageVersionTag || IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
-    const parsedVersion = parseImageVersionTag(versionTag);
-    if (!parsedVersion) {
-        console.error(`${RED}错误: 镜像版本格式错误，必须为 <x.y.z-后缀>，例如 1.7.4-common: ${versionTag}${NC}`);
-        process.exit(1);
-    }
-
-    const version = parsedVersion.baseVersion;
-    let imageTool = parsedVersion.tool;
-    const toolFromArgs = IMAGE_BUILD_ARGS.filter(v => v.startsWith("TOOL=")).at(-1)?.slice("TOOL=".length);
-
-    if (!toolFromArgs) {
-        IMAGE_BUILD_ARGS = [...IMAGE_BUILD_ARGS, "--build-arg", `TOOL=${imageTool}`];
-    } else {
-        imageTool = toolFromArgs;
-    }
-
-    const fullImageTag = `${imageName}:${version}-${imageTool}`;
-
-    console.log(`${CYAN}🔨 正在构建镜像: ${YELLOW}${fullImageTag}${NC}`);
-    console.log(`${BLUE}构建组件类型: ${imageTool}${NC}\n`);
-
-    // Prepare cache (自动检测并下载缺失的文件)
-    await prepareBuildCache(imageTool);
-
-    // Find Dockerfile path
-    const dockerfilePath = path.join(__dirname, '../docker/manyoyo.Dockerfile');
-    if (!fs.existsSync(dockerfilePath)) {
-        console.error(`${RED}错误: 找不到 Dockerfile: ${dockerfilePath}${NC}`);
-        process.exit(1);
-    }
-
-    // Build command
-    const imageBuildArgs = IMAGE_BUILD_ARGS.join(' ');
-    const buildCmd = `${DOCKER_CMD} build -t "${fullImageTag}" -f "${dockerfilePath}" "${path.join(__dirname, '..')}" ${imageBuildArgs} --load --progress=plain --no-cache`;
-
-    console.log(`${BLUE}准备执行命令:${NC}`);
-    console.log(`${buildCmd}\n`);
-
-    if (!YES_MODE) {
-        await askQuestion(`❔ 是否继续构建? [ 直接回车=继续, ctrl+c=取消 ]: `);
-        console.log("");
-    }
-
-    try {
-        execSync(buildCmd, { stdio: 'inherit' });
-        console.log(`\n${GREEN}✅ 镜像构建成功: ${fullImageTag}${NC}`);
-        console.log(`${BLUE}使用镜像:${NC}`);
-        console.log(`  ${MANYOYO_NAME} -n test --in ${imageName} --iv ${version}-${imageTool} -y c`);
-
-        // Prune dangling images
-        pruneDanglingImages();
-    } catch (e) {
-        console.error(`${RED}错误: 镜像构建失败${NC}`);
-        process.exit(1);
-    }
-}
-
-// ==============================================================================
-// SECTION: Command Line Interface
-// ==============================================================================
 
 function maybeHandleDockerPluginMetadata(argv) {
     if (argv[2] !== 'docker-cli-plugin-metadata') {
@@ -1581,7 +800,13 @@ async function setupCommander() {
     }
 
     if (options.initConfig !== undefined) {
-        await initAgentConfigs(options.initConfig);
+        await initAgentConfigs(options.initConfig, {
+            yesMode: YES_MODE,
+            askQuestion,
+            loadConfig,
+            supportedAgents: SUPPORTED_INIT_AGENTS,
+            colors: { RED, GREEN, YELLOW, CYAN, NC }
+        });
         process.exit(0);
     }
 
@@ -1833,10 +1058,6 @@ async function waitForContainerReady(containerName) {
     process.exit(1);
 }
 
-// ==============================================================================
-// SECTION: Container Lifecycle Management
-// ==============================================================================
-
 function joinExecCommand(prefix, command, suffix) {
     return `${prefix || ''}${command || ''}${suffix || ''}`;
 }
@@ -2019,10 +1240,6 @@ async function handlePostExit(runtime, defaultCommand) {
     }
 }
 
-// ==============================================================================
-// SECTION: Web Server
-// ==============================================================================
-
 async function runWebServerMode(runtime) {
     if (!runtime.serverAuthUser || !runtime.serverAuthPass) {
         ensureWebServerAuthCredentials();
@@ -2069,10 +1286,6 @@ async function runWebServerMode(runtime) {
     });
 }
 
-// ==============================================================================
-// Main Function
-// ==============================================================================
-
 async function main() {
     try {
         // 1. Setup commander and parse arguments
@@ -2087,7 +1300,23 @@ async function main() {
 
         // 3. Handle image build operation
         if (IMAGE_BUILD_NEED) {
-            await buildImage(IMAGE_BUILD_ARGS, runtime.imageName, runtime.imageVersion);
+            await buildImage({
+                imageBuildArgs: IMAGE_BUILD_ARGS,
+                imageName: runtime.imageName,
+                imageVersionTag: runtime.imageVersion,
+                imageVersionDefault: IMAGE_VERSION_DEFAULT,
+                imageVersionBase: IMAGE_VERSION_BASE,
+                parseImageVersionTag,
+                manyoyoName: MANYOYO_NAME,
+                yesMode: YES_MODE,
+                dockerCmd: DOCKER_CMD,
+                rootDir: path.join(__dirname, '..'),
+                loadConfig,
+                runCmd,
+                askQuestion,
+                pruneDanglingImages,
+                colors: { RED, GREEN, YELLOW, BLUE, CYAN, NC }
+            });
             process.exit(0);
         }
 
