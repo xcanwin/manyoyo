@@ -1429,7 +1429,7 @@ async function setupCommander() {
 示例:
   ${MANYOYO_NAME} --ib --iv ${IMAGE_VERSION_BASE || "1.0.0"}                     构建镜像
   ${MANYOYO_NAME} --init-config all                   从本机 Agent 配置初始化 ~/.manyoyo
-  ${MANYOYO_NAME} -r claude                           使用 manyoyo.json.runs.claude 快速启动
+  ${MANYOYO_NAME} -r claude                           使用 manyoyo.json 的 runs.claude 快速启动
   ${MANYOYO_NAME} -r codex --ss "resume --last"       使用命令后缀
   ${MANYOYO_NAME} -n test --ef /abs/path/myenv.env -y c  使用绝对路径环境变量文件
   ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
