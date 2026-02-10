@@ -15,7 +15,7 @@
 - 文档栈：VitePress（`npm run docs:dev|build|preview`）。
 - 文档语言策略：中文主维护 `docs/zh/`，英文 `docs/en/`。
 - 根目录历史中文页按需保留为兼容跳转页。
-- 配置合并规则：标量配置按“命令行参数 > 运行配置 > 全局配置 > 默认值”覆盖；数组配置（`envFile`/`env`/`volumes`/`imageBuildArgs`）按“全局配置 → 运行配置 → 命令行参数”追加合并。
+- 配置合并规则：标量配置按“命令行参数 > runs.<name> > 全局配置 > 默认值”覆盖；数组配置（`envFile`/`volumes`/`imageBuildArgs`）按“全局配置 → runs.<name> → 命令行参数”追加合并；`env` 使用 map，按 key 合并覆盖（命令行参数 > runs.<name> > 全局配置）。
 - `--server` 网页模式采用全局认证网关；除登录路由外默认所有页面与接口都需认证。
 
 ## 项目结构与模块组织
@@ -74,7 +74,7 @@
 - 命令预览：`manyoyo -n test --show-command`，用于检查参数拼装。
 - 快速迁移已有 Agent 配置：`manyoyo --init-config all`，然后 `manyoyo -r claude`（或 `codex/gemini/opencode`）。
 - 动态容器名验证（`{now}`）：在运行配置写 `containerName: "my-<agent>-{now}"`，执行 `manyoyo -r <name> --show-config` 查看解析结果。
-- 环境文件解析：`manyoyo --ef <name> --show-config`。
+- 环境文件解析：`manyoyo --ef /abs/path/myenv.env --show-config`。
 - 容器调试：`manyoyo -n <name> -x /bin/bash`。
 - 镜像构建：`manyoyo --ib --iv <version>`，可加 `--iba TOOL=common`。
 - 局域网监听网页服务：`manyoyo --server 0.0.0.0:3000 --server-user <user> --server-pass <pass>`。
@@ -86,10 +86,10 @@
 ## 配置与路径提示
 - 配置模板：`config.example.json`。
 - 全局配置：`~/.manyoyo/manyoyo.json`（JSON5）。
-- 运行配置：`~/.manyoyo/run/<name>.json`。
-- 环境文件：`~/.manyoyo/env/<name>.env`。
-- 初始化配置：`manyoyo --init-config [agents]` 会生成 `~/.manyoyo/run/*.json` 与 `~/.manyoyo/env/*.env`。
-- 初始化覆盖行为：目标文件已存在时逐个询问（`json` 与 `env` 分开）；`--yes --init-config ...` 会自动覆盖。
+- 运行配置：`~/.manyoyo/manyoyo.json` 的 `runs.<name>`（`-r <name>` 仅按名称读取）。
+- 环境文件：`--ef/--env-file` 与 `envFile` 仅支持绝对路径（如 `/abs/path/name.env`）。
+- 初始化配置：`manyoyo --init-config [agents]` 会写入 `~/.manyoyo/manyoyo.json` 的 `runs.<agent>`（含 `env` map）。
+- 初始化覆盖行为：目标 `runs.<name>` 已存在时逐个询问；`--yes --init-config ...` 会自动覆盖。
 - 网页认证配置：`serverUser`、`serverPass`（支持环境变量 `MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`）。
 - 网页服务监听：`--server` 支持 `<port>` 或 `<host:port>`，默认 `127.0.0.1:3000`。
 - 网页认证参数优先级：命令行参数 > 运行配置 > 全局配置 > 环境变量 > 默认值。
@@ -113,6 +113,8 @@
 
 ## 文档与安全提示
 - 侧边栏在 `/zh/` 与 `/en/` 统一展示全章节导航；首页卡片需可点击跳转。
+- 文档目录首页统一使用 `README.md`（不再使用 `index.md`），并保持 `zh/en` 目录结构对齐。
+- 文档内部链接优先使用仓库相对 `.md`/`README.md` 路径，保证 GitHub 网页浏览可直接跳转；站点路由由 VitePress 兼容。
 - 文档修改后运行 `npm run docs:build`，检查 dead links 与导航行为。
 - 配置模板见 `config.example.json`；用户配置默认在 `~/.manyoyo/`。
 - 新增配置项或 CLI 选项时，同步更新 `config.example.json`、`docs/zh/` 与 `docs/en/`；必要时同步 `README.md` 示例。
