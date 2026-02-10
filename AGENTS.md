@@ -20,12 +20,13 @@
 
 ## 项目结构与模块组织
 - `bin/manyoyo.js`: CLI 入口与主流程编排（CommonJS）；参数解析、容器主流程优先就近维护。
+- `lib/container-run.js`: CLI/Web 共享的容器运行参数构造与命令展示。
 - `lib/web/server.js`: `--server` 网页服务、全局认证网关与 API 路由。
 - `lib/web/frontend/`: 网页前端资源（`app/login` 的 `html/css/js`）。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docs/`: VitePress 文档；中文主目录 `docs/zh/`，英文 `docs/en/`；结构需保持一致。
-- `test/`: Jest 测试，文件名 `*.test.js`（如 `test/manyoyo.test.js`）。
+- `test/`: Jest 测试，文件名 `*.test.js`（如 `test/manyoyo.test.js`、`test/web-server-auth.test.js`）。
 - `assets/` 与 `config.example.json`: 资源与配置模板。
 
 ## 目录速查
@@ -52,13 +53,13 @@
 
 ## 测试规范
 - 框架为 Jest（见 `package.json` 的 `jest` 配置）。
-- 新增功能优先补充 `test/manyoyo.test.js` 的关键分支与异常路径。
+- 新增功能优先补充对应领域测试文件的关键分支与异常路径（CLI 优先 `test/manyoyo.test.js`，Web 优先 `test/web-server-auth.test.js`）。
 - 修复 bug 时建议加入回归测试，并注明 case。
 - 涉及网页服务认证时，至少验证未登录 `401`、登录成功可访问、登出后失效。
 
 ## TDD 模式
 - 默认适用：新增功能、行为变更、bug 修复；纯文档改动可例外。
-- Red：先写失败测试，优先在 `test/manyoyo.test.js` 用最小 case 复现问题。
+- Red：先写失败测试，按变更领域选最小 case（CLI 优先 `test/manyoyo.test.js`；Web 优先 `test/web-server-auth.test.js`）。
 - Green：只做最小代码改动让测试通过，避免顺手重构。
 - Refactor：在测试持续通过前提下再整理命名或重复逻辑，确保行为不变。
 - 开发阶段优先运行 `npm run test:unit`；提交前运行 `npm test`。
