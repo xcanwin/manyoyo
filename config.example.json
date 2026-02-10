@@ -15,8 +15,10 @@
     "serverUser": "admin",
     "serverPass": "change-this-password",
 
-    // 合并型参数（配置文件和命令行会累加）
-    "env": ["IS_SANDBOX=1"],
+    // 合并型参数（env 按 key 合并覆盖；其余数组参数会累加）
+    "env": {
+        "IS_SANDBOX": "1"
+    },
     "envFile": [],
     "volumes": [],
     "imageBuildArgs": [],

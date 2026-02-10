@@ -67,7 +67,7 @@ describe('MANYOYO CLI', () => {
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
-            const tokenEnv = config.env.find(e => e.includes('ANTHROPIC_AUTH_TOKEN'));
+            const tokenEnv = config.env.ANTHROPIC_AUTH_TOKEN;
             expect(tokenEnv).toContain('****');
             expect(tokenEnv).not.toContain('sk-abcd1234efgh5678');
         });
@@ -78,7 +78,7 @@ describe('MANYOYO CLI', () => {
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
-            const keyEnv = config.env.find(e => e.includes('API_KEY'));
+            const keyEnv = config.env.API_KEY;
             expect(keyEnv).toContain('****');
         });
 
@@ -88,8 +88,8 @@ describe('MANYOYO CLI', () => {
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
-            const normalEnv = config.env.find(e => e.includes('MY_VAR'));
-            expect(normalEnv).toBe('MY_VAR=normalvalue');
+            const normalEnv = config.env.MY_VAR;
+            expect(normalEnv).toBe('normalvalue');
         });
     });
 
@@ -150,14 +150,60 @@ describe('MANYOYO CLI', () => {
             expect(config.imageVersion).toBe('2.0.0');
         });
 
-        test('multiple env values should be merged', () => {
+        test('multiple env values should be merged into env map', () => {
             const output = execSync(
                 `node ${BIN_PATH} --show-config -e "VAR1=value1" -e "VAR2=value2"`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
-            expect(config.env).toContain('VAR1=value1');
-            expect(config.env).toContain('VAR2=value2');
+            expect(config.env).toEqual(expect.objectContaining({
+                VAR1: 'value1',
+                VAR2: 'value2'
+            }));
+        });
+
+        test('json env map should merge with cli env and cli has higher priority', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-env-map-'));
+            const runConfigPath = path.join(tempDir, 'env-map.json');
+            fs.writeFileSync(runConfigPath, JSON.stringify({
+                env: {
+                    VAR1: 'run-value',
+                    VAR2: 'run-value-2'
+                }
+            }, null, 4));
+
+            try {
+                const output = execSync(
+                    `node ${BIN_PATH} --show-config -r "${runConfigPath}" -e "VAR1=cli-value"`,
+                    { encoding: 'utf-8' }
+                );
+                const config = JSON.parse(output);
+                expect(config.env).toEqual(expect.objectContaining({
+                    VAR1: 'cli-value',
+                    VAR2: 'run-value-2'
+                }));
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
+        test('run config env array should be rejected', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-env-array-'));
+            const runConfigPath = path.join(tempDir, 'env-array.json');
+            fs.writeFileSync(runConfigPath, JSON.stringify({
+                env: ['VAR1=value1']
+            }, null, 4));
+
+            try {
+                expect(() => {
+                    execSync(`node ${BIN_PATH} --show-config -r "${runConfigPath}"`, {
+                        encoding: 'utf-8',
+                        stdio: 'pipe'
+                    });
+                }).toThrow();
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
         });
 
         test('multiple volumes should be merged', () => {
@@ -302,21 +348,21 @@ describe('MANYOYO CLI', () => {
                     env: { ...process.env, HOME: tempHome }
                 });
 
-                const envFilePath = path.join(tempHome, '.manyoyo', 'env', 'claude.env');
                 const runFilePath = path.join(tempHome, '.manyoyo', 'run', 'claude.json');
+                const envFilePath = path.join(tempHome, '.manyoyo', 'env', 'claude.env');
 
-                expect(fs.existsSync(envFilePath)).toBe(true);
                 expect(fs.existsSync(runFilePath)).toBe(true);
-
-                const envContent = fs.readFileSync(envFilePath, 'utf-8');
-                expect(envContent).toContain('ANTHROPIC_AUTH_TOKEN');
-                expect(envContent).toContain('sk-claude-test-token');
-                expect(envContent).toContain('ANTHROPIC_BASE_URL');
+                expect(fs.existsSync(envFilePath)).toBe(false);
 
                 const runConfig = JSON.parse(fs.readFileSync(runFilePath, 'utf-8'));
                 expect(runConfig.containerName).toBe('my-claude-{now}');
-                expect(runConfig.envFile).toEqual(['claude']);
                 expect(runConfig.yolo).toBe('c');
+                expect(runConfig.envFile).toBeUndefined();
+                expect(runConfig.env).toEqual(expect.objectContaining({
+                    ANTHROPIC_AUTH_TOKEN: 'sk-claude-test-token',
+                    ANTHROPIC_BASE_URL: 'https://llm.example.com',
+                    ANTHROPIC_MODEL: 'claude-sonnet-4-5'
+                }));
             } finally {
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }
@@ -337,20 +383,20 @@ describe('MANYOYO CLI', () => {
                     }
                 });
 
-                const envFilePath = path.join(tempHome, '.manyoyo', 'env', 'codex.env');
                 const runFilePath = path.join(tempHome, '.manyoyo', 'run', 'codex.json');
+                const envFilePath = path.join(tempHome, '.manyoyo', 'env', 'codex.env');
 
-                expect(fs.existsSync(envFilePath)).toBe(true);
                 expect(fs.existsSync(runFilePath)).toBe(true);
-
-                const envContent = fs.readFileSync(envFilePath, 'utf-8');
-                expect(envContent).toContain('# export OPENAI_API_KEY=""');
-                expect(envContent).toContain('# export OPENAI_BASE_URL=""');
-                expect(envContent).toContain('# export OPENAI_MODEL=""');
+                expect(fs.existsSync(envFilePath)).toBe(false);
 
                 const runConfig = JSON.parse(fs.readFileSync(runFilePath, 'utf-8'));
-                expect(runConfig.envFile).toEqual(['codex']);
                 expect(runConfig.yolo).toBe('cx');
+                expect(runConfig.envFile).toBeUndefined();
+                expect(runConfig.env).toEqual(expect.objectContaining({
+                    OPENAI_API_KEY: '',
+                    OPENAI_BASE_URL: '',
+                    OPENAI_MODEL: ''
+                }));
             } finally {
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }
@@ -391,8 +437,13 @@ describe('MANYOYO CLI', () => {
                 expect(fs.existsSync(runFilePath)).toBe(true);
 
                 const runConfig = JSON.parse(fs.readFileSync(runFilePath, 'utf-8'));
-                expect(runConfig.envFile).toEqual(['opencode']);
                 expect(runConfig.yolo).toBe('oc');
+                expect(runConfig.envFile).toBeUndefined();
+                expect(runConfig.env).toEqual(expect.objectContaining({
+                    OPENAI_API_KEY: 'sk-opencode-test',
+                    OPENAI_BASE_URL: 'https://llm.example.com',
+                    OPENAI_MODEL: 'gpt-5.2-codex'
+                }));
                 expect(runConfig.volumes).toContain(`${opencodeConfigPath}:/root/.config/opencode/opencode.json`);
                 expect(runConfig.volumes).toContain(`${opencodeAuthPath}:/root/.local/share/opencode/auth.json`);
             } finally {
@@ -400,30 +451,23 @@ describe('MANYOYO CLI', () => {
             }
         });
 
-        test('--init-config should prompt and keep existing env/json when answering no', () => {
+        test('--init-config should prompt and keep existing json when answering no', () => {
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
-            const manyoyoEnvDir = path.join(tempHome, '.manyoyo', 'env');
             const manyoyoRunDir = path.join(tempHome, '.manyoyo', 'run');
-            const targetEnvPath = path.join(manyoyoEnvDir, 'claude.env');
             const targetRunPath = path.join(manyoyoRunDir, 'claude.json');
-            const originalEnvContent = 'export ORIGINAL_ONLY=1\n';
             const originalRunContent = '{\n    "keep": true\n}\n';
 
-            fs.mkdirSync(manyoyoEnvDir, { recursive: true });
             fs.mkdirSync(manyoyoRunDir, { recursive: true });
-            fs.writeFileSync(targetEnvPath, originalEnvContent);
             fs.writeFileSync(targetRunPath, originalRunContent);
 
             try {
                 const output = execSync(`node "${BIN_PATH}" --init-config claude`, {
                     encoding: 'utf-8',
                     env: { ...process.env, HOME: tempHome },
-                    input: 'n\nn\n'
+                    input: 'n\n'
                 });
 
-                expect(output).toContain(`${targetEnvPath} 已存在`);
                 expect(output).toContain(`${targetRunPath} 已存在`);
-                expect(fs.readFileSync(targetEnvPath, 'utf-8')).toBe(originalEnvContent);
                 expect(fs.readFileSync(targetRunPath, 'utf-8')).toBe(originalRunContent);
             } finally {
                 fs.rmSync(tempHome, { recursive: true, force: true });
