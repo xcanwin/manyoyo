@@ -251,6 +251,7 @@ function sanitizeSensitiveData(obj) {
  * @property {Object.<string, string|number|boolean>} [env] - 环境变量映射
  * @property {string[]} [envFile] - 环境文件数组
  * @property {string[]} [volumes] - 挂载卷数组
+ * @property {Object.<string, Object>} [runs] - 运行配置映射（-r <name>）
  * @property {string} [yolo] - YOLO 模式
  * @property {string} [containerMode] - 容器模式
  * @property {number} [cacheTTL] - 缓存过期天数
@@ -275,25 +276,30 @@ function loadConfig() {
     return {};
 }
 
-function loadRunConfig(name) {
-    const runConfigPath = String(name || '').trim();
-    if (!path.isAbsolute(runConfigPath)) {
-        console.error(`${RED}⚠️  错误: --run 仅支持绝对路径: ${name}${NC}`);
+function loadRunConfig(name, config) {
+    const runName = String(name || '').trim();
+    if (!runName) {
+        console.error(`${RED}⚠️  错误: --run 不能为空${NC}`);
+        process.exit(1);
+    }
+    if (runName.includes('/') || runName.includes('\\')) {
+        console.error(`${RED}⚠️  错误: --run 仅支持 runs 配置名: ${name}${NC}`);
         process.exit(1);
     }
 
-    if (fs.existsSync(runConfigPath)) {
-        try {
-            const config = JSON5.parse(fs.readFileSync(runConfigPath, 'utf-8'));
-            return config;
-        } catch (e) {
-            console.error(`${YELLOW}⚠️  运行配置文件格式错误: ${runConfigPath}${NC}`);
-            return {};
-        }
+    const runs = config && config.runs;
+    if (runs !== undefined && (typeof runs !== 'object' || runs === null || Array.isArray(runs))) {
+        console.error(`${RED}⚠️  错误: ~/.manyoyo/manyoyo.json 的 runs 必须是对象(map)${NC}`);
+        process.exit(1);
     }
 
-    console.error(`${RED}⚠️  未找到运行配置: ${runConfigPath}${NC}`);
-    return {};
+    const runConfig = runs && Object.prototype.hasOwnProperty.call(runs, runName) ? runs[runName] : undefined;
+    if (!runConfig || typeof runConfig !== 'object' || Array.isArray(runConfig)) {
+        console.error(`${RED}⚠️  未找到运行配置: runs.${runName}${NC}`);
+        process.exit(1);
+    }
+
+    return runConfig;
 }
 
 function readJsonFileSafely(filePath, label) {
@@ -633,40 +639,40 @@ function buildInitRunEnv(keys, values) {
     return { envMap, missingKeys, unsafeKeys };
 }
 
-function writeInitRunFile(filePath, agent, yolo, volumes, keys, values) {
+function buildInitRunProfile(agent, yolo, volumes, keys, values) {
     const envBuildResult = buildInitRunEnv(keys, values);
-    const runConfig = {
+    const runProfile = {
         containerName: `my-${agent}-{now}`,
         env: envBuildResult.envMap,
         yolo
     };
     const volumeList = dedupeList(volumes);
     if (volumeList.length > 0) {
-        runConfig.volumes = volumeList;
+        runProfile.volumes = volumeList;
     }
-    fs.writeFileSync(filePath, `${JSON.stringify(runConfig, null, 4)}\n`);
     return {
+        runProfile,
         missingKeys: envBuildResult.missingKeys,
         unsafeKeys: envBuildResult.unsafeKeys
     };
 }
 
-async function shouldOverwriteInitFile(filePath, fileLabel) {
-    if (!fs.existsSync(filePath)) {
+async function shouldOverwriteInitRunEntry(runName, exists) {
+    if (!exists) {
         return true;
     }
 
     if (YES_MODE) {
-        console.log(`${YELLOW}⚠️  ${filePath} 已存在，--yes 模式自动覆盖 (${fileLabel})${NC}`);
+        console.log(`${YELLOW}⚠️  runs.${runName} 已存在，--yes 模式自动覆盖${NC}`);
         return true;
     }
 
-    const reply = await askQuestion(`❔ ${filePath} 已存在，是否覆盖? [y/N]: `);
+    const reply = await askQuestion(`❔ runs.${runName} 已存在，是否覆盖? [y/N]: `);
     const firstChar = String(reply || '').trim().toLowerCase()[0];
     if (firstChar === 'y') {
         return true;
     }
-    console.log(`${YELLOW}⏭️  已保留原文件: ${filePath}${NC}`);
+    console.log(`${YELLOW}⏭️  已保留原配置: runs.${runName}${NC}`);
     return false;
 }
 
@@ -674,9 +680,20 @@ async function initAgentConfigs(rawAgents) {
     const agents = normalizeInitConfigAgents(rawAgents);
     const homeDir = os.homedir();
     const manyoyoHome = path.join(homeDir, '.manyoyo');
-    const runDir = path.join(manyoyoHome, 'run');
+    const manyoyoConfigPath = path.join(manyoyoHome, 'manyoyo.json');
 
-    fs.mkdirSync(runDir, { recursive: true });
+    fs.mkdirSync(manyoyoHome, { recursive: true });
+
+    const manyoyoConfig = loadConfig();
+    let runsMap = {};
+    if (manyoyoConfig.runs !== undefined) {
+        if (typeof manyoyoConfig.runs !== 'object' || manyoyoConfig.runs === null || Array.isArray(manyoyoConfig.runs)) {
+            console.error(`${RED}⚠️  错误: ~/.manyoyo/manyoyo.json 的 runs 必须是对象(map)${NC}`);
+            process.exit(1);
+        }
+        runsMap = { ...manyoyoConfig.runs };
+    }
+    let hasConfigChanged = false;
 
     const extractors = {
         claude: collectClaudeInitData,
@@ -695,20 +712,28 @@ async function initAgentConfigs(rawAgents) {
 
     for (const agent of agents) {
         const data = extractors[agent](homeDir);
-        const runFilePath = path.join(runDir, `${agent}.json`);
-        const shouldWriteRun = await shouldOverwriteInitFile(runFilePath, `${agent}.json`);
+        const shouldWriteRun = await shouldOverwriteInitRunEntry(
+            agent,
+            Object.prototype.hasOwnProperty.call(runsMap, agent)
+        );
 
         let writeResult = { missingKeys: [], unsafeKeys: [] };
         if (shouldWriteRun) {
-            writeResult = writeInitRunFile(runFilePath, agent, yoloMap[agent], data.volumes, data.keys, data.values);
+            const buildResult = buildInitRunProfile(agent, yoloMap[agent], data.volumes, data.keys, data.values);
+            runsMap[agent] = buildResult.runProfile;
+            writeResult = {
+                missingKeys: buildResult.missingKeys,
+                unsafeKeys: buildResult.unsafeKeys
+            };
+            hasConfigChanged = true;
         }
 
         if (shouldWriteRun) {
             console.log(`${GREEN}✅ [${agent}] 初始化完成${NC}`);
         } else {
-            console.log(`${YELLOW}⚠️  [${agent}] 已跳过（文件保留）${NC}`);
+            console.log(`${YELLOW}⚠️  [${agent}] 已跳过（配置保留）${NC}`);
         }
-        console.log(`   run: ${shouldWriteRun ? '已写入' : '保留'} ${runFilePath}`);
+        console.log(`   run: ${shouldWriteRun ? '已写入' : '保留'} runs.${agent}`);
 
         if (shouldWriteRun && writeResult.missingKeys.length > 0) {
             console.log(`${YELLOW}⚠️  [${agent}] 以下变量未找到，请手动填写:${NC} ${writeResult.missingKeys.join(', ')}`);
@@ -719,6 +744,11 @@ async function initAgentConfigs(rawAgents) {
         if (data.notes && data.notes.length > 0) {
             data.notes.forEach(note => console.log(`${YELLOW}⚠️  [${agent}] ${note}${NC}`));
         }
+    }
+
+    if (hasConfigChanged || !fs.existsSync(manyoyoConfigPath)) {
+        manyoyoConfig.runs = runsMap;
+        fs.writeFileSync(manyoyoConfigPath, `${JSON.stringify(manyoyoConfig, null, 4)}\n`);
     }
 }
 
@@ -1391,7 +1421,7 @@ async function setupCommander() {
   ~/.manyoyo/run/c.json      运行配置示例
 
 路径规则:
-  -r /abs/path.json → 绝对路径运行配置
+  -r name       → ~/.manyoyo/manyoyo.json 的 runs.name
   --ef /abs/path.env → 绝对路径环境文件
   --ss "<args>" → 显式设置命令后缀
   -- <args...>  → 直接透传命令后缀（优先级最高）
@@ -1399,8 +1429,8 @@ async function setupCommander() {
 示例:
   ${MANYOYO_NAME} --ib --iv ${IMAGE_VERSION_BASE || "1.0.0"}                     构建镜像
   ${MANYOYO_NAME} --init-config all                   从本机 Agent 配置初始化 ~/.manyoyo
-  ${MANYOYO_NAME} -r /abs/path/claude.json            使用绝对路径运行配置快速启动
-  ${MANYOYO_NAME} -r /abs/path/codex.json --ss "resume --last"  使用命令后缀
+  ${MANYOYO_NAME} -r claude                           使用 manyoyo.json.runs.claude 快速启动
+  ${MANYOYO_NAME} -r codex --ss "resume --last"       使用命令后缀
   ${MANYOYO_NAME} -n test --ef /abs/path/myenv.env -y c  使用绝对路径环境变量文件
   ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
   ${MANYOYO_NAME} -x echo 123                         指定命令执行
@@ -1412,7 +1442,7 @@ async function setupCommander() {
 
     // Options
     program
-        .option('-r, --run <file>', '加载运行配置 (仅支持绝对路径，如 /abs/path.json)')
+        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
         .option('--hp, --host-path <path>', '设置宿主机工作目录 (默认当前路径)')
         .option('-n, --cont-name <name>', '设置容器名称')
         .option('--cp, --cont-path <path>', '设置容器工作目录')
@@ -1495,7 +1525,7 @@ async function setupCommander() {
     }
 
     // Load run config if specified
-    const runConfig = options.run ? loadRunConfig(options.run) : {};
+    const runConfig = options.run ? loadRunConfig(options.run, config) : {};
 
     // Merge configs: command line > run config > global config > defaults
     // Override mode (scalar values): use first defined value

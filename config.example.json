@@ -1,7 +1,7 @@
 {
     // MANYOYO 全局配置文件，保存到 ~/.manyoyo/manyoyo.json
 
-    // 覆盖型参数（命令行 > 运行配置 > 全局配置）
+    // 覆盖型参数（命令行 > runs.<name> > 全局配置）
     "containerName": "my-dev",
     "hostPath": "/path/to/your/project",
     "containerPath": "/path/to/your/project",
@@ -22,5 +22,17 @@
     "envFile": [],
     "volumes": [],
     "imageBuildArgs": [],
-    "quiet": ["tip", "cmd"]
+    "quiet": ["tip", "cmd"],
+
+    // 运行配置集合：通过 -r <name> 读取 runs.<name>
+    "runs": {
+        "claude": {
+            "containerName": "my-claude-{now}",
+            "yolo": "c",
+            "shell": "claude",
+            "env": {
+                "ANTHROPIC_MODEL": "claude-sonnet-4-5"
+            }
+        }
+    }
 }

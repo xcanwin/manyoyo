@@ -10,6 +10,15 @@ const os = require('os');
 
 const BIN_PATH = path.join(__dirname, '../bin/manyoyo.js');
 
+function writeGlobalConfig(homeDir, configObj) {
+    const manyoyoDir = path.join(homeDir, '.manyoyo');
+    fs.mkdirSync(manyoyoDir, { recursive: true });
+    fs.writeFileSync(
+        path.join(manyoyoDir, 'manyoyo.json'),
+        `${JSON.stringify(configObj, null, 4)}\n`
+    );
+}
+
 describe('MANYOYO CLI', () => {
     // ==============================================================================
     // 基础命令测试
@@ -169,30 +178,33 @@ describe('MANYOYO CLI', () => {
             }).toThrow();
         });
 
-        test('should accept absolute path for --run', () => {
-            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-runfile-'));
-            const runConfigPath = path.join(tempDir, 'abs-run.json');
-            fs.writeFileSync(runConfigPath, JSON.stringify({
-                shell: 'codex',
-                shellSuffix: 'resume --last'
-            }, null, 4));
+        test('should load run profile from manyoyo.json runs', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-run-'));
+            writeGlobalConfig(tempHome, {
+                runs: {
+                    claude: {
+                        shell: 'codex',
+                        shellSuffix: 'resume --last'
+                    }
+                }
+            });
 
             try {
-                const output = execSync(
-                    `node ${BIN_PATH} --show-config -r "${runConfigPath}"`,
-                    { encoding: 'utf-8' }
-                );
+                const output = execSync(`node ${BIN_PATH} --show-config -r claude`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome }
+                });
                 const config = JSON.parse(output);
                 expect(config.shell).toBe('codex');
                 expect(config.shellSuffix).toBe(' resume --last');
             } finally {
-                fs.rmSync(tempDir, { recursive: true, force: true });
+                fs.rmSync(tempHome, { recursive: true, force: true });
             }
         });
 
-        test('should reject non-absolute name for --run', () => {
+        test('should reject absolute path for --run', () => {
             expect(() => {
-                execSync(`node ${BIN_PATH} --show-config -r claude`, {
+                execSync(`node ${BIN_PATH} --show-config -r /tmp/myconfig.json`, {
                     encoding: 'utf-8',
                     stdio: 'pipe'
                 });
@@ -236,20 +248,56 @@ describe('MANYOYO CLI', () => {
             }));
         });
 
-        test('json env map should merge with cli env and cli has higher priority', () => {
-            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-env-map-'));
-            const runConfigPath = path.join(tempDir, 'env-map.json');
-            fs.writeFileSync(runConfigPath, JSON.stringify({
-                env: {
-                    VAR1: 'run-value',
-                    VAR2: 'run-value-2'
+        test('priority should be cli > runs > global > defaults', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-priority-'));
+            writeGlobalConfig(tempHome, {
+                shell: 'global-shell',
+                runs: {
+                    demo: {
+                        shell: 'run-shell'
+                    }
                 }
-            }, null, 4));
+            });
+
+            try {
+                const runOutput = execSync(`node ${BIN_PATH} --show-config -r demo`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome }
+                });
+                const runConfig = JSON.parse(runOutput);
+                expect(runConfig.shell).toBe('run-shell');
+
+                const cliOutput = execSync(`node ${BIN_PATH} --show-config -r demo -s cli-shell`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome }
+                });
+                const cliConfig = JSON.parse(cliOutput);
+                expect(cliConfig.shell).toBe('cli-shell');
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('json env map should merge with cli env and cli has higher priority', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-env-map-'));
+            writeGlobalConfig(tempHome, {
+                runs: {
+                    envMap: {
+                        env: {
+                            VAR1: 'run-value',
+                            VAR2: 'run-value-2'
+                        }
+                    }
+                }
+            });
 
             try {
                 const output = execSync(
-                    `node ${BIN_PATH} --show-config -r "${runConfigPath}" -e "VAR1=cli-value"`,
-                    { encoding: 'utf-8' }
+                    `node ${BIN_PATH} --show-config -r envMap -e "VAR1=cli-value"`,
+                    {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome }
+                    }
                 );
                 const config = JSON.parse(output);
                 expect(config.env).toEqual(expect.objectContaining({
@@ -257,26 +305,30 @@ describe('MANYOYO CLI', () => {
                     VAR2: 'run-value-2'
                 }));
             } finally {
-                fs.rmSync(tempDir, { recursive: true, force: true });
+                fs.rmSync(tempHome, { recursive: true, force: true });
             }
         });
 
         test('run config env array should be rejected', () => {
-            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-env-array-'));
-            const runConfigPath = path.join(tempDir, 'env-array.json');
-            fs.writeFileSync(runConfigPath, JSON.stringify({
-                env: ['VAR1=value1']
-            }, null, 4));
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-env-array-'));
+            writeGlobalConfig(tempHome, {
+                runs: {
+                    envArray: {
+                        env: ['VAR1=value1']
+                    }
+                }
+            });
 
             try {
                 expect(() => {
-                    execSync(`node ${BIN_PATH} --show-config -r "${runConfigPath}"`, {
+                    execSync(`node ${BIN_PATH} --show-config -r envArray`, {
                         encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome },
                         stdio: 'pipe'
                     });
                 }).toThrow();
             } finally {
-                fs.rmSync(tempDir, { recursive: true, force: true });
+                fs.rmSync(tempHome, { recursive: true, force: true });
             }
         });
 
@@ -301,23 +353,29 @@ describe('MANYOYO CLI', () => {
         });
 
         test('run config should support shellSuffix', () => {
-            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-shellsuffix-'));
-            const runConfigPath = path.join(tempDir, 'codex.json');
-            fs.writeFileSync(runConfigPath, JSON.stringify({
-                shell: 'codex',
-                shellSuffix: 'resume --last'
-            }, null, 4));
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-shellsuffix-'));
+            writeGlobalConfig(tempHome, {
+                runs: {
+                    codex: {
+                        shell: 'codex',
+                        shellSuffix: 'resume --last'
+                    }
+                }
+            });
 
             try {
                 const output = execSync(
-                    `node ${BIN_PATH} --show-config -r "${runConfigPath}"`,
-                    { encoding: 'utf-8' }
+                    `node ${BIN_PATH} --show-config -r codex`,
+                    {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome }
+                    }
                 );
                 const config = JSON.parse(output);
                 expect(config.shell).toBe('codex');
                 expect(config.shellSuffix).toBe(' resume --last');
             } finally {
-                fs.rmSync(tempDir, { recursive: true, force: true });
+                fs.rmSync(tempHome, { recursive: true, force: true });
             }
         });
 
@@ -331,21 +389,27 @@ describe('MANYOYO CLI', () => {
         });
 
         test('containerName should resolve {now} template from run config', () => {
-            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-contname-'));
-            const runConfigPath = path.join(tempDir, 'opencode.json');
-            fs.writeFileSync(runConfigPath, JSON.stringify({
-                containerName: 'my-opencode-{now}'
-            }, null, 4));
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-contname-'));
+            writeGlobalConfig(tempHome, {
+                runs: {
+                    opencode: {
+                        containerName: 'my-opencode-{now}'
+                    }
+                }
+            });
 
             try {
                 const output = execSync(
-                    `node ${BIN_PATH} --show-config -r "${runConfigPath}"`,
-                    { encoding: 'utf-8' }
+                    `node ${BIN_PATH} --show-config -r opencode`,
+                    {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome }
+                    }
                 );
                 const config = JSON.parse(output);
                 expect(config.containerName).toMatch(/^my-opencode-\d{4}-\d{4}$/);
             } finally {
-                fs.rmSync(tempDir, { recursive: true, force: true });
+                fs.rmSync(tempHome, { recursive: true, force: true });
             }
         });
     });
@@ -422,13 +486,16 @@ describe('MANYOYO CLI', () => {
                     env: { ...process.env, HOME: tempHome }
                 });
 
+                const manyoyoConfigPath = path.join(tempHome, '.manyoyo', 'manyoyo.json');
                 const runFilePath = path.join(tempHome, '.manyoyo', 'run', 'claude.json');
                 const envFilePath = path.join(tempHome, '.manyoyo', 'env', 'claude.env');
 
-                expect(fs.existsSync(runFilePath)).toBe(true);
+                expect(fs.existsSync(manyoyoConfigPath)).toBe(true);
+                expect(fs.existsSync(runFilePath)).toBe(false);
                 expect(fs.existsSync(envFilePath)).toBe(false);
 
-                const runConfig = JSON.parse(fs.readFileSync(runFilePath, 'utf-8'));
+                const manyoyoConfig = JSON.parse(fs.readFileSync(manyoyoConfigPath, 'utf-8'));
+                const runConfig = manyoyoConfig.runs && manyoyoConfig.runs.claude;
                 expect(runConfig.containerName).toBe('my-claude-{now}');
                 expect(runConfig.yolo).toBe('c');
                 expect(runConfig.envFile).toBeUndefined();
@@ -457,13 +524,16 @@ describe('MANYOYO CLI', () => {
                     }
                 });
 
+                const manyoyoConfigPath = path.join(tempHome, '.manyoyo', 'manyoyo.json');
                 const runFilePath = path.join(tempHome, '.manyoyo', 'run', 'codex.json');
                 const envFilePath = path.join(tempHome, '.manyoyo', 'env', 'codex.env');
 
-                expect(fs.existsSync(runFilePath)).toBe(true);
+                expect(fs.existsSync(manyoyoConfigPath)).toBe(true);
+                expect(fs.existsSync(runFilePath)).toBe(false);
                 expect(fs.existsSync(envFilePath)).toBe(false);
 
-                const runConfig = JSON.parse(fs.readFileSync(runFilePath, 'utf-8'));
+                const manyoyoConfig = JSON.parse(fs.readFileSync(manyoyoConfigPath, 'utf-8'));
+                const runConfig = manyoyoConfig.runs && manyoyoConfig.runs.codex;
                 expect(runConfig.yolo).toBe('cx');
                 expect(runConfig.envFile).toBeUndefined();
                 expect(runConfig.env).toEqual(expect.objectContaining({
@@ -507,10 +577,13 @@ describe('MANYOYO CLI', () => {
                     env: { ...process.env, HOME: tempHome }
                 });
 
+                const manyoyoConfigPath = path.join(tempHome, '.manyoyo', 'manyoyo.json');
                 const runFilePath = path.join(tempHome, '.manyoyo', 'run', 'opencode.json');
-                expect(fs.existsSync(runFilePath)).toBe(true);
+                expect(fs.existsSync(manyoyoConfigPath)).toBe(true);
+                expect(fs.existsSync(runFilePath)).toBe(false);
 
-                const runConfig = JSON.parse(fs.readFileSync(runFilePath, 'utf-8'));
+                const manyoyoConfig = JSON.parse(fs.readFileSync(manyoyoConfigPath, 'utf-8'));
+                const runConfig = manyoyoConfig.runs && manyoyoConfig.runs.opencode;
                 expect(runConfig.yolo).toBe('oc');
                 expect(runConfig.envFile).toBeUndefined();
                 expect(runConfig.env).toEqual(expect.objectContaining({
@@ -527,12 +600,14 @@ describe('MANYOYO CLI', () => {
 
         test('--init-config should prompt and keep existing json when answering no', () => {
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
-            const manyoyoRunDir = path.join(tempHome, '.manyoyo', 'run');
-            const targetRunPath = path.join(manyoyoRunDir, 'claude.json');
-            const originalRunContent = '{\n    "keep": true\n}\n';
-
-            fs.mkdirSync(manyoyoRunDir, { recursive: true });
-            fs.writeFileSync(targetRunPath, originalRunContent);
+            const manyoyoConfigPath = path.join(tempHome, '.manyoyo', 'manyoyo.json');
+            writeGlobalConfig(tempHome, {
+                runs: {
+                    claude: {
+                        keep: true
+                    }
+                }
+            });
 
             try {
                 const output = execSync(`node "${BIN_PATH}" --init-config claude`, {
@@ -541,8 +616,9 @@ describe('MANYOYO CLI', () => {
                     input: 'n\n'
                 });
 
-                expect(output).toContain(`${targetRunPath} 已存在`);
-                expect(fs.readFileSync(targetRunPath, 'utf-8')).toBe(originalRunContent);
+                expect(output).toContain('runs.claude 已存在');
+                const manyoyoConfig = JSON.parse(fs.readFileSync(manyoyoConfigPath, 'utf-8'));
+                expect(manyoyoConfig.runs.claude).toEqual({ keep: true });
             } finally {
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }
