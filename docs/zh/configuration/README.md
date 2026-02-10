@@ -123,6 +123,6 @@ manyoyo --show-command
 
 ## 下一步
 
-- [环境变量详解](./environment) - 了解如何配置环境变量
-- [配置文件详解](./config-files) - 学习所有配置选项
-- [配置示例](./examples) - 查看实用的配置示例
+- [环境变量详解](./environment.md) - 了解如何配置环境变量
+- [配置文件详解](./config-files.md) - 学习所有配置选项
+- [配置示例](./examples.md) - 查看实用的配置示例

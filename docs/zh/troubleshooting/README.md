@@ -5,28 +5,28 @@
 ## 快速导航
 
 ### 构建相关问题
-- [镜像构建失败](./build-errors#镜像构建失败)
-- [镜像拉取失败](./build-errors#镜像拉取失败)
-- [网络连接问题](./build-errors#网络连接问题)
-- [磁盘空间不足](./build-errors#磁盘空间不足)
+- [镜像构建失败](./build-errors.md#镜像构建失败)
+- [镜像拉取失败](./build-errors.md#镜像拉取失败)
+- [网络连接问题](./build-errors.md#网络连接问题)
+- [磁盘空间不足](./build-errors.md#磁盘空间不足)
 
 ### 运行时问题
-- [容器启动失败](./runtime-errors#容器启动失败)
-- [权限不足](./runtime-errors#权限不足)
-- [环境变量未生效](./runtime-errors#环境变量未生效)
-- [容器内无法访问宿主机文件](./runtime-errors#容器内无法访问宿主机文件)
-- [AI CLI 工具报错](./runtime-errors#ai-cli-工具报错)
+- [容器启动失败](./runtime-errors.md#容器启动失败)
+- [权限不足](./runtime-errors.md#权限不足)
+- [环境变量未生效](./runtime-errors.md#环境变量未生效)
+- [容器内无法访问宿主机文件](./runtime-errors.md#容器内无法访问宿主机文件)
+- [AI CLI 工具报错](./runtime-errors.md#ai-cli-工具报错)
 
 ## 常见问题速查表
 
 | 问题症状 | 可能原因 | 快速解决方案 | 详细文档 |
 |---------|---------|-------------|---------|
-| `manyoyo --ib` 构建失败 | 网络问题、磁盘空间不足 | 检查网络和磁盘空间 | [构建问题](./build-errors) |
-| `pinging container registry failed` | 镜像未构建 | 运行 `manyoyo --ib --iv 1.7.0` | [镜像拉取失败](./build-errors#镜像拉取失败) |
-| 容器无法启动 | 端口冲突、权限问题 | 检查日志和权限 | [容器启动失败](./runtime-errors#容器启动失败) |
-| `permission denied` | Docker/Podman 权限不足 | 添加用户到 docker 组 | [权限不足](./runtime-errors#权限不足) |
-| 环境变量未生效 | 文件格式错误、路径错误 | 检查环境文件格式 | [环境变量未生效](./runtime-errors#环境变量未生效) |
-| AI CLI 报错缺少 API Key | 环境变量未配置 | 配置环境文件 | [AI CLI 工具报错](./runtime-errors#ai-cli-工具报错) |
+| `manyoyo --ib` 构建失败 | 网络问题、磁盘空间不足 | 检查网络和磁盘空间 | [构建问题](./build-errors.md) |
+| `pinging container registry failed` | 镜像未构建 | 运行 `manyoyo --ib --iv 1.7.0` | [镜像拉取失败](./build-errors.md#镜像拉取失败) |
+| 容器无法启动 | 端口冲突、权限问题 | 检查日志和权限 | [容器启动失败](./runtime-errors.md#容器启动失败) |
+| `permission denied` | Docker/Podman 权限不足 | 添加用户到 docker 组 | [权限不足](./runtime-errors.md#权限不足) |
+| 环境变量未生效 | 文件格式错误、路径错误 | 检查环境文件格式 | [环境变量未生效](./runtime-errors.md#环境变量未生效) |
+| AI CLI 报错缺少 API Key | 环境变量未配置 | 配置环境文件 | [AI CLI 工具报错](./runtime-errors.md#ai-cli-工具报错) |
 
 ## 调试工具
 
@@ -90,12 +90,12 @@ manyoyo -x curl -I https://api.anthropic.com
 ### 1. 先完成安装验证
 
 系统要求、版本、镜像、测试容器等基础检查，建议先按安装文档执行：
-- [安装详解：验证安装](../guide/installation#验证安装)
+- [安装详解：验证安装](../guide/installation.md#验证安装)
 
 ### 2. 按问题类型进入专项排查
 
-- 构建相关问题：[`build-errors`](./build-errors)
-- 运行时相关问题：[`runtime-errors`](./runtime-errors)
+- 构建相关问题：[`build-errors`](./build-errors.md)
+- 运行时相关问题：[`runtime-errors`](./runtime-errors.md)
 
 ### 3. 验证配置文件
 
@@ -164,7 +164,7 @@ manyoyo --ib --iv 1.7.0 2>&1 | tee build-error.log
 
 ## 相关文档
 
-- [构建问题详解](./build-errors) - 镜像构建相关问题
-- [运行时问题详解](./runtime-errors) - 容器运行相关问题
-- [配置系统](../configuration/) - 配置文件和环境变量
-- [命令参考](../reference/cli-options) - 命令行选项说明
+- [构建问题详解](./build-errors.md) - 镜像构建相关问题
+- [运行时问题详解](./runtime-errors.md) - 容器运行相关问题
+- [配置系统](../configuration/README.md) - 配置文件和环境变量
+- [命令参考](../reference/cli-options.md) - 命令行选项说明

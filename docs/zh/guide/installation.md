@@ -395,9 +395,9 @@ manyoyo -n test -x node --version
 ## 故障排查
 
 安装相关问题已统一收敛到：
-- [故障排查指南](../troubleshooting/)
-- [构建问题详解](../troubleshooting/build-errors)
-- [运行时问题详解](../troubleshooting/runtime-errors)
+- [故障排查指南](../troubleshooting/README.md)
+- [构建问题详解](../troubleshooting/build-errors.md)
+- [运行时问题详解](../troubleshooting/runtime-errors.md)
 
 建议先执行以下最小检查：
 
@@ -476,7 +476,7 @@ manyoyo --irm
 
 安装完成后，您可以：
 
-1. [快速开始](./quick-start) - 了解基本使用流程
-2. [基础用法](./basic-usage) - 学习常用命令和操作
-3. [配置系统](../configuration/) - 设置环境变量和配置文件
-4. [命令参考](../reference/cli-options) - 查看所有命令行选项
+1. [快速开始](./quick-start.md) - 了解基本使用流程
+2. [基础用法](./basic-usage.md) - 学习常用命令和操作
+3. [配置系统](../configuration/README.md) - 设置环境变量和配置文件
+4. [命令参考](../reference/cli-options.md) - 查看所有命令行选项

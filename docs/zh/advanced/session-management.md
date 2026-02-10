@@ -593,7 +593,7 @@ claude --sync-sessions
 
 ## 相关文档
 
-- [基础用法](../guide/basic-usage) - 学习基本命令
-- [AI 智能体](../reference/agents) - 了解各智能体的会话管理
-- [配置示例](../configuration/examples) - 查看配置示例
-- [容器模式](../reference/container-modes) - 了解容器管理
+- [基础用法](../guide/basic-usage.md) - 学习基本命令
+- [AI 智能体](../reference/agents.md) - 了解各智能体的会话管理
+- [配置示例](../configuration/examples.md) - 查看配置示例
+- [容器模式](../reference/container-modes.md) - 了解容器管理

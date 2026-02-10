@@ -5,28 +5,28 @@ This page provides a quick index and solutions for common MANYOYO issues.
 ## Quick Navigation
 
 ### Build-Related Issues
-- [Image Build Failures](./build-errors#image-build-failures)
-- [Image Pull Failures](./build-errors#image-pull-failures)
-- [Network Connection Issues](./build-errors#network-connection-issues)
-- [Insufficient Disk Space](./build-errors#insufficient-disk-space)
+- [Image Build Failures](./build-errors.md#image-build-failures)
+- [Image Pull Failures](./build-errors.md#image-pull-failures)
+- [Network Connection Issues](./build-errors.md#network-connection-issues)
+- [Insufficient Disk Space](./build-errors.md#insufficient-disk-space)
 
 ### Runtime Issues
-- [Container Startup Failures](./runtime-errors#container-startup-failures)
-- [Permission Denied](./runtime-errors#permission-denied)
-- [Environment Variables Not Taking Effect](./runtime-errors#environment-variables-not-taking-effect)
-- [Cannot Access Host Files from Container](./runtime-errors#cannot-access-host-files-from-container)
-- [AI CLI Tool Errors](./runtime-errors#ai-cli-tool-errors)
+- [Container Startup Failures](./runtime-errors.md#container-startup-failures)
+- [Permission Denied](./runtime-errors.md#permission-denied)
+- [Environment Variables Not Taking Effect](./runtime-errors.md#environment-variables-not-taking-effect)
+- [Cannot Access Host Files from Container](./runtime-errors.md#cannot-access-host-files-from-container)
+- [AI CLI Tool Errors](./runtime-errors.md#ai-cli-tool-errors)
 
 ## Common Issues Quick Reference
 
 | Symptom | Possible Cause | Quick Solution | Detailed Documentation |
 |---------|---------------|----------------|------------------------|
-| `manyoyo --ib` build fails | Network issues, insufficient disk space | Check network and disk space | [Build Issues](./build-errors) |
-| `pinging container registry failed` | Image not built | Run `manyoyo --ib --iv 1.7.0` | [Image Pull Failures](./build-errors#image-pull-failures) |
-| Container won't start | Port conflicts, permission issues | Check logs and permissions | [Container Startup Failures](./runtime-errors#container-startup-failures) |
-| `permission denied` | Insufficient Docker/Podman permissions | Add user to docker group | [Permission Denied](./runtime-errors#permission-denied) |
-| Environment variables not working | File format errors, path errors | Check environment file format | [Environment Variables Not Taking Effect](./runtime-errors#environment-variables-not-taking-effect) |
-| AI CLI missing API Key | Environment variables not configured | Configure environment file | [AI CLI Tool Errors](./runtime-errors#ai-cli-tool-errors) |
+| `manyoyo --ib` build fails | Network issues, insufficient disk space | Check network and disk space | [Build Issues](./build-errors.md) |
+| `pinging container registry failed` | Image not built | Run `manyoyo --ib --iv 1.7.0` | [Image Pull Failures](./build-errors.md#image-pull-failures) |
+| Container won't start | Port conflicts, permission issues | Check logs and permissions | [Container Startup Failures](./runtime-errors.md#container-startup-failures) |
+| `permission denied` | Insufficient Docker/Podman permissions | Add user to docker group | [Permission Denied](./runtime-errors.md#permission-denied) |
+| Environment variables not working | File format errors, path errors | Check environment file format | [Environment Variables Not Taking Effect](./runtime-errors.md#environment-variables-not-taking-effect) |
+| AI CLI missing API Key | Environment variables not configured | Configure environment file | [AI CLI Tool Errors](./runtime-errors.md#ai-cli-tool-errors) |
 
 ## Debugging Tools
 
@@ -90,12 +90,12 @@ manyoyo -x curl -I https://api.anthropic.com
 ### 1. Complete Installation Verification First
 
 For requirements, version checks, image checks, and test container creation, run the installation verification checklist first:
-- [Installation Guide: Verify Installation](../guide/installation#verify-installation)
+- [Installation Guide: Verify Installation](../guide/installation.md#verify-installation)
 
 ### 2. Jump to Targeted Troubleshooting
 
-- Build-related issues: [`build-errors`](./build-errors)
-- Runtime-related issues: [`runtime-errors`](./runtime-errors)
+- Build-related issues: [`build-errors`](./build-errors.md)
+- Runtime-related issues: [`runtime-errors`](./runtime-errors.md)
 
 ### 3. Verify Configuration Files
 
@@ -164,7 +164,7 @@ Visit [GitHub Issues](https://github.com/xcanwin/manyoyo/issues) and provide:
 
 ## Related Documentation
 
-- [Build Issues Explained](./build-errors) - Image build related issues
-- [Runtime Issues Explained](./runtime-errors) - Container runtime related issues
-- [Configuration System](../configuration/) - Configuration files and environment variables
-- [Command Reference](../reference/cli-options) - Command line options description
+- [Build Issues Explained](./build-errors.md) - Image build related issues
+- [Runtime Issues Explained](./runtime-errors.md) - Container runtime related issues
+- [Configuration System](../configuration/README.md) - Configuration files and environment variables
+- [Command Reference](../reference/cli-options.md) - Command line options description

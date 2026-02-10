@@ -93,7 +93,7 @@ docker ps -a
 ```
 
 For full workflows (architecture, performance, security, CI examples), see:  
-[Docker-in-Docker Complete Guide](../advanced/docker-in-docker)
+[Docker-in-Docker Complete Guide](../advanced/docker-in-docker.md)
 
 ### Use Cases
 
@@ -134,7 +134,7 @@ For full workflows (architecture, performance, security, CI examples), see:
 ### In-depth Examples
 
 For complete configuration and end-to-end examples, see:  
-[Docker-in-Docker Complete Guide](../advanced/docker-in-docker)
+[Docker-in-Docker Complete Guide](../advanced/docker-in-docker.md)
 
 ## Socket Mount Mode (Dangerous)
 
@@ -456,7 +456,7 @@ Document why specific modes are needed for team understanding.
 
 ## Related Documentation
 
-- [Basic Usage](../guide/basic-usage) - Learn basic commands
-- [Configuration Examples](../configuration/examples) - View configuration examples
-- [Installation Guide](../guide/installation) - Learn about image building
-- [Troubleshooting](../troubleshooting/) - Solve container issues
+- [Basic Usage](../guide/basic-usage.md) - Learn basic commands
+- [Configuration Examples](../configuration/examples.md) - View configuration examples
+- [Installation Guide](../guide/installation.md) - Learn about image building
+- [Troubleshooting](../troubleshooting/README.md) - Solve container issues

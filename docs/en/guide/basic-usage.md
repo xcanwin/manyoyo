@@ -226,7 +226,7 @@ manyoyo -r claude -e "DEBUG=true"
 manyoyo -r claude --ef /abs/path/additional.env
 ```
 
-For detailed configuration, refer to [Configuration System](../configuration/).
+For detailed configuration, refer to [Configuration System](../configuration/README.md).
 
 ## Directories and Mounts
 
@@ -561,7 +561,7 @@ fi
 
 ## Next Steps
 
-- [Configuration System](../configuration/) - Learn how to use configuration files to simplify operations
-- [Command Reference](../reference/cli-options) - View all command-line options
-- [Container Modes](../reference/container-modes) - Learn about different container nesting modes
-- [Troubleshooting](../troubleshooting/) - Solve common problems
+- [Configuration System](../configuration/README.md) - Learn how to use configuration files to simplify operations
+- [Command Reference](../reference/cli-options.md) - View all command-line options
+- [Container Modes](../reference/container-modes.md) - Learn about different container nesting modes
+- [Troubleshooting](../troubleshooting/README.md) - Solve common problems

@@ -486,6 +486,6 @@ manyoyo --ib --iv 1.7.0 --iba TOOL=common --yes
 
 ## 相关文档
 
-- [故障排查首页](./) - 问题索引和快速导航
-- [运行时问题](./runtime-errors) - 容器运行时问题
-- [配置系统](../configuration/) - 配置文件和环境变量
+- [故障排查首页](./README.md) - 问题索引和快速导航
+- [运行时问题](./runtime-errors.md) - 容器运行时问题
+- [配置系统](../configuration/README.md) - 配置文件和环境变量

@@ -21,8 +21,8 @@ manyoyo -V
 ## 2. Install Podman / Docker
 
 Container runtime install/switch references:
-- [Install Podman (Recommended)](./installation#install-podman-recommended)
-- [Install Docker (Optional)](./installation#install-docker-optional)
+- [Install Podman (Recommended)](./installation.md#install-podman-recommended)
+- [Install Docker (Optional)](./installation.md#install-docker-optional)
 
 ## 3. Build sandbox image
 
@@ -56,11 +56,11 @@ vim ~/.manyoyo/manyoyo.json
 cat ~/.manyoyo/manyoyo.json | jq '.runs.claude.env'
 ```
 
-More issues: [Troubleshooting](../troubleshooting/)
+More issues: [Troubleshooting](../troubleshooting/README.md)
 
 ## Next Steps
 
-- [Basic Usage](./basic-usage)
-- [Configuration](../configuration/)
-- [CLI Reference](../reference/cli-options)
-- [Troubleshooting](../troubleshooting/)
+- [Basic Usage](./basic-usage.md)
+- [Configuration](../configuration/README.md)
+- [CLI Reference](../reference/cli-options.md)
+- [Troubleshooting](../troubleshooting/README.md)

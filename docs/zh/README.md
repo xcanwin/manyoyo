@@ -45,7 +45,7 @@ features:
     linkText: 查看详情
 ---
 
-> 如果你更习惯英文文档，请切换到 [English](/en/)。
+> 如果你更习惯英文文档，请切换到 [English](../en/README.md)。
 
 ## 为什么是 MANYOYO
 
@@ -57,9 +57,9 @@ MANYOYO 不是通用容器工具，而是专门为 AI Agent CLI 设计的安全�
 
 ## 热门场景
 
-- [Claude Code YOLO 安全沙箱](./guide/quick-start) - 2 分钟启动隔离环境，降低宿主机风险
-- [Codex CLI 容器沙箱](./reference/agents) - 在隔离容器中运行 `codex`，支持会话恢复与命令调试
-- [Docker/Podman 安全运行 Agent CLI](./reference/container-modes) - 对比 `none` / `dind` / `sock` 模式
+- [Claude Code YOLO 安全沙箱](./guide/quick-start.md) - 2 分钟启动隔离环境，降低宿主机风险
+- [Codex CLI 容器沙箱](./reference/agents.md) - 在隔离容器中运行 `codex`，支持会话恢复与命令调试
+- [Docker/Podman 安全运行 Agent CLI](./reference/container-modes.md) - 对比 `none` / `dind` / `sock` 模式
 
 ## 在线文档部署方式
 

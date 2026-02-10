@@ -486,6 +486,6 @@ manyoyo --ib --iv 1.7.0 --iba TOOL=common --yes
 
 ## Related Documentation
 
-- [Troubleshooting Home](./) - Issue index and quick navigation
-- [Runtime Issues](./runtime-errors) - Container runtime issues
-- [Configuration System](../configuration/) - Configuration files and environment variables
+- [Troubleshooting Home](./README.md) - Issue index and quick navigation
+- [Runtime Issues](./runtime-errors.md) - Container runtime issues
+- [Configuration System](../configuration/README.md) - Configuration files and environment variables

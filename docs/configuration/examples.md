@@ -13,6 +13,6 @@ onMounted(() => {
 
 # 页面已迁移
 
-此页面已迁移至 [新地址](../zh/configuration/examples)。
+此页面已迁移至 [新地址](../zh/configuration/examples.md)。
 
 如果没有自动跳转，请点击上方链接。

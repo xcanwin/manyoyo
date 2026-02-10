@@ -282,6 +282,6 @@ manyoyo --ef /abs/path/myconfig.env -x 'env | sort'
 
 ## Related Documentation
 
-- [Configuration System Overview](./) - Understand configuration priority mechanism
-- [Configuration Files Details](./config-files) - Learn how to use envFile in configuration files
-- [Configuration Examples](./examples) - View complete configuration examples
+- [Configuration System Overview](./README.md) - Understand configuration priority mechanism
+- [Configuration Files Details](./config-files.md) - Learn how to use envFile in configuration files
+- [Configuration Examples](./examples.md) - View complete configuration examples

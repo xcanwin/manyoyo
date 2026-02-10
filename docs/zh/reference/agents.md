@@ -537,7 +537,7 @@ manyoyo -n test -r claude
 
 ## 相关文档
 
-- [基础用法](../guide/basic-usage) - 学习基本命令和操作
-- [配置示例](../configuration/examples) - 查看智能体配置示例
-- [环境变量详解](../configuration/environment) - 了解如何配置环境变量
-- [运行时问题](../troubleshooting/runtime-errors#ai-cli-工具报错) - AI CLI 工具故障排查
+- [基础用法](../guide/basic-usage.md) - 学习基本命令和操作
+- [配置示例](../configuration/examples.md) - 查看智能体配置示例
+- [环境变量详解](../configuration/environment.md) - 了解如何配置环境变量
+- [运行时问题](../troubleshooting/runtime-errors.md#ai-cli-工具报错) - AI CLI 工具故障排查

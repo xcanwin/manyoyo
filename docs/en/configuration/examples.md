@@ -27,7 +27,7 @@ manyoyo -y c  # Automatically uses image from global configuration
 ### Basic Configuration
 
 Baseline template (env vars, run config, common commands) is maintained in one place:  
-[AI Agents / Claude Code](../reference/agents#claude-code).
+[AI Agents / Claude Code](../reference/agents.md#claude-code).
 
 ### Advanced Configuration (Custom Base URL)
 
@@ -76,7 +76,7 @@ EOF
 ### Basic Configuration
 
 Baseline template (env vars, run config, resume commands) is maintained in one place:  
-[AI Agents / Codex](../reference/agents#codex).
+[AI Agents / Codex](../reference/agents.md#codex).
 
 ### API Key Authentication Configuration
 
@@ -104,14 +104,14 @@ EOF
 ### Basic Configuration
 
 Baseline template (env vars, run config, resume commands) is maintained in one place:  
-[AI Agents / Gemini](../reference/agents#gemini).
+[AI Agents / Gemini](../reference/agents.md#gemini).
 
 ## OpenCode Configuration Examples
 
 ### Basic Configuration
 
 Baseline template (env vars, run config, shortcuts) is maintained in one place:  
-[AI Agents / OpenCode](../reference/agents#opencode).
+[AI Agents / OpenCode](../reference/agents.md#opencode).
 
 ## Docker-in-Docker Configuration Examples
 
@@ -499,6 +499,6 @@ Command Line Arguments
 
 ## Related Documentation
 
-- [Configuration System Overview](./) - Understand configuration principles
-- [Environment Variables Details](./environment) - Deep dive into environment variables
-- [Configuration Files Details](./config-files) - Learn all configuration options
+- [Configuration System Overview](./README.md) - Understand configuration principles
+- [Environment Variables Details](./environment.md) - Deep dive into environment variables
+- [Configuration Files Details](./config-files.md) - Learn all configuration options

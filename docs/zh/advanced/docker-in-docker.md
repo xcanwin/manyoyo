@@ -494,7 +494,7 @@ manyoyo --yes -m dind -x "
 
 ## 相关文档
 
-- [容器模式对比](../reference/container-modes) - 了解不同容器模式
-- [基础用法](../guide/basic-usage) - 学习基本命令
-- [配置示例](../configuration/examples) - 查看配置示例
-- [故障排查](../troubleshooting/runtime-errors) - 解决运行时问题
+- [容器模式对比](../reference/container-modes.md) - 了解不同容器模式
+- [基础用法](../guide/basic-usage.md) - 学习基本命令
+- [配置示例](../configuration/examples.md) - 查看配置示例
+- [故障排查](../troubleshooting/runtime-errors.md) - 解决运行时问题

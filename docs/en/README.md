@@ -45,7 +45,7 @@ features:
     linkText: Learn more
 ---
 
-> If you prefer Chinese documentation, please switch to [简体中文](/zh/).
+> If you prefer Chinese documentation, please switch to [简体中文](../zh/README.md).
 
 ## Why MANYOYO
 
@@ -57,9 +57,9 @@ MANYOYO is not a general container tool, but a security sandbox specifically des
 
 ## Popular Use Cases
 
-- [Claude Code YOLO sandbox](./guide/quick-start) - launch an isolated environment in 2 minutes
-- [Codex CLI container sandbox](./reference/agents) - run `codex` in an isolated container with session recovery
-- [Docker/Podman secure runtime for Agent CLI](./reference/container-modes) - compare `none` / `dind` / `sock` modes
+- [Claude Code YOLO sandbox](./guide/quick-start.md) - launch an isolated environment in 2 minutes
+- [Codex CLI container sandbox](./reference/agents.md) - run `codex` in an isolated container with session recovery
+- [Docker/Podman secure runtime for Agent CLI](./reference/container-modes.md) - compare `none` / `dind` / `sock` modes
 
 ## Documentation Deployment
 

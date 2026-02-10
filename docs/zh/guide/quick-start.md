@@ -21,8 +21,8 @@ manyoyo -V
 ## 2. 安装 Podman / Docker
 
 容器运行时安装或切换可参考：
-- [安装 Podman（推荐）](./installation#安装-podman推荐)
-- [安装 Docker（可选）](./installation#安装-docker可选)
+- [安装 Podman（推荐）](./installation.md#安装-podman推荐)
+- [安装 Docker（可选）](./installation.md#安装-docker可选)
 
 ## 3. 构建沙箱镜像
 
@@ -56,11 +56,11 @@ vim ~/.manyoyo/manyoyo.json
 cat ~/.manyoyo/manyoyo.json | jq '.runs.claude.env'
 ```
 
-更多问题见：[故障排查](../troubleshooting/)
+更多问题见：[故障排查](../troubleshooting/README.md)
 
 ## 下一步
 
-- [基础用法](./basic-usage)
-- [配置系统](../configuration/)
-- [命令参考](../reference/cli-options)
-- [故障排查](../troubleshooting/)
+- [基础用法](./basic-usage.md)
+- [配置系统](../configuration/README.md)
+- [命令参考](../reference/cli-options.md)
+- [故障排查](../troubleshooting/README.md)

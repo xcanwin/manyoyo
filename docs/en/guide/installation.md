@@ -395,9 +395,9 @@ manyoyo -n test -x node --version
 ## Troubleshooting
 
 Installation issues are centralized in:
-- [Troubleshooting Guide](../troubleshooting/)
-- [Build Issues Guide](../troubleshooting/build-errors)
-- [Runtime Errors Guide](../troubleshooting/runtime-errors)
+- [Troubleshooting Guide](../troubleshooting/README.md)
+- [Build Issues Guide](../troubleshooting/build-errors.md)
+- [Runtime Errors Guide](../troubleshooting/runtime-errors.md)
 
 Run this minimal checklist first:
 
@@ -476,7 +476,7 @@ manyoyo --irm
 
 After installation, you can:
 
-1. [Quick Start](./quick-start) - Learn basic usage workflow
-2. [Basic Usage](./basic-usage) - Learn common commands and operations
-3. [Configuration System](../configuration/) - Set environment variables and configuration files
-4. [Command Reference](../reference/cli-options) - View all command-line options
+1. [Quick Start](./quick-start.md) - Learn basic usage workflow
+2. [Basic Usage](./basic-usage.md) - Learn common commands and operations
+3. [Configuration System](../configuration/README.md) - Set environment variables and configuration files
+4. [Command Reference](../reference/cli-options.md) - View all command-line options

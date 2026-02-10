@@ -27,7 +27,7 @@ manyoyo -y c  # 自动使用全局配置中的镜像
 ### 基础配置
 
 基础模板（环境变量、运行配置、常用命令）已统一在参考文档维护：  
-[AI 智能体 / Claude Code](../reference/agents#claude-code)。
+[AI 智能体 / Claude Code](../reference/agents.md#claude-code)。
 
 ### 高级配置（自定义 Base URL）
 
@@ -76,7 +76,7 @@ EOF
 ### 基础配置
 
 基础模板（环境变量、运行配置、会话恢复）已统一在参考文档维护：  
-[AI 智能体 / Codex](../reference/agents#codex)。
+[AI 智能体 / Codex](../reference/agents.md#codex)。
 
 ### API Key 认证配置
 
@@ -104,14 +104,14 @@ EOF
 ### 基础配置
 
 基础模板（环境变量、运行配置、恢复命令）已统一在参考文档维护：  
-[AI 智能体 / Gemini](../reference/agents#gemini)。
+[AI 智能体 / Gemini](../reference/agents.md#gemini)。
 
 ## OpenCode 配置示例
 
 ### 基础配置
 
 基础模板（环境变量、运行配置、快捷方式）已统一在参考文档维护：  
-[AI 智能体 / OpenCode](../reference/agents#opencode)。
+[AI 智能体 / OpenCode](../reference/agents.md#opencode)。
 
 ## Docker-in-Docker 配置示例
 
@@ -499,6 +499,6 @@ manyoyo -r claude -x env | grep ANTHROPIC
 
 ## 相关文档
 
-- [配置系统概览](./) - 了解配置原理
-- [环境变量详解](./environment) - 深入了解环境变量
-- [配置文件详解](./config-files) - 学习所有配置选项
+- [配置系统概览](./README.md) - 了解配置原理
+- [环境变量详解](./environment.md) - 深入了解环境变量
+- [配置文件详解](./config-files.md) - 学习所有配置选项
