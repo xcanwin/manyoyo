@@ -276,35 +276,23 @@ function loadConfig() {
 }
 
 function loadRunConfig(name) {
-    // Check if name is a file path (contains path separator or extension)
-    const isFilePath = name.includes('/') || name.includes('\\') || path.extname(name);
+    const runConfigPath = String(name || '').trim();
+    if (!path.isAbsolute(runConfigPath)) {
+        console.error(`${RED}⚠️  错误: --run 仅支持绝对路径: ${name}${NC}`);
+        process.exit(1);
+    }
 
-    if (isFilePath) {
-        // If it's a file path, only check that exact path
-        if (fs.existsSync(name)) {
-            try {
-                const config = JSON5.parse(fs.readFileSync(name, 'utf-8'));
-                return config;
-            } catch (e) {
-                console.error(`${YELLOW}⚠️  运行配置文件格式错误: ${name}${NC}`);
-                return {};
-            }
-        }
-    } else {
-        // If it's just a name, only check ~/.manyoyo/run/name.json
-        const configPath = path.join(os.homedir(), '.manyoyo', 'run', `${name}.json`);
-        if (fs.existsSync(configPath)) {
-            try {
-                const config = JSON5.parse(fs.readFileSync(configPath, 'utf-8'));
-                return config;
-            } catch (e) {
-                console.error(`${YELLOW}⚠️  运行配置文件格式错误: ${configPath}${NC}`);
-                return {};
-            }
+    if (fs.existsSync(runConfigPath)) {
+        try {
+            const config = JSON5.parse(fs.readFileSync(runConfigPath, 'utf-8'));
+            return config;
+        } catch (e) {
+            console.error(`${YELLOW}⚠️  运行配置文件格式错误: ${runConfigPath}${NC}`);
+            return {};
         }
     }
 
-    console.error(`${RED}⚠️  未找到运行配置: ${name}${NC}`);
+    console.error(`${RED}⚠️  未找到运行配置: ${runConfigPath}${NC}`);
     return {};
 }
 
@@ -877,16 +865,10 @@ function addEnv(env) {
 }
 
 function addEnvFile(envFile) {
-    // Check if envFile is a file path (contains path separator)
-    const isFilePath = envFile.includes('/') || envFile.includes('\\');
-
-    let filePath;
-    if (isFilePath) {
-        // If it's a file path, only check that exact path
-        filePath = envFile;
-    } else {
-        // If it's just a name, only check ~/.manyoyo/env/name.env
-        filePath = path.join(os.homedir(), '.manyoyo', 'env', `${envFile}.env`);
+    const filePath = String(envFile || '').trim();
+    if (!path.isAbsolute(filePath)) {
+        console.error(`${RED}⚠️  错误: --env-file 仅支持绝对路径: ${envFile}${NC}`);
+        process.exit(1);
     }
 
     ENV_FILE = filePath;
@@ -1409,22 +1391,17 @@ async function setupCommander() {
   ~/.manyoyo/run/c.json      运行配置示例
 
 路径规则:
-  -r name       → ~/.manyoyo/run/name.json
-  -r ./file.json → 当前目录的 file.json
-  --ef name     → ~/.manyoyo/env/name.env
-  --ef ./file.env → 当前目录的 file.env
+  -r /abs/path.json → 绝对路径运行配置
+  --ef /abs/path.env → 绝对路径环境文件
   --ss "<args>" → 显式设置命令后缀
   -- <args...>  → 直接透传命令后缀（优先级最高）
 
 示例:
   ${MANYOYO_NAME} --ib --iv ${IMAGE_VERSION_BASE || "1.0.0"}                     构建镜像
   ${MANYOYO_NAME} --init-config all                   从本机 Agent 配置初始化 ~/.manyoyo
-  ${MANYOYO_NAME} -r claude                           使用初始化后的运行配置快速启动
-  ${MANYOYO_NAME} -r c                                使用 ~/.manyoyo/run/c.json 配置
-  ${MANYOYO_NAME} -r codex --ss "resume --last"       使用命令后缀
-  ${MANYOYO_NAME} -r ./myconfig.json                  使用当前目录 ./myconfig.json 配置
-  ${MANYOYO_NAME} -n test --ef claude -y c            使用 ~/.manyoyo/env/claude.env 环境变量文件
-  ${MANYOYO_NAME} -n test --ef ./myenv.env -y c       使用当前目录 ./myenv.env 环境变量文件
+  ${MANYOYO_NAME} -r /abs/path/claude.json            使用绝对路径运行配置快速启动
+  ${MANYOYO_NAME} -r /abs/path/codex.json --ss "resume --last"  使用命令后缀
+  ${MANYOYO_NAME} -n test --ef /abs/path/myenv.env -y c  使用绝对路径环境变量文件
   ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
   ${MANYOYO_NAME} -x echo 123                         指定命令执行
   ${MANYOYO_NAME} --server --server-user admin --server-pass 123456   启动带登录认证的网页服务
@@ -1435,7 +1412,7 @@ async function setupCommander() {
 
     // Options
     program
-        .option('-r, --run <name>', '加载运行配置 (name → ~/.manyoyo/run/name.json, ./file.json → 当前目录文件)')
+        .option('-r, --run <file>', '加载运行配置 (仅支持绝对路径，如 /abs/path.json)')
         .option('--hp, --host-path <path>', '设置宿主机工作目录 (默认当前路径)')
         .option('-n, --cont-name <name>', '设置容器名称')
         .option('--cp, --cont-path <path>', '设置容器工作目录')
@@ -1449,7 +1426,7 @@ async function setupCommander() {
         .option('--init-config [agents]', '初始化 Agent 配置到 ~/.manyoyo (all 或逗号分隔: claude,codex,gemini,opencode)')
         .option('--irm, --image-remove', '清理悬空镜像和 <none> 镜像')
         .option('-e, --env <env>', '设置环境变量 XXX=YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
-        .option('--ef, --env-file <file>', '设置环境变量通过文件 (name → ~/.manyoyo/env/name.env, ./file.env → 当前目录文件)', (value, previous) => [...(previous || []), value], [])
+        .option('--ef, --env-file <file>', '设置环境变量通过文件 (仅支持绝对路径，如 /abs/path.env)', (value, previous) => [...(previous || []), value], [])
         .option('-v, --volume <volume>', '绑定挂载卷 XXX:YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--sp, --shell-prefix <command>', '临时环境变量 (作为-s前缀)')
         .option('-s, --shell <command>', '指定命令执行')

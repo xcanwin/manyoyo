@@ -133,6 +133,80 @@ describe('MANYOYO CLI', () => {
                 });
             }).toThrow();
         });
+
+        test('should accept absolute path for --ef', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-envfile-'));
+            const envFilePath = path.join(tempDir, 'abs.env');
+            fs.writeFileSync(envFilePath, 'export ABS_VAR=ok\n');
+
+            try {
+                const output = execSync(
+                    `node ${BIN_PATH} --show-config --ef "${envFilePath}"`,
+                    { encoding: 'utf-8' }
+                );
+                const config = JSON.parse(output);
+                expect(config.envFile).toContain(envFilePath);
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
+        test('should reject non-absolute name for --ef', () => {
+            expect(() => {
+                execSync(`node ${BIN_PATH} --show-config --ef myenv`, {
+                    encoding: 'utf-8',
+                    stdio: 'pipe'
+                });
+            }).toThrow();
+        });
+
+        test('should reject relative path for --ef', () => {
+            expect(() => {
+                execSync(`node ${BIN_PATH} --show-config --ef ./myenv.env`, {
+                    encoding: 'utf-8',
+                    stdio: 'pipe'
+                });
+            }).toThrow();
+        });
+
+        test('should accept absolute path for --run', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-runfile-'));
+            const runConfigPath = path.join(tempDir, 'abs-run.json');
+            fs.writeFileSync(runConfigPath, JSON.stringify({
+                shell: 'codex',
+                shellSuffix: 'resume --last'
+            }, null, 4));
+
+            try {
+                const output = execSync(
+                    `node ${BIN_PATH} --show-config -r "${runConfigPath}"`,
+                    { encoding: 'utf-8' }
+                );
+                const config = JSON.parse(output);
+                expect(config.shell).toBe('codex');
+                expect(config.shellSuffix).toBe(' resume --last');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
+        test('should reject non-absolute name for --run', () => {
+            expect(() => {
+                execSync(`node ${BIN_PATH} --show-config -r claude`, {
+                    encoding: 'utf-8',
+                    stdio: 'pipe'
+                });
+            }).toThrow();
+        });
+
+        test('should reject relative path for --run', () => {
+            expect(() => {
+                execSync(`node ${BIN_PATH} --show-config -r ./myconfig.json`, {
+                    encoding: 'utf-8',
+                    stdio: 'pipe'
+                });
+            }).toThrow();
+        });
     });
 
     // ==============================================================================
