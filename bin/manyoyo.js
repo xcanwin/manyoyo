@@ -14,6 +14,7 @@ const readline = require('readline');
 const { Command } = require('commander');
 const JSON5 = require('json5');
 const { startWebServer } = require('../lib/web/server');
+const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/container-run');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_DEFAULT } = require('../package.json');
 const IMAGE_VERSION_BASE = String(IMAGE_VERSION_DEFAULT || '1.0.0').split('-')[0];
 const IMAGE_VERSION_HELP_EXAMPLE = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
@@ -60,14 +61,12 @@ let IMAGE_VERSION = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
 let EXEC_COMMAND = "";
 let EXEC_COMMAND_PREFIX = "";
 let EXEC_COMMAND_SUFFIX = "";
-let ENV_FILE = "";
 let SHOULD_REMOVE = false;
 let IMAGE_BUILD_NEED = false;
 let IMAGE_BUILD_ARGS = [];
 let CONTAINER_ENVS = [];
 let CONTAINER_VOLUMES = [];
 let MANYOYO_NAME = detectCommandName();
-let CONT_MODE = "";
 let CONT_MODE_ARGS = [];
 let QUIET = {};
 let SHOW_COMMAND = false;
@@ -114,6 +113,19 @@ function resolveContainerNameTemplate(name) {
     }
     const nowValue = formatDate();
     return name.replace(/\{now\}|\$\{now\}/g, nowValue);
+}
+
+function pickConfigValue(...values) {
+    for (const value of values) {
+        if (value) {
+            return value;
+        }
+    }
+    return undefined;
+}
+
+function mergeArrayConfig(globalValue, runValue, cliValue) {
+    return [...(globalValue || []), ...(runValue || []), ...(cliValue || [])];
 }
 
 function validateServerHost(host, rawServer) {
@@ -923,7 +935,6 @@ function addEnvFile(envFile) {
         process.exit(1);
     }
 
-    ENV_FILE = filePath;
     if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8');
         const lines = content.split('\n');
@@ -999,20 +1010,17 @@ function setYolo(cli) {
 function setContMode(mode) {
     switch (mode) {
         case 'common':
-            CONT_MODE = "";
             CONT_MODE_ARGS = [];
             break;
         case 'docker-in-docker':
         case 'dind':
         case 'd':
-            CONT_MODE = "--privileged";
             CONT_MODE_ARGS = ['--privileged'];
             console.log(`${GREEN}✅ 开启安全的容器嵌套容器模式, 手动在容器内启动服务: nohup dockerd &${NC}`);
             break;
         case 'mount-docker-socket':
         case 'sock':
         case 's':
-            CONT_MODE = "--privileged --volume /var/run/docker.sock:/var/run/docker.sock --env DOCKER_HOST=unix:///var/run/docker.sock --env CONTAINER_HOST=unix:///var/run/docker.sock";
             CONT_MODE_ARGS = [
                 '--privileged',
                 '--volume', '/var/run/docker.sock:/var/run/docker.sock',
@@ -1030,17 +1038,6 @@ function setContMode(mode) {
 // ==============================================================================
 // Docker Helper Functions
 // ==============================================================================
-
-function dockerExec(cmd, options = {}) {
-    try {
-        return execSync(cmd, { encoding: 'utf-8', ...options });
-    } catch (e) {
-        if (options.ignoreError) {
-            return e.stdout || '';
-        }
-        throw e;
-    }
-}
 
 function showImagePullHint(err) {
     const stderr = err && err.stderr ? err.stderr.toString() : '';
@@ -1171,201 +1168,219 @@ function pruneDanglingImages() {
  * 准备构建缓存（Node.js、JDT LSP、gopls）
  * @param {string} imageTool - 构建工具类型
  */
-async function prepareBuildCache(imageTool) {
+function ensureDirectoryIfMissing(dirPath) {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
+}
+
+function loadBuildCacheTimestamps(timestampFile) {
+    if (!fs.existsSync(timestampFile)) {
+        return {};
+    }
+    try {
+        return JSON.parse(fs.readFileSync(timestampFile, 'utf-8'));
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveBuildCacheTimestamps(timestampFile, timestamps) {
+    fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
+}
+
+function createBuildCacheContext() {
     const cacheDir = path.join(__dirname, '../docker/cache');
     const timestampFile = path.join(cacheDir, '.timestamps.json');
+    ensureDirectoryIfMissing(cacheDir);
 
-    // 从配置文件读取 TTL，默认 2 天
     const config = loadConfig();
-    const cacheTTLDays = config.cacheTTL || CONFIG.CACHE_TTL_DAYS;
+    return {
+        cacheDir,
+        timestampFile,
+        cacheTTLDays: config.cacheTTL || CONFIG.CACHE_TTL_DAYS,
+        nodeMirrors: [
+            config.nodeMirror,
+            'https://mirrors.tencent.com/nodejs-release',
+            'https://nodejs.org/dist'
+        ].filter(Boolean),
+        timestamps: loadBuildCacheTimestamps(timestampFile),
+        now: new Date()
+    };
+}
 
-    // 镜像源优先级：用户配置 > 腾讯云 > 官方
-    const nodeMirrors = [
-        config.nodeMirror,
-        'https://mirrors.tencent.com/nodejs-release',
-        'https://nodejs.org/dist'
-    ].filter(Boolean);
+function isBuildCacheExpired(cache, key) {
+    if (!cache.timestamps[key]) return true;
+    const cachedTime = new Date(cache.timestamps[key]);
+    const diffDays = (cache.now - cachedTime) / (1000 * 60 * 60 * 24);
+    return diffDays > cache.cacheTTLDays;
+}
+
+function touchBuildCache(cache, key) {
+    cache.timestamps[key] = cache.now.toISOString();
+    saveBuildCacheTimestamps(cache.timestampFile, cache.timestamps);
+}
+
+function resolveBuildCacheArch() {
+    const arch = process.arch === 'x64' ? 'amd64' : process.arch === 'arm64' ? 'arm64' : process.arch;
+    const archNode = arch === 'amd64' ? 'x64' : 'arm64';
+    return { arch, archNode };
+}
+
+function prepareNodeBuildCache(cache, archNode) {
+    const nodeCacheDir = path.join(cache.cacheDir, 'node');
+    const nodeVersion = 24;
+    const nodeKey = 'node/';
+
+    ensureDirectoryIfMissing(nodeCacheDir);
+
+    const hasNodeCache = fs.readdirSync(nodeCacheDir).some(fileName => (
+        fileName.startsWith('node-') && fileName.includes(`linux-${archNode}`)
+    ));
+
+    if (hasNodeCache && !isBuildCacheExpired(cache, nodeKey)) {
+        console.log(`${GREEN}✓ Node.js 缓存已存在${NC}`);
+        return;
+    }
+
+    console.log(`${YELLOW}下载 Node.js ${nodeVersion} (${archNode})...${NC}`);
+
+    for (const mirror of cache.nodeMirrors) {
+        try {
+            console.log(`${BLUE}尝试镜像源: ${mirror}${NC}`);
+            const shasumUrl = `${mirror}/latest-v${nodeVersion}.x/SHASUMS256.txt`;
+            const shasumContent = execSync(`curl -sL ${shasumUrl}`, { encoding: 'utf-8' });
+            const shasumLine = shasumContent.split('\n').find(line => line.includes(`linux-${archNode}.tar.gz`));
+            if (!shasumLine) {
+                continue;
+            }
+
+            const [expectedHash, fileName] = shasumLine.trim().split(/\s+/);
+            const nodeUrl = `${mirror}/latest-v${nodeVersion}.x/${fileName}`;
+            const nodeTargetPath = path.join(nodeCacheDir, fileName);
+            runCmd('curl', ['-fsSL', nodeUrl, '-o', nodeTargetPath], { stdio: 'inherit' });
+
+            const actualHash = getFileSha256(nodeTargetPath);
+            if (actualHash !== expectedHash) {
+                console.log(`${RED}SHA256 校验失败，删除文件${NC}`);
+                fs.unlinkSync(nodeTargetPath);
+                continue;
+            }
+
+            console.log(`${GREEN}✓ SHA256 校验通过${NC}`);
+            touchBuildCache(cache, nodeKey);
+            console.log(`${GREEN}✓ Node.js 下载完成${NC}`);
+            return;
+        } catch (e) {
+            console.log(`${YELLOW}镜像源 ${mirror} 失败，尝试下一个...${NC}`);
+        }
+    }
+
+    console.error(`${RED}错误: Node.js 下载失败（所有镜像源均不可用）${NC}`);
+    throw new Error('Node.js download failed');
+}
+
+function prepareJdtlsBuildCache(cache, imageTool) {
+    if (!(imageTool === 'full' || imageTool.includes('java'))) {
+        return;
+    }
+
+    const jdtlsCacheDir = path.join(cache.cacheDir, 'jdtls');
+    const jdtlsKey = 'jdtls/jdt-language-server-latest.tar.gz';
+    const jdtlsPath = path.join(cache.cacheDir, jdtlsKey);
+
+    ensureDirectoryIfMissing(jdtlsCacheDir);
+
+    if (fs.existsSync(jdtlsPath) && !isBuildCacheExpired(cache, jdtlsKey)) {
+        console.log(`${GREEN}✓ JDT LSP 缓存已存在${NC}`);
+        return;
+    }
+
+    console.log(`${YELLOW}下载 JDT Language Server...${NC}`);
+    const apkUrl = 'https://mirrors.tencent.com/alpine/latest-stable/community/x86_64/jdtls-1.53.0-r0.apk';
+    const tmpDir = path.join(jdtlsCacheDir, '.tmp-apk');
+    const apkPath = path.join(tmpDir, 'jdtls.apk');
+
+    try {
+        ensureDirectoryIfMissing(tmpDir);
+        runCmd('curl', ['-fsSL', apkUrl, '-o', apkPath], { stdio: 'inherit' });
+        runCmd('tar', ['-xzf', apkPath, '-C', tmpDir], { stdio: 'inherit' });
+        const srcDir = path.join(tmpDir, 'usr', 'share', 'jdtls');
+        runCmd('tar', ['-czf', jdtlsPath, '-C', srcDir, '.'], { stdio: 'inherit' });
+        touchBuildCache(cache, jdtlsKey);
+        console.log(`${GREEN}✓ JDT LSP 下载完成${NC}`);
+    } catch (e) {
+        console.error(`${RED}错误: JDT LSP 下载失败${NC}`);
+        throw e;
+    } finally {
+        try { runCmd('rm', ['-rf', tmpDir], { stdio: 'inherit', ignoreError: true }); } catch (e) {}
+    }
+}
+
+function cleanupGoTmpPath(tmpGoPath, warnOnError) {
+    if (!fs.existsSync(tmpGoPath)) {
+        return;
+    }
+    try {
+        execSync(`GOPATH="${tmpGoPath}" go clean -modcache 2>/dev/null || true`, { stdio: 'inherit' });
+        execSync(`chmod -R u+w "${tmpGoPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+        execSync(`rm -rf "${tmpGoPath}"`, { stdio: 'inherit' });
+    } catch (e) {
+        if (warnOnError) {
+            console.log(`${YELLOW}提示: 临时目录清理失败，可手动删除 ${tmpGoPath}${NC}`);
+        }
+    }
+}
+
+function prepareGoplsBuildCache(cache, imageTool, arch) {
+    if (!(imageTool === 'full' || imageTool.includes('go'))) {
+        return;
+    }
+
+    const goplsCacheDir = path.join(cache.cacheDir, 'gopls');
+    const goplsKey = `gopls/gopls-linux-${arch}`;
+    const goplsPath = path.join(cache.cacheDir, goplsKey);
+
+    ensureDirectoryIfMissing(goplsCacheDir);
+
+    if (fs.existsSync(goplsPath) && !isBuildCacheExpired(cache, goplsKey)) {
+        console.log(`${GREEN}✓ gopls 缓存已存在${NC}`);
+        return;
+    }
+
+    console.log(`${YELLOW}下载 gopls (${arch})...${NC}`);
+    const tmpGoPath = path.join(cache.cacheDir, '.tmp-go');
+
+    try {
+        cleanupGoTmpPath(tmpGoPath, false);
+        ensureDirectoryIfMissing(tmpGoPath);
+
+        runCmd('go', ['install', 'golang.org/x/tools/gopls@latest'], {
+            stdio: 'inherit',
+            env: { ...process.env, GOPATH: tmpGoPath, GOOS: 'linux', GOARCH: arch }
+        });
+        execSync(`cp "${tmpGoPath}/bin/linux_${arch}/gopls" "${goplsPath}" || cp "${tmpGoPath}/bin/gopls" "${goplsPath}"`, { stdio: 'inherit' });
+        runCmd('chmod', ['+x', goplsPath], { stdio: 'inherit' });
+        touchBuildCache(cache, goplsKey);
+        console.log(`${GREEN}✓ gopls 下载完成${NC}`);
+        cleanupGoTmpPath(tmpGoPath, true);
+    } catch (e) {
+        console.error(`${RED}错误: gopls 下载失败${NC}`);
+        throw e;
+    }
+}
+
+async function prepareBuildCache(imageTool) {
+    const cache = createBuildCacheContext();
+    const { arch, archNode } = resolveBuildCacheArch();
 
     console.log(`\n${CYAN}准备构建缓存...${NC}`);
 
-    // Create cache directory
-    if (!fs.existsSync(cacheDir)) {
-        fs.mkdirSync(cacheDir, { recursive: true });
-    }
+    prepareNodeBuildCache(cache, archNode);
+    prepareJdtlsBuildCache(cache, imageTool);
+    prepareGoplsBuildCache(cache, imageTool, arch);
 
-    // Load timestamps
-    let timestamps = {};
-    if (fs.existsSync(timestampFile)) {
-        try {
-            timestamps = JSON.parse(fs.readFileSync(timestampFile, 'utf-8'));
-        } catch (e) {
-            timestamps = {};
-        }
-    }
-
-    const now = new Date();
-    const isExpired = (key) => {
-        if (!timestamps[key]) return true;
-        const cachedTime = new Date(timestamps[key]);
-        const diffDays = (now - cachedTime) / (1000 * 60 * 60 * 24);
-        return diffDays > cacheTTLDays;
-    };
-
-    // Determine architecture
-    const arch = process.arch === 'x64' ? 'amd64' : process.arch === 'arm64' ? 'arm64' : process.arch;
-    const archNode = arch === 'amd64' ? 'x64' : 'arm64';
-
-    // Prepare Node.js cache
-    const nodeCacheDir = path.join(cacheDir, 'node');
-    const nodeVersion = 24;
-    const nodeKey = 'node/';  // 使用目录级别的相对路径
-
-    if (!fs.existsSync(nodeCacheDir)) {
-        fs.mkdirSync(nodeCacheDir, { recursive: true });
-    }
-
-    const hasNodeCache = fs.existsSync(nodeCacheDir) && fs.readdirSync(nodeCacheDir).some(f => f.startsWith('node-') && f.includes(`linux-${archNode}`));
-    if (!hasNodeCache || isExpired(nodeKey)) {
-        console.log(`${YELLOW}下载 Node.js ${nodeVersion} (${archNode})...${NC}`);
-
-        // 尝试多个镜像源
-        let downloadSuccess = false;
-        for (const mirror of nodeMirrors) {
-            try {
-                console.log(`${BLUE}尝试镜像源: ${mirror}${NC}`);
-                const shasumUrl = `${mirror}/latest-v${nodeVersion}.x/SHASUMS256.txt`;
-                const shasumContent = execSync(`curl -sL ${shasumUrl}`, { encoding: 'utf-8' });
-                const shasumLine = shasumContent.split('\n').find(line => line.includes(`linux-${archNode}.tar.gz`));
-                if (!shasumLine) continue;
-
-                const [expectedHash, fileName] = shasumLine.trim().split(/\s+/);
-                const nodeUrl = `${mirror}/latest-v${nodeVersion}.x/${fileName}`;
-                const nodeTargetPath = path.join(nodeCacheDir, fileName);
-
-                // 下载文件
-                runCmd('curl', ['-fsSL', nodeUrl, '-o', nodeTargetPath], { stdio: 'inherit' });
-
-                // SHA256 校验（使用 Node.js crypto 模块，跨平台）
-                const actualHash = getFileSha256(nodeTargetPath);
-                if (actualHash !== expectedHash) {
-                    console.log(`${RED}SHA256 校验失败，删除文件${NC}`);
-                    fs.unlinkSync(nodeTargetPath);
-                    continue;
-                }
-
-                console.log(`${GREEN}✓ SHA256 校验通过${NC}`);
-                timestamps[nodeKey] = now.toISOString();
-                fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
-                console.log(`${GREEN}✓ Node.js 下载完成${NC}`);
-                downloadSuccess = true;
-                break;
-            } catch (e) {
-                console.log(`${YELLOW}镜像源 ${mirror} 失败，尝试下一个...${NC}`);
-            }
-        }
-
-        if (!downloadSuccess) {
-            console.error(`${RED}错误: Node.js 下载失败（所有镜像源均不可用）${NC}`);
-            throw new Error('Node.js download failed');
-        }
-    } else {
-        console.log(`${GREEN}✓ Node.js 缓存已存在${NC}`);
-    }
-
-    // Prepare JDT LSP cache (for java variant)
-    if (imageTool === 'full' || imageTool.includes('java')) {
-        const jdtlsCacheDir = path.join(cacheDir, 'jdtls');
-        const jdtlsKey = 'jdtls/jdt-language-server-latest.tar.gz';  // 使用相对路径
-        const jdtlsPath = path.join(cacheDir, jdtlsKey);
-
-        if (!fs.existsSync(jdtlsCacheDir)) {
-            fs.mkdirSync(jdtlsCacheDir, { recursive: true });
-        }
-
-        if (!fs.existsSync(jdtlsPath) || isExpired(jdtlsKey)) {
-            console.log(`${YELLOW}下载 JDT Language Server...${NC}`);
-            const apkUrl = 'https://mirrors.tencent.com/alpine/latest-stable/community/x86_64/jdtls-1.53.0-r0.apk';
-            const tmpDir = path.join(jdtlsCacheDir, '.tmp-apk');
-            const apkPath = path.join(tmpDir, 'jdtls.apk');
-            try {
-                fs.mkdirSync(tmpDir, { recursive: true });
-                runCmd('curl', ['-fsSL', apkUrl, '-o', apkPath], { stdio: 'inherit' });
-                runCmd('tar', ['-xzf', apkPath, '-C', tmpDir], { stdio: 'inherit' });
-                const srcDir = path.join(tmpDir, 'usr', 'share', 'jdtls');
-                runCmd('tar', ['-czf', jdtlsPath, '-C', srcDir, '.'], { stdio: 'inherit' });
-                timestamps[jdtlsKey] = now.toISOString();
-                fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
-                console.log(`${GREEN}✓ JDT LSP 下载完成${NC}`);
-            } catch (e) {
-                console.error(`${RED}错误: JDT LSP 下载失败${NC}`);
-                throw e;
-            } finally {
-                try { runCmd('rm', ['-rf', tmpDir], { stdio: 'inherit', ignoreError: true }); } catch {}
-            }
-        } else {
-            console.log(`${GREEN}✓ JDT LSP 缓存已存在${NC}`);
-        }
-    }
-
-    // Prepare gopls cache (for go variant)
-    if (imageTool === 'full' || imageTool.includes('go')) {
-        const goplsCacheDir = path.join(cacheDir, 'gopls');
-        const goplsKey = `gopls/gopls-linux-${arch}`;  // 使用相对路径
-        const goplsPath = path.join(cacheDir, goplsKey);
-
-        if (!fs.existsSync(goplsCacheDir)) {
-            fs.mkdirSync(goplsCacheDir, { recursive: true });
-        }
-
-        if (!fs.existsSync(goplsPath) || isExpired(goplsKey)) {
-            console.log(`${YELLOW}下载 gopls (${arch})...${NC}`);
-            try {
-                // Download using go install in temporary environment
-                const tmpGoPath = path.join(cacheDir, '.tmp-go');
-
-                // Clean up existing temp directory (with go clean for mod cache)
-                if (fs.existsSync(tmpGoPath)) {
-                    try {
-                        execSync(`GOPATH="${tmpGoPath}" go clean -modcache 2>/dev/null || true`, { stdio: 'inherit' });
-                        execSync(`chmod -R u+w "${tmpGoPath}" 2>/dev/null || true`, { stdio: 'inherit' });
-                        execSync(`rm -rf "${tmpGoPath}"`, { stdio: 'inherit' });
-                    } catch (e) {
-                        // Ignore cleanup errors
-                    }
-                }
-                fs.mkdirSync(tmpGoPath, { recursive: true });
-
-                runCmd('go', ['install', 'golang.org/x/tools/gopls@latest'], {
-                    stdio: 'inherit',
-                    env: { ...process.env, GOPATH: tmpGoPath, GOOS: 'linux', GOARCH: arch }
-                });
-                execSync(`cp "${tmpGoPath}/bin/linux_${arch}/gopls" "${goplsPath}" || cp "${tmpGoPath}/bin/gopls" "${goplsPath}"`, { stdio: 'inherit' });
-                runCmd('chmod', ['+x', goplsPath], { stdio: 'inherit' });
-
-                // Save timestamp immediately after successful download
-                timestamps[goplsKey] = now.toISOString();
-                fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
-                console.log(`${GREEN}✓ gopls 下载完成${NC}`);
-
-                // Clean up temp directory (with go clean for mod cache)
-                try {
-                    execSync(`GOPATH="${tmpGoPath}" go clean -modcache 2>/dev/null || true`, { stdio: 'inherit' });
-                    execSync(`chmod -R u+w "${tmpGoPath}" 2>/dev/null || true`, { stdio: 'inherit' });
-                    execSync(`rm -rf "${tmpGoPath}"`, { stdio: 'inherit' });
-                } catch (e) {
-                    console.log(`${YELLOW}提示: 临时目录清理失败，可手动删除 ${tmpGoPath}${NC}`);
-                }
-            } catch (e) {
-                console.error(`${RED}错误: gopls 下载失败${NC}`);
-                throw e;
-            }
-        } else {
-            console.log(`${GREEN}✓ gopls 缓存已存在${NC}`);
-        }
-    }
-
-    // Save timestamps
-    fs.writeFileSync(timestampFile, JSON.stringify(timestamps, null, 4));
+    saveBuildCacheTimestamps(cache.timestampFile, cache.timestamps);
     console.log(`${GREEN}✅ 构建缓存准备完成${NC}\n`);
 }
 
@@ -1436,6 +1451,34 @@ async function buildImage(IMAGE_BUILD_ARGS, imageName, imageVersionTag) {
 // SECTION: Command Line Interface
 // ==============================================================================
 
+function maybeHandleDockerPluginMetadata(argv) {
+    if (argv[2] !== 'docker-cli-plugin-metadata') {
+        return false;
+    }
+    console.log(JSON.stringify({
+        "SchemaVersion": "0.1.0",
+        "Vendor": "xcanwin",
+        "Version": "v1.0.0",
+        "Description": "AI Agent CLI Sandbox"
+    }, null, 4));
+    return true;
+}
+
+function normalizeDockerPluginArgv(argv) {
+    const dockerPluginPath = path.join(process.env.HOME || '', '.docker/cli-plugins/docker-manyoyo');
+    if (argv[1] === dockerPluginPath && argv[2] === 'manyoyo') {
+        argv.splice(2, 1);
+    }
+}
+
+function normalizeShellFullArgv(argv) {
+    const shellFullIndex = argv.findIndex(arg => arg === '-x' || arg === '--shell-full');
+    if (shellFullIndex !== -1 && shellFullIndex < argv.length - 1) {
+        const shellFullArgs = argv.slice(shellFullIndex + 1).join(' ');
+        argv.splice(shellFullIndex + 1, argv.length - (shellFullIndex + 1), shellFullArgs);
+    }
+}
+
 async function setupCommander() {
     // Load config file
     const config = loadConfig();
@@ -1505,21 +1548,12 @@ async function setupCommander() {
         .option('-q, --quiet <item>', '静默显示 (可多次使用: cnew,crm,tip,cmd,full)', (value, previous) => [...(previous || []), value], []);
 
     // Docker CLI plugin metadata check
-    if (process.argv[2] === 'docker-cli-plugin-metadata') {
-        console.log(JSON.stringify({
-            "SchemaVersion": "0.1.0",
-            "Vendor": "xcanwin",
-            "Version": "v1.0.0",
-            "Description": "AI Agent CLI Sandbox"
-        }, null, 4));
+    if (maybeHandleDockerPluginMetadata(process.argv)) {
         process.exit(0);
     }
 
     // Docker CLI plugin mode - remove first arg if running as plugin
-    const dockerPluginPath = path.join(process.env.HOME || '', '.docker/cli-plugins/docker-manyoyo');
-    if (process.argv[1] === dockerPluginPath && process.argv[2] === 'manyoyo') {
-        process.argv.splice(2, 1);
-    }
+    normalizeDockerPluginArgv(process.argv);
 
     // No args: show help instead of starting container
     if (process.argv.length <= 2) {
@@ -1534,11 +1568,7 @@ async function setupCommander() {
     }
 
     // Pre-handle -x/--shell-full: treat all following args as a single command
-    const shellFullIndex = process.argv.findIndex(arg => arg === '-x' || arg === '--shell-full');
-    if (shellFullIndex !== -1 && shellFullIndex < process.argv.length - 1) {
-        const shellFullArgs = process.argv.slice(shellFullIndex + 1).join(' ');
-        process.argv.splice(shellFullIndex + 1, process.argv.length - (shellFullIndex + 1), shellFullArgs);
-    }
+    normalizeShellFullArgv(process.argv);
 
     // Parse arguments
     program.allowUnknownOption(false);
@@ -1560,26 +1590,32 @@ async function setupCommander() {
 
     // Merge configs: command line > run config > global config > defaults
     // Override mode (scalar values): use first defined value
-    HOST_PATH = options.hostPath || runConfig.hostPath || config.hostPath || HOST_PATH;
-    if (options.contName || runConfig.containerName || config.containerName) {
-        CONTAINER_NAME = options.contName || runConfig.containerName || config.containerName;
+    HOST_PATH = pickConfigValue(options.hostPath, runConfig.hostPath, config.hostPath, HOST_PATH) || HOST_PATH;
+    const mergedContainerName = pickConfigValue(options.contName, runConfig.containerName, config.containerName);
+    if (mergedContainerName) {
+        CONTAINER_NAME = mergedContainerName;
     }
     CONTAINER_NAME = resolveContainerNameTemplate(CONTAINER_NAME);
-    if (options.contPath || runConfig.containerPath || config.containerPath) {
-        CONTAINER_PATH = options.contPath || runConfig.containerPath || config.containerPath;
+    const mergedContainerPath = pickConfigValue(options.contPath, runConfig.containerPath, config.containerPath);
+    if (mergedContainerPath) {
+        CONTAINER_PATH = mergedContainerPath;
     }
-    IMAGE_NAME = options.imageName || runConfig.imageName || config.imageName || IMAGE_NAME;
-    if (options.imageVer || runConfig.imageVersion || config.imageVersion) {
-        IMAGE_VERSION = options.imageVer || runConfig.imageVersion || config.imageVersion;
+    IMAGE_NAME = pickConfigValue(options.imageName, runConfig.imageName, config.imageName, IMAGE_NAME) || IMAGE_NAME;
+    const mergedImageVersion = pickConfigValue(options.imageVer, runConfig.imageVersion, config.imageVersion);
+    if (mergedImageVersion) {
+        IMAGE_VERSION = mergedImageVersion;
     }
-    if (options.shellPrefix || runConfig.shellPrefix || config.shellPrefix) {
-        EXEC_COMMAND_PREFIX = (options.shellPrefix || runConfig.shellPrefix || config.shellPrefix) + " ";
+    const mergedShellPrefix = pickConfigValue(options.shellPrefix, runConfig.shellPrefix, config.shellPrefix);
+    if (mergedShellPrefix) {
+        EXEC_COMMAND_PREFIX = `${mergedShellPrefix} `;
     }
-    if (options.shell || runConfig.shell || config.shell) {
-        EXEC_COMMAND = options.shell || runConfig.shell || config.shell;
+    const mergedShell = pickConfigValue(options.shell, runConfig.shell, config.shell);
+    if (mergedShell) {
+        EXEC_COMMAND = mergedShell;
     }
-    if (options.shellSuffix || runConfig.shellSuffix || config.shellSuffix) {
-        EXEC_COMMAND_SUFFIX = normalizeCommandSuffix(options.shellSuffix || runConfig.shellSuffix || config.shellSuffix);
+    const mergedShellSuffix = pickConfigValue(options.shellSuffix, runConfig.shellSuffix, config.shellSuffix);
+    if (mergedShellSuffix) {
+        EXEC_COMMAND_SUFFIX = normalizeCommandSuffix(mergedShellSuffix);
     }
 
     // Basic name validation to reduce injection risk
@@ -1604,20 +1640,20 @@ async function setupCommander() {
     };
     Object.entries(envMap).forEach(([key, value]) => addEnv(`${key}=${value}`));
 
-    const volumeList = [...(config.volumes || []), ...(runConfig.volumes || []), ...(options.volume || [])];
+    const volumeList = mergeArrayConfig(config.volumes, runConfig.volumes, options.volume);
     volumeList.forEach(v => addVolume(v));
 
-    const buildArgList = [...(config.imageBuildArgs || []), ...(runConfig.imageBuildArgs || []), ...(options.imageBuildArg || [])];
+    const buildArgList = mergeArrayConfig(config.imageBuildArgs, runConfig.imageBuildArgs, options.imageBuildArg);
     buildArgList.forEach(arg => addImageBuildArg(arg));
 
     // Override mode for special options
-    const yoloValue = options.yolo || runConfig.yolo || config.yolo;
+    const yoloValue = pickConfigValue(options.yolo, runConfig.yolo, config.yolo);
     if (yoloValue) setYolo(yoloValue);
 
-    const contModeValue = options.contMode || runConfig.containerMode || config.containerMode;
+    const contModeValue = pickConfigValue(options.contMode, runConfig.containerMode, config.containerMode);
     if (contModeValue) setContMode(contModeValue);
 
-    const quietValue = options.quiet || runConfig.quiet || config.quiet;
+    const quietValue = pickConfigValue(options.quiet, runConfig.quiet, config.quiet);
     if (quietValue) setQuiet(quietValue);
 
     // Handle shell-full (variadic arguments)
@@ -1635,10 +1671,6 @@ async function setupCommander() {
         }
     }
 
-    if (options.yes) {
-        YES_MODE = true;
-    }
-
     if (options.rmOnExit) {
         RM_ON_EXIT = true;
     }
@@ -1650,12 +1682,12 @@ async function setupCommander() {
         SERVER_PORT = serverListen.port;
     }
 
-    const serverUserValue = options.serverUser || runConfig.serverUser || config.serverUser || process.env.MANYOYO_SERVER_USER;
+    const serverUserValue = pickConfigValue(options.serverUser, runConfig.serverUser, config.serverUser, process.env.MANYOYO_SERVER_USER);
     if (serverUserValue) {
         SERVER_AUTH_USER = String(serverUserValue);
     }
 
-    const serverPassValue = options.serverPass || runConfig.serverPass || config.serverPass || process.env.MANYOYO_SERVER_PASS;
+    const serverPassValue = pickConfigValue(options.serverPass, runConfig.serverPass, config.serverPass, process.env.MANYOYO_SERVER_PASS);
     if (serverPassValue) {
         SERVER_AUTH_PASS = String(serverPassValue);
         SERVER_AUTH_PASS_AUTO = false;
@@ -1712,27 +1744,54 @@ async function setupCommander() {
     return program;
 }
 
-function handleRemoveContainer() {
-    if (SHOULD_REMOVE) {
-        try {
-            if (containerExists(CONTAINER_NAME)) {
-                removeContainer(CONTAINER_NAME);
-            } else {
-                console.log(`${RED}⚠️  错误: 未找到名为 ${CONTAINER_NAME} 的容器。${NC}`);
-            }
-        } catch (e) {
-            console.log(`${RED}⚠️  错误: 未找到名为 ${CONTAINER_NAME} 的容器。${NC}`);
-        }
-        process.exit(0);
-    }
+function createRuntimeContext() {
+    return {
+        containerName: CONTAINER_NAME,
+        hostPath: HOST_PATH,
+        containerPath: CONTAINER_PATH,
+        imageName: IMAGE_NAME,
+        imageVersion: IMAGE_VERSION,
+        execCommand: EXEC_COMMAND,
+        execCommandPrefix: EXEC_COMMAND_PREFIX,
+        execCommandSuffix: EXEC_COMMAND_SUFFIX,
+        contModeArgs: CONT_MODE_ARGS,
+        containerEnvs: CONTAINER_ENVS,
+        containerVolumes: CONTAINER_VOLUMES,
+        quiet: QUIET,
+        showCommand: SHOW_COMMAND,
+        rmOnExit: RM_ON_EXIT,
+        serverMode: SERVER_MODE,
+        serverHost: SERVER_HOST,
+        serverPort: SERVER_PORT,
+        serverAuthUser: SERVER_AUTH_USER,
+        serverAuthPass: SERVER_AUTH_PASS,
+        serverAuthPassAuto: SERVER_AUTH_PASS_AUTO
+    };
 }
 
-function validateHostPath() {
-    if (!fs.existsSync(HOST_PATH)) {
-        console.log(`${RED}⚠️  错误: 宿主机路径不存在: ${HOST_PATH}${NC}`);
+function handleRemoveContainer(runtime) {
+    if (!SHOULD_REMOVE) {
+        return false;
+    }
+
+    try {
+        if (containerExists(runtime.containerName)) {
+            removeContainer(runtime.containerName);
+        } else {
+            console.log(`${RED}⚠️  错误: 未找到名为 ${runtime.containerName} 的容器。${NC}`);
+        }
+    } catch (e) {
+        console.log(`${RED}⚠️  错误: 未找到名为 ${runtime.containerName} 的容器。${NC}`);
+    }
+    return true;
+}
+
+function validateHostPath(runtime) {
+    if (!fs.existsSync(runtime.hostPath)) {
+        console.log(`${RED}⚠️  错误: 宿主机路径不存在: ${runtime.hostPath}${NC}`);
         process.exit(1);
     }
-    const realHostPath = fs.realpathSync(HOST_PATH);
+    const realHostPath = fs.realpathSync(runtime.hostPath);
     const homeDir = process.env.HOME || '/home';
     if (realHostPath === '/' || realHostPath === '/home' || realHostPath === homeDir) {
         console.log(`${RED}⚠️  错误: 不允许挂载根目录或home目录。${NC}`);
@@ -1778,24 +1837,34 @@ async function waitForContainerReady(containerName) {
 // SECTION: Container Lifecycle Management
 // ==============================================================================
 
+function joinExecCommand(prefix, command, suffix) {
+    return `${prefix || ''}${command || ''}${suffix || ''}`;
+}
+
 /**
  * 创建新容器
  * @returns {Promise<string>} 默认命令
  */
-async function createNewContainer() {
-    if ( !(QUIET.cnew || QUIET.full) ) console.log(`${CYAN}📦 manyoyo by xcanwin 正在创建新容器: ${YELLOW}${CONTAINER_NAME}${NC}`);
+async function createNewContainer(runtime) {
+    if (!(runtime.quiet.cnew || runtime.quiet.full)) {
+        console.log(`${CYAN}📦 manyoyo by xcanwin 正在创建新容器: ${YELLOW}${runtime.containerName}${NC}`);
+    }
 
-    EXEC_COMMAND = `${EXEC_COMMAND_PREFIX}${EXEC_COMMAND}${EXEC_COMMAND_SUFFIX}`;
-    const defaultCommand = EXEC_COMMAND;
+    runtime.execCommand = joinExecCommand(
+        runtime.execCommandPrefix,
+        runtime.execCommand,
+        runtime.execCommandSuffix
+    );
+    const defaultCommand = runtime.execCommand;
 
-    if (SHOW_COMMAND) {
-        console.log(buildDockerRunCmd());
+    if (runtime.showCommand) {
+        console.log(buildDockerRunCmd(runtime));
         process.exit(0);
     }
 
     // 使用数组参数执行命令（安全方式）
     try {
-        const args = buildDockerRunArgs();
+        const args = buildDockerRunArgs(runtime);
         dockerExecArgs(args, { stdio: 'pipe' });
     } catch (e) {
         showImagePullHint(e);
@@ -1803,7 +1872,7 @@ async function createNewContainer() {
     }
 
     // Wait for container to be ready
-    await waitForContainerReady(CONTAINER_NAME);
+    await waitForContainerReady(runtime.containerName);
 
     return defaultCommand;
 }
@@ -1812,97 +1881,94 @@ async function createNewContainer() {
  * 构建 Docker run 命令参数数组（安全方式，避免命令注入）
  * @returns {string[]} 命令参数数组
  */
-function buildDockerRunArgs() {
-    const fullImage = `${IMAGE_NAME}:${IMAGE_VERSION}`;
-    const safeLabelCmd = EXEC_COMMAND.replace(/[\r\n]/g, ' ');
-
-    const args = [
-        'run', '-d',
-        '--name', CONTAINER_NAME,
-        '--entrypoint', '',
-        ...CONT_MODE_ARGS,
-        ...CONTAINER_ENVS,
-        ...CONTAINER_VOLUMES,
-        '--volume', `${HOST_PATH}:${CONTAINER_PATH}`,
-        '--workdir', CONTAINER_PATH,
-        '--label', `manyoyo.default_cmd=${safeLabelCmd}`,
-        fullImage,
-        'tail', '-f', '/dev/null'
-    ];
-
-    return args;
+function buildDockerRunArgs(runtime) {
+    return buildContainerRunArgs({
+        containerName: runtime.containerName,
+        hostPath: runtime.hostPath,
+        containerPath: runtime.containerPath,
+        imageName: runtime.imageName,
+        imageVersion: runtime.imageVersion,
+        contModeArgs: runtime.contModeArgs,
+        containerEnvs: runtime.containerEnvs,
+        containerVolumes: runtime.containerVolumes,
+        defaultCommand: runtime.execCommand
+    });
 }
 
 /**
  * 构建 Docker run 命令字符串（用于显示）
  * @returns {string} 命令字符串
  */
-function buildDockerRunCmd() {
-    const args = buildDockerRunArgs();
-    // 对包含空格或特殊字符的参数加引号
-    const quotedArgs = args.map(arg => {
-        if (arg.includes(' ') || arg.includes('"') || arg.includes('=')) {
-            return `"${arg.replace(/"/g, '\\"')}"`;
-        }
-        return arg;
-    });
-    return `${DOCKER_CMD} ${quotedArgs.join(' ')}`;
+function buildDockerRunCmd(runtime) {
+    const args = buildDockerRunArgs(runtime);
+    return buildContainerRunCommand(DOCKER_CMD, args);
 }
 
-async function connectExistingContainer() {
-    if ( !(QUIET.cnew || QUIET.full) ) console.log(`${CYAN}🔄 manyoyo by xcanwin 正在连接到现有容器: ${YELLOW}${CONTAINER_NAME}${NC}`);
+async function connectExistingContainer(runtime) {
+    if (!(runtime.quiet.cnew || runtime.quiet.full)) {
+        console.log(`${CYAN}🔄 manyoyo by xcanwin 正在连接到现有容器: ${YELLOW}${runtime.containerName}${NC}`);
+    }
 
     // Start container if stopped
-    const status = getContainerStatus(CONTAINER_NAME);
+    const status = getContainerStatus(runtime.containerName);
     if (status !== 'running') {
-        dockerExecArgs(['start', CONTAINER_NAME], { stdio: 'pipe' });
+        dockerExecArgs(['start', runtime.containerName], { stdio: 'pipe' });
     }
 
     // Get default command from label
-    const defaultCommand = dockerExecArgs(['inspect', '-f', '{{index .Config.Labels "manyoyo.default_cmd"}}', CONTAINER_NAME]).trim();
+    const defaultCommand = dockerExecArgs(['inspect', '-f', '{{index .Config.Labels "manyoyo.default_cmd"}}', runtime.containerName]).trim();
 
-    if (!EXEC_COMMAND) {
-        EXEC_COMMAND = `${EXEC_COMMAND_PREFIX}${defaultCommand}${EXEC_COMMAND_SUFFIX}`;
+    if (!runtime.execCommand) {
+        runtime.execCommand = joinExecCommand(runtime.execCommandPrefix, defaultCommand, runtime.execCommandSuffix);
     } else {
-        EXEC_COMMAND = `${EXEC_COMMAND_PREFIX}${EXEC_COMMAND}${EXEC_COMMAND_SUFFIX}`;
+        runtime.execCommand = joinExecCommand(runtime.execCommandPrefix, runtime.execCommand, runtime.execCommandSuffix);
     }
 
     return defaultCommand;
 }
 
-async function setupContainer() {
-    if (SHOW_COMMAND) {
-        if (containerExists(CONTAINER_NAME)) {
-            const defaultCommand = dockerExecArgs(['inspect', '-f', '{{index .Config.Labels "manyoyo.default_cmd"}}', CONTAINER_NAME]).trim();
-            const execCmd = EXEC_COMMAND
-                ? `${EXEC_COMMAND_PREFIX}${EXEC_COMMAND}${EXEC_COMMAND_SUFFIX}`
-                : `${EXEC_COMMAND_PREFIX}${defaultCommand}${EXEC_COMMAND_SUFFIX}`;
-            console.log(`${DOCKER_CMD} exec -it ${CONTAINER_NAME} /bin/bash -c "${execCmd.replace(/"/g, '\\"')}"`);
+async function setupContainer(runtime) {
+    if (runtime.showCommand) {
+        if (containerExists(runtime.containerName)) {
+            const defaultCommand = dockerExecArgs(['inspect', '-f', '{{index .Config.Labels "manyoyo.default_cmd"}}', runtime.containerName]).trim();
+            const execCmd = runtime.execCommand
+                ? joinExecCommand(runtime.execCommandPrefix, runtime.execCommand, runtime.execCommandSuffix)
+                : joinExecCommand(runtime.execCommandPrefix, defaultCommand, runtime.execCommandSuffix);
+            console.log(`${DOCKER_CMD} exec -it ${runtime.containerName} /bin/bash -c "${execCmd.replace(/"/g, '\\"')}"`);
             process.exit(0);
         }
-        EXEC_COMMAND = `${EXEC_COMMAND_PREFIX}${EXEC_COMMAND}${EXEC_COMMAND_SUFFIX}`;
-        console.log(buildDockerRunCmd());
+        runtime.execCommand = joinExecCommand(runtime.execCommandPrefix, runtime.execCommand, runtime.execCommandSuffix);
+        console.log(buildDockerRunCmd(runtime));
         process.exit(0);
     }
-    if (!containerExists(CONTAINER_NAME)) {
-        return await createNewContainer();
+    if (!containerExists(runtime.containerName)) {
+        return await createNewContainer(runtime);
     } else {
-        return await connectExistingContainer();
+        return await connectExistingContainer(runtime);
     }
 }
 
-function executeInContainer(defaultCommand) {
-    getHelloTip(CONTAINER_NAME, defaultCommand);
-    if ( !(QUIET.cmd || QUIET.full) ) {
+function executeInContainer(runtime, defaultCommand) {
+    if (!containerExists(runtime.containerName)) {
+        throw new Error(`未找到容器: ${runtime.containerName}`);
+    }
+
+    const status = getContainerStatus(runtime.containerName);
+    if (status !== 'running') {
+        dockerExecArgs(['start', runtime.containerName], { stdio: 'pipe' });
+    }
+
+    getHelloTip(runtime.containerName, defaultCommand);
+    if (!(runtime.quiet.cmd || runtime.quiet.full)) {
         console.log(`${BLUE}----------------------------------------${NC}`);
-        console.log(`💻 执行命令: ${YELLOW}${EXEC_COMMAND || '交互式 Shell'}${NC}`);
+        console.log(`💻 执行命令: ${YELLOW}${runtime.execCommand || '交互式 Shell'}${NC}`);
     }
 
     // Execute command in container
-    if (EXEC_COMMAND) {
-        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', CONTAINER_NAME, '/bin/bash', '-c', EXEC_COMMAND], { stdio: 'inherit' });
+    if (runtime.execCommand) {
+        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash', '-c', runtime.execCommand], { stdio: 'inherit' });
     } else {
-        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', CONTAINER_NAME, '/bin/bash'], { stdio: 'inherit' });
+        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash'], { stdio: 'inherit' });
     }
 }
 
@@ -1910,45 +1976,46 @@ function executeInContainer(defaultCommand) {
  * 处理会话退出后的交互
  * @param {string} defaultCommand - 默认命令
  */
-async function handlePostExit(defaultCommand) {
+async function handlePostExit(runtime, defaultCommand) {
     // --rm-on-exit 模式：自动删除容器
-    if (RM_ON_EXIT) {
-        removeContainer(CONTAINER_NAME);
-        return;
+    if (runtime.rmOnExit) {
+        removeContainer(runtime.containerName);
+        return false;
     }
 
-    getHelloTip(CONTAINER_NAME, defaultCommand);
+    getHelloTip(runtime.containerName, defaultCommand);
 
-    let tipAskKeep = `❔ 会话已结束。是否保留此后台容器 ${CONTAINER_NAME}? [ y=默认保留, n=删除, 1=首次命令进入, x=执行命令, i=交互式SHELL ]: `;
-    if ( QUIET.askkeep || QUIET.full ) tipAskKeep = `保留容器吗? [y n 1 x i] `;
+    let tipAskKeep = `❔ 会话已结束。是否保留此后台容器 ${runtime.containerName}? [ y=默认保留, n=删除, 1=首次命令进入, x=执行命令, i=交互式SHELL ]: `;
+    if (runtime.quiet.askkeep || runtime.quiet.full) tipAskKeep = `保留容器吗? [y n 1 x i] `;
     const reply = await askQuestion(tipAskKeep);
 
     const firstChar = reply.trim().toLowerCase()[0];
 
     if (firstChar === 'n') {
-        removeContainer(CONTAINER_NAME);
+        removeContainer(runtime.containerName);
+        return false;
     } else if (firstChar === '1') {
-        if ( !(QUIET.full) ) console.log(`${GREEN}✅ 离开当前连接，用首次命令进入。${NC}`);
-        // Reset command variables to use default command
-        EXEC_COMMAND = "";
-        EXEC_COMMAND_PREFIX = "";
-        EXEC_COMMAND_SUFFIX = "";
-        const newArgs = ['-n', CONTAINER_NAME];
-        process.argv = [process.argv[0], process.argv[1], ...newArgs];
-        await main();
+        if (!(runtime.quiet.full)) console.log(`${GREEN}✅ 离开当前连接，用首次命令进入。${NC}`);
+        runtime.execCommandPrefix = "";
+        runtime.execCommandSuffix = "";
+        runtime.execCommand = defaultCommand;
+        return true;
     } else if (firstChar === 'x') {
         const command = await askQuestion('❔ 输入要执行的命令: ');
-        if ( !(QUIET.cmd || QUIET.full) ) console.log(`${GREEN}✅ 离开当前连接，执行命令。${NC}`);
-        const newArgs = ['-n', CONTAINER_NAME, '-x', command];
-        process.argv = [process.argv[0], process.argv[1], ...newArgs];
-        await main();
+        if (!(runtime.quiet.cmd || runtime.quiet.full)) console.log(`${GREEN}✅ 离开当前连接，执行命令。${NC}`);
+        runtime.execCommandPrefix = "";
+        runtime.execCommandSuffix = "";
+        runtime.execCommand = command;
+        return true;
     } else if (firstChar === 'i') {
-        if ( !(QUIET.full) ) console.log(`${GREEN}✅ 离开当前连接，进入容器交互式SHELL。${NC}`);
-        const newArgs = ['-n', CONTAINER_NAME, '-x', '/bin/bash'];
-        process.argv = [process.argv[0], process.argv[1], ...newArgs];
-        await main();
+        if (!(runtime.quiet.full)) console.log(`${GREEN}✅ 离开当前连接，进入容器交互式SHELL。${NC}`);
+        runtime.execCommandPrefix = "";
+        runtime.execCommandSuffix = "";
+        runtime.execCommand = '/bin/bash';
+        return true;
     } else {
-        console.log(`${GREEN}✅ 已退出连接。容器 ${CONTAINER_NAME} 仍在后台运行。${NC}`);
+        console.log(`${GREEN}✅ 已退出连接。容器 ${runtime.containerName} 仍在后台运行。${NC}`);
+        return false;
     }
 }
 
@@ -1956,27 +2023,32 @@ async function handlePostExit(defaultCommand) {
 // SECTION: Web Server
 // ==============================================================================
 
-async function runWebServerMode() {
-    ensureWebServerAuthCredentials();
+async function runWebServerMode(runtime) {
+    if (!runtime.serverAuthUser || !runtime.serverAuthPass) {
+        ensureWebServerAuthCredentials();
+        runtime.serverAuthUser = SERVER_AUTH_USER;
+        runtime.serverAuthPass = SERVER_AUTH_PASS;
+        runtime.serverAuthPassAuto = SERVER_AUTH_PASS_AUTO;
+    }
 
     await startWebServer({
-        serverHost: SERVER_HOST,
-        serverPort: SERVER_PORT,
-        authUser: SERVER_AUTH_USER,
-        authPass: SERVER_AUTH_PASS,
-        authPassAuto: SERVER_AUTH_PASS_AUTO,
+        serverHost: runtime.serverHost,
+        serverPort: runtime.serverPort,
+        authUser: runtime.serverAuthUser,
+        authPass: runtime.serverAuthPass,
+        authPassAuto: runtime.serverAuthPassAuto,
         dockerCmd: DOCKER_CMD,
-        hostPath: HOST_PATH,
-        containerPath: CONTAINER_PATH,
-        imageName: IMAGE_NAME,
-        imageVersion: IMAGE_VERSION,
-        execCommandPrefix: EXEC_COMMAND_PREFIX,
-        execCommand: EXEC_COMMAND,
-        execCommandSuffix: EXEC_COMMAND_SUFFIX,
-        contModeArgs: CONT_MODE_ARGS,
-        containerEnvs: CONTAINER_ENVS,
-        containerVolumes: CONTAINER_VOLUMES,
-        validateHostPath,
+        hostPath: runtime.hostPath,
+        containerPath: runtime.containerPath,
+        imageName: runtime.imageName,
+        imageVersion: runtime.imageVersion,
+        execCommandPrefix: runtime.execCommandPrefix,
+        execCommand: runtime.execCommand,
+        execCommandSuffix: runtime.execCommandSuffix,
+        contModeArgs: runtime.contModeArgs,
+        containerEnvs: runtime.containerEnvs,
+        containerVolumes: runtime.containerVolumes,
+        validateHostPath: () => validateHostPath(runtime),
         formatDate,
         isValidContainerName,
         containerExists,
@@ -2005,33 +2077,37 @@ async function main() {
     try {
         // 1. Setup commander and parse arguments
         await setupCommander();
+        const runtime = createRuntimeContext();
 
         // 2. Start web server mode
-        if (SERVER_MODE) {
-            await runWebServerMode();
+        if (runtime.serverMode) {
+            await runWebServerMode(runtime);
             return;
         }
 
         // 3. Handle image build operation
         if (IMAGE_BUILD_NEED) {
-            await buildImage(IMAGE_BUILD_ARGS, IMAGE_NAME, IMAGE_VERSION);
+            await buildImage(IMAGE_BUILD_ARGS, runtime.imageName, runtime.imageVersion);
             process.exit(0);
         }
 
         // 4. Handle remove container operation
-        handleRemoveContainer();
+        if (handleRemoveContainer(runtime)) {
+            return;
+        }
 
         // 5. Validate host path safety
-        validateHostPath();
+        validateHostPath(runtime);
 
         // 6. Setup container (create or connect)
-        const defaultCommand = await setupContainer();
+        const defaultCommand = await setupContainer(runtime);
 
-        // 7. Execute command in container
-        executeInContainer(defaultCommand);
-
-        // 8. Handle post-exit interactions
-        await handlePostExit(defaultCommand);
+        // 7-8. Execute command and handle post-exit interactions
+        let shouldContinue = true;
+        while (shouldContinue) {
+            executeInContainer(runtime, defaultCommand);
+            shouldContinue = await handlePostExit(runtime, defaultCommand);
+        }
 
     } catch (e) {
         console.error(`${RED}Error: ${e.message}${NC}`);
