@@ -499,6 +499,6 @@ Command Line Arguments
 
 ## Related Documentation
 
-- [Configuration System Overview](./index) - Understand configuration principles
+- [Configuration System Overview](./) - Understand configuration principles
 - [Environment Variables Details](./environment) - Deep dive into environment variables
 - [Configuration Files Details](./config-files) - Learn all configuration options

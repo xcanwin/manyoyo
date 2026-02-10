@@ -24,7 +24,7 @@ manyoyo -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" 
 Use the `--ef` parameter to load environment variables from a file:
 
 ```bash
-manyoyo --ef anthropic_claudecode -x claude
+manyoyo --ef /abs/path/anthropic_claudecode.env -x claude
 ```
 
 **Features**:
@@ -64,24 +64,11 @@ MESSAGE="Hello World"
 
 ## Environment File Path Rules
 
-MANYOYO uses intelligent path resolution:
+`--ef` accepts absolute paths only:
 
-### Short Name (Recommended)
-```bash
-manyoyo --ef myconfig
-# Loads: ~/.manyoyo/env/myconfig.env
-```
-
-### Relative Path
-```bash
-manyoyo --ef ./myconfig.env
-# Loads: myconfig.env from current directory
-```
-
-### Absolute Path
 ```bash
 manyoyo --ef /abs/path/myconfig.env
-# Loads: file from specified absolute path
+# Loads: file from the specified absolute path
 ```
 
 ## Common Examples
@@ -91,11 +78,11 @@ manyoyo --ef /abs/path/myconfig.env
 Create environment file:
 
 ```bash
-# Create environment file directory
-mkdir -p ~/.manyoyo/env/
+# Create environment file directory (absolute path)
+mkdir -p $HOME/.manyoyo/env/
 
 # Create Claude Code environment file
-cat > ~/.manyoyo/env/anthropic_[claudecode]_claudecode.env << 'EOF'
+cat > $HOME/.manyoyo/env/anthropic_[claudecode]_claudecode.env << 'EOF'
 export ANTHROPIC_BASE_URL="https://api.anthropic.com"
 # export CLAUDE_CODE_OAUTH_TOKEN="sk-xxxxxxxx"  # OAuth method
 export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"        # API Key method
@@ -111,11 +98,11 @@ EOF
 Use environment file:
 
 ```bash
-# Use from any directory
-manyoyo --ef anthropic_[claudecode]_claudecode -x claude
+# Use from any directory (absolute path)
+manyoyo --ef $HOME/.manyoyo/env/anthropic_[claudecode]_claudecode.env -x claude
 
-# Or use with run configuration
-manyoyo -r claude  # envFile specified in config file
+# Or use with runs configuration
+manyoyo -r claude  # envFile specified in runs.claude
 ```
 
 ### Codex Environment Configuration
@@ -123,11 +110,11 @@ manyoyo -r claude  # envFile specified in config file
 Create environment file:
 
 ```bash
-# Create environment file directory
-mkdir -p ~/.manyoyo/env/
+# Create environment file directory (absolute path)
+mkdir -p $HOME/.manyoyo/env/
 
 # Create Codex environment file
-cat > ~/.manyoyo/env/openai_[gpt]_codex.env << 'EOF'
+cat > $HOME/.manyoyo/env/openai_[gpt]_codex.env << 'EOF'
 export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
 EOF
 ```
@@ -135,11 +122,11 @@ EOF
 Use environment file:
 
 ```bash
-# Use from any directory
-manyoyo --ef openai_[gpt]_codex -x codex
+# Use from any directory (absolute path)
+manyoyo --ef $HOME/.manyoyo/env/openai_[gpt]_codex.env -x codex
 
-# Or use with run configuration
-manyoyo -r codex  # envFile specified in config file
+# Or use with runs configuration
+manyoyo -r codex  # envFile specified in runs.codex
 ```
 
 ### Gemini Environment Configuration
@@ -148,7 +135,7 @@ Create environment file:
 
 ```bash
 # Create Gemini environment file
-cat > ~/.manyoyo/env/gemini.env << 'EOF'
+cat > $HOME/.manyoyo/env/gemini.env << 'EOF'
 export GEMINI_API_KEY="your-api-key"
 export GEMINI_MODEL="gemini-2.0-flash-exp"
 EOF
@@ -157,7 +144,7 @@ EOF
 Use environment file:
 
 ```bash
-manyoyo --ef gemini -x gemini
+manyoyo --ef $HOME/.manyoyo/env/gemini.env -x gemini
 ```
 
 ### OpenCode Environment Configuration
@@ -166,7 +153,7 @@ Create environment file:
 
 ```bash
 # Create OpenCode environment file
-cat > ~/.manyoyo/env/opencode.env << 'EOF'
+cat > $HOME/.manyoyo/env/opencode.env << 'EOF'
 export OPENAI_API_KEY="your-api-key"
 export OPENAI_BASE_URL="https://api.openai.com/v1"
 EOF
@@ -175,7 +162,7 @@ EOF
 Use environment file:
 
 ```bash
-manyoyo --ef opencode -x opencode
+manyoyo --ef $HOME/.manyoyo/env/opencode.env -x opencode
 ```
 
 ## Environment Variable Priority
@@ -183,26 +170,26 @@ manyoyo --ef opencode -x opencode
 When using configuration files, environment variables are loaded in the following order:
 
 1. `envFile` array in global configuration
-2. `envFile` array in run configuration
+2. `envFile` array in `runs.<name>`
 3. Command-line `--ef` parameter
-4. `env` array in global configuration
-5. `env` array in run configuration
+4. `env` map in global configuration
+5. `env` map in `runs.<name>`
 6. Command-line `-e` parameter
 
 **Note**: Later loaded environment variables will override earlier ones with the same name.
 
 Example:
 ```bash
-# Global config: envFile: ["base"]
-# Run config: envFile: ["override"]
-# Command line: --ef custom -e "VAR=value"
+# Global config: envFile: ["/abs/path/base.env"]
+# runs.claude: envFile: ["/abs/path/override.env"]
+# Command line: --ef /abs/path/custom.env -e "VAR=value"
 #
 # Loading order:
-# 1. ~/.manyoyo/env/base.env
-# 2. ~/.manyoyo/env/override.env
-# 3. ~/.manyoyo/env/custom.env
-# 4. env array from global config
-# 5. env array from run config
+# 1. /abs/path/base.env
+# 2. /abs/path/override.env
+# 3. /abs/path/custom.env
+# 4. env map from global config
+# 5. env map from runs.claude
 # 6. VAR=value from command line
 ```
 
@@ -212,7 +199,7 @@ Example:
 
 Recommended using descriptive file names:
 ```bash
-~/.manyoyo/env/
+/abs/path/env/
 ├── anthropic_[claudecode]_claudecode.env
 ├── openai_[gpt]_codex.env
 ├── gemini_production.env
@@ -233,14 +220,18 @@ export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
 
 ### 3. Use Configuration Files for Management
 
-Configure environment files in run configurations to avoid repetitive input:
+Configure environment files in `runs` to avoid repetitive input:
 ```json5
-// ~/.manyoyo/run/claude.json
+// ~/.manyoyo/manyoyo.json (fragment)
 {
-    "envFile": [
-        "anthropic_base",
-        "anthropic_secrets"
-    ]
+    "runs": {
+        "claude": {
+            "envFile": [
+                "/abs/path/anthropic_base.env",
+                "/abs/path/anthropic_secrets.env"
+            ]
+        }
+    }
 }
 ```
 
@@ -269,10 +260,10 @@ manyoyo -r claude -x env | grep ANTHROPIC
 
 ```bash
 # Check configuration
-manyoyo --show-config --ef myconfig
+manyoyo --show-config --ef /abs/path/myconfig.env
 
 # Check environment variables in container
-manyoyo --ef myconfig -x env
+manyoyo --ef /abs/path/myconfig.env -x env
 ```
 
 ### Environment Variable Value Incorrect
@@ -286,11 +277,11 @@ manyoyo --ef myconfig -x env
 
 ```bash
 # View all effective environment variables
-manyoyo --ef myconfig -x 'env | sort'
+manyoyo --ef /abs/path/myconfig.env -x 'env | sort'
 ```
 
 ## Related Documentation
 
-- [Configuration System Overview](./index) - Understand configuration priority mechanism
+- [Configuration System Overview](./) - Understand configuration priority mechanism
 - [Configuration Files Details](./config-files) - Learn how to use envFile in configuration files
 - [Configuration Examples](./examples) - View complete configuration examples

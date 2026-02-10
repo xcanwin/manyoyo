@@ -34,20 +34,16 @@ Example:
 
 ## Configuration File Path Rules
 
-MANYOYO uses intelligent path resolution rules:
-
 ### Run Configuration
-- `manyoyo -r myconfig` → Loads `~/.manyoyo/run/myconfig.json`
-- `manyoyo -r ./myconfig.json` → Loads `myconfig.json` from the current directory
-- `manyoyo -r /abs/path/myconfig.json` → Loads configuration file from absolute path
+- `manyoyo -r claude` → Loads `runs.claude` from `~/.manyoyo/manyoyo.json`
+- `manyoyo -r <name>` only accepts `runs.<name>` names, not file paths
 
 ### Global Configuration
 - When running any manyoyo command, `~/.manyoyo/manyoyo.json` is automatically loaded (if it exists)
 
 ### Environment Files
-- `manyoyo --ef myenv` → Loads `~/.manyoyo/env/myenv.env`
-- `manyoyo --ef ./myenv.env` → Loads `myenv.env` from the current directory
 - `manyoyo --ef /abs/path/myenv.env` → Loads environment file from absolute path
+- `--ef` only accepts absolute paths (no short name / relative path)
 
 ## Priority Mechanism
 
@@ -56,7 +52,7 @@ MANYOYO configuration parameters are divided into two categories with different 
 ### Override Parameters
 These parameters only take the value from the highest priority:
 
-**Priority Order**: Command-line arguments > Run configuration > Global configuration > Default values
+**Priority Order**: Command-line arguments > `runs.<name>` > Global configuration > Default values
 
 Override parameters include:
 - `containerName` - Container name
@@ -79,35 +75,35 @@ Example:
 ### Merge Parameters
 These parameters are accumulated and merged in order:
 
-**Merge Order**: Global configuration + Run configuration + Command-line arguments
+**Merge Order**: Global configuration + `runs.<name>` + Command-line arguments
 
 Merge parameters include:
-- `env` - Environment variable array
+- `env` - Environment variable map (merged by key)
 - `envFile` - Environment file array
 - `volumes` - Mount volume array
 - `imageBuildArgs` - Image build argument array
 
 Example:
 ```bash
-# Global configuration: env: ["VAR1=value1"]
-# Run configuration: env: ["VAR2=value2"]
+# Global configuration: env: {"VAR1":"value1"}
+# runs.demo: env: {"VAR2":"value2"}
 # Command line: -e "VAR3=value3"
-# Final result: All three environment variables will be effective
+# Final result: VAR1/VAR2/VAR3 are effective; same key is overridden by later source
 ```
 
 ## Configuration Merge Rules Table
 
 | Parameter Type | Parameter Name | Merge Behavior | Example |
 |---------------|----------------|----------------|---------|
-| Override | `containerName` | Takes highest priority value | CLI `-n test` overrides config file value |
+| Override | `containerName` | Takes highest priority value | CLI `-n test` overrides `runs.<name>` or global value |
 | Override | `hostPath` | Takes highest priority value | Defaults to current directory |
 | Override | `containerPath` | Takes highest priority value | Defaults to same as hostPath |
 | Override | `imageName` | Takes highest priority value | Default `localhost/xcanwin/manyoyo` |
 | Override | `imageVersion` | Takes highest priority value | e.g., `1.7.0-full` |
 | Override | `containerMode` | Takes highest priority value | `common`, `dind`, `sock` |
 | Override | `yolo` | Takes highest priority value | `c`, `gm`, `cx`, `oc` |
-| Merge | `env` | Array accumulation merge | All values from global + run config + CLI |
-| Merge | `envFile` | Array accumulation merge | All environment files are loaded in sequence |
+| Merge | `env` | Map merge by key | Global + `runs.<name>` + CLI (later source overrides same key) |
+| Merge | `envFile` | Array accumulation merge | Absolute-path env files from global + `runs.<name>` + CLI |
 | Merge | `volumes` | Array accumulation merge | All mount volumes take effect |
 | Merge | `imageBuildArgs` | Array accumulation merge | All build arguments take effect |
 

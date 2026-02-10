@@ -740,7 +740,7 @@ diff clean.json problem.json
 
 ## Related Documentation
 
-- [Troubleshooting Home](./index) - Issue index and quick navigation
+- [Troubleshooting Home](./) - Issue index and quick navigation
 - [Build Issues](./build-errors) - Image build related issues
 - [Configuration System](../configuration/) - Configuration files and environment variables
 - [Command Reference](../reference/cli-options) - Command line options detailed explanation

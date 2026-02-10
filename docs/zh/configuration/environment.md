@@ -24,7 +24,7 @@ manyoyo -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" 
 使用 `--ef` 参数从文件加载环境变量：
 
 ```bash
-manyoyo --ef anthropic_claudecode -x claude
+manyoyo --ef /abs/path/anthropic_claudecode.env -x claude
 ```
 
 **特点**：
@@ -64,24 +64,11 @@ MESSAGE="Hello World"
 
 ## 环境文件路径规则
 
-MANYOYO 使用智能路径解析：
+`--ef` 仅支持绝对路径：
 
-### 短名称（推荐）
-```bash
-manyoyo --ef myconfig
-# 加载：~/.manyoyo/env/myconfig.env
-```
-
-### 相对路径
-```bash
-manyoyo --ef ./myconfig.env
-# 加载：当前目录的 myconfig.env
-```
-
-### 绝对路径
 ```bash
 manyoyo --ef /abs/path/myconfig.env
-# 加载：指定绝对路径的文件
+# 加载：指定绝对路径文件
 ```
 
 ## 常用示例
@@ -91,11 +78,11 @@ manyoyo --ef /abs/path/myconfig.env
 创建环境文件：
 
 ```bash
-# 创建环境文件目录
-mkdir -p ~/.manyoyo/env/
+# 创建环境文件目录（绝对路径）
+mkdir -p $HOME/.manyoyo/env/
 
 # 创建 Claude Code 环境文件
-cat > ~/.manyoyo/env/anthropic_[claudecode]_claudecode.env << 'EOF'
+cat > $HOME/.manyoyo/env/anthropic_[claudecode]_claudecode.env << 'EOF'
 export ANTHROPIC_BASE_URL="https://api.anthropic.com"
 # export CLAUDE_CODE_OAUTH_TOKEN="sk-xxxxxxxx"  # OAuth 方式
 export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"        # API Key 方式
@@ -111,11 +98,11 @@ EOF
 使用环境文件：
 
 ```bash
-# 在任意目录下使用
-manyoyo --ef anthropic_[claudecode]_claudecode -x claude
+# 在任意目录下使用（绝对路径）
+manyoyo --ef $HOME/.manyoyo/env/anthropic_[claudecode]_claudecode.env -x claude
 
-# 或结合运行配置使用
-manyoyo -r claude  # 配置文件中指定 envFile
+# 或结合 runs 配置使用
+manyoyo -r claude  # ~/.manyoyo/manyoyo.json 的 runs.claude 中指定 envFile
 ```
 
 ### Codex 环境配置
@@ -123,11 +110,11 @@ manyoyo -r claude  # 配置文件中指定 envFile
 创建环境文件：
 
 ```bash
-# 创建环境文件目录
-mkdir -p ~/.manyoyo/env/
+# 创建环境文件目录（绝对路径）
+mkdir -p $HOME/.manyoyo/env/
 
 # 创建 Codex 环境文件
-cat > ~/.manyoyo/env/openai_[gpt]_codex.env << 'EOF'
+cat > $HOME/.manyoyo/env/openai_[gpt]_codex.env << 'EOF'
 export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
 EOF
 ```
@@ -135,11 +122,11 @@ EOF
 使用环境文件：
 
 ```bash
-# 在任意目录下使用
-manyoyo --ef openai_[gpt]_codex -x codex
+# 在任意目录下使用（绝对路径）
+manyoyo --ef $HOME/.manyoyo/env/openai_[gpt]_codex.env -x codex
 
-# 或结合运行配置使用
-manyoyo -r codex  # 配置文件中指定 envFile
+# 或结合 runs 配置使用
+manyoyo -r codex  # ~/.manyoyo/manyoyo.json 的 runs.codex 中指定 envFile
 ```
 
 ### Gemini 环境配置
@@ -148,7 +135,7 @@ manyoyo -r codex  # 配置文件中指定 envFile
 
 ```bash
 # 创建 Gemini 环境文件
-cat > ~/.manyoyo/env/gemini.env << 'EOF'
+cat > $HOME/.manyoyo/env/gemini.env << 'EOF'
 export GEMINI_API_KEY="your-api-key"
 export GEMINI_MODEL="gemini-2.0-flash-exp"
 EOF
@@ -157,7 +144,7 @@ EOF
 使用环境文件：
 
 ```bash
-manyoyo --ef gemini -x gemini
+manyoyo --ef $HOME/.manyoyo/env/gemini.env -x gemini
 ```
 
 ### OpenCode 环境配置
@@ -166,7 +153,7 @@ manyoyo --ef gemini -x gemini
 
 ```bash
 # 创建 OpenCode 环境文件
-cat > ~/.manyoyo/env/opencode.env << 'EOF'
+cat > $HOME/.manyoyo/env/opencode.env << 'EOF'
 export OPENAI_API_KEY="your-api-key"
 export OPENAI_BASE_URL="https://api.openai.com/v1"
 EOF
@@ -175,7 +162,7 @@ EOF
 使用环境文件：
 
 ```bash
-manyoyo --ef opencode -x opencode
+manyoyo --ef $HOME/.manyoyo/env/opencode.env -x opencode
 ```
 
 ## 环境变量优先级
@@ -183,26 +170,26 @@ manyoyo --ef opencode -x opencode
 当使用配置文件时，环境变量的加载顺序为：
 
 1. 全局配置中的 `envFile` 数组
-2. 运行配置中的 `envFile` 数组
+2. `runs.<name>` 中的 `envFile` 数组
 3. 命令行 `--ef` 参数
-4. 全局配置中的 `env` 数组
-5. 运行配置中的 `env` 数组
+4. 全局配置中的 `env` 对象
+5. `runs.<name>` 中的 `env` 对象
 6. 命令行 `-e` 参数
 
 **注意**：后加载的环境变量会覆盖先加载的同名变量。
 
 示例：
 ```bash
-# 全局配置：envFile: ["base"]
-# 运行配置：envFile: ["override"]
-# 命令行：--ef custom -e "VAR=value"
+# 全局配置：envFile: ["/abs/path/base.env"]
+# runs.claude：envFile: ["/abs/path/override.env"]
+# 命令行：--ef /abs/path/custom.env -e "VAR=value"
 #
 # 加载顺序：
-# 1. ~/.manyoyo/env/base.env
-# 2. ~/.manyoyo/env/override.env
-# 3. ~/.manyoyo/env/custom.env
-# 4. 全局配置的 env 数组
-# 5. 运行配置的 env 数组
+# 1. /abs/path/base.env
+# 2. /abs/path/override.env
+# 3. /abs/path/custom.env
+# 4. 全局配置的 env 对象
+# 5. runs.claude 的 env 对象
 # 6. 命令行的 VAR=value
 ```
 
@@ -212,7 +199,7 @@ manyoyo --ef opencode -x opencode
 
 建议使用描述性的文件名：
 ```bash
-~/.manyoyo/env/
+/abs/path/env/
 ├── anthropic_[claudecode]_claudecode.env
 ├── openai_[gpt]_codex.env
 ├── gemini_production.env
@@ -233,14 +220,18 @@ export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
 
 ### 3. 使用配置文件管理
 
-将环境文件配置到运行配置中，避免重复输入：
+将环境文件配置到 `manyoyo.json` 的 `runs` 中，避免重复输入：
 ```json5
-// ~/.manyoyo/run/claude.json
+// ~/.manyoyo/manyoyo.json（片段）
 {
-    "envFile": [
-        "anthropic_base",
-        "anthropic_secrets"
-    ]
+    "runs": {
+        "claude": {
+            "envFile": [
+                "/abs/path/anthropic_base.env",
+                "/abs/path/anthropic_secrets.env"
+            ]
+        }
+    }
 }
 ```
 
@@ -269,10 +260,10 @@ manyoyo -r claude -x env | grep ANTHROPIC
 
 ```bash
 # 检查配置
-manyoyo --show-config --ef myconfig
+manyoyo --show-config --ef /abs/path/myconfig.env
 
 # 在容器中检查环境变量
-manyoyo --ef myconfig -x env
+manyoyo --ef /abs/path/myconfig.env -x env
 ```
 
 ### 环境变量值错误
@@ -286,11 +277,11 @@ manyoyo --ef myconfig -x env
 
 ```bash
 # 查看所有生效的环境变量
-manyoyo --ef myconfig -x 'env | sort'
+manyoyo --ef /abs/path/myconfig.env -x 'env | sort'
 ```
 
 ## 相关文档
 
-- [配置系统概览](./index) - 了解配置优先级机制
+- [配置系统概览](./) - 了解配置优先级机制
 - [配置文件详解](./config-files) - 学习如何在配置文件中使用 envFile
 - [配置示例](./examples) - 查看完整的配置示例

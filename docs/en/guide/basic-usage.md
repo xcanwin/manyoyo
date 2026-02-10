@@ -207,13 +207,10 @@ manyoyo -e "VAR1=value1" \
 
 ```bash
 # Load environment file
-manyoyo --ef anthropic_claudecode -x claude
+manyoyo --ef /abs/path/anthropic_claudecode.env -x claude
 
 # Load multiple environment files
-manyoyo --ef base --ef anthropic_secrets -x claude
-
-# Use relative path
-manyoyo --ef ./local.env -x claude
+manyoyo --ef /abs/path/base.env --ef /abs/path/anthropic_secrets.env -x claude
 ```
 
 ### Using Run Configuration
@@ -226,7 +223,7 @@ manyoyo -r claude
 manyoyo -r claude -e "DEBUG=true"
 
 # Run configuration + additional environment file
-manyoyo -r claude --ef additional
+manyoyo -r claude --ef /abs/path/additional.env
 ```
 
 For detailed configuration, refer to [Configuration System](../configuration/).
@@ -276,7 +273,7 @@ manyoyo -v "/data:/workspace/data" \
 manyoyo -y c
 
 # Create named session
-manyoyo -n my-project --ef anthropic -y c
+manyoyo -n my-project --ef /abs/path/anthropic.env -y c
 ```
 
 ### Resume Session
@@ -509,7 +506,7 @@ docker ps -a | grep my-test | awk '{print $1}' | xargs docker rm
 
 ```bash
 # 1. Start development container
-manyoyo -n dev-project --ef anthropic -y c
+manyoyo -n dev-project --ef /abs/path/anthropic.env -y c
 
 # 2. Work... (AI-assisted programming)
 
@@ -529,10 +526,10 @@ manyoyo -n dev-project --crm
 
 ```bash
 # Project A
-manyoyo -n project-a --hp ~/projects/a --ef claude -y c
+manyoyo -n project-a --hp ~/projects/a --ef /abs/path/claude.env -y c
 
 # Project B
-manyoyo -n project-b --hp ~/projects/b --ef claude -y c
+manyoyo -n project-b --hp ~/projects/b --ef /abs/path/claude.env -y c
 
 # Switch back to Project A
 manyoyo -n project-a -- -c

@@ -34,20 +34,16 @@ MANYOYO 支持两种主要的配置方式：
 
 ## 配置文件路径规则
 
-MANYOYO 使用智能路径解析规则：
-
 ### 运行配置
-- `manyoyo -r myconfig` → 加载 `~/.manyoyo/run/myconfig.json`
-- `manyoyo -r ./myconfig.json` → 加载当前目录的 `myconfig.json`
-- `manyoyo -r /abs/path/myconfig.json` → 加载绝对路径的配置文件
+- `manyoyo -r claude` → 加载 `~/.manyoyo/manyoyo.json` 的 `runs.claude`
+- `manyoyo -r <name>` 仅支持 `runs.<name>` 名称，不支持文件路径
 
 ### 全局配置
 - 运行任何 manyoyo 命令时，都会自动加载 `~/.manyoyo/manyoyo.json`（如果存在）
 
 ### 环境文件
-- `manyoyo --ef myenv` → 加载 `~/.manyoyo/env/myenv.env`
-- `manyoyo --ef ./myenv.env` → 加载当前目录的 `myenv.env`
-- `manyoyo --ef /abs/path/myenv.env` → 加载绝对路径的环境文件
+- `manyoyo --ef /abs/path/myenv.env` → 加载绝对路径环境文件
+- `--ef` 仅支持绝对路径，不支持短名称和相对路径
 
 ## 优先级机制
 
@@ -56,7 +52,7 @@ MANYOYO 配置参数分为两类，具有不同的合并行为：
 ### 覆盖型参数
 这些参数只取最高优先级的值：
 
-**优先级顺序**：命令行参数 > 运行配置 > 全局配置 > 默认值
+**优先级顺序**：命令行参数 > `runs.<name>` > 全局配置 > 默认值
 
 覆盖型参数包括：
 - `containerName` - 容器名称
@@ -79,35 +75,35 @@ MANYOYO 配置参数分为两类，具有不同的合并行为：
 ### 合并型参数
 这些参数会按顺序累加合并：
 
-**合并顺序**：全局配置 + 运行配置 + 命令行参数
+**合并顺序**：全局配置 + `runs.<name>` + 命令行参数
 
 合并型参数包括：
-- `env` - 环境变量数组
+- `env` - 环境变量对象（按 key 覆盖）
 - `envFile` - 环境文件数组
 - `volumes` - 挂载卷数组
 - `imageBuildArgs` - 镜像构建参数数组
 
 示例：
 ```bash
-# 全局配置：env: ["VAR1=value1"]
-# 运行配置：env: ["VAR2=value2"]
+# 全局配置：env: {"VAR1":"value1"}
+# runs.demo：env: {"VAR2":"value2"}
 # 命令行：-e "VAR3=value3"
-# 最终结果：所有三个环境变量都会生效
+# 最终结果：VAR1/VAR2/VAR3 都会生效；同名 key 按后者覆盖前者
 ```
 
 ## 配置合并规则表
 
 | 参数类型 | 参数名 | 合并行为 | 示例 |
 |---------|--------|---------|------|
-| 覆盖型 | `containerName` | 取最高优先级的值 | CLI `-n test` 覆盖配置文件中的值 |
+| 覆盖型 | `containerName` | 取最高优先级的值 | CLI `-n test` 覆盖 `runs.<name>` 或全局值 |
 | 覆盖型 | `hostPath` | 取最高优先级的值 | 默认为当前目录 |
 | 覆盖型 | `containerPath` | 取最高优先级的值 | 默认与 hostPath 相同 |
 | 覆盖型 | `imageName` | 取最高优先级的值 | 默认 `localhost/xcanwin/manyoyo` |
 | 覆盖型 | `imageVersion` | 取最高优先级的值 | 如 `1.7.0-full` |
 | 覆盖型 | `containerMode` | 取最高优先级的值 | `common`, `dind`, `sock` |
 | 覆盖型 | `yolo` | 取最高优先级的值 | `c`, `gm`, `cx`, `oc` |
-| 合并型 | `env` | 数组累加合并 | 全局 + 运行配置 + CLI 的所有值 |
-| 合并型 | `envFile` | 数组累加合并 | 所有环境文件依次加载 |
+| 合并型 | `env` | 对象按 key 合并覆盖 | 全局 + `runs.<name>` + CLI（同名后者覆盖） |
+| 合并型 | `envFile` | 数组累加合并 | 全局 + `runs.<name>` + CLI 的绝对路径文件 |
 | 合并型 | `volumes` | 数组累加合并 | 所有挂载卷生效 |
 | 合并型 | `imageBuildArgs` | 数组累加合并 | 所有构建参数生效 |
 

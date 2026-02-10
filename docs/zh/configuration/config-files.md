@@ -25,9 +25,9 @@ MANYOYO 支持两种配置文件：
 
 ### 2. 运行配置
 
-**文件路径**：
-- `~/.manyoyo/run/<name>.json`（使用 `-r <name>`）
-- 或自定义路径（使用 `-r ./path.json`）
+**位置**：
+- 全局配置文件：`~/.manyoyo/manyoyo.json`
+- 运行配置：`~/.manyoyo/manyoyo.json` 的 `runs.<name>`（使用 `-r <name>`）
 
 **特点**：
 - 需要显式加载（使用 `-r` 参数）
@@ -37,7 +37,7 @@ MANYOYO 支持两种配置文件：
 **示例**：
 ```json5
 {
-    "envFile": ["anthropic_claudecode"],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
     "shellSuffix": "-c",
     "yolo": "c"
 }
@@ -132,28 +132,28 @@ MANYOYO 支持两种配置文件：
 #### envFile
 - **类型**：字符串数组
 - **合并方式**：累加合并
-- **说明**：环境文件列表，按顺序加载
+- **说明**：环境文件列表，按顺序加载（仅支持绝对路径）
 - **示例**：
 ```json5
 {
     "envFile": [
-        "anthropic_claudecode",  // 加载 ~/.manyoyo/env/anthropic_claudecode.env
-        "secrets"                // 加载 ~/.manyoyo/env/secrets.env
+        "/abs/path/anthropic_claudecode.env",
+        "/abs/path/secrets.env"
     ]
 }
 ```
 
 #### env
-- **类型**：字符串数组
-- **合并方式**：累加合并
+- **类型**：对象（map）
+- **合并方式**：按 key 合并，后者覆盖前者
 - **说明**：直接指定环境变量
 - **示例**：
 ```json5
 {
-    "env": [
-        "DEBUG=true",
-        "LOG_LEVEL=info"
-    ]
+    "env": {
+        "DEBUG": "true",
+        "LOG_LEVEL": "info"
+    }
 }
 ```
 
@@ -252,17 +252,9 @@ MANYOYO 支持两种配置文件：
 ### 运行配置路径解析
 
 ```bash
-# 短名称（推荐）
+# 从 manyoyo.json 的 runs 读取
 manyoyo -r claude
-# 加载：~/.manyoyo/run/claude.json
-
-# 相对路径
-manyoyo -r ./config.json
-# 加载：当前目录的 config.json
-
-# 绝对路径
-manyoyo -r /abs/path/config.json
-# 加载：指定路径的配置文件
+# 加载：~/.manyoyo/manyoyo.json 的 runs.claude
 ```
 
 ### 全局配置
@@ -274,20 +266,20 @@ manyoyo -r /abs/path/config.json
 
 ## 配置合并规则
 
-参考[配置系统概览](./index#优先级机制)了解详细的合并规则。
+参考[配置系统概览](./#优先级机制)了解详细的合并规则。
 
 简要说明：
 
 ### 覆盖型参数
 取最高优先级的值：
 ```
-命令行参数 > 运行配置 > 全局配置 > 默认值
+命令行参数 > runs.<name> > 全局配置 > 默认值
 ```
 
 ### 合并型参数
 按顺序累加合并：
 ```
-全局配置 + 运行配置 + 命令行参数
+全局配置 + runs.<name> + 命令行参数
 ```
 
 ## 完整配置示例
@@ -302,10 +294,10 @@ manyoyo -r /abs/path/config.json
     "imageVersion": "1.7.0-full",
 
     // 全局环境变量
-    "env": [
-        "TZ=Asia/Shanghai",
-        "LANG=en_US.UTF-8"
-    ],
+    "env": {
+        "TZ": "Asia/Shanghai",
+        "LANG": "en_US.UTF-8"
+    },
 
     // 默认静默提示
     "quiet": ["tip"]
@@ -315,12 +307,10 @@ manyoyo -r /abs/path/config.json
 ### 示例：Claude Code 运行配置
 
 ```json5
-// ~/.manyoyo/run/claude.json
+// ~/.manyoyo/manyoyo.json（片段）
 {
     // 加载 Claude 环境变量
-    "envFile": [
-        "anthropic_claudecode"
-    ],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
 
     // 使用 YOLO 模式
     "yolo": "c",
@@ -335,12 +325,10 @@ manyoyo -r /abs/path/config.json
 ### 示例：Codex 运行配置
 
 ```json5
-// ~/.manyoyo/run/codex.json
+// ~/.manyoyo/manyoyo.json（片段）
 {
     // 加载 Codex 环境变量
-    "envFile": [
-        "openai_[gpt]_codex"
-    ],
+    "envFile": ["/abs/path/openai_[gpt]_codex.env"],
 
     // 挂载认证文件
     "volumes": [
@@ -355,7 +343,7 @@ manyoyo -r /abs/path/config.json
 ### 示例：Docker-in-Docker 配置
 
 ```json5
-// ~/.manyoyo/run/dind.json
+// ~/.manyoyo/manyoyo.json（片段）
 {
     // 使用 Docker-in-Docker 模式
     "containerMode": "dind",
@@ -379,15 +367,13 @@ manyoyo -r /abs/path/config.json
     "containerName": "my-myproject",
 
     // 项目环境变量
-    "env": [
-        "PROJECT_NAME=myproject",
-        "NODE_ENV=development"
-    ],
+    "env": {
+        "PROJECT_NAME": "myproject",
+        "NODE_ENV": "development"
+    },
 
     // 使用项目本地环境文件
-    "envFile": [
-        "./local.env"
-    ]
+    "envFile": ["/abs/path/local.env"]
 }
 ```
 
@@ -419,8 +405,8 @@ manyoyo -r claude --show-command
 4. 注意覆盖型参数只取最高优先级的值
 
 ```bash
-# 验证配置格式
-cat ~/.manyoyo/run/claude.json | jq .
+# 验证 runs.claude 配置格式
+cat ~/.manyoyo/manyoyo.json | jq '.runs.claude'
 
 # 查看最终配置
 manyoyo -r claude --show-config
@@ -461,9 +447,8 @@ manyoyo -r claude -x env | grep ANTHROPIC
 # 全局配置：设置通用选项
 ~/.manyoyo/manyoyo.json
 
-# 运行配置：设置工具特定选项
-~/.manyoyo/run/claude.json
-~/.manyoyo/run/codex.json
+# 运行配置：设置工具特定选项（manyoyo.json 的 runs）
+~/.manyoyo/manyoyo.json (runs.claude / runs.codex)
 
 # 项目配置：设置项目特定选项
 ./project/.manyoyo.json
@@ -480,8 +465,8 @@ manyoyo -r claude -x env | grep ANTHROPIC
     // "imageVersion": "1.6.0-common",
 
     "envFile": [
-        "anthropic_base",    // 基础配置
-        "anthropic_secrets"  // 敏感信息
+        "/abs/path/anthropic_base.env",    // 基础配置
+        "/abs/path/anthropic_secrets.env"  // 敏感信息
     ]
 }
 ```
@@ -503,15 +488,12 @@ config.example.json     # 配置示例
 
 创建配置模板供团队使用：
 ```bash
-# 复制示例配置
-cp ~/.manyoyo/run/claude.example.json ~/.manyoyo/run/claude.json
-
-# 编辑配置
-vim ~/.manyoyo/run/claude.json
+# 编辑 runs 配置
+vim ~/.manyoyo/manyoyo.json
 ```
 
 ## 相关文档
 
-- [配置系统概览](./index) - 了解配置优先级机制
+- [配置系统概览](./) - 了解配置优先级机制
 - [环境变量详解](./environment) - 学习如何配置环境变量
 - [配置示例](./examples) - 查看更多实用示例

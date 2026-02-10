@@ -18,16 +18,28 @@ const defaultKeywords = [
   'yolo mode'
 ].join(', ')
 const defaultOgImage = `${siteUrl}images/manyoyo-og-cover.svg`
+const readmeRewrites = {
+  'README.md': 'index.md',
+  'configuration/README.md': 'configuration/index.md',
+  'en/README.md': 'en/index.md',
+  'en/configuration/README.md': 'en/configuration/index.md',
+  'en/troubleshooting/README.md': 'en/troubleshooting/index.md',
+  'troubleshooting/README.md': 'troubleshooting/index.md',
+  'zh/README.md': 'zh/index.md',
+  'zh/configuration/README.md': 'zh/configuration/index.md',
+  'zh/troubleshooting/README.md': 'zh/troubleshooting/index.md'
+}
 
 function toRoutePath(relativePath: string): string {
   const normalized = relativePath.replace(/\\/g, '/').replace(/\.md$/, '')
 
-  if (normalized === 'index') {
+  if (normalized === 'index' || normalized === 'README') {
     return '/'
   }
 
-  if (normalized.endsWith('/index')) {
-    return `/${normalized.slice(0, -'/index'.length)}/`
+  if (normalized.endsWith('/index') || normalized.endsWith('/README')) {
+    const suffix = normalized.endsWith('/index') ? '/index' : '/README'
+    return `/${normalized.slice(0, -suffix.length)}/`
   }
 
   return `/${normalized}`
@@ -97,6 +109,7 @@ export default defineConfig({
   description: defaultDescription,
   base: process.env.GITHUB_ACTIONS ? '/manyoyo/' : '/',
   cleanUrls: true,
+  rewrites: readmeRewrites,
   lastUpdated: true,
   srcExclude: ['README_EN.md'],
   head: [

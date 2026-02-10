@@ -13,7 +13,7 @@ description: MANYOYO 命令行参数与常用命令速查，覆盖容器管理�
 | 查看版本 | `manyoyo -V` |
 | 从本机 Agent 初始化配置 | `manyoyo --init-config all` |
 | 列出容器 | `manyoyo -l` |
-| 创建容器并启动 Claude Code | `manyoyo -n test --ef .env -y c` |
+| 创建容器并启动 Claude Code | `manyoyo -n test --ef /abs/path/.env -y c` |
 | 进入 shell | `manyoyo -n test -x /bin/bash` |
 | 执行自定义命令 | `manyoyo -n test -x echo "hello world"` |
 | 删除容器 | `manyoyo -n test --crm` |
@@ -27,8 +27,8 @@ description: MANYOYO 命令行参数与常用命令速查，覆盖容器管理�
 | `-y` | 快速进入 Agent 模式 |
 | `-x` | 在容器内执行命令 |
 | `-e` | 直接传入环境变量 |
-| `--ef` | 读取环境变量文件（`.env`） |
-| `-r` | 读取 JSON5 配置文件 |
+| `--ef` | 读取环境变量文件（仅支持绝对路径） |
+| `-r` | 读取 `~/.manyoyo/manyoyo.json` 的 `runs.<name>` |
 | `--ib` | 构建沙箱镜像 |
 | `--iv` | 指定镜像版本 |
 | `--iba` | 传递镜像构建参数（如 `TOOL=common`） |
@@ -40,8 +40,8 @@ description: MANYOYO 命令行参数与常用命令速查，覆盖容器管理�
 
 ## 配置文件规则
 
-- `manyoyo -r myconfig` 会读取 `~/.manyoyo/run/myconfig.json`
-- `manyoyo -r ./myconfig.json` 会读取当前目录配置
+- `manyoyo -r claude` 会读取 `~/.manyoyo/manyoyo.json` 的 `runs.claude`
+- `manyoyo --ef /abs/path/my.env` 仅支持绝对路径环境文件
 - 任何命令都会优先加载全局配置 `~/.manyoyo/manyoyo.json`
 
 完整参数请以 `README.md` 为准。

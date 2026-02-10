@@ -499,6 +499,6 @@ manyoyo -r claude -x env | grep ANTHROPIC
 
 ## 相关文档
 
-- [配置系统概览](./index) - 了解配置原理
+- [配置系统概览](./) - 了解配置原理
 - [环境变量详解](./environment) - 深入了解环境变量
 - [配置文件详解](./config-files) - 学习所有配置选项

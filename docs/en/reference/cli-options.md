@@ -13,7 +13,7 @@ description: MANYOYO CLI option reference for container management, env injectio
 | View version | `manyoyo -V` |
 | Initialize config from local Agent setup | `manyoyo --init-config all` |
 | List containers | `manyoyo -l` |
-| Create container and start Claude Code | `manyoyo -n test --ef .env -y c` |
+| Create container and start Claude Code | `manyoyo -n test --ef /abs/path/.env -y c` |
 | Enter shell | `manyoyo -n test -x /bin/bash` |
 | Execute custom command | `manyoyo -n test -x echo "hello world"` |
 | Remove container | `manyoyo -n test --crm` |
@@ -27,8 +27,8 @@ description: MANYOYO CLI option reference for container management, env injectio
 | `-y` | Quick enter Agent mode |
 | `-x` | Execute command in container |
 | `-e` | Pass environment variables directly |
-| `--ef` | Read environment variable file (`.env`) |
-| `-r` | Read JSON5 configuration file |
+| `--ef` | Read environment variable file (absolute path only) |
+| `-r` | Read `runs.<name>` from `~/.manyoyo/manyoyo.json` |
 | `--ib` | Build sandbox image |
 | `--iv` | Specify image version |
 | `--iba` | Pass image build arguments (e.g., `TOOL=common`) |
@@ -40,8 +40,8 @@ description: MANYOYO CLI option reference for container management, env injectio
 
 ## Configuration File Rules
 
-- `manyoyo -r myconfig` will read `~/.manyoyo/run/myconfig.json`
-- `manyoyo -r ./myconfig.json` will read configuration from current directory
+- `manyoyo -r claude` will read `runs.claude` from `~/.manyoyo/manyoyo.json`
+- `manyoyo --ef /abs/path/my.env` only accepts absolute env-file paths
 - Any command will prioritize loading the global configuration `~/.manyoyo/manyoyo.json`
 
 For complete parameters, please refer to `README.md`.

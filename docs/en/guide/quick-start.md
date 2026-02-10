@@ -47,13 +47,13 @@ manyoyo -r opencode
 
 ## Troubleshooting
 
-If `--init-config` reports missing variables, edit only the related `.env`:
+If `--init-config` reports missing variables, edit the related `runs.<agent>.env` in `~/.manyoyo/manyoyo.json`:
 
 ```bash
-vim ~/.manyoyo/env/claude.env
-vim ~/.manyoyo/env/codex.env
-vim ~/.manyoyo/env/gemini.env
-vim ~/.manyoyo/env/opencode.env
+vim ~/.manyoyo/manyoyo.json
+
+# Example: inspect runs.claude.env
+cat ~/.manyoyo/manyoyo.json | jq '.runs.claude.env'
 ```
 
 More issues: [Troubleshooting](../troubleshooting/)

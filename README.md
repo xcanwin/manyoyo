@@ -48,7 +48,7 @@ npm install -g @xcanwin/manyoyo    # 安装
 podman pull ubuntu:24.04           # 仅 Podman 需要
 manyoyo --ib --iv 1.7.4            # 构建镜像
 manyoyo --init-config all          # 从本机 Agent 配置迁移到 ~/.manyoyo
-manyoyo -r claude                  # 使用迁移后的运行配置启动
+manyoyo -r claude                  # 使用 manyoyo.json 的 runs.claude 启动
 ```
 
 注意：YOLO/SOLO 会跳过权限确认，请确保在可控环境中使用。
@@ -134,7 +134,7 @@ manyoyo --show-command
 
 ## 配置
 
-配置优先级：命令行参数 > 运行配置 > 全局配置 > 默认值  
+配置优先级：命令行参数 > runs.<name> > 全局配置 > 默认值  
 详细说明请参考：
 - [配置系统概览](https://xcanwin.github.io/manyoyo/zh/configuration/)
 - [环境变量详解](https://xcanwin.github.io/manyoyo/zh/configuration/environment)

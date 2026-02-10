@@ -207,13 +207,10 @@ manyoyo -e "VAR1=value1" \
 
 ```bash
 # 加载环境文件
-manyoyo --ef anthropic_claudecode -x claude
+manyoyo --ef /abs/path/anthropic_claudecode.env -x claude
 
 # 加载多个环境文件
-manyoyo --ef base --ef anthropic_secrets -x claude
-
-# 使用相对路径
-manyoyo --ef ./local.env -x claude
+manyoyo --ef /abs/path/base.env --ef /abs/path/anthropic_secrets.env -x claude
 ```
 
 ### 使用运行配置
@@ -226,7 +223,7 @@ manyoyo -r claude
 manyoyo -r claude -e "DEBUG=true"
 
 # 运行配置 + 额外环境文件
-manyoyo -r claude --ef additional
+manyoyo -r claude --ef /abs/path/additional.env
 ```
 
 详细配置请参考[配置系统](../configuration/)。
@@ -276,7 +273,7 @@ manyoyo -v "/data:/workspace/data" \
 manyoyo -y c
 
 # 创建命名会话
-manyoyo -n my-project --ef anthropic -y c
+manyoyo -n my-project --ef /abs/path/anthropic.env -y c
 ```
 
 ### 恢复会话
@@ -509,7 +506,7 @@ docker ps -a | grep my-test | awk '{print $1}' | xargs docker rm
 
 ```bash
 # 1. 启动开发容器
-manyoyo -n dev-project --ef anthropic -y c
+manyoyo -n dev-project --ef /abs/path/anthropic.env -y c
 
 # 2. 工作...（AI 辅助编程）
 
@@ -529,10 +526,10 @@ manyoyo -n dev-project --crm
 
 ```bash
 # 项目 A
-manyoyo -n project-a --hp ~/projects/a --ef claude -y c
+manyoyo -n project-a --hp ~/projects/a --ef /abs/path/claude.env -y c
 
 # 项目 B
-manyoyo -n project-b --hp ~/projects/b --ef claude -y c
+manyoyo -n project-b --hp ~/projects/b --ef /abs/path/claude.env -y c
 
 # 切换回项目 A
 manyoyo -n project-a -- -c

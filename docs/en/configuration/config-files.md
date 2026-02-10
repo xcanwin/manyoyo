@@ -25,9 +25,9 @@ MANYOYO supports two types of configuration files:
 
 ### 2. Run Configuration
 
-**File Path**:
-- `~/.manyoyo/run/<name>.json` (using `-r <name>`)
-- Or custom path (using `-r ./path.json`)
+**Location**:
+- Global configuration file: `~/.manyoyo/manyoyo.json`
+- Run configuration: `runs.<name>` in `~/.manyoyo/manyoyo.json` (using `-r <name>`)
 
 **Features**:
 - Needs to be explicitly loaded (using `-r` parameter)
@@ -37,7 +37,7 @@ MANYOYO supports two types of configuration files:
 **Example**:
 ```json5
 {
-    "envFile": ["anthropic_claudecode"],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
     "shellSuffix": "-c",
     "yolo": "c"
 }
@@ -132,28 +132,28 @@ Mode descriptions:
 #### envFile
 - **Type**: String array
 - **Merge Method**: Accumulation merge
-- **Description**: Environment file list, loaded in order
+- **Description**: Environment file list, loaded in order (absolute paths only)
 - **Example**:
 ```json5
 {
     "envFile": [
-        "anthropic_claudecode",  // Loads ~/.manyoyo/env/anthropic_claudecode.env
-        "secrets"                // Loads ~/.manyoyo/env/secrets.env
+        "/abs/path/anthropic_claudecode.env",
+        "/abs/path/secrets.env"
     ]
 }
 ```
 
 #### env
-- **Type**: String array
-- **Merge Method**: Accumulation merge
+- **Type**: Object (map)
+- **Merge Method**: Merge by key (later source overrides earlier source)
 - **Description**: Directly specify environment variables
 - **Example**:
 ```json5
 {
-    "env": [
-        "DEBUG=true",
-        "LOG_LEVEL=info"
-    ]
+    "env": {
+        "DEBUG": "true",
+        "LOG_LEVEL": "info"
+    }
 }
 ```
 
@@ -252,17 +252,9 @@ Mode descriptions:
 ### Run Configuration Path Resolution
 
 ```bash
-# Short name (recommended)
+# Read from runs in manyoyo.json
 manyoyo -r claude
-# Loads: ~/.manyoyo/run/claude.json
-
-# Relative path
-manyoyo -r ./config.json
-# Loads: config.json from current directory
-
-# Absolute path
-manyoyo -r /abs/path/config.json
-# Loads: configuration file from specified path
+# Loads: runs.claude in ~/.manyoyo/manyoyo.json
 ```
 
 ### Global Configuration
@@ -274,20 +266,20 @@ Global configuration is always loaded from a fixed location:
 
 ## Configuration Merge Rules
 
-Refer to [Configuration System Overview](./index#priority-mechanism) for detailed merge rules.
+Refer to [Configuration System Overview](./#priority-mechanism) for detailed merge rules.
 
 Brief description:
 
 ### Override Parameters
 Takes the value from the highest priority:
 ```
-Command-line arguments > Run configuration > Global configuration > Default values
+Command-line arguments > runs.<name> > Global configuration > Default values
 ```
 
 ### Merge Parameters
 Accumulated merge in order:
 ```
-Global configuration + Run configuration + Command-line arguments
+Global configuration + runs.<name> + Command-line arguments
 ```
 
 ## Complete Configuration Examples
@@ -302,10 +294,10 @@ Global configuration + Run configuration + Command-line arguments
     "imageVersion": "1.7.0-full",
 
     // Global environment variables
-    "env": [
-        "TZ=Asia/Shanghai",
-        "LANG=en_US.UTF-8"
-    ],
+    "env": {
+        "TZ": "Asia/Shanghai",
+        "LANG": "en_US.UTF-8"
+    },
 
     // Default silent tips
     "quiet": ["tip"]
@@ -315,12 +307,10 @@ Global configuration + Run configuration + Command-line arguments
 ### Example: Claude Code Run Configuration
 
 ```json5
-// ~/.manyoyo/run/claude.json
+// ~/.manyoyo/manyoyo.json (fragment)
 {
     // Load Claude environment variables
-    "envFile": [
-        "anthropic_claudecode"
-    ],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
 
     // Use YOLO mode
     "yolo": "c",
@@ -335,12 +325,10 @@ Global configuration + Run configuration + Command-line arguments
 ### Example: Codex Run Configuration
 
 ```json5
-// ~/.manyoyo/run/codex.json
+// ~/.manyoyo/manyoyo.json (fragment)
 {
     // Load Codex environment variables
-    "envFile": [
-        "openai_[gpt]_codex"
-    ],
+    "envFile": ["/abs/path/openai_[gpt]_codex.env"],
 
     // Mount authentication file
     "volumes": [
@@ -355,7 +343,7 @@ Global configuration + Run configuration + Command-line arguments
 ### Example: Docker-in-Docker Configuration
 
 ```json5
-// ~/.manyoyo/run/dind.json
+// ~/.manyoyo/manyoyo.json (fragment)
 {
     // Use Docker-in-Docker mode
     "containerMode": "dind",
@@ -379,15 +367,13 @@ Global configuration + Run configuration + Command-line arguments
     "containerName": "my-myproject",
 
     // Project environment variables
-    "env": [
-        "PROJECT_NAME=myproject",
-        "NODE_ENV=development"
-    ],
+    "env": {
+        "PROJECT_NAME": "myproject",
+        "NODE_ENV": "development"
+    },
 
     // Use project local environment file
-    "envFile": [
-        "./local.env"
-    ]
+    "envFile": ["/abs/path/local.env"]
 }
 ```
 
@@ -419,8 +405,8 @@ manyoyo -r claude --show-command
 4. Note that override parameters only take the highest priority value
 
 ```bash
-# Verify configuration format
-cat ~/.manyoyo/run/claude.json | jq .
+# Verify runs.claude structure
+cat ~/.manyoyo/manyoyo.json | jq '.runs.claude'
 
 # View final configuration
 manyoyo -r claude --show-config
@@ -461,9 +447,8 @@ manyoyo -r claude -x env | grep ANTHROPIC
 # Global configuration: Set common options
 ~/.manyoyo/manyoyo.json
 
-# Run configuration: Set tool-specific options
-~/.manyoyo/run/claude.json
-~/.manyoyo/run/codex.json
+# Run configuration: Set tool-specific options (runs in manyoyo.json)
+~/.manyoyo/manyoyo.json (runs.claude / runs.codex)
 
 # Project configuration: Set project-specific options
 ./project/.manyoyo.json
@@ -480,8 +465,8 @@ manyoyo -r claude -x env | grep ANTHROPIC
     // "imageVersion": "1.6.0-common",
 
     "envFile": [
-        "anthropic_base",    // Base configuration
-        "anthropic_secrets"  // Sensitive information
+        "/abs/path/anthropic_base.env",    // Base configuration
+        "/abs/path/anthropic_secrets.env"  // Sensitive information
     ]
 }
 ```
@@ -503,15 +488,12 @@ config.example.json     # Configuration example
 
 Create configuration templates for team use:
 ```bash
-# Copy example configuration
-cp ~/.manyoyo/run/claude.example.json ~/.manyoyo/run/claude.json
-
-# Edit configuration
-vim ~/.manyoyo/run/claude.json
+# Edit runs configuration
+vim ~/.manyoyo/manyoyo.json
 ```
 
 ## Related Documentation
 
-- [Configuration System Overview](./index) - Understand configuration priority mechanism
+- [Configuration System Overview](./) - Understand configuration priority mechanism
 - [Environment Variables Details](./environment) - Learn how to configure environment variables
 - [Configuration Examples](./examples) - View more practical examples

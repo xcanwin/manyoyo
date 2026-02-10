@@ -47,13 +47,13 @@ manyoyo -r opencode
 
 ## 故障排查
 
-如果 `--init-config` 提示某些变量未找到，可编辑对应 `.env`：
+如果 `--init-config` 提示某些变量未找到，直接编辑 `~/.manyoyo/manyoyo.json` 的对应 `runs.<agent>.env`：
 
 ```bash
-vim ~/.manyoyo/env/claude.env
-vim ~/.manyoyo/env/codex.env
-vim ~/.manyoyo/env/gemini.env
-vim ~/.manyoyo/env/opencode.env
+vim ~/.manyoyo/manyoyo.json
+
+# 示例：查看 runs.claude.env
+cat ~/.manyoyo/manyoyo.json | jq '.runs.claude.env'
 ```
 
 更多问题见：[故障排查](../troubleshooting/)
