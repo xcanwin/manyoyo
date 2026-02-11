@@ -1,0 +1,4 @@
+interface:
+  display_name: "AGENTS 初始化"
+  short_description: "在任意仓库生成中文版 AGENTS.md 协作指引模板"
+  default_prompt: "使用 $agents-init 为当前仓库生成或更新中文版 AGENTS.md。"
