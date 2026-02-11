@@ -1,0 +1,4 @@
+interface:
+  display_name: "提交文案差异"
+  short_description: "对比最近提交与当前工作区核心变化并输出可用提交文案"
+  default_prompt: "使用 $commit-diff 对比最近一次 commit 和当前代码的核心功能变化，输出 text 代码块；代码块首行空内容，第二行起每段以 \"- \" 开头。"
