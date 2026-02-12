@@ -2,8 +2,7 @@
 
 MANYOYO 支持三种容器模式，提供不同级别的容器嵌套能力。
 
-> 提示：当前版本推荐使用 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`；
-> 文中如果出现 `~/.manyoyo/run/*.json` 示例，请按兼容历史写法理解。
+> 提示：运行配置统一写在 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`，`envFile` 使用绝对路径。
 
 ## 模式概览
 
@@ -52,10 +51,10 @@ docker build     # ❌ 无法构建镜像
 ### 配置示例
 
 ```json5
-// ~/.manyoyo/run/dev.json
+// ~/.manyoyo/manyoyo.json 的 runs.dev
 {
     "containerMode": "common",  // 或省略（默认）
-    "envFile": ["anthropic_claudecode"],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
     "yolo": "c"
 }
 ```
@@ -122,11 +121,11 @@ docker ps -a
 ### 配置示例
 
 ```json5
-// ~/.manyoyo/run/dind.json
+// ~/.manyoyo/manyoyo.json 的 runs.dind
 {
     "containerName": "my-dind",
     "containerMode": "dind",
-    "envFile": ["anthropic_claudecode"],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
     "volumes": [
         // 挂载 Docker 配置（可选）
         "~/.docker:/root/.docker:ro"
@@ -260,11 +259,11 @@ manyoyo -v "/var/run/docker.sock:/var/run/docker.sock:ro" -x /bin/bash
 ### 配置示例
 
 ```json5
-// ~/.manyoyo/run/sock.json（谨慎使用！）
+// ~/.manyoyo/manyoyo.json 的 runs.sock（谨慎使用！）
 {
     "containerName": "my-sock",
     "containerMode": "sock",  // 危险！
-    "envFile": ["anthropic_claudecode"]
+    "envFile": ["/abs/path/anthropic_claudecode.env"]
 }
 ```
 
@@ -444,13 +443,13 @@ docker ps -a
 
 ```bash
 # Common 模式（默认）
-~/.manyoyo/run/dev.json
+~/.manyoyo/manyoyo.json 的 runs.dev
 
 # dind 模式
-~/.manyoyo/run/dind.json
+~/.manyoyo/manyoyo.json 的 runs.dind
 
 # sock 模式（谨慎使用）
-~/.manyoyo/run/sock.json
+~/.manyoyo/manyoyo.json 的 runs.sock
 ```
 
 ### 5. 文档化使用场景

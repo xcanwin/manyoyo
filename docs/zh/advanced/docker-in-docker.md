@@ -2,9 +2,7 @@
 
 本页面提供 Docker-in-Docker (DinD) 模式的完整使用指南，包括原理、配置、最佳实践和安全性分析。
 
-> 提示：当前版本推荐使用 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`；
-> 文中如果出现 `~/.manyoyo/run/*.json` 示例，请按兼容历史写法理解。
-> 配置文件中的 `env` 推荐使用对象（map）写法，如 `{ "DOCKER_HOST": "tcp://..." }`。
+> 提示：运行配置统一写在 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`，`envFile` 使用绝对路径，`env` 使用对象（map）。
 
 ## 什么是 Docker-in-Docker
 
@@ -49,12 +47,16 @@ docker ps -a
 
 ```bash
 # 创建 dind 配置
-cat > ~/.manyoyo/run/dind.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "containerName": "my-dind",
-    "containerMode": "dind",
-    "envFile": ["anthropic_claudecode"],
-    "yolo": "c"
+    "runs": {
+        "dind": {
+            "containerName": "my-dind",
+            "containerMode": "dind",
+            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "yolo": "c"
+        }
+    }
 }
 EOF
 
@@ -141,15 +143,19 @@ docker build -t myapp .
 
 ```bash
 # 1. 创建 dind 配置
-cat > ~/.manyoyo/run/dind-dev.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "containerName": "my-dind-dev",
-    "containerMode": "dind",
-    "envFile": ["anthropic_claudecode"],
-    "volumes": [
-        "~/.docker:/root/.docker:ro"
-    ],
-    "yolo": "c"
+    "runs": {
+        "dind-dev": {
+            "containerName": "my-dind-dev",
+            "containerMode": "dind",
+            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "volumes": [
+                "~/.docker:/root/.docker:ro"
+            ],
+            "yolo": "c"
+        }
+    }
 }
 EOF
 
@@ -178,15 +184,15 @@ cat > ./myproject/.manyoyo.json << 'EOF'
 {
     "containerName": "my-ci",
     "containerMode": "dind",
-    "env": [
-        "CI=true",
-        "NODE_ENV=test"
-    ]
+    "env": {
+        "CI": "true",
+        "NODE_ENV": "test"
+    }
 }
 EOF
 
 # 2. 运行 CI 任务
-manyoyo -r ./myproject/.manyoyo.json -x /bin/bash
+manyoyo -n my-ci --hp ./myproject -m dind -x /bin/bash
 
 # 3. 在容器内运行测试
 $ npm install

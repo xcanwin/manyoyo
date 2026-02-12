@@ -2,9 +2,7 @@
 
 MANYOYO supports multiple AI CLI tools (agents), providing shortcuts to launch YOLO/SOLO mode.
 
-> Note: Current versions recommend `runs.<name>` in `~/.manyoyo/manyoyo.json`.
-> If you see `~/.manyoyo/run/*.json` in examples, treat it as a legacy-compatible pattern.
-> For configuration files, `env` is recommended as a map, e.g. `{ "NODE_ENV": "development" }`.
+> Note: Run profiles should be under `runs.<name>` in `~/.manyoyo/manyoyo.json`; use absolute paths for `envFile` and map style for `env`.
 
 ## Supported Agents
 
@@ -32,9 +30,9 @@ manyoyo -n <container-name> -- --continue
 
 **Configuration example**:
 ```json5
-// ~/.manyoyo/run/claude.json
+// runs.claude in ~/.manyoyo/manyoyo.json
 {
-    "envFile": ["anthropic_claudecode"],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
     "yolo": "c"
 }
 ```
@@ -90,9 +88,9 @@ manyoyo -n <container-name> -- --resume
 
 **Configuration example**:
 ```json5
-// ~/.manyoyo/run/gemini.json
+// runs.gemini in ~/.manyoyo/manyoyo.json
 {
-    "envFile": ["gemini"],
+    "envFile": ["/abs/path/gemini.env"],
     "yolo": "gm"
 }
 ```
@@ -139,9 +137,9 @@ manyoyo -n <container-name> -- resume <session-id>
 
 **Configuration example**:
 ```json5
-// ~/.manyoyo/run/codex.json
+// runs.codex in ~/.manyoyo/manyoyo.json
 {
-    "envFile": ["openai_codex"],
+    "envFile": ["/abs/path/openai_codex.env"],
     "volumes": [
         "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
     ],
@@ -193,9 +191,9 @@ manyoyo -n <container-name> -- --continue
 
 **Configuration example**:
 ```json5
-// ~/.manyoyo/run/opencode.json
+// runs.opencode in ~/.manyoyo/manyoyo.json
 {
-    "envFile": ["opencode"],
+    "envFile": ["/abs/path/opencode.env"],
     "yolo": "oc"
 }
 ```
@@ -407,10 +405,14 @@ Create dedicated configuration for each agent:
 
 ```bash
 # Create configuration
-cat > ~/.manyoyo/run/claude.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "envFile": ["anthropic_claudecode"],
-    "yolo": "c"
+    "runs": {
+        "claude": {
+            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "yolo": "c"
+        }
+    }
 }
 EOF
 
@@ -454,20 +456,24 @@ Configure different environments for different agents:
 
 ```bash
 # Development environment - Use Claude
-cat > ~/.manyoyo/run/dev.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "envFile": ["anthropic_dev"],
-    "env": ["NODE_ENV=development"],
-    "yolo": "c"
-}
-EOF
-
-# Production environment - Use Gemini
-cat > ~/.manyoyo/run/prod.json << 'EOF'
-{
-    "envFile": ["gemini_prod"],
-    "env": ["NODE_ENV=production"],
-    "yolo": "gm"
+    "runs": {
+        "dev": {
+            "envFile": ["/abs/path/anthropic_dev.env"],
+            "env": {
+                "NODE_ENV": "development"
+            },
+            "yolo": "c"
+        },
+        "prod": {
+            "envFile": ["/abs/path/gemini_prod.env"],
+            "env": {
+                "NODE_ENV": "production"
+            },
+            "yolo": "gm"
+        }
+    }
 }
 EOF
 ```

@@ -2,9 +2,7 @@
 
 This page introduces MANYOYO's session management mechanism, including session creation, resumption, persistence, and best practices.
 
-> Note: Current versions recommend `runs.<name>` in `~/.manyoyo/manyoyo.json`.
-> If you see `~/.manyoyo/run/*.json` in examples, treat it as a legacy-compatible pattern.
-> For configuration files, `env` is recommended as a map, e.g. `{ "NODE_ENV": "development" }`.
+> Note: Run profiles should be under `runs.<name>` in `~/.manyoyo/manyoyo.json`; use absolute paths for `envFile` and map style for `env`.
 
 ## What is a Session
 
@@ -54,11 +52,15 @@ manyoyo -n my-project -y c
 
 ```bash
 # Method 1: Run configuration (recommended)
-cat > ~/.manyoyo/run/project-a.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "containerName": "my-project-a",
-    "envFile": ["anthropic_claudecode"],
-    "yolo": "c"
+    "runs": {
+        "project-a": {
+            "containerName": "my-project-a",
+            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "yolo": "c"
+        }
+    }
 }
 EOF
 
@@ -68,13 +70,13 @@ manyoyo -r project-a
 cat > ./myproject/.manyoyo.json << 'EOF'
 {
     "containerName": "my-myproject",
-    "envFile": ["anthropic_claudecode"],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
     "yolo": "c"
 }
 EOF
 
 cd myproject
-manyoyo -r ./.manyoyo.json
+manyoyo -n my-myproject -x /bin/bash
 ```
 
 ## Session Resumption
@@ -450,11 +452,12 @@ my-0204-1430
 
 ```bash
 # Create configuration for each project
-~/.manyoyo/run/
-├── webapp.json
-├── api.json
-├── mobile.json
-└── debug.json
+~/.manyoyo/manyoyo.json
+└── runs
+    ├── webapp
+    ├── api
+    ├── mobile
+    └── debug
 
 # Quick start
 manyoyo -r webapp
@@ -498,23 +501,27 @@ chmod +x ~/cleanup-manyoyo.sh
 
 ```bash
 # Create session template
-cat > ~/.manyoyo/run/template.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "containerName": "my-template",
-    "envFile": ["base", "secrets"],
-    "volumes": [
-        "~/.ssh:/root/.ssh:ro",
-        "~/.gitconfig:/root/.gitconfig:ro"
-    ],
-    "env": [
-        "TZ=Asia/Shanghai"
-    ]
+    "runs": {
+        "template": {
+            "containerName": "my-template",
+            "envFile": ["/abs/path/base.env", "/abs/path/secrets.env"],
+            "volumes": [
+                "~/.ssh:/root/.ssh:ro",
+                "~/.gitconfig:/root/.gitconfig:ro"
+            ],
+            "env": {
+                "TZ": "Asia/Shanghai"
+            }
+        }
+    }
 }
 EOF
 
 # Create new session based on template
-cp ~/.manyoyo/run/template.json ~/.manyoyo/run/newproject.json
-# Modify containerName and specific configuration
+manyoyo -r template
+# Copy runs.template to runs.newproject and update containerName
 ```
 
 ## Advanced Tips

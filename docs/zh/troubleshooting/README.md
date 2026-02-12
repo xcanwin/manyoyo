@@ -51,7 +51,7 @@ manyoyo --ef /abs/path/anthropic_claudecode.env -x env | grep ANTHROPIC
 ## 配置检查要点
 
 - 运行配置位于 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`。
-- `manyoyo -r <name>` 只按名称读取 `runs.<name>`，不读取 `~/.manyoyo/run/*.json`。
+- `manyoyo -r <name>` 只按名称读取 `~/.manyoyo/manyoyo.json` 中的 `runs.<name>`。
 - `envFile` 必须是绝对路径数组。
 
 ## 获取帮助

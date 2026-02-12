@@ -2,9 +2,7 @@
 
 This page provides a comprehensive guide to Docker-in-Docker (DinD) mode, including principles, configuration, best practices, and security analysis.
 
-> Note: Current versions recommend `runs.<name>` in `~/.manyoyo/manyoyo.json`.
-> If you see `~/.manyoyo/run/*.json` in examples, treat it as a legacy-compatible pattern.
-> For configuration files, `env` is recommended as a map, e.g. `{ "DOCKER_HOST": "tcp://..." }`.
+> Note: Run profiles should be under `runs.<name>` in `~/.manyoyo/manyoyo.json`; use absolute paths for `envFile` and map style for `env`.
 
 ## What is Docker-in-Docker
 
@@ -49,12 +47,16 @@ docker ps -a
 
 ```bash
 # Create dind configuration
-cat > ~/.manyoyo/run/dind.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "containerName": "my-dind",
-    "containerMode": "dind",
-    "envFile": ["anthropic_claudecode"],
-    "yolo": "c"
+    "runs": {
+        "dind": {
+            "containerName": "my-dind",
+            "containerMode": "dind",
+            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "yolo": "c"
+        }
+    }
 }
 EOF
 
@@ -141,15 +143,19 @@ docker build -t myapp .
 
 ```bash
 # 1. Create dind configuration
-cat > ~/.manyoyo/run/dind-dev.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "containerName": "my-dind-dev",
-    "containerMode": "dind",
-    "envFile": ["anthropic_claudecode"],
-    "volumes": [
-        "~/.docker:/root/.docker:ro"
-    ],
-    "yolo": "c"
+    "runs": {
+        "dind-dev": {
+            "containerName": "my-dind-dev",
+            "containerMode": "dind",
+            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "volumes": [
+                "~/.docker:/root/.docker:ro"
+            ],
+            "yolo": "c"
+        }
+    }
 }
 EOF
 
@@ -178,15 +184,15 @@ cat > ./myproject/.manyoyo.json << 'EOF'
 {
     "containerName": "my-ci",
     "containerMode": "dind",
-    "env": [
-        "CI=true",
-        "NODE_ENV=test"
-    ]
+    "env": {
+        "CI": "true",
+        "NODE_ENV": "test"
+    }
 }
 EOF
 
 # 2. Run CI tasks
-manyoyo -r ./myproject/.manyoyo.json -x /bin/bash
+manyoyo -n my-ci --hp ./myproject -m dind -x /bin/bash
 
 # 3. Run tests inside the container
 $ npm install

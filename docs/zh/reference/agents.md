@@ -2,9 +2,7 @@
 
 MANYOYO 支持多种 AI CLI 工具（智能体），提供快捷方式启动 YOLO/SOLO 模式。
 
-> 提示：当前版本推荐使用 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`；
-> 文中如果出现 `~/.manyoyo/run/*.json` 示例，请按兼容历史写法理解。
-> 配置文件中的 `env` 推荐使用对象（map）写法，如 `{ "NODE_ENV": "development" }`。
+> 提示：运行配置统一写在 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`，`envFile` 使用绝对路径，`env` 使用对象（map）。
 
 ## 支持的智能体
 
@@ -32,9 +30,9 @@ manyoyo -n <容器名> -- --continue
 
 **配置示例**：
 ```json5
-// ~/.manyoyo/run/claude.json
+// ~/.manyoyo/manyoyo.json 的 runs.claude
 {
-    "envFile": ["anthropic_claudecode"],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
     "yolo": "c"
 }
 ```
@@ -90,9 +88,9 @@ manyoyo -n <容器名> -- --resume
 
 **配置示例**：
 ```json5
-// ~/.manyoyo/run/gemini.json
+// ~/.manyoyo/manyoyo.json 的 runs.gemini
 {
-    "envFile": ["gemini"],
+    "envFile": ["/abs/path/gemini.env"],
     "yolo": "gm"
 }
 ```
@@ -139,9 +137,9 @@ manyoyo -n <容器名> -- resume <session-id>
 
 **配置示例**：
 ```json5
-// ~/.manyoyo/run/codex.json
+// ~/.manyoyo/manyoyo.json 的 runs.codex
 {
-    "envFile": ["openai_codex"],
+    "envFile": ["/abs/path/openai_codex.env"],
     "volumes": [
         "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
     ],
@@ -193,9 +191,9 @@ manyoyo -n <容器名> -- --continue
 
 **配置示例**：
 ```json5
-// ~/.manyoyo/run/opencode.json
+// ~/.manyoyo/manyoyo.json 的 runs.opencode
 {
-    "envFile": ["opencode"],
+    "envFile": ["/abs/path/opencode.env"],
     "yolo": "oc"
 }
 ```
@@ -407,10 +405,14 @@ manyoyo -n project -- -c
 
 ```bash
 # 创建配置
-cat > ~/.manyoyo/run/claude.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "envFile": ["anthropic_claudecode"],
-    "yolo": "c"
+    "runs": {
+        "claude": {
+            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "yolo": "c"
+        }
+    }
 }
 EOF
 
@@ -454,20 +456,24 @@ manyoyo -n project-codex -- resume --last
 
 ```bash
 # 开发环境 - 使用 Claude
-cat > ~/.manyoyo/run/dev.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "envFile": ["anthropic_dev"],
-    "env": ["NODE_ENV=development"],
-    "yolo": "c"
-}
-EOF
-
-# 生产环境 - 使用 Gemini
-cat > ~/.manyoyo/run/prod.json << 'EOF'
-{
-    "envFile": ["gemini_prod"],
-    "env": ["NODE_ENV=production"],
-    "yolo": "gm"
+    "runs": {
+        "dev": {
+            "envFile": ["/abs/path/anthropic_dev.env"],
+            "env": {
+                "NODE_ENV": "development"
+            },
+            "yolo": "c"
+        },
+        "prod": {
+            "envFile": ["/abs/path/gemini_prod.env"],
+            "env": {
+                "NODE_ENV": "production"
+            },
+            "yolo": "gm"
+        }
+    }
 }
 EOF
 ```

@@ -2,8 +2,7 @@
 
 MANYOYO supports three container modes, providing different levels of container nesting capabilities.
 
-> Note: Current versions recommend `runs.<name>` in `~/.manyoyo/manyoyo.json`.
-> If you see `~/.manyoyo/run/*.json` in examples, treat it as a legacy-compatible pattern.
+> Note: Run profiles should be under `runs.<name>` in `~/.manyoyo/manyoyo.json`; `envFile` must use absolute paths.
 
 ## Mode Overview
 
@@ -52,10 +51,10 @@ docker build     # ❌ Cannot build images
 ### Configuration Example
 
 ```json5
-// ~/.manyoyo/run/dev.json
+// runs.dev in ~/.manyoyo/manyoyo.json
 {
     "containerMode": "common",  // Or omit (default)
-    "envFile": ["anthropic_claudecode"],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
     "yolo": "c"
 }
 ```
@@ -122,11 +121,11 @@ For full workflows (architecture, performance, security, CI examples), see:
 ### Configuration Example
 
 ```json5
-// ~/.manyoyo/run/dind.json
+// runs.dind in ~/.manyoyo/manyoyo.json
 {
     "containerName": "my-dind",
     "containerMode": "dind",
-    "envFile": ["anthropic_claudecode"],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
     "volumes": [
         // Mount Docker config (optional)
         "~/.docker:/root/.docker:ro"
@@ -260,11 +259,11 @@ manyoyo -v "/var/run/docker.sock:/var/run/docker.sock:ro" -x /bin/bash
 ### Configuration Example
 
 ```json5
-// ~/.manyoyo/run/sock.json (Use with caution!)
+// runs.sock in ~/.manyoyo/manyoyo.json (Use with caution!)
 {
     "containerName": "my-sock",
     "containerMode": "sock",  // Dangerous!
-    "envFile": ["anthropic_claudecode"]
+    "envFile": ["/abs/path/anthropic_claudecode.env"]
 }
 ```
 
@@ -444,13 +443,13 @@ Create dedicated configurations for different modes:
 
 ```bash
 # Common mode (default)
-~/.manyoyo/run/dev.json
+~/.manyoyo/manyoyo.json (runs.dev)
 
 # dind mode
-~/.manyoyo/run/dind.json
+~/.manyoyo/manyoyo.json (runs.dind)
 
 # sock mode (use with caution)
-~/.manyoyo/run/sock.json
+~/.manyoyo/manyoyo.json (runs.sock)
 ```
 
 ### 5. Document Use Cases

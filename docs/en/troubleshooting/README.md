@@ -51,7 +51,7 @@ manyoyo --ef /abs/path/anthropic_claudecode.env -x env | grep ANTHROPIC
 ## Config Checks
 
 - Run profiles are under `runs.<name>` in `~/.manyoyo/manyoyo.json`.
-- `manyoyo -r <name>` only reads `runs.<name>` and does not read `~/.manyoyo/run/*.json`.
+- `manyoyo -r <name>` reads `runs.<name>` from `~/.manyoyo/manyoyo.json`.
 - `envFile` must be an array of absolute paths.
 
 ## Getting Help

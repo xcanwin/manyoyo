@@ -2,9 +2,7 @@
 
 本页面介绍 MANYOYO 的会话管理机制，包括会话创建、恢复、持久化和最佳实践。
 
-> 提示：当前版本推荐使用 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`；
-> 文中如果出现 `~/.manyoyo/run/*.json` 示例，请按兼容历史写法理解。
-> 配置文件中的 `env` 推荐使用对象（map）写法，如 `{ "NODE_ENV": "development" }`。
+> 提示：运行配置统一写在 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`，`envFile` 使用绝对路径，`env` 使用对象（map）。
 
 ## 什么是会话
 
@@ -53,11 +51,15 @@ manyoyo -n my-project -y c
 
 ```bash
 # 方式 1：运行配置（推荐）
-cat > ~/.manyoyo/run/project-a.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "containerName": "my-project-a",
-    "envFile": ["anthropic_claudecode"],
-    "yolo": "c"
+    "runs": {
+        "project-a": {
+            "containerName": "my-project-a",
+            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "yolo": "c"
+        }
+    }
 }
 EOF
 
@@ -67,13 +69,13 @@ manyoyo -r project-a
 cat > ./myproject/.manyoyo.json << 'EOF'
 {
     "containerName": "my-myproject",
-    "envFile": ["anthropic_claudecode"],
+    "envFile": ["/abs/path/anthropic_claudecode.env"],
     "yolo": "c"
 }
 EOF
 
 cd myproject
-manyoyo -r ./.manyoyo.json
+manyoyo -n my-myproject -x /bin/bash
 ```
 
 ## 会话恢复
@@ -449,11 +451,12 @@ my-0204-1430
 
 ```bash
 # 为每个项目创建配置
-~/.manyoyo/run/
-├── webapp.json
-├── api.json
-├── mobile.json
-└── debug.json
+~/.manyoyo/manyoyo.json
+└── runs
+    ├── webapp
+    ├── api
+    ├── mobile
+    └── debug
 
 # 快速启动
 manyoyo -r webapp
@@ -497,23 +500,27 @@ chmod +x ~/cleanup-manyoyo.sh
 
 ```bash
 # 创建会话模板
-cat > ~/.manyoyo/run/template.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "containerName": "my-template",
-    "envFile": ["base", "secrets"],
-    "volumes": [
-        "~/.ssh:/root/.ssh:ro",
-        "~/.gitconfig:/root/.gitconfig:ro"
-    ],
-    "env": [
-        "TZ=Asia/Shanghai"
-    ]
+    "runs": {
+        "template": {
+            "containerName": "my-template",
+            "envFile": ["/abs/path/base.env", "/abs/path/secrets.env"],
+            "volumes": [
+                "~/.ssh:/root/.ssh:ro",
+                "~/.gitconfig:/root/.gitconfig:ro"
+            ],
+            "env": {
+                "TZ": "Asia/Shanghai"
+            }
+        }
+    }
 }
 EOF
 
 # 基于模板创建新会话
-cp ~/.manyoyo/run/template.json ~/.manyoyo/run/newproject.json
-# 修改 containerName 和特定配置
+manyoyo -r template
+# 复制 runs.template 为 runs.newproject 并修改 containerName
 ```
 
 ## 高级技巧
