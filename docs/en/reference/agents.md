@@ -2,6 +2,10 @@
 
 MANYOYO supports multiple AI CLI tools (agents), providing shortcuts to launch YOLO/SOLO mode.
 
+> Note: Current versions recommend `runs.<name>` in `~/.manyoyo/manyoyo.json`.
+> If you see `~/.manyoyo/run/*.json` in examples, treat it as a legacy-compatible pattern.
+> For configuration files, `env` is recommended as a map, e.g. `{ "NODE_ENV": "development" }`.
+
 ## Supported Agents
 
 ### Claude Code

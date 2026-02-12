@@ -182,8 +182,8 @@ MANYOYO 使用自定义的容器镜像，包含预装的 AI CLI 工具和开发�
 ### 推荐方式：使用 manyoyo 构建
 
 ```bash
-# 构建完整版本（推荐，建议指定版本号）
-manyoyo --ib --iv 1.7.0-common
+# 构建推荐版本（common）
+manyoyo --ib --iv 1.8.0-common
 
 # 构建后验证
 docker images | grep manyoyo  # 或 podman images
@@ -202,9 +202,9 @@ docker images | grep manyoyo  # 或 podman images
 包含所有支持的 AI CLI 工具和开发环境：
 
 ```bash
-manyoyo --ib --iv 1.7.0-common
-# 或显式指定
-manyoyo --ib --iv 1.7.0-full --iba TOOL=full
+manyoyo --ib --iv 1.8.0-full
+# 或显式指定构建参数
+manyoyo --ib --iv 1.8.0-full --iba TOOL=full
 ```
 
 **包含工具**：
@@ -260,12 +260,12 @@ manyoyo --ib --iba TOOL=go,codex,java,gemini
 
 ```bash
 # 自定义镜像名和版本
-manyoyo --ib --in myimage --iv 2.0.0-common
-# 生成镜像：myimage:2.0.0-full
+manyoyo --ib --in myimage --iv 1.8.0-common
+# 生成镜像：myimage:1.8.0-common
 
 # 指定完整的镜像名
 manyoyo --ib --in localhost/myuser/sandbox --iv 1.0.0-common
-# 生成镜像：localhost/myuser/sandbox:1.0.0-full
+# 生成镜像：localhost/myuser/sandbox:1.0.0-common
 ```
 
 #### 特殊构建参数
@@ -286,7 +286,7 @@ manyoyo --ib --iba NODE_MIRROR=https://custom-mirror.com
 如果需要更多控制，可以手动使用 Docker/Podman 命令：
 
 ```bash
-iv=1.7.0
+iv=1.8.0
 podman build \
     -t localhost/xcanwin/manyoyo:$iv-full \
     -f docker/manyoyo.Dockerfile . \
@@ -353,7 +353,7 @@ manyoyo -h
 docker images | grep manyoyo  # 或 podman images
 
 # 应该看到类似：
-# localhost/xcanwin/manyoyo  1.7.0-full  xxx  xxx  xxGB
+# localhost/xcanwin/manyoyo  1.8.0-common  xxx  xxx  xxGB
 ```
 
 ### 3. 初始化 Agent 配置（推荐）
@@ -433,12 +433,12 @@ manyoyo -V
 
 ```bash
 # 构建新版本镜像
-manyoyo --ib --iv 1.7.0-common
+manyoyo --ib --iv 1.8.0-common
 
 # 更新全局配置
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "imageVersion": "1.7.0-full"
+    "imageVersion": "1.8.0-common"
 }
 EOF
 

@@ -19,7 +19,7 @@ MANYOYO supports two types of configuration files:
 ```json5
 {
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.7.0-full"
+    "imageVersion": "1.8.0-full"
 }
 ```
 
@@ -101,7 +101,7 @@ Refer to `config.example.json` to view all configurable items. Below are detaile
 - **Example**:
 ```json5
 {
-    "imageVersion": "1.7.0-full"  // full version includes all tools
+    "imageVersion": "1.8.0-full"  // full version includes all tools
 }
 ```
 
@@ -291,7 +291,7 @@ Global configuration + runs.<name> + Command-line arguments
 {
     // Use custom image
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.7.0-full",
+    "imageVersion": "1.8.0-full",
 
     // Global environment variables
     "env": {
@@ -459,10 +459,10 @@ manyoyo -r claude -x env | grep ANTHROPIC
 ```json5
 {
     // Production environment configuration
-    "imageVersion": "1.7.0-full",
+    "imageVersion": "1.8.0-full",
 
     // Can temporarily switch during development
-    // "imageVersion": "1.6.0-common",
+    // "imageVersion": "1.8.0-common",
 
     "envFile": [
         "/abs/path/anthropic_base.env",    // Base configuration

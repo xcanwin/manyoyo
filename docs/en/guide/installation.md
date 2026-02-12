@@ -182,8 +182,8 @@ MANYOYO uses custom container images that include pre-installed AI CLI tools and
 ### Recommended Method: Build with manyoyo
 
 ```bash
-# Build full version (recommended, suggest specifying version number)
-manyoyo --ib --iv 1.7.0-common
+# Build recommended version (common)
+manyoyo --ib --iv 1.8.0-common
 
 # Verify after build
 docker images | grep manyoyo  # or podman images
@@ -202,9 +202,9 @@ docker images | grep manyoyo  # or podman images
 Includes all supported AI CLI tools and development environments:
 
 ```bash
-manyoyo --ib --iv 1.7.0-common
-# Or explicitly specify
-manyoyo --ib --iv 1.7.0-full --iba TOOL=full
+manyoyo --ib --iv 1.8.0-full
+# Or explicitly specify build args
+manyoyo --ib --iv 1.8.0-full --iba TOOL=full
 ```
 
 **Included Tools**:
@@ -260,12 +260,12 @@ manyoyo --ib --iba TOOL=go,codex,java,gemini
 
 ```bash
 # Custom image name and version
-manyoyo --ib --in myimage --iv 2.0.0-common
-# Generates image: myimage:2.0.0-full
+manyoyo --ib --in myimage --iv 1.8.0-common
+# Generates image: myimage:1.8.0-common
 
 # Specify full image name
 manyoyo --ib --in localhost/myuser/sandbox --iv 1.0.0-common
-# Generates image: localhost/myuser/sandbox:1.0.0-full
+# Generates image: localhost/myuser/sandbox:1.0.0-common
 ```
 
 #### Special Build Parameters
@@ -286,7 +286,7 @@ manyoyo --ib --iba NODE_MIRROR=https://custom-mirror.com
 If you need more control, you can manually use Docker/Podman commands:
 
 ```bash
-iv=1.7.0
+iv=1.8.0
 podman build \
     -t localhost/xcanwin/manyoyo:$iv-full \
     -f docker/manyoyo.Dockerfile . \
@@ -353,7 +353,7 @@ manyoyo -h
 docker images | grep manyoyo  # or podman images
 
 # Should see something like:
-# localhost/xcanwin/manyoyo  1.7.0-full  xxx  xxx  xxGB
+# localhost/xcanwin/manyoyo  1.8.0-common  xxx  xxx  xxGB
 ```
 
 ### 3. Initialize Agent Config (Recommended)
@@ -433,12 +433,12 @@ manyoyo -V
 
 ```bash
 # Build new version image
-manyoyo --ib --iv 1.7.0-common
+manyoyo --ib --iv 1.8.0-common
 
 # Update global configuration
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "imageVersion": "1.7.0-full"
+    "imageVersion": "1.8.0-common"
 }
 EOF
 

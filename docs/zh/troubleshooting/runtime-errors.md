@@ -126,7 +126,7 @@ docker images | grep manyoyo
 # 统一版本
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "imageVersion": "1.7.0-full"
+    "imageVersion": "1.8.0-common"
 }
 EOF
 ```
@@ -283,19 +283,18 @@ ls -la ~/.manyoyo/env/
 ls ~/.manyoyo/env/ | grep -i anthropic
 
 # 测试加载
-manyoyo --ef anthropic_claudecode --show-config
+manyoyo --ef /abs/path/anthropic_claudecode.env --show-config
 ```
 
 **路径规则**：
-- `--ef myconfig` → `~/.manyoyo/env/myconfig.env`
-- `--ef ./myconfig.env` → 当前目录的 `myconfig.env`
-- `--ef /abs/path.env` → 绝对路径
+- `--ef` 仅支持绝对路径
+- 推荐写法：`--ef /abs/path/myconfig.env`
 
 #### 3. 使用 --show-config 查看配置
 
 ```bash
 # 查看最终生效的配置
-manyoyo --ef anthropic_claudecode --show-config
+manyoyo --ef /abs/path/anthropic_claudecode.env --show-config
 
 # 检查 envFile 是否正确加载
 manyoyo -r claude --show-config | grep -A 5 envFile
@@ -308,13 +307,13 @@ manyoyo -r claude --show-config | grep -A 20 '"env"'
 
 ```bash
 # 查看所有环境变量
-manyoyo --ef anthropic_claudecode -x env
+manyoyo --ef /abs/path/anthropic_claudecode.env -x env
 
 # 查看特定环境变量
-manyoyo --ef anthropic_claudecode -x 'env | grep ANTHROPIC'
+manyoyo --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC'
 
 # 测试 Claude Code
-manyoyo --ef anthropic_claudecode -x 'echo $ANTHROPIC_AUTH_TOKEN'
+manyoyo --ef /abs/path/anthropic_claudecode.env -x 'echo $ANTHROPIC_AUTH_TOKEN'
 ```
 
 #### 5. 检查配置优先级
@@ -345,10 +344,10 @@ manyoyo --ef anthropic_claudecode -x 'echo $ANTHROPIC_AUTH_TOKEN'
 grep -r "ANTHROPIC_AUTH_TOKEN" ~/.manyoyo/
 
 # 2. 查看最终值
-manyoyo --ef anthropic_claudecode -x 'echo "TOKEN=$ANTHROPIC_AUTH_TOKEN"'
+manyoyo --ef /abs/path/anthropic_claudecode.env -x 'echo "TOKEN=$ANTHROPIC_AUTH_TOKEN"'
 
 # 3. 检查是否有空格或特殊字符
-manyoyo --ef anthropic_claudecode -x 'env | grep ANTHROPIC | cat -A'
+manyoyo --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC | cat -A'
 
 # 4. 使用新环境文件测试
 cat > /tmp/test.env << 'EOF'
@@ -422,7 +421,7 @@ manyoyo -v "/sensitive:/container/sensitive:ro" -y c
 #### 5. 配置文件中设置挂载
 
 ```json5
-// ~/.manyoyo/run/claude.json
+// ~/.manyoyo/manyoyo.json 的 runs.claude
 {
     "volumes": [
         "/Users/user/.ssh:/root/.ssh:ro",
@@ -524,13 +523,17 @@ Error: Unauthorized
 manyoyo -v "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json" -y cx
 
 # 或在配置文件中设置
-cat > ~/.manyoyo/run/codex.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "envFile": ["openai_[gpt]_codex"],
-    "volumes": [
-        "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
-    ],
-    "yolo": "cx"
+    "runs": {
+        "codex": {
+            "envFile": ["/abs/path/openai_[gpt]_codex.env"],
+            "volumes": [
+                "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
+            ],
+            "yolo": "cx"
+        }
+    }
 }
 EOF
 ```
@@ -641,7 +644,7 @@ export HTTPS_PROXY=http://proxy.example.com:8080
 export NO_PROXY=localhost,127.0.0.1
 EOF
 
-manyoyo --ef proxy --ef anthropic_claudecode -y c
+manyoyo --ef /abs/path/proxy.env --ef /abs/path/anthropic_claudecode.env -y c
 ```
 
 ## 性能问题
@@ -656,8 +659,8 @@ manyoyo --ef proxy --ef anthropic_claudecode -y c
 docker images | grep manyoyo
 
 # 2. 使用精简版镜像
-manyoyo --ib --iv 1.7.0-common --iba TOOL=common
-manyoyo --iv 1.7.0-common -y c
+manyoyo --ib --iv 1.8.0-common --iba TOOL=common
+manyoyo --iv 1.8.0-common -y c
 
 # 3. 清理无用资源
 docker system prune

@@ -2,6 +2,9 @@
 
 MANYOYO supports three container modes, providing different levels of container nesting capabilities.
 
+> Note: Current versions recommend `runs.<name>` in `~/.manyoyo/manyoyo.json`.
+> If you see `~/.manyoyo/run/*.json` in examples, treat it as a legacy-compatible pattern.
+
 ## Mode Overview
 
 | Mode | Abbreviation | Container Nesting | Security | Use Cases |

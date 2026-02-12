@@ -126,7 +126,7 @@ docker images | grep manyoyo
 # Unify version
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "imageVersion": "1.7.0-full"
+    "imageVersion": "1.8.0-common"
 }
 EOF
 ```
@@ -283,19 +283,18 @@ ls -la ~/.manyoyo/env/
 ls ~/.manyoyo/env/ | grep -i anthropic
 
 # Test loading
-manyoyo --ef anthropic_claudecode --show-config
+manyoyo --ef /abs/path/anthropic_claudecode.env --show-config
 ```
 
 **Path rules**:
-- `--ef myconfig` → `~/.manyoyo/env/myconfig.env`
-- `--ef ./myconfig.env` → `myconfig.env` in current directory
-- `--ef /abs/path.env` → absolute path
+- `--ef` only accepts absolute paths
+- Recommended format: `--ef /abs/path/myconfig.env`
 
 #### 3. Use --show-config to View Configuration
 
 ```bash
 # View final effective configuration
-manyoyo --ef anthropic_claudecode --show-config
+manyoyo --ef /abs/path/anthropic_claudecode.env --show-config
 
 # Check if envFile is loaded correctly
 manyoyo -r claude --show-config | grep -A 5 envFile
@@ -308,13 +307,13 @@ manyoyo -r claude --show-config | grep -A 20 '"env"'
 
 ```bash
 # View all environment variables
-manyoyo --ef anthropic_claudecode -x env
+manyoyo --ef /abs/path/anthropic_claudecode.env -x env
 
 # View specific environment variable
-manyoyo --ef anthropic_claudecode -x 'env | grep ANTHROPIC'
+manyoyo --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC'
 
 # Test Claude Code
-manyoyo --ef anthropic_claudecode -x 'echo $ANTHROPIC_AUTH_TOKEN'
+manyoyo --ef /abs/path/anthropic_claudecode.env -x 'echo $ANTHROPIC_AUTH_TOKEN'
 ```
 
 #### 5. Check Configuration Priority
@@ -345,10 +344,10 @@ Environment variable loading order (later loaded overrides earlier):
 grep -r "ANTHROPIC_AUTH_TOKEN" ~/.manyoyo/
 
 # 2. View final value
-manyoyo --ef anthropic_claudecode -x 'echo "TOKEN=$ANTHROPIC_AUTH_TOKEN"'
+manyoyo --ef /abs/path/anthropic_claudecode.env -x 'echo "TOKEN=$ANTHROPIC_AUTH_TOKEN"'
 
 # 3. Check for spaces or special characters
-manyoyo --ef anthropic_claudecode -x 'env | grep ANTHROPIC | cat -A'
+manyoyo --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC | cat -A'
 
 # 4. Test with new environment file
 cat > /tmp/test.env << 'EOF'
@@ -422,7 +421,7 @@ manyoyo -v "/sensitive:/container/sensitive:ro" -y c
 #### 5. Configure Mounts in Configuration File
 
 ```json5
-// ~/.manyoyo/run/claude.json
+// runs.claude in ~/.manyoyo/manyoyo.json
 {
     "volumes": [
         "/Users/user/.ssh:/root/.ssh:ro",
@@ -524,13 +523,17 @@ Error: Unauthorized
 manyoyo -v "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json" -y cx
 
 # Or set in configuration file
-cat > ~/.manyoyo/run/codex.json << 'EOF'
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "envFile": ["openai_[gpt]_codex"],
-    "volumes": [
-        "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
-    ],
-    "yolo": "cx"
+    "runs": {
+        "codex": {
+            "envFile": ["/abs/path/openai_[gpt]_codex.env"],
+            "volumes": [
+                "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
+            ],
+            "yolo": "cx"
+        }
+    }
 }
 EOF
 ```
@@ -641,7 +644,7 @@ export HTTPS_PROXY=http://proxy.example.com:8080
 export NO_PROXY=localhost,127.0.0.1
 EOF
 
-manyoyo --ef proxy --ef anthropic_claudecode -y c
+manyoyo --ef /abs/path/proxy.env --ef /abs/path/anthropic_claudecode.env -y c
 ```
 
 ## Performance Issues
@@ -656,8 +659,8 @@ manyoyo --ef proxy --ef anthropic_claudecode -y c
 docker images | grep manyoyo
 
 # 2. Use minimal image
-manyoyo --ib --iv 1.7.0-common --iba TOOL=common
-manyoyo --iv 1.7.0-common -y c
+manyoyo --ib --iv 1.8.0-common --iba TOOL=common
+manyoyo --iv 1.8.0-common -y c
 
 # 3. Clean unused resources
 docker system prune

@@ -28,7 +28,7 @@ Example:
 {
     // This is a comment
     containerName: "my-dev",  // Keys can be unquoted
-    imageVersion: "1.7.0-full",  // Trailing commas are supported
+    imageVersion: "1.8.0-common",  // Trailing commas are supported
 }
 ```
 
@@ -67,9 +67,9 @@ Override parameters include:
 
 Example:
 ```bash
-# Global configuration sets imageVersion: "1.6.0-full"
-# Run configuration sets imageVersion: "1.7.0-full"
-# Final value is "1.7.0-full" (run configuration has higher priority)
+# Global configuration sets imageVersion: "1.8.0-common"
+# Run configuration sets imageVersion: "1.8.0-full"
+# Final value is "1.8.0-full" (run configuration has higher priority)
 ```
 
 ### Merge Parameters
@@ -99,7 +99,7 @@ Example:
 | Override | `hostPath` | Takes highest priority value | Defaults to current directory |
 | Override | `containerPath` | Takes highest priority value | Defaults to same as hostPath |
 | Override | `imageName` | Takes highest priority value | Default `localhost/xcanwin/manyoyo` |
-| Override | `imageVersion` | Takes highest priority value | e.g., `1.7.0-full` |
+| Override | `imageVersion` | Takes highest priority value | e.g., `1.8.0-common` |
 | Override | `containerMode` | Takes highest priority value | `common`, `dind`, `sock` |
 | Override | `yolo` | Takes highest priority value | `c`, `gm`, `cx`, `oc` |
 | Merge | `env` | Map merge by key | Global + `runs.<name>` + CLI (later source overrides same key) |

@@ -2,6 +2,10 @@
 
 This page introduces MANYOYO's session management mechanism, including session creation, resumption, persistence, and best practices.
 
+> Note: Current versions recommend `runs.<name>` in `~/.manyoyo/manyoyo.json`.
+> If you see `~/.manyoyo/run/*.json` in examples, treat it as a legacy-compatible pattern.
+> For configuration files, `env` is recommended as a map, e.g. `{ "NODE_ENV": "development" }`.
+
 ## What is a Session
 
 In MANYOYO, a **Session** refers to:

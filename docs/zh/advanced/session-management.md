@@ -2,6 +2,10 @@
 
 本页面介绍 MANYOYO 的会话管理机制，包括会话创建、恢复、持久化和最佳实践。
 
+> 提示：当前版本推荐使用 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`；
+> 文中如果出现 `~/.manyoyo/run/*.json` 示例，请按兼容历史写法理解。
+> 配置文件中的 `env` 推荐使用对象（map）写法，如 `{ "NODE_ENV": "development" }`。
+
 ## 什么是会话
 
 在 MANYOYO 中，**会话（Session）** 指的是：

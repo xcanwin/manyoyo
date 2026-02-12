@@ -2,6 +2,10 @@
 
 This page provides a comprehensive guide to Docker-in-Docker (DinD) mode, including principles, configuration, best practices, and security analysis.
 
+> Note: Current versions recommend `runs.<name>` in `~/.manyoyo/manyoyo.json`.
+> If you see `~/.manyoyo/run/*.json` in examples, treat it as a legacy-compatible pattern.
+> For configuration files, `env` is recommended as a map, e.g. `{ "DOCKER_HOST": "tcp://..." }`.
+
 ## What is Docker-in-Docker
 
 Docker-in-Docker refers to the technology of running a Docker daemon inside a Docker container, allowing you to create and manage other containers within a container.

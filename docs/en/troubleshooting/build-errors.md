@@ -1,6 +1,7 @@
 # Build Issue Troubleshooting
 
 This page covers issues that may occur during MANYOYO image build process and their solutions.
+Default examples use `1.8.0-common`; replace the tag with your actual version if needed.
 
 ## Image Build Failures
 
@@ -66,7 +67,7 @@ manyoyo --irm
 
 ```bash
 # Skip all interactive confirmations
-manyoyo --ib --iv 1.7.0-common --yes
+manyoyo --ib --iv 1.8.0-common --yes
 ```
 
 #### 4. Modify Mirror Sources for International Users
@@ -81,24 +82,24 @@ Edit `docker/manyoyo.Dockerfile`, comment out mirror source related ARGs:
 
 Or use empty values:
 ```bash
-manyoyo --ib --iv 1.7.0-common --iba NODE_MIRROR= --iba NPM_REGISTRY=
+manyoyo --ib --iv 1.8.0-common --iba NODE_MIRROR= --iba NPM_REGISTRY=
 ```
 
 #### 5. Step-by-Step Build Debugging
 
 ```bash
 # First build basic version (faster, fewer issues)
-manyoyo --ib --iv 1.7.0-common --iba TOOL=common
+manyoyo --ib --iv 1.8.0-common --iba TOOL=common
 
 # After basic version succeeds, build full version
-manyoyo --ib --iv 1.7.0-full --iba TOOL=full
+manyoyo --ib --iv 1.8.0-full --iba TOOL=full
 ```
 
 #### 6. View Detailed Build Logs
 
 ```bash
 # Save build logs
-manyoyo --ib --iv 1.7.0-common 2>&1 | tee build.log
+manyoyo --ib --iv 1.8.0-common 2>&1 | tee build.log
 
 # Search for error keywords
 grep -i "error\|failed\|fatal" build.log
@@ -132,7 +133,7 @@ sudo systemctl restart docker
 **Solution**:
 ```bash
 # Skip Git SSL verification during build (not recommended, dev environments only)
-manyoyo --ib --iv 1.7.0-common --iba GIT_SSL_NO_VERIFY=true
+manyoyo --ib --iv 1.8.0-common --iba GIT_SSL_NO_VERIFY=true
 ```
 
 ## Image Pull Failures
@@ -154,7 +155,7 @@ MANYOYO uses local images by default (`localhost/xcanwin/manyoyo`), which need t
 
 ```bash
 # Build image
-manyoyo --ib --iv 1.7.0-common
+manyoyo --ib --iv 1.8.0-common
 
 # Verify image
 docker images | grep manyoyo  # or podman images
@@ -171,7 +172,8 @@ docker images | grep manyoyo
 # Modify global configuration
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "imageVersion": "1.6.0-full"  # Use existing version
+    // Use the image tag that already exists on your machine
+    "imageVersion": "1.8.0-common"
 }
 EOF
 ```
@@ -180,7 +182,7 @@ EOF
 
 ```bash
 # Specify version via command line
-manyoyo --iv 1.6.0-full -y c
+manyoyo --iv 1.8.0-common -y c
 ```
 
 ### Image Does Not Exist
@@ -196,7 +198,7 @@ docker images | grep manyoyo
 manyoyo --iv <x.y.z-suffix> -y c
 
 # Or build new version
-manyoyo --ib --iv 1.7.0-common
+manyoyo --ib --iv 1.8.0-common
 ```
 
 ## Network Connection Issues
@@ -265,7 +267,7 @@ export HTTPS_PROXY=http://proxy.example.com:8080
 export NO_PROXY=localhost,127.0.0.1
 
 # Rebuild
-manyoyo --ib --iv 1.7.0-common
+manyoyo --ib --iv 1.8.0-common
 ```
 
 ## Insufficient Disk Space
@@ -364,7 +366,7 @@ newgrp docker
 docker ps
 
 # Solution 2: Use sudo (not recommended)
-sudo manyoyo --ib --iv 1.7.0-common
+sudo manyoyo --ib --iv 1.8.0-common
 ```
 
 ### File Permission Issues
@@ -431,7 +433,7 @@ docker version
 rm -rf docker/cache/
 
 # Rebuild (will re-download)
-manyoyo --ib --iv 1.7.0-common
+manyoyo --ib --iv 1.8.0-common
 ```
 
 ### Cache Not Taking Effect
@@ -456,7 +458,7 @@ touch docker/cache/*
 
 ```bash
 # View detailed build process
-manyoyo --ib --iv 1.7.0-common 2>&1 | tee build.log
+manyoyo --ib --iv 1.8.0-common 2>&1 | tee build.log
 
 # Enable debugging in Docker
 export DOCKER_BUILDKIT=0  # Use traditional builder for more verbose output
@@ -481,7 +483,7 @@ podman build -t localhost/xcanwin/manyoyo:test-full \
 podman build --target=base -f docker/manyoyo.Dockerfile .
 
 # Test specific build arguments
-manyoyo --ib --iv 1.7.0-common --iba TOOL=common --yes
+manyoyo --ib --iv 1.8.0-common --iba TOOL=common --yes
 ```
 
 ## Related Documentation

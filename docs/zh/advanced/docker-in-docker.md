@@ -2,6 +2,10 @@
 
 本页面提供 Docker-in-Docker (DinD) 模式的完整使用指南，包括原理、配置、最佳实践和安全性分析。
 
+> 提示：当前版本推荐使用 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`；
+> 文中如果出现 `~/.manyoyo/run/*.json` 示例，请按兼容历史写法理解。
+> 配置文件中的 `env` 推荐使用对象（map）写法，如 `{ "DOCKER_HOST": "tcp://..." }`。
+
 ## 什么是 Docker-in-Docker
 
 Docker-in-Docker 是指在 Docker 容器内运行 Docker daemon，从而在容器中创建和管理其他容器的技术。

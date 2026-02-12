@@ -2,6 +2,10 @@
 
 本页面提供实用的 MANYOYO 配置示例，涵盖常见使用场景。
 
+> 提示：当前版本推荐把运行配置写在 `~/.manyoyo/manyoyo.json` 的 `runs.<name>` 中；
+> 文中如果出现 `~/.manyoyo/run/*.json` 示例，请按兼容历史写法理解。
+> 配置文件中的 `env` 推荐使用对象（map）写法，如 `{ "NODE_ENV": "development" }`。
+
 ## 快速开始示例
 
 ### 最小全局配置
@@ -12,7 +16,7 @@ mkdir -p ~/.manyoyo/
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.7.0-full"
+    "imageVersion": "1.8.0-full"
 }
 EOF
 ```
@@ -167,7 +171,7 @@ docker ps -a
 ```json5
 {
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.7.0-full",
+    "imageVersion": "1.8.0-full",
     "env": [
         "TZ=Asia/Shanghai"
     ]
@@ -320,7 +324,7 @@ export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
 ```json5
 {
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.7.0-full",
+    "imageVersion": "1.8.0-full",
     "env": [
         "TZ=Asia/Shanghai"  // 全局环境变量
     ]
@@ -360,13 +364,13 @@ manyoyo -r claude -e "LOG_LEVEL=debug"
 ```json5
 {
     "imageName": "localhost/myuser/custom-manyoyo",
-    "imageVersion": "2.0.0-full"
+    "imageVersion": "1.8.0-full"
 }
 ```
 
 **构建自定义镜像**：
 ```bash
-manyoyo --ib --in myuser/custom-manyoyo --iv 2.0.0-full --iba TOOL=full
+manyoyo --ib --in myuser/custom-manyoyo --iv 1.8.0-full --iba TOOL=full
 ```
 
 ### 最小化镜像配置
@@ -374,13 +378,13 @@ manyoyo --ib --in myuser/custom-manyoyo --iv 2.0.0-full --iba TOOL=full
 **全局配置**：
 ```json5
 {
-    "imageVersion": "1.7.0-common"  // 使用精简版镜像
+    "imageVersion": "1.8.0-common"  // 使用精简版镜像
 }
 ```
 
 **构建精简镜像**：
 ```bash
-manyoyo --ib --iv 1.7.0-common --iba TOOL=common
+manyoyo --ib --iv 1.8.0-common --iba TOOL=common
 ```
 
 ## 团队协作配置示例
@@ -392,7 +396,7 @@ manyoyo --ib --iv 1.7.0-common --iba TOOL=common
 {
     // 团队统一镜像
     "imageName": "localhost/team/manyoyo",
-    "imageVersion": "1.7.0-full",
+    "imageVersion": "1.8.0-full",
 
     // 项目环境变量
     "env": [

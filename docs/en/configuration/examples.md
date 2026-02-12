@@ -2,6 +2,10 @@
 
 This page provides practical MANYOYO configuration examples covering common usage scenarios.
 
+> Note: Current versions recommend storing run profiles under `runs.<name>` in `~/.manyoyo/manyoyo.json`.
+> If you see `~/.manyoyo/run/*.json` in examples, treat it as a legacy-compatible pattern.
+> For configuration files, `env` is recommended as a map, e.g. `{ "NODE_ENV": "development" }`.
+
 ## Quick Start Examples
 
 ### Minimal Global Configuration
@@ -12,7 +16,7 @@ mkdir -p ~/.manyoyo/
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.7.0-full"
+    "imageVersion": "1.8.0-full"
 }
 EOF
 ```
@@ -167,7 +171,7 @@ docker ps -a
 ```json5
 {
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.7.0-full",
+    "imageVersion": "1.8.0-full",
     "env": [
         "TZ=Asia/Shanghai"
     ]
@@ -320,7 +324,7 @@ export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
 ```json5
 {
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.7.0-full",
+    "imageVersion": "1.8.0-full",
     "env": [
         "TZ=Asia/Shanghai"  // Global environment variable
     ]
@@ -360,13 +364,13 @@ manyoyo -r claude -e "LOG_LEVEL=debug"
 ```json5
 {
     "imageName": "localhost/myuser/custom-manyoyo",
-    "imageVersion": "2.0.0-full"
+    "imageVersion": "1.8.0-full"
 }
 ```
 
 **Build Custom Image**:
 ```bash
-manyoyo --ib --in myuser/custom-manyoyo --iv 2.0.0-full --iba TOOL=full
+manyoyo --ib --in myuser/custom-manyoyo --iv 1.8.0-full --iba TOOL=full
 ```
 
 ### Minimized Image Configuration
@@ -374,13 +378,13 @@ manyoyo --ib --in myuser/custom-manyoyo --iv 2.0.0-full --iba TOOL=full
 **Global Configuration**:
 ```json5
 {
-    "imageVersion": "1.7.0-common"  // Use minimal version image
+    "imageVersion": "1.8.0-common"  // Use minimal version image
 }
 ```
 
 **Build Minimal Image**:
 ```bash
-manyoyo --ib --iv 1.7.0-common --iba TOOL=common
+manyoyo --ib --iv 1.8.0-common --iba TOOL=common
 ```
 
 ## Team Collaboration Configuration Examples
@@ -392,7 +396,7 @@ manyoyo --ib --iv 1.7.0-common --iba TOOL=common
 {
     // Team unified image
     "imageName": "localhost/team/manyoyo",
-    "imageVersion": "1.7.0-full",
+    "imageVersion": "1.8.0-full",
 
     // Project environment variables
     "env": [

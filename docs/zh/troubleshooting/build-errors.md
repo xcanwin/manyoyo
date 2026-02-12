@@ -1,6 +1,7 @@
 # 构建问题排查
 
 本页面介绍 MANYOYO 镜像构建过程中可能遇到的问题及解决方案。
+默认示例使用 `1.8.0-common`；如你使用其他标签，请替换为实际版本。
 
 ## 镜像构建失败
 
@@ -66,7 +67,7 @@ manyoyo --irm
 
 ```bash
 # 跳过所有交互式确认
-manyoyo --ib --iv 1.7.0-common --yes
+manyoyo --ib --iv 1.8.0-common --yes
 ```
 
 #### 4. 国外用户修改镜像源
@@ -81,24 +82,24 @@ manyoyo --ib --iv 1.7.0-common --yes
 
 或使用空值：
 ```bash
-manyoyo --ib --iv 1.7.0-common --iba NODE_MIRROR= --iba NPM_REGISTRY=
+manyoyo --ib --iv 1.8.0-common --iba NODE_MIRROR= --iba NPM_REGISTRY=
 ```
 
 #### 5. 分步构建调试
 
 ```bash
 # 先构建基础版本（更快，问题更少）
-manyoyo --ib --iv 1.7.0-common --iba TOOL=common
+manyoyo --ib --iv 1.8.0-common --iba TOOL=common
 
 # 基础版本成功后，再构建完整版本
-manyoyo --ib --iv 1.7.0-full --iba TOOL=full
+manyoyo --ib --iv 1.8.0-full --iba TOOL=full
 ```
 
 #### 6. 查看详细构建日志
 
 ```bash
 # 保存构建日志
-manyoyo --ib --iv 1.7.0-common 2>&1 | tee build.log
+manyoyo --ib --iv 1.8.0-common 2>&1 | tee build.log
 
 # 查找错误关键字
 grep -i "error\|failed\|fatal" build.log
@@ -132,7 +133,7 @@ sudo systemctl restart docker
 **解决方案**：
 ```bash
 # 构建时跳过 Git SSL 验证（不推荐，仅限开发环境）
-manyoyo --ib --iv 1.7.0-common --iba GIT_SSL_NO_VERIFY=true
+manyoyo --ib --iv 1.8.0-common --iba GIT_SSL_NO_VERIFY=true
 ```
 
 ## 镜像拉取失败
@@ -154,7 +155,7 @@ MANYOYO 默认使用本地镜像（`localhost/xcanwin/manyoyo`），需要先构
 
 ```bash
 # 构建镜像
-manyoyo --ib --iv 1.7.0-common
+manyoyo --ib --iv 1.8.0-common
 
 # 验证镜像
 docker images | grep manyoyo  # 或 podman images
@@ -171,7 +172,8 @@ docker images | grep manyoyo
 # 修改全局配置
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "imageVersion": "1.6.0-full"  # 使用已有的版本
+    // 使用本机已存在的镜像标签
+    "imageVersion": "1.8.0-common"
 }
 EOF
 ```
@@ -180,7 +182,7 @@ EOF
 
 ```bash
 # 命令行指定版本
-manyoyo --iv 1.6.0-full -y c
+manyoyo --iv 1.8.0-common -y c
 ```
 
 ### 镜像不存在
@@ -196,7 +198,7 @@ docker images | grep manyoyo
 manyoyo --iv <x.y.z-后缀> -y c
 
 # 或构建新版本
-manyoyo --ib --iv 1.7.0-common
+manyoyo --ib --iv 1.8.0-common
 ```
 
 ## 网络连接问题
@@ -265,7 +267,7 @@ export HTTPS_PROXY=http://proxy.example.com:8080
 export NO_PROXY=localhost,127.0.0.1
 
 # 重新构建
-manyoyo --ib --iv 1.7.0-common
+manyoyo --ib --iv 1.8.0-common
 ```
 
 ## 磁盘空间不足
@@ -364,7 +366,7 @@ newgrp docker
 docker ps
 
 # 方案 2：使用 sudo（不推荐）
-sudo manyoyo --ib --iv 1.7.0-common
+sudo manyoyo --ib --iv 1.8.0-common
 ```
 
 ### 文件权限问题
@@ -431,7 +433,7 @@ docker version
 rm -rf docker/cache/
 
 # 重新构建（会重新下载）
-manyoyo --ib --iv 1.7.0-common
+manyoyo --ib --iv 1.8.0-common
 ```
 
 ### 缓存未生效
@@ -456,7 +458,7 @@ touch docker/cache/*
 
 ```bash
 # 查看详细构建过程
-manyoyo --ib --iv 1.7.0-common 2>&1 | tee build.log
+manyoyo --ib --iv 1.8.0-common 2>&1 | tee build.log
 
 # 在 Docker 中启用调试
 export DOCKER_BUILDKIT=0  # 使用传统构建器，输出更详细
@@ -481,7 +483,7 @@ podman build -t localhost/xcanwin/manyoyo:test-full \
 podman build --target=base -f docker/manyoyo.Dockerfile .
 
 # 测试特定构建参数
-manyoyo --ib --iv 1.7.0-common --iba TOOL=common --yes
+manyoyo --ib --iv 1.8.0-common --iba TOOL=common --yes
 ```
 
 ## 相关文档
