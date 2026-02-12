@@ -13,7 +13,7 @@ const { startWebServer } = require('../lib/web/server');
 const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/container-run');
 const { initAgentConfigs } = require('../lib/init-config');
 const { buildImage } = require('../lib/image-build');
-const { resolveAgentResumeArg } = require('../lib/agent-resume');
+const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_DEFAULT } = require('../package.json');
 const IMAGE_VERSION_BASE = String(IMAGE_VERSION_DEFAULT || '1.0.0').split('-')[0];
 const IMAGE_VERSION_HELP_EXAMPLE = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
@@ -1210,8 +1210,12 @@ async function handlePostExit(runtime, defaultCommand) {
 
     getHelloTip(runtime.containerName, defaultCommand, runtime.execCommand);
 
-    let tipAskKeep = `❔ 会话已结束。是否保留此后台容器 ${runtime.containerName}? [ y=默认保留, n=删除, 1=首次命令进入, x=执行命令, i=交互式SHELL ]: `;
-    if (runtime.quiet.askkeep || runtime.quiet.full) tipAskKeep = `保留容器吗? [y n 1 x i] `;
+    const resumeCommand = buildAgentResumeCommand(defaultCommand);
+    const hasResumeAction = Boolean(resumeCommand);
+    const menuResume = hasResumeAction ? ', r=恢复首次命令会话' : '';
+    const quietResume = hasResumeAction ? ' r' : '';
+    let tipAskKeep = `❔ 会话已结束。是否保留此后台容器 ${runtime.containerName}? [ y=默认保留, n=删除, 1=首次命令进入${menuResume}, x=执行命令, i=交互式SHELL ]: `;
+    if (runtime.quiet.askkeep || runtime.quiet.full) tipAskKeep = `保留容器吗? [y n 1${quietResume} x i] `;
     const reply = await askQuestion(tipAskKeep);
 
     const firstChar = reply.trim().toLowerCase()[0];
@@ -1224,6 +1228,12 @@ async function handlePostExit(runtime, defaultCommand) {
         runtime.execCommandPrefix = "";
         runtime.execCommandSuffix = "";
         runtime.execCommand = defaultCommand;
+        return true;
+    } else if (firstChar === 'r' && hasResumeAction) {
+        if (!(runtime.quiet.full)) console.log(`${GREEN}✅ 离开当前连接，恢复首次命令会话。${NC}`);
+        runtime.execCommandPrefix = "";
+        runtime.execCommandSuffix = "";
+        runtime.execCommand = resumeCommand;
         return true;
     } else if (firstChar === 'x') {
         const command = await askQuestion('❔ 输入要执行的命令: ');

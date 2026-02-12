@@ -1,4 +1,4 @@
-const { resolveAgentResumeArg } = require('../lib/agent-resume');
+const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
 
 describe('Agent Resume Arg Mapping', () => {
     test('claude command should map to -r', () => {
@@ -35,5 +35,19 @@ describe('Agent Resume Arg Mapping', () => {
 
     test('empty command should return empty string', () => {
         expect(resolveAgentResumeArg('')).toBe('');
+    });
+});
+
+describe('Agent Resume Command Builder', () => {
+    test('should append claude resume arg', () => {
+        expect(buildAgentResumeCommand('IS_SANDBOX=1 claude --dangerously-skip-permissions')).toBe('IS_SANDBOX=1 claude --dangerously-skip-permissions -r');
+    });
+
+    test('should append codex resume arg', () => {
+        expect(buildAgentResumeCommand('codex --dangerously-bypass-approvals-and-sandbox')).toBe('codex --dangerously-bypass-approvals-and-sandbox resume');
+    });
+
+    test('non-agent command should return empty string', () => {
+        expect(buildAgentResumeCommand('npm test')).toBe('');
     });
 });

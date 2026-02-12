@@ -303,6 +303,7 @@ Container exited, please choose an action:
   y - Keep container running in background (default)
   n - Remove container
   1 - Re-enter using initial command
+  r - Resume initial command session (agent commands only)
   x - Execute new command
   i - Enter interactive shell
 ```
@@ -312,6 +313,7 @@ Container exited, please choose an action:
 - **y (default)**: Keep container running, can resume later
 - **n**: Remove container, free resources
 - **1**: Re-enter using the command that started the container
+- **r**: Resume initial command session (auto-append agent resume arg)
 - **x**: Execute new custom command
 - **i**: Enter /bin/bash interactive shell
 

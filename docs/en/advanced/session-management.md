@@ -84,6 +84,7 @@ Container exited, please select an action:
   y - Keep container running in background (default)
   n - Remove container
   1 - Re-enter using the initial command
+  r - Resume initial command session (agent commands only)
   x - Execute a new command
   i - Enter interactive shell
 ```
@@ -135,6 +136,19 @@ manyoyo -n my-project -- -r
 - AI accidentally exited
 - Need to restart AI tool
 - Clear current session but keep container
+
+#### r - Resume Initial Command Session
+
+```bash
+# After selecting 'r', append the agent resume arg to the initial command
+# Example:
+#   Claude -> -r
+#   Codex  -> resume
+```
+
+**Use Cases**:
+- Initial command is an agent CLI
+- Want a fast resume path without manual input
 
 #### x - Execute New Command
 
