@@ -251,4 +251,71 @@ describe('Web Server Auth Gateway', () => {
             fs.rmSync(tempHost, { recursive: true, force: true });
         }
     });
+
+    test('should keep web api responsive while run command is executing', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-run-nonblock-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  const delay = command.includes('sleep 2') ? 2000 : 0;
+  setTimeout(() => {
+    if (command.includes('id')) {
+      process.stdout.write('uid=0(root) gid=0(root) groups=0(root)\\n');
+    }
+    process.exit(0);
+  }, delay);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running'
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const runPromise = request(`${baseUrl}/api/sessions/demo/run`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ command: 'sleep 2 && id' })
+            });
+
+            await new Promise(resolve => setTimeout(resolve, 160));
+
+            const start = Date.now();
+            const configRes = await request(`${baseUrl}/api/config`, {
+                headers: { Cookie: authCookie }
+            });
+            const elapsed = Date.now() - start;
+
+            expect(configRes.response.status).toBe(200);
+            expect(elapsed).toBeLessThan(900);
+
+            const runRes = await runPromise;
+            expect(runRes.response.status).toBe(200);
+            expect(runRes.json).toEqual(expect.objectContaining({ exitCode: 0 }));
+            expect(String(runRes.json.output || '')).toContain('uid=0(root)');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
 });

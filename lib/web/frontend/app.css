@@ -417,7 +417,6 @@ textarea:focus-visible {
     text-align: left;
     width: 100%;
     border: 1px solid var(--line);
-    border-left: 4px solid transparent;
     background: var(--panel-strong);
     color: var(--text);
     border-radius: 10px;
@@ -428,15 +427,30 @@ textarea:focus-visible {
 
 .session-item:hover {
     border-color: #d1aa7f;
-    border-left-color: #d39c6d;
     background: #fff8ef;
+    box-shadow: inset 3px 0 0 #d39c6d;
 }
 
 .session-item.active {
     border-color: #c68d5a;
-    border-left-color: var(--accent);
     background: #fff3e8;
-    box-shadow: 0 0 0 2px rgba(196, 85, 31, 0.14);
+    box-shadow: inset 3px 0 0 var(--accent), 0 0 0 2px rgba(196, 85, 31, 0.14);
+}
+
+.session-item.history-only {
+    color: #b3ab9f;
+}
+
+.session-item.history-only .session-name,
+.session-item.history-only .session-count,
+.session-item.history-only .session-time {
+    color: #b3ab9f;
+}
+
+.session-item.history-only .session-status {
+    background: #f7f3ed;
+    border-color: #e3dbd1;
+    color: #b3ab9f;
 }
 
 .session-name {
