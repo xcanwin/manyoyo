@@ -27,7 +27,7 @@
 - 容器：`docker` `podman`
 - Java：`java` `javac` `mvn`
 - Go：`go` `gopls`
-- Agent CLI：`codex` `claude` `gemini` `copilot` `opencode`
+- Agent CLI：`codex` `claude` `gemini` `opencode`
 
 ## 安装名映射（仅在缺失时使用）
 
@@ -54,7 +54,6 @@
 - `codex` -> `@openai/codex`
 - `claude` -> `@anthropic-ai/claude-code`
 - `gemini` -> `@google/gemini-cli`
-- `copilot` -> `@github/copilot`
 - `opencode` -> `opencode-ai`
 
 ## 探测模板
@@ -68,5 +67,5 @@ command -v <cmd1> <cmd2> <cmd3> || true
 一次性批量探测（仅在允许场景）：
 
 ```bash
-command -v python3 pip node npm git gh jq rg curl wget docker podman java javac mvn go gopls codex claude gemini copilot opencode || true
+command -v python3 pip node npm git gh jq rg curl wget docker podman java javac mvn go gopls codex claude gemini opencode || true
 ```

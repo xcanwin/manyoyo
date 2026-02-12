@@ -4,6 +4,7 @@
 FROM ubuntu:24.04 AS cache-stage
 
 ARG TARGETARCH
+ARG TOOL="common"
 
 # 复制缓存目录（可能为空）
 COPY ./docker/cache/ /cache/
@@ -29,27 +30,31 @@ RUN <<EOX
         curl -fsSL ${NVM_NODEJS_ORG_MIRROR}/latest-v24.x/${NODE_TAR} | tar -xz -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE'
     fi
 
-    # JDT LSP: 检测缓存，不存在则下载
+    # JDT LSP: 仅在 full/java 时准备缓存
     mkdir -p /opt/jdtls
-    if [ -f /cache/jdtls/jdt-language-server-latest.tar.gz ]; then
-        echo "使用 JDT LSP 缓存"
-        tar -xzf /cache/jdtls/jdt-language-server-latest.tar.gz -C /opt/jdtls --no-same-owner
-    else
-        echo "下载 JDT LSP"
-        curl -fsSL https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz | tar -xz -C /opt/jdtls
-    fi
+    case ",$TOOL," in *,full,*|*,java,*)
+        if [ -f /cache/jdtls/jdt-language-server-latest.tar.gz ]; then
+            echo "使用 JDT LSP 缓存"
+            tar -xzf /cache/jdtls/jdt-language-server-latest.tar.gz -C /opt/jdtls --no-same-owner
+        else
+            echo "下载 JDT LSP"
+            curl -fsSL https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz | tar -xz -C /opt/jdtls
+        fi
+    ;; esac
 
-    # gopls: 检测缓存，不存在则下载
+    # gopls: 仅在 full/go 时准备缓存
     mkdir -p /opt/gopls
-    if [ -f /cache/gopls/gopls-linux-${ARCH_GO} ]; then
-        echo "使用 gopls 缓存"
-        cp /cache/gopls/gopls-linux-${ARCH_GO} /opt/gopls/gopls
-        chmod +x /opt/gopls/gopls
-    else
-        echo "下载 gopls (需要 go 环境)"
-        # gopls 需要编译，这里跳过，在最终阶段处理
-        touch /opt/gopls/.no-cache
-    fi
+    case ",$TOOL," in *,full,*|*,go,*)
+        if [ -f /cache/gopls/gopls-linux-${ARCH_GO} ]; then
+            echo "使用 gopls 缓存"
+            cp /cache/gopls/gopls-linux-${ARCH_GO} /opt/gopls/gopls
+            chmod +x /opt/gopls/gopls
+        else
+            echo "下载 gopls (需要 go 环境)"
+            # gopls 需要编译，这里跳过，在最终阶段处理
+            touch /opt/gopls/.no-cache
+        fi
+    ;; esac
 EOX
 
 # ==============================================================================
@@ -68,6 +73,8 @@ ARG PIP_INDEX_URL=https://mirrors.tencent.com/pypi/simple
 # 轻量级文本解析依赖（可通过 --build-arg 覆盖）
 ARG PY_TEXT_PIP_PACKAGES="PyYAML python-dotenv tomlkit pyjson5 jsonschema"
 ARG PY_TEXT_EXTRA_PIP_PACKAGES=""
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
 
 # 合并系统依赖安装为单层，减少镜像体积
 RUN <<EOX
@@ -128,7 +135,6 @@ ARG GIT_SSL_NO_VERIFY=false
 RUN <<EOX
     # 配置 node.js
     npm config set registry=${NPM_REGISTRY}
-    npm install -g npm
 
     # 安装 LSP服务（python、typescript）
     npm install -g pyright typescript-language-server typescript
@@ -151,8 +157,12 @@ EOF
     claude plugin install ralph-loop@claude-plugins-official
     claude plugin install typescript-lsp@claude-plugins-official
     claude plugin install pyright-lsp@claude-plugins-official
-    claude plugin install gopls-lsp@claude-plugins-official
-    claude plugin install jdtls-lsp@claude-plugins-official
+    case ",$TOOL," in *,full,*|*,go,*)
+        claude plugin install gopls-lsp@claude-plugins-official
+    ;; esac
+    case ",$TOOL," in *,full,*|*,java,*)
+        claude plugin install jdtls-lsp@claude-plugins-official
+    ;; esac
 
     GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY claude plugin marketplace add https://github.com/anthropics/skills
     claude plugin install example-skills@anthropic-agent-skills
@@ -200,21 +210,6 @@ enabled = false
 EOF
     ;; esac
 
-    # 安装 Copilot CLI
-    case ",$TOOL," in *,full,*|*,copilot,*)
-        npm install -g @github/copilot
-        mkdir -p ~/.copilot/
-        cat > ~/.copilot/config.json <<EOF
-{
-    "banner": "never",
-    "model": "gemini-3-pro-preview",
-    "render_markdown": true,
-    "screen_reader": false,
-    "theme": "auto"
-}
-EOF
-    ;; esac
-
     # 安装 OpenCode CLI
     case ",$TOOL," in *,full,*|*,opencode,*)
         npm install -g opencode-ai
@@ -251,7 +246,7 @@ EOF
 EOX
 
 # 从 cache-stage 复制 JDT LSP（缓存或下载）
-COPY --from=cache-stage /opt/jdtls /root/.local/share/jdtls
+COPY --from=cache-stage /opt/jdtls /tmp/jdtls-cache
 
 RUN <<EOX
     # 安装 java
@@ -260,12 +255,15 @@ RUN <<EOX
         apt-get install -y --no-install-recommends openjdk-21-jdk maven
 
         # 配置 LSP服务（java）
+        mkdir -p ~/.local/share/
+        cp -a /tmp/jdtls-cache ~/.local/share/jdtls
         ln -sf ~/.local/share/jdtls/bin/jdtls /usr/local/bin/jdtls
 
         # 清理
         apt-get clean
         rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
     ;; esac
+    rm -rf /tmp/jdtls-cache
 EOX
 
 # 从 cache-stage 复制 gopls（缓存或下载）
@@ -288,13 +286,12 @@ RUN <<EOX
             go install golang.org/x/tools/gopls@latest
             ln -sf ~/go/bin/gopls /usr/local/bin/gopls
         fi
-        rm -rf /tmp/gopls-cache
-
         # 清理
         apt-get clean
         go clean -modcache -cache
         rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
     ;; esac
+    rm -rf /tmp/gopls-cache
 EOX
 
 RUN <<EOX
