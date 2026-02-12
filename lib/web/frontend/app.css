@@ -735,7 +735,7 @@ body.terminal-mode .composer {
     flex-direction: column;
     gap: 6px;
     animation: msgIn 210ms ease both;
-    animation-delay: calc(var(--msg-index, 0) * 22ms);
+    animation-delay: 0ms;
 }
 
 .msg.user {
@@ -751,6 +751,39 @@ body.terminal-mode .composer {
     color: var(--muted);
     font-size: 12px;
     font-weight: 600;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.25;
+}
+
+.msg-meta-line {
+    white-space: nowrap;
+}
+
+.msg.user .msg-meta {
+    align-items: flex-end;
+    text-align: right;
+}
+
+.msg.assistant .msg-meta,
+.msg.system .msg-meta {
+    align-items: flex-start;
+    text-align: left;
+}
+
+.msg-meta-time {
+    font-weight: 500;
+}
+
+.msg-meta-role {
+    font-weight: 700;
+}
+
+.msg-meta-exit {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1px;
 }
 
 .bubble {
