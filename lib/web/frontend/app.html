@@ -18,6 +18,10 @@
                     <div class="brand">MANYOYO Web</div>
                     <div class="brand-sub">Container Session Console</div>
                 </div>
+                <div class="sidebar-actions">
+                    <button type="button" id="openConfigBtn" class="secondary">配置</button>
+                    <button type="button" id="openCreateBtn">新建</button>
+                </div>
                 <button
                     type="button"
                     id="mobileSidebarClose"
@@ -25,10 +29,6 @@
                     aria-label="关闭会话列表"
                 >关闭</button>
             </div>
-            <form class="new-session" id="newSessionForm">
-                <input id="newSessionName" placeholder="容器名 (例如 my-dev)" />
-                <button type="submit">新建</button>
-            </form>
             <div class="session-head">
                 <span>会话</span>
                 <span id="sessionCount">0 个</span>
@@ -91,6 +91,73 @@
             </form>
         </main>
         <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
+
+        <div id="configModal" class="modal-backdrop" hidden>
+            <section class="modal" role="dialog" aria-modal="true" aria-labelledby="configModalTitle">
+                <header class="modal-header">
+                    <h2 id="configModalTitle">编辑配置 (~/.manyoyo/manyoyo.json)</h2>
+                    <button type="button" id="configCancelBtn" class="secondary">关闭</button>
+                </header>
+                <div class="modal-body">
+                    <div id="configPath" class="modal-tip"></div>
+                    <textarea id="configEditor" class="config-editor" spellcheck="false"></textarea>
+                    <div id="configError" class="modal-error" hidden></div>
+                </div>
+                <footer class="modal-footer">
+                    <button type="button" id="configReloadBtn" class="secondary">重新加载</button>
+                    <button type="button" id="configSaveBtn">保存</button>
+                </footer>
+            </section>
+        </div>
+
+        <div id="createModal" class="modal-backdrop" hidden>
+            <section class="modal" role="dialog" aria-modal="true" aria-labelledby="createModalTitle">
+                <header class="modal-header">
+                    <h2 id="createModalTitle">新建容器会话</h2>
+                    <button type="button" id="createCancelBtn" class="secondary">关闭</button>
+                </header>
+                <form id="createSessionForm" class="modal-body">
+                    <div class="form-grid">
+                        <label>run
+                            <select id="createRun">
+                                <option value="">(不使用 run)</option>
+                            </select>
+                        </label>
+                        <label>hostPath<input id="createHostPath" placeholder="/abs/path/project" /></label>
+                        <label>containerName<input id="createContainerName" placeholder="my-dev 或 my-{now}" /></label>
+                        <label>containerPath<input id="createContainerPath" placeholder="/workspace" /></label>
+                        <label>imageName<input id="createImageName" placeholder="localhost/xcanwin/manyoyo" /></label>
+                        <label>imageVersion<input id="createImageVersion" placeholder="1.7.4-common" /></label>
+                        <label>containerMode
+                            <select id="createContainerMode">
+                                <option value="">(跟随默认)</option>
+                                <option value="common">common</option>
+                                <option value="dind">dind</option>
+                                <option value="sock">sock</option>
+                            </select>
+                        </label>
+                        <label>shellPrefix<input id="createShellPrefix" placeholder="例如 IS_SANDBOX=1" /></label>
+                        <label>shell<input id="createShell" placeholder="例如 claude / codex" /></label>
+                        <label>shellSuffix<input id="createShellSuffix" placeholder="例如 --dangerously-skip-permissions" /></label>
+                        <label>yolo<input id="createYolo" placeholder="例如 c / cx / gm / oc" /></label>
+                    </div>
+                    <label class="text-block">env (KEY=VALUE，每行一项)
+                        <textarea id="createEnv" placeholder="KEY=value"></textarea>
+                    </label>
+                    <label class="text-block">envFile (绝对路径，每行一项)
+                        <textarea id="createEnvFile" placeholder="/abs/path/.env"></textarea>
+                    </label>
+                    <label class="text-block">volumes (每行一项)
+                        <textarea id="createVolumes" placeholder="/host/path:/container/path"></textarea>
+                    </label>
+                    <div id="createError" class="modal-error" hidden></div>
+                    <footer class="modal-footer">
+                        <button type="button" id="createResetBtn" class="secondary">重置默认</button>
+                        <button type="submit" id="createSubmitBtn">创建并进入</button>
+                    </footer>
+                </form>
+            </section>
+        </div>
     </div>
 
     <script src="/app/vendor/xterm.js"></script>
