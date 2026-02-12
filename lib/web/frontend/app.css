@@ -780,10 +780,22 @@ body.terminal-mode .composer {
     font-weight: 700;
 }
 
-.msg-meta-exit {
+.msg-exit {
     font-family: var(--font-mono);
     font-size: 11px;
     letter-spacing: 0.1px;
+    color: var(--muted);
+}
+
+.msg.user .msg-exit {
+    align-self: flex-end;
+    text-align: right;
+}
+
+.msg.assistant .msg-exit,
+.msg.system .msg-exit {
+    align-self: flex-start;
+    text-align: left;
 }
 
 .bubble {
