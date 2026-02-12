@@ -31,7 +31,7 @@ EOF2
 manyoyo -r claude
 ```
 
-## Agent 配置示例
+## 智能体配置示例
 
 ### Claude Code（自定义 Base URL）
 

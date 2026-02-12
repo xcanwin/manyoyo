@@ -65,17 +65,22 @@ EOF
 
 manyoyo -r project-a
 
-# 方式 2：项目配置
-cat > ./myproject/.manyoyo.json << 'EOF'
+# 方式 2：带项目路径的运行配置
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "containerName": "my-myproject",
-    "envFile": ["/abs/path/anthropic_claudecode.env"],
-    "yolo": "c"
+    "runs": {
+        "project-b": {
+            "containerName": "my-myproject",
+            "hostPath": "/abs/path/myproject",
+            "containerPath": "/abs/path/myproject",
+            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "yolo": "c"
+        }
+    }
 }
 EOF
 
-cd myproject
-manyoyo -n my-myproject -x /bin/bash
+manyoyo -r project-b
 ```
 
 ## 会话恢复

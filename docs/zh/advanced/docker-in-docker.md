@@ -179,20 +179,26 @@ podman images
 ### 示例 2：CI/CD 流水线
 
 ```bash
-# 1. 创建项目配置
-cat > ./myproject/.manyoyo.json << 'EOF'
+# 1. 创建 CI 运行配置
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "containerName": "my-ci",
-    "containerMode": "dind",
-    "env": {
-        "CI": "true",
-        "NODE_ENV": "test"
+    "runs": {
+        "ci": {
+            "containerName": "my-ci",
+            "hostPath": "/abs/path/myproject",
+            "containerPath": "/abs/path/myproject",
+            "containerMode": "dind",
+            "env": {
+                "CI": "true",
+                "NODE_ENV": "test"
+            }
+        }
     }
 }
 EOF
 
 # 2. 运行 CI 任务
-manyoyo -n my-ci --hp ./myproject -m dind -x /bin/bash
+manyoyo -r ci -x /bin/bash
 
 # 3. 在容器内运行测试
 $ npm install

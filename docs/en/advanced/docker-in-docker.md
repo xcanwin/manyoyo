@@ -179,20 +179,26 @@ podman images
 ### Example 2: CI/CD Pipeline
 
 ```bash
-# 1. Create project configuration
-cat > ./myproject/.manyoyo.json << 'EOF'
+# 1. Create CI run profile
+cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "containerName": "my-ci",
-    "containerMode": "dind",
-    "env": {
-        "CI": "true",
-        "NODE_ENV": "test"
+    "runs": {
+        "ci": {
+            "containerName": "my-ci",
+            "hostPath": "/abs/path/myproject",
+            "containerPath": "/abs/path/myproject",
+            "containerMode": "dind",
+            "env": {
+                "CI": "true",
+                "NODE_ENV": "test"
+            }
+        }
     }
 }
 EOF
 
 # 2. Run CI tasks
-manyoyo -n my-ci --hp ./myproject -m dind -x /bin/bash
+manyoyo -r ci -x /bin/bash
 
 # 3. Run tests inside the container
 $ npm install
