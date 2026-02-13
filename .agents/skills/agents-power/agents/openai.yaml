@@ -1,0 +1,4 @@
+interface:
+  display_name: "AGENTS 能力中枢"
+  short_description: "统一评估、初始化与更新 AGENTS.md"
+  default_prompt: "使用 $agents-power 先评估 AGENTS.md，再按需要生成或更新。"
