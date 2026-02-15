@@ -127,6 +127,30 @@ Mode descriptions:
 - `dind` - Docker-in-Docker mode, secure nested containers
 - `sock` - Mount Docker Socket mode (dangerous, can access everything on host)
 
+#### serverUser
+- **Type**: String
+- **Default**: `admin`
+- **Description**: Web login username (`--server` mode)
+- **Environment Variable**: `MANYOYO_SERVER_USER`
+- **Example**:
+```json5
+{
+    "serverUser": "admin"
+}
+```
+
+#### serverPass
+- **Type**: String
+- **Default**: Auto-generated random password when unset
+- **Description**: Web login password (`--server` mode)
+- **Environment Variable**: `MANYOYO_SERVER_PASS`
+- **Example**:
+```json5
+{
+    "serverPass": "change-this-password"
+}
+```
+
 ### Environment Variable Configuration
 
 #### envFile
@@ -274,6 +298,11 @@ Brief description:
 Takes the value from the highest priority:
 ```
 Command-line arguments > runs.<name> > Global configuration > Default values
+```
+
+For `serverUser` / `serverPass`, the priority is:
+```
+Command-line arguments > runs.<name> > Global configuration > Environment variables > Default values
 ```
 
 ### Merge Parameters
@@ -497,3 +526,4 @@ vim ~/.manyoyo/manyoyo.json
 - [Configuration System Overview](./README.md) - Understand configuration priority mechanism
 - [Environment Variables Details](./environment.md) - Learn how to configure environment variables
 - [Configuration Examples](./examples.md) - View more practical examples
+- [Web Server Auth and Security](../advanced/web-server-auth.md) - Auth behavior and security baseline for `--server`

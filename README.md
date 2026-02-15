@@ -119,6 +119,7 @@ manyoyo -y c          # Claude Code（或 claude / cc）
 manyoyo -y gm         # Gemini（或 gemini / g）
 manyoyo -y cx         # Codex（或 codex）
 manyoyo -y oc         # OpenCode（或 opencode）
+manyoyo --update      # 更新 MANYOYO（全局 npm 安装场景）
 
 # 容器管理
 manyoyo -l

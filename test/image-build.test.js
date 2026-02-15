@@ -1,6 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { buildImage } = require('../lib/image-build');
 
 function parseImageVersionTag(tag) {
@@ -109,6 +110,8 @@ describe('image-build with unified build and buildkit fallback', () => {
             'docker.io/moby/buildkit:latest',
             '--frontend',
             'dockerfile.v0',
+            '--opt',
+            'build-arg:HTTP_PROXY=$HTTP_PROXY',
             '--opt',
             'build-arg:TOOL=common',
             '--opt',
@@ -242,5 +245,30 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(options.runCmd).toHaveBeenCalledTimes(1);
         expect(options.runCmdPipeline).toHaveBeenCalledTimes(1);
         expect(options.error).toHaveBeenCalled();
+    });
+
+    test('should honor cacheTTL=0 from config without falling back to default', async () => {
+        const cacheHash = crypto.createHash('sha256').update('cache').digest('hex');
+        const options = createBaseOptions({
+            loadConfig: () => ({ cacheTTL: 0 }),
+            runCmd: jest.fn((cmd, args) => {
+                if (cmd === 'curl') {
+                    if (Array.isArray(args) && args.some(arg => String(arg).includes('SHASUMS256.txt'))) {
+                        return `${cacheHash} node-v24.0.0-linux-x64.tar.gz\n`;
+                    }
+                    return '';
+                }
+                return '';
+            })
+        });
+
+        fs.writeFileSync(
+            path.join(options.rootDir, 'docker', 'cache', '.timestamps.json'),
+            JSON.stringify({ 'node/': '2000-01-01T00:00:00.000Z' })
+        );
+
+        await buildImage(options);
+        const curlCalls = options.runCmd.mock.calls.filter(([cmd]) => cmd === 'curl');
+        expect(curlCalls.length).toBeGreaterThan(0);
     });
 });

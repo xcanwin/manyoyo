@@ -695,6 +695,89 @@ describe('MANYOYO CLI', () => {
             expect(output).toContain('--init-config');
         });
 
+        test('--update option should be accepted', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --help`,
+                { encoding: 'utf-8' }
+            );
+            expect(output).toContain('--update');
+        });
+
+        test('--update should invoke npm update when global install source is registry', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-update-'));
+            const fakeNpmPath = path.join(tempDir, 'npm');
+            const npmLogPath = path.join(tempDir, 'npm.log');
+            const depPath = path.join(tempDir, 'dep-registry');
+
+            fs.mkdirSync(depPath, { recursive: true });
+
+            fs.writeFileSync(fakeNpmPath, `#!/bin/sh
+echo "$@" >> "${npmLogPath}"
+if [ "$1" = "ls" ]; then
+cat <<EOF
+{"dependencies":{"@xcanwin/manyoyo":{"path":"${depPath}"}}}
+EOF
+fi
+exit 0
+`, { mode: 0o755 });
+
+            try {
+                execSync(`"${process.execPath}" ${BIN_PATH} --update`, {
+                    encoding: 'utf-8',
+                    env: {
+                        ...process.env,
+                        PATH: `${tempDir}:${process.env.PATH}`,
+                        HOME: tempDir
+                    },
+                    cwd: tempDir
+                });
+
+                const npmArgs = fs.readFileSync(npmLogPath, 'utf-8').trim().split('\n');
+                expect(npmArgs.some(line => line.startsWith('ls -g @xcanwin/manyoyo'))).toBe(true);
+                expect(npmArgs).toContain('update -g @xcanwin/manyoyo');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
+        test('--update should skip npm update when global install source is local file install', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-update-file-'));
+            const fakeNpmPath = path.join(tempDir, 'npm');
+            const npmLogPath = path.join(tempDir, 'npm.log');
+            const depRealPath = path.join(tempDir, 'dep-real');
+            const depLinkPath = path.join(tempDir, 'dep-link');
+            fs.mkdirSync(depRealPath, { recursive: true });
+            fs.symlinkSync(depRealPath, depLinkPath);
+
+            fs.writeFileSync(fakeNpmPath, `#!/bin/sh
+echo "$@" >> "${npmLogPath}"
+if [ "$1" = "ls" ]; then
+cat <<EOF
+{"dependencies":{"@xcanwin/manyoyo":{"resolved":"file:/tmp/local-src","path":"${depLinkPath}"}}}
+EOF
+fi
+exit 0
+`, { mode: 0o755 });
+
+            try {
+                execSync(`"${process.execPath}" ${BIN_PATH} --update`, {
+                    encoding: 'utf-8',
+                    env: {
+                        ...process.env,
+                        PATH: `${tempDir}:${process.env.PATH}`,
+                        HOME: tempDir
+                    },
+                    cwd: tempDir
+                });
+
+                const npmArgs = fs.readFileSync(npmLogPath, 'utf-8').trim().split('\n');
+                expect(npmArgs.some(line => line.startsWith('ls -g @xcanwin/manyoyo'))).toBe(true);
+                expect(npmArgs.some(line => line.startsWith('update -g @xcanwin/manyoyo'))).toBe(false);
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
         test('--show-config should include server mode and port', () => {
             const output = execSync(
                 `node ${BIN_PATH} --show-config --server 39001`,

@@ -640,6 +640,35 @@ function installManyoyo(name) {
     process.exit(0);
 }
 
+function updateManyoyo() {
+    let isLocalFileInstall = false;
+    try {
+        const listOutput = runCmd('npm', ['ls', '-g', '@xcanwin/manyoyo', '--json', '--long'], { stdio: 'pipe' });
+        const listJson = JSON.parse(listOutput || '{}');
+        const dep = listJson && listJson.dependencies && listJson.dependencies['@xcanwin/manyoyo'];
+        const resolved = dep && typeof dep.resolved === 'string' ? dep.resolved : '';
+        const depPath = dep && typeof dep.path === 'string' ? dep.path : '';
+
+        if (resolved.startsWith('file:')) {
+            isLocalFileInstall = true;
+        } else if (depPath && fs.existsSync(depPath)) {
+            isLocalFileInstall = fs.lstatSync(depPath).isSymbolicLink();
+        }
+    } catch (e) {
+        // ignore detect errors and fallback to registry update
+    }
+
+    if (isLocalFileInstall) {
+        console.log(`${YELLOW}ℹ️  检测到 MANYOYO 为本地 file 安装（npm install -g . / npm link），跳过在线更新。${NC}`);
+        console.log(`${YELLOW}   如需更新，请在本地仓库拉取最新代码后重新安装。${NC}`);
+        return;
+    }
+
+    console.log(`${CYAN}🔄 正在更新 ${MANYOYO_NAME} 到最新版本...${NC}`);
+    runCmd('npm', ['update', '-g', '@xcanwin/manyoyo'], { stdio: 'inherit' });
+    console.log(`${GREEN}✅ 更新完成，请重新执行 ${MANYOYO_NAME} --version 确认版本。${NC}`);
+}
+
 function getContList() {
     try {
         const result = execSync(`${DOCKER_CMD} ps -a --size --filter "ancestor=manyoyo" --filter "ancestor=$(${DOCKER_CMD} images -a --format '{{.Repository}}:{{.Tag}}' | grep manyoyo)" --format "table {{.Names}}\\t{{.Status}}\\t{{.Size}}\\t{{.ID}}\\t{{.Image}}\\t{{.Ports}}\\t{{.Networks}}\\t{{.Mounts}}"`,
@@ -724,6 +753,7 @@ async function setupCommander() {
   -- <args...>  → 直接透传命令后缀（优先级最高）
 
 示例:
+  ${MANYOYO_NAME} --update                            更新 MANYOYO 到最新版本
   ${MANYOYO_NAME} --ib --iv ${IMAGE_VERSION_HELP_EXAMPLE}              构建镜像
   ${MANYOYO_NAME} --init-config all                   从本机 Agent 配置初始化 ~/.manyoyo
   ${MANYOYO_NAME} -r claude                           使用 manyoyo.json 的 runs.claude 快速启动
@@ -751,6 +781,7 @@ async function setupCommander() {
         .option('--ib, --image-build', '构建镜像')
         .option('--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--init-config [agents]', '初始化 Agent 配置到 ~/.manyoyo (all 或逗号分隔: claude,codex,gemini,opencode)')
+        .option('--update', '更新 MANYOYO（若检测为本地 file 安装则跳过）')
         .option('--irm, --image-remove', '清理悬空镜像和 <none> 镜像')
         .option('-e, --env <env>', '设置环境变量 XXX=YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--ef, --env-file <file>', '设置环境变量通过文件 (仅支持绝对路径，如 /abs/path.env)', (value, previous) => [...(previous || []), value], [])
@@ -784,8 +815,9 @@ async function setupCommander() {
     }
 
     const isInitConfigMode = process.argv.some(arg => arg === '--init-config' || arg.startsWith('--init-config='));
-    // init-config 只处理本地文件，不依赖 docker/podman
-    if (!isInitConfigMode) {
+    const isUpdateMode = process.argv.includes('--update');
+    // init-config/update 只处理本地文件或 npm，不依赖 docker/podman
+    if (!isInitConfigMode && !isUpdateMode) {
         // Ensure docker/podman is available
         ensureDocker();
     }
@@ -801,6 +833,11 @@ async function setupCommander() {
 
     if (options.yes) {
         YES_MODE = true;
+    }
+
+    if (options.update) {
+        updateManyoyo();
+        process.exit(0);
     }
 
     if (options.initConfig !== undefined) {

@@ -64,6 +64,14 @@ Override parameters include:
 - `yolo` - YOLO mode selection
 - `shellPrefix` - Command prefix
 - `shell` - Execution command
+- `serverUser` - Web login username
+- `serverPass` - Web login password
+
+For web auth parameters `serverUser` / `serverPass`, environment variables are also supported with this priority:
+
+`command-line arguments > runs.<name> > global configuration > environment variables > defaults`
+
+Environment variable keys: `MANYOYO_SERVER_USER`, `MANYOYO_SERVER_PASS`.
 
 Example:
 ```bash
@@ -102,6 +110,8 @@ Example:
 | Override | `imageVersion` | Takes highest priority value | e.g., `1.8.0-common` |
 | Override | `containerMode` | Takes highest priority value | `common`, `dind`, `sock` |
 | Override | `yolo` | Takes highest priority value | `c`, `gm`, `cx`, `oc` |
+| Override | `serverUser` | Uses web auth priority order | CLI > `runs.<name>` > global > env vars > defaults |
+| Override | `serverPass` | Uses web auth priority order | CLI > `runs.<name>` > global > env vars > defaults |
 | Merge | `env` | Map merge by key | Global + `runs.<name>` + CLI (later source overrides same key) |
 | Merge | `envFile` | Array accumulation merge | Absolute-path env files from global + `runs.<name>` + CLI |
 | Merge | `volumes` | Array accumulation merge | All mount volumes take effect |
@@ -126,3 +136,4 @@ These debugging commands will display the merged results from all configuration 
 - [Environment Variables Details](./environment.md) - Learn how to configure environment variables
 - [Configuration Files Details](./config-files.md) - Learn all configuration options
 - [Configuration Examples](./examples.md) - View practical configuration examples
+- [Web Server Auth and Security](../advanced/web-server-auth.md) - Learn auth behavior and security guidance for `--server`

@@ -193,6 +193,18 @@ manyoyo --ef $HOME/.manyoyo/env/opencode.env -x opencode
 # 6. 命令行的 VAR=value
 ```
 
+## MANYOYO 自身环境变量
+
+除传入容器的 `env` / `envFile` 外，MANYOYO 还支持用于网页认证的自身环境变量：
+
+- `MANYOYO_SERVER_USER`
+- `MANYOYO_SERVER_PASS`
+
+这两个变量用于 `--server` 模式认证，不会注入到容器内业务进程。优先级详见：
+
+- [配置系统概览](./README.md)
+- [网页服务认证与安全实践](../advanced/web-server-auth.md)
+
 ## 最佳实践
 
 ### 1. 使用命名规范

@@ -193,6 +193,18 @@ Example:
 # 6. VAR=value from command line
 ```
 
+## MANYOYO Runtime Environment Variables
+
+Besides container `env` / `envFile`, MANYOYO also supports runtime env vars for web authentication:
+
+- `MANYOYO_SERVER_USER`
+- `MANYOYO_SERVER_PASS`
+
+These are used by `--server` auth and are not injected into container workloads. See:
+
+- [Configuration System Overview](./README.md)
+- [Web Server Auth and Security](../advanced/web-server-auth.md)
+
 ## Best Practices
 
 ### 1. Use Naming Conventions

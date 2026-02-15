@@ -127,6 +127,30 @@ MANYOYO 支持两种配置文件：
 - `dind` - Docker-in-Docker 模式，安全的嵌套容器
 - `sock` - 挂载 Docker Socket 模式（危险，可访问宿主机一切）
 
+#### serverUser
+- **类型**：字符串
+- **默认值**：`admin`
+- **说明**：网页服务登录用户名（`--server` 模式）
+- **环境变量**：`MANYOYO_SERVER_USER`
+- **示例**：
+```json5
+{
+    "serverUser": "admin"
+}
+```
+
+#### serverPass
+- **类型**：字符串
+- **默认值**：未设置时自动生成随机密码
+- **说明**：网页服务登录密码（`--server` 模式）
+- **环境变量**：`MANYOYO_SERVER_PASS`
+- **示例**：
+```json5
+{
+    "serverPass": "change-this-password"
+}
+```
+
 ### 环境变量配置
 
 #### envFile
@@ -274,6 +298,11 @@ manyoyo -r claude
 取最高优先级的值：
 ```
 命令行参数 > runs.<name> > 全局配置 > 默认值
+```
+
+其中 `serverUser` / `serverPass` 的优先级为：
+```
+命令行参数 > runs.<name> > 全局配置 > 环境变量 > 默认值
 ```
 
 ### 合并型参数
@@ -497,3 +526,4 @@ vim ~/.manyoyo/manyoyo.json
 - [配置系统概览](./README.md) - 了解配置优先级机制
 - [环境变量详解](./environment.md) - 学习如何配置环境变量
 - [配置示例](./examples.md) - 查看更多实用示例
+- [网页服务认证与安全实践](../advanced/web-server-auth.md) - `--server` 模式认证与安全基线

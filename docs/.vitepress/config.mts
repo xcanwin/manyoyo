@@ -250,7 +250,8 @@ export default defineConfig({
               collapsed: false,
               items: [
                 { text: 'Docker-in-Docker', link: '/zh/advanced/docker-in-docker' },
-                { text: '会话管理', link: '/zh/advanced/session-management' }
+                { text: '会话管理', link: '/zh/advanced/session-management' },
+                { text: '网页服务认证', link: '/zh/advanced/web-server-auth' }
               ]
             },
             {
@@ -338,7 +339,8 @@ export default defineConfig({
               collapsed: false,
               items: [
                 { text: 'Docker-in-Docker', link: '/en/advanced/docker-in-docker' },
-                { text: 'Session Management', link: '/en/advanced/session-management' }
+                { text: 'Session Management', link: '/en/advanced/session-management' },
+                { text: 'Web Server Auth', link: '/en/advanced/web-server-auth' }
               ]
             },
             {

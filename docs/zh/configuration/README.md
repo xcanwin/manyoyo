@@ -64,6 +64,14 @@ MANYOYO 配置参数分为两类，具有不同的合并行为：
 - `yolo` - YOLO 模式选择
 - `shellPrefix` - 命令前缀
 - `shell` - 执行命令
+- `serverUser` - 网页服务登录用户名
+- `serverPass` - 网页服务登录密码
+
+其中网页认证参数 `serverUser` / `serverPass` 还支持环境变量兜底，优先级为：
+
+`命令行参数 > runs.<name> > 全局配置 > 环境变量 > 默认值`
+
+对应环境变量：`MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`。
 
 示例：
 ```bash
@@ -102,6 +110,8 @@ MANYOYO 配置参数分为两类，具有不同的合并行为：
 | 覆盖型 | `imageVersion` | 取最高优先级的值 | 如 `1.8.0-common` |
 | 覆盖型 | `containerMode` | 取最高优先级的值 | `common`, `dind`, `sock` |
 | 覆盖型 | `yolo` | 取最高优先级的值 | `c`, `gm`, `cx`, `oc` |
+| 覆盖型 | `serverUser` | 按网页认证优先级取值 | CLI > `runs.<name>` > 全局 > 环境变量 > 默认值 |
+| 覆盖型 | `serverPass` | 按网页认证优先级取值 | CLI > `runs.<name>` > 全局 > 环境变量 > 默认值 |
 | 合并型 | `env` | 对象按 key 合并覆盖 | 全局 + `runs.<name>` + CLI（同名后者覆盖） |
 | 合并型 | `envFile` | 数组累加合并 | 全局 + `runs.<name>` + CLI 的绝对路径文件 |
 | 合并型 | `volumes` | 数组累加合并 | 所有挂载卷生效 |
@@ -126,3 +136,4 @@ manyoyo --show-command
 - [环境变量详解](./environment.md) - 了解如何配置环境变量
 - [配置文件详解](./config-files.md) - 学习所有配置选项
 - [配置示例](./examples.md) - 查看实用的配置示例
+- [网页服务认证与安全实践](../advanced/web-server-auth.md) - 了解 `--server` 模式认证与安全建议
