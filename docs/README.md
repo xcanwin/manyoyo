@@ -11,7 +11,9 @@ onMounted(() => {
 })
 </script>
 
-# 页面已迁移
+# MANYOYO - AI 智能体 CLI 安全沙箱
+
+MANYOYO - AI 智能体 CLI 安全沙箱
 
 此页面已迁移至 [新地址](./zh/README.md)。
 
