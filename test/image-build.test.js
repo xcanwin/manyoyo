@@ -121,13 +121,37 @@ describe('image-build with unified build and buildkit fallback', () => {
         const options = createBaseOptions({
             dockerCmd: 'podman',
             runCmd: jest.fn(() => {
-                throw createCommandError('failed to solve: Dockerfile parse error');
+                throw createCommandError(
+                    'failed to solve: Dockerfile parse error',
+                    'Build error: Dockerfile parse error line 12'
+                );
             })
         });
 
         await expect(buildImage(options)).rejects.toThrow('exit:1');
         expect(options.runCmdPipeline).not.toHaveBeenCalled();
         expect(options.error).toHaveBeenCalled();
+    });
+
+    test('podman should fallback to buildkit on unknown CASE instruction from legacy builder', async () => {
+        const options = createBaseOptions({
+            dockerCmd: 'podman',
+            runCmd: jest.fn(() => {
+                throw createCommandError(
+                    'Error: building at STEP "CASE "',
+                    'Build error: Unknown instruction: "CASE"'
+                );
+            })
+        });
+
+        await buildImage(options);
+
+        expect(options.runCmd).toHaveBeenCalledTimes(1);
+        expect(options.runCmdPipeline).toHaveBeenCalledTimes(1);
+        const [leftCmd, , rightCmd, rightArgs] = options.runCmdPipeline.mock.calls[0];
+        expect(leftCmd).toBe('podman');
+        expect(rightCmd).toBe('podman');
+        expect(rightArgs).toEqual(['load']);
     });
 
     test('docker should prefer native build when it succeeds', async () => {
@@ -178,13 +202,29 @@ describe('image-build with unified build and buildkit fallback', () => {
         const options = createBaseOptions({
             dockerCmd: 'docker',
             runCmd: jest.fn(() => {
-                throw createCommandError('failed to solve: syntax error');
+                throw createCommandError(
+                    'failed to solve: syntax error',
+                    'Dockerfile:23 syntax error'
+                );
             })
         });
 
         await expect(buildImage(options)).rejects.toThrow('exit:1');
         expect(options.runCmdPipeline).not.toHaveBeenCalled();
         expect(options.error).toHaveBeenCalled();
+    });
+
+    test('should fallback when direct build fails without stderr/stdout diagnostics', async () => {
+        const options = createBaseOptions({
+            dockerCmd: 'podman',
+            runCmd: jest.fn(() => {
+                throw createCommandError('Command failed: podman build ...');
+            })
+        });
+
+        await buildImage(options);
+        expect(options.runCmd).toHaveBeenCalledTimes(1);
+        expect(options.runCmdPipeline).toHaveBeenCalledTimes(1);
     });
 
     test('should fail when buildkit fallback also fails', async () => {
