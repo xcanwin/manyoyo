@@ -1,5 +1,5 @@
 ---
-title: 页面已迁移
+title: MANYOYO - AI Agent CLI Security Sandbox
 outline: false
 ---
 
