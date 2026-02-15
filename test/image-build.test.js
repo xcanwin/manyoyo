@@ -111,12 +111,13 @@ describe('image-build with unified build and buildkit fallback', () => {
             '--frontend',
             'dockerfile.v0',
             '--opt',
-            'build-arg:HTTP_PROXY=$HTTP_PROXY',
-            '--opt',
             'build-arg:TOOL=common',
             '--opt',
             'build-arg:APT_MIRROR=https://mirror.example'
         ]));
+        // 验证包含代理相关参数（值为 process.env 的值，可能是 undefined）
+        expect(leftArgs).toContain('--opt');
+        expect(leftArgs.some(arg => arg.startsWith('build-arg:HTTP_PROXY='))).toBe(true);
         expect(options.pruneDanglingImages).toHaveBeenCalledTimes(1);
     });
 
