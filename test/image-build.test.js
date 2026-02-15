@@ -9,6 +9,13 @@ function parseImageVersionTag(tag) {
     return { baseVersion: match[1], tool: match[2] };
 }
 
+function createCommandError(message, stderr = '', stdout = '') {
+    const err = new Error(message);
+    err.stderr = stderr;
+    err.stdout = stdout;
+    return err;
+}
+
 function createTestRoot() {
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-image-build-'));
     const dockerDir = path.join(rootDir, 'docker');
@@ -55,7 +62,7 @@ function createBaseOptions(overrides = {}) {
     };
 }
 
-describe('image-build with podman buildkit fallback', () => {
+describe('image-build with unified build and buildkit fallback', () => {
     afterEach(() => {
         while (tempRoots.length > 0) {
             const rootDir = tempRoots.pop();
@@ -63,14 +70,33 @@ describe('image-build with podman buildkit fallback', () => {
         }
     });
 
-    test('podman should prefer buildkit and pipe output to podman load', async () => {
+    test('podman should prefer native build when it succeeds', async () => {
         const options = createBaseOptions({
-            dockerCmd: 'podman',
-            imageBuildArgs: ['--build-arg', 'APT_MIRROR=https://mirror.example']
+            dockerCmd: 'podman'
         });
 
         await buildImage(options);
 
+        expect(options.runCmdPipeline).not.toHaveBeenCalled();
+        const buildCall = options.runCmd.mock.calls.find(([cmd, args]) => (
+            cmd === 'podman' && Array.isArray(args) && args[0] === 'build'
+        ));
+        expect(buildCall).toBeTruthy();
+        expect(options.pruneDanglingImages).toHaveBeenCalledTimes(1);
+    });
+
+    test('podman should fallback to buildkit when native build hits capability error', async () => {
+        const options = createBaseOptions({
+            dockerCmd: 'podman',
+            imageBuildArgs: ['--build-arg', 'APT_MIRROR=https://mirror.example'],
+            runCmd: jest.fn(() => {
+                throw createCommandError('unknown flag: --load');
+            })
+        });
+
+        await buildImage(options);
+
+        expect(options.runCmd).toHaveBeenCalledTimes(1);
         expect(options.runCmdPipeline).toHaveBeenCalledTimes(1);
         const [leftCmd, leftArgs, rightCmd, rightArgs] = options.runCmdPipeline.mock.calls[0];
         expect(leftCmd).toBe('podman');
@@ -80,7 +106,7 @@ describe('image-build with podman buildkit fallback', () => {
             'run',
             '--entrypoint',
             'buildctl-daemonless.sh',
-            'moby/buildkit:latest',
+            'docker.io/moby/buildkit:latest',
             '--frontend',
             'dockerfile.v0',
             '--opt',
@@ -88,28 +114,23 @@ describe('image-build with podman buildkit fallback', () => {
             '--opt',
             'build-arg:APT_MIRROR=https://mirror.example'
         ]));
-        const usedPodmanBuild = options.runCmd.mock.calls.some(([cmd, args]) => (
-            cmd === 'podman' && Array.isArray(args) && args[0] === 'build'
-        ));
-        expect(usedPodmanBuild).toBe(false);
+        expect(options.pruneDanglingImages).toHaveBeenCalledTimes(1);
     });
 
-    test('podman should fallback to native podman build when buildkit fails', async () => {
+    test('podman should not fallback when native build fails with non-capability error', async () => {
         const options = createBaseOptions({
             dockerCmd: 'podman',
-            runCmdPipeline: jest.fn(async () => { throw new Error('buildkit unavailable'); })
+            runCmd: jest.fn(() => {
+                throw createCommandError('failed to solve: Dockerfile parse error');
+            })
         });
 
-        await buildImage(options);
-
-        expect(options.runCmdPipeline).toHaveBeenCalledTimes(1);
-        const buildCall = options.runCmd.mock.calls.find(([cmd, args]) => (
-            cmd === 'podman' && Array.isArray(args) && args[0] === 'build'
-        ));
-        expect(buildCall).toBeTruthy();
+        await expect(buildImage(options)).rejects.toThrow('exit:1');
+        expect(options.runCmdPipeline).not.toHaveBeenCalled();
+        expect(options.error).toHaveBeenCalled();
     });
 
-    test('docker should keep native docker build path', async () => {
+    test('docker should prefer native build when it succeeds', async () => {
         const options = createBaseOptions({
             dockerCmd: 'docker'
         });
@@ -121,5 +142,65 @@ describe('image-build with podman buildkit fallback', () => {
             cmd === 'docker' && Array.isArray(args) && args[0] === 'build'
         ));
         expect(buildCall).toBeTruthy();
+        expect(options.pruneDanglingImages).toHaveBeenCalledTimes(1);
+    });
+
+    test('docker should fallback to buildkit when native build hits capability error', async () => {
+        const options = createBaseOptions({
+            dockerCmd: 'docker',
+            runCmd: jest.fn(() => {
+                throw createCommandError('unknown option --load');
+            })
+        });
+
+        await buildImage(options);
+
+        expect(options.runCmd).toHaveBeenCalledTimes(1);
+        expect(options.runCmdPipeline).toHaveBeenCalledTimes(1);
+        const [leftCmd, leftArgs, rightCmd, rightArgs] = options.runCmdPipeline.mock.calls[0];
+        expect(leftCmd).toBe('docker');
+        expect(rightCmd).toBe('docker');
+        expect(rightArgs).toEqual(['load']);
+        expect(leftArgs).toEqual(expect.arrayContaining([
+            'run',
+            '--entrypoint',
+            'buildctl-daemonless.sh',
+            'docker.io/moby/buildkit:latest',
+            '--frontend',
+            'dockerfile.v0',
+            '--opt',
+            'build-arg:TOOL=common'
+        ]));
+        expect(options.pruneDanglingImages).toHaveBeenCalledTimes(1);
+    });
+
+    test('docker should not fallback when native build fails with non-capability error', async () => {
+        const options = createBaseOptions({
+            dockerCmd: 'docker',
+            runCmd: jest.fn(() => {
+                throw createCommandError('failed to solve: syntax error');
+            })
+        });
+
+        await expect(buildImage(options)).rejects.toThrow('exit:1');
+        expect(options.runCmdPipeline).not.toHaveBeenCalled();
+        expect(options.error).toHaveBeenCalled();
+    });
+
+    test('should fail when buildkit fallback also fails', async () => {
+        const options = createBaseOptions({
+            dockerCmd: 'docker',
+            runCmd: jest.fn(() => {
+                throw createCommandError('unknown flag: --load');
+            }),
+            runCmdPipeline: jest.fn(async () => {
+                throw new Error('buildkit unavailable');
+            })
+        });
+
+        await expect(buildImage(options)).rejects.toThrow('exit:1');
+        expect(options.runCmd).toHaveBeenCalledTimes(1);
+        expect(options.runCmdPipeline).toHaveBeenCalledTimes(1);
+        expect(options.error).toHaveBeenCalled();
     });
 });
