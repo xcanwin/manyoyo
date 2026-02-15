@@ -271,4 +271,26 @@ describe('image-build with unified build and buildkit fallback', () => {
         const curlCalls = options.runCmd.mock.calls.filter(([cmd]) => cmd === 'curl');
         expect(curlCalls.length).toBeGreaterThan(0);
     });
+
+    test('should skip local gopls cache when go command is unavailable', async () => {
+        const options = createBaseOptions({
+            imageVersionTag: '1.8.0-go',
+            runCmd: jest.fn((cmd) => {
+                if (cmd === 'go') {
+                    const err = new Error('spawnSync go ENOENT');
+                    err.code = 'ENOENT';
+                    throw err;
+                }
+                return '';
+            })
+        });
+
+        await buildImage(options);
+
+        const buildCall = options.runCmd.mock.calls.find(([cmd, args]) => (
+            cmd === 'docker' && Array.isArray(args) && args[0] === 'build'
+        ));
+        expect(buildCall).toBeTruthy();
+        expect(options.log).toHaveBeenCalledWith(expect.stringContaining('跳过 gopls 本地缓存预下载'));
+    });
 });
