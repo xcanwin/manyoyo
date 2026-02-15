@@ -56,8 +56,18 @@ curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
-**Windows**:
-- Download installer from [Node.js official website](https://nodejs.org/)
+**Windows (Native)**:
+- Download installer from [Node.js official website](https://nodejs.org/) (best for PowerShell/native Windows workflow)
+
+**Windows (WSL2)**:
+- In WSL2, use the Linux-style installation flow, preferably `nvm` (best for Bash/Linux workflow)
+
+```bash
+# Run inside WSL terminal
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+nvm install 22
+nvm use 22
+```
 
 ### Install Podman (Recommended)
 
@@ -113,6 +123,22 @@ Install MANYOYO globally using npm:
 ```bash
 npm install -g @xcanwin/manyoyo
 ```
+
+### Non-root Global npm Install (macOS/Linux/WSL)
+
+If `npm install -g xxx` fails with `EACCES` / `permission denied`, use a user-owned global prefix instead of `sudo`:
+
+```bash
+mkdir -p "$HOME/.npm-global"
+npm config set prefix "$HOME/.npm-global"
+echo 'export PATH=$HOME/.npm-global/bin:$PATH' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Notes:
+- This permission issue is common on macOS/Linux/WSL when Node.js uses a system-owned prefix (for example `/usr/local`)
+- Native Windows environment does not use `sudo`
+- If you use zsh, append PATH in `~/.zprofile` or `~/.zshrc`
 
 After installation, verify:
 

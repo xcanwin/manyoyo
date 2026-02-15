@@ -56,8 +56,18 @@ curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
-**Windows**：
-- 从 [Node.js 官网](https://nodejs.org/) 下载安装器
+**Windows（原生）**：
+- 从 [Node.js 官网](https://nodejs.org/) 下载安装器（适合 PowerShell/Windows 原生开发）
+
+**Windows（WSL2）**：
+- WSL2 下按 Linux 方式安装，推荐使用 `nvm`（适合 Bash/Linux 开发流程）
+
+```bash
+# 在 WSL 终端执行
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+nvm install 22
+nvm use 22
+```
 
 ### 安装 Podman（推荐）
 
@@ -113,6 +123,22 @@ newgrp docker
 ```bash
 npm install -g @xcanwin/manyoyo
 ```
+
+### 低权限全局安装（macOS/Linux/WSL）
+
+如果 `npm install -g xxx` 报 `EACCES` / `permission denied`，可以改用用户目录作为全局前缀，避免 `sudo`：
+
+```bash
+mkdir -p "$HOME/.npm-global"
+npm config set prefix "$HOME/.npm-global"
+echo 'export PATH=$HOME/.npm-global/bin:$PATH' >> ~/.bashrc
+source ~/.bashrc
+```
+
+说明：
+- 这类权限问题主要出现在 macOS/Linux/WSL 使用系统 Node.js 前缀（如 `/usr/local`）时
+- Windows 原生环境通常不使用 `sudo`
+- 如果你使用 zsh，请把 PATH 追加到 `~/.zprofile` 或 `~/.zshrc`
 
 安装完成后，验证安装：
 
