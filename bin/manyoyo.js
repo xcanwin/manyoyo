@@ -642,10 +642,18 @@ function installManyoyo(name) {
 
 function updateManyoyo() {
     let isLocalFileInstall = false;
+    let currentVersion = 'unknown';
+
     try {
         const listOutput = runCmd('npm', ['ls', '-g', '@xcanwin/manyoyo', '--json', '--long'], { stdio: 'pipe' });
         const listJson = JSON.parse(listOutput || '{}');
         const dep = listJson && listJson.dependencies && listJson.dependencies['@xcanwin/manyoyo'];
+
+        // 获取当前版本
+        if (dep && dep.version) {
+            currentVersion = dep.version;
+        }
+
         const resolved = dep && typeof dep.resolved === 'string' ? dep.resolved : '';
         const depPath = dep && typeof dep.path === 'string' ? dep.path : '';
 
@@ -664,9 +672,28 @@ function updateManyoyo() {
         return;
     }
 
+    console.log(`${CYAN}🔄 当前版本: ${currentVersion}${NC}`);
     console.log(`${CYAN}🔄 正在更新 ${MANYOYO_NAME} 到最新版本...${NC}`);
     runCmd('npm', ['update', '-g', '@xcanwin/manyoyo'], { stdio: 'inherit' });
-    console.log(`${GREEN}✅ 更新完成，请重新执行 ${MANYOYO_NAME} --version 确认版本。${NC}`);
+
+    // 升级后获取新版本
+    let newVersion = 'unknown';
+    try {
+        const listOutput = runCmd('npm', ['ls', '-g', '@xcanwin/manyoyo', '--json'], { stdio: 'pipe' });
+        const listJson = JSON.parse(listOutput || '{}');
+        const dep = listJson && listJson.dependencies && listJson.dependencies['@xcanwin/manyoyo'];
+        if (dep && dep.version) {
+            newVersion = dep.version;
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    if (currentVersion === newVersion) {
+        console.log(`${GREEN}✅ 已是最新版本 ${newVersion}${NC}`);
+    } else {
+        console.log(`${GREEN}✅ 更新完成: ${currentVersion} → ${newVersion}${NC}`);
+    }
 }
 
 function getContList() {
