@@ -358,6 +358,74 @@ describe('MANYOYO CLI', () => {
             expect(config.volumes).toContain('/var:/var');
         });
 
+        test('multiple ports should be merged', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --show-config -p "8080:80" -p "53:53/udp"`,
+                { encoding: 'utf-8' }
+            );
+            const config = JSON.parse(output);
+            expect(config.ports).toContain('8080:80');
+            expect(config.ports).toContain('53:53/udp');
+        });
+
+        test('ports should merge by global + runs + cli order', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ports-'));
+            writeGlobalConfig(tempHome, {
+                ports: ['7000:70'],
+                runs: {
+                    demo: {
+                        ports: ['8000:80']
+                    }
+                }
+            });
+
+            try {
+                const output = execSync(
+                    `node ${BIN_PATH} --show-config -r demo -p "9000:90"`,
+                    {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome }
+                    }
+                );
+                const config = JSON.parse(output);
+                expect(config.ports).toEqual(['7000:70', '8000:80', '9000:90']);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('--show-command should include publish args from --port', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-show-command-'));
+            const fakeDockerPath = path.join(tempDir, 'docker');
+            fs.writeFileSync(fakeDockerPath, `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "Docker version 26.0.0"
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  exit 0
+fi
+exit 0
+`, { mode: 0o755 });
+
+            try {
+                const output = execSync(
+                    `node ${BIN_PATH} --show-command -n port-test -p "8080:80" -p "127.0.0.1:8443:443"`,
+                    {
+                        encoding: 'utf-8',
+                        env: {
+                            ...process.env,
+                            PATH: `${tempDir}:${process.env.PATH}`
+                        }
+                    }
+                );
+                expect(output).toContain('--publish 8080:80');
+                expect(output).toContain('--publish 127.0.0.1:8443:443');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
         test('--ss should set shell suffix', () => {
             const output = execSync(
                 `node ${BIN_PATH} --show-config -s codex --ss "-c"`,
@@ -676,6 +744,14 @@ describe('MANYOYO CLI', () => {
                 { encoding: 'utf-8' }
             );
             expect(output).toContain('--server');
+        });
+
+        test('--port option should be accepted', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --help`,
+                { encoding: 'utf-8' }
+            );
+            expect(output).toContain('--port');
         });
 
         test('--server-user and --server-pass options should be accepted', () => {

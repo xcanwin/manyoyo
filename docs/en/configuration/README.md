@@ -89,6 +89,7 @@ Merge parameters include:
 - `env` - Environment variable map (merged by key)
 - `envFile` - Environment file array
 - `volumes` - Mount volume array
+- `ports` - Port mapping array
 - `imageBuildArgs` - Image build argument array
 
 Example:
@@ -115,6 +116,7 @@ Example:
 | Merge | `env` | Map merge by key | Global + `runs.<name>` + CLI (later source overrides same key) |
 | Merge | `envFile` | Array accumulation merge | Absolute-path env files from global + `runs.<name>` + CLI |
 | Merge | `volumes` | Array accumulation merge | All mount volumes take effect |
+| Merge | `ports` | Array accumulation merge | All port mappings take effect (pass-through as `--publish`) |
 | Merge | `imageBuildArgs` | Array accumulation merge | All build arguments take effect |
 
 ## Debugging Configuration

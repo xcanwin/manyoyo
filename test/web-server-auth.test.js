@@ -150,7 +150,8 @@ describe('Web Server Auth Gateway', () => {
             }));
             expect(configRes.json.raw).toContain('"hostPath": "/tmp"');
             expect(configRes.json.defaults).toEqual(expect.objectContaining({
-                hostPath: '/tmp'
+                hostPath: '/tmp',
+                ports: []
             }));
 
             const invalidSave = await request(`${baseUrl}/api/config`, {
@@ -163,6 +164,17 @@ describe('Web Server Auth Gateway', () => {
             });
             expect(invalidSave.response.status).toBe(400);
             expect(invalidSave.json).toEqual(expect.objectContaining({ error: '配置格式错误' }));
+
+            const invalidPortsSave = await request(`${baseUrl}/api/config`, {
+                method: 'PUT',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ raw: '{\n"ports": "8080:80"\n}\n' })
+            });
+            expect(invalidPortsSave.response.status).toBe(400);
+            expect(invalidPortsSave.json).toEqual(expect.objectContaining({ error: '配置格式错误' }));
 
             const validSave = await request(`${baseUrl}/api/config`, {
                 method: 'PUT',
@@ -215,13 +227,17 @@ describe('Web Server Auth Gateway', () => {
                         imageVersion: '1.7.4-common',
                         shell: 'claude',
                         env: { A: '1' },
-                        volumes: [`${tempHost}:/workspace/custom`]
+                        volumes: [`${tempHost}:/workspace/custom`],
+                        ports: ['8080:80', '53:53/udp']
                     }
                 })
             });
 
             expect(created.response.status).toBe(200);
-            expect(created.json).toEqual(expect.objectContaining({ name: 'my-web-create' }));
+            expect(created.json).toEqual(expect.objectContaining({
+                name: 'my-web-create',
+                applied: expect.objectContaining({ portCount: 2 })
+            }));
             expect(waitForContainerReady).toHaveBeenCalledWith('my-web-create');
             expect(dockerExecArgs).toHaveBeenCalled();
             const runArgs = dockerExecArgs.mock.calls[0][0];
@@ -232,6 +248,12 @@ describe('Web Server Auth Gateway', () => {
                 'my-web-create',
                 '--workdir',
                 '/workspace/custom'
+            ]));
+            expect(runArgs).toEqual(expect.arrayContaining([
+                '--publish',
+                '8080:80',
+                '--publish',
+                '53:53/udp'
             ]));
 
             const legacy = await request(`${baseUrl}/api/sessions`, {

@@ -27,6 +27,7 @@ description: MANYOYO CLI option reference for container management, env injectio
 | `-y` | Quick enter Agent mode |
 | `-x` | Execute command in container |
 | `-e` | Pass environment variables directly |
+| `-p` | Pass port mappings directly (same as `--publish`) |
 | `--ef` | Read environment variable file (absolute path only) |
 | `-r` | Read `runs.<name>` from `~/.manyoyo/manyoyo.json` |
 | `--ib` | Build sandbox image |

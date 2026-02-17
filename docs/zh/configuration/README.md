@@ -89,6 +89,7 @@ MANYOYO 配置参数分为两类，具有不同的合并行为：
 - `env` - 环境变量对象（按 key 覆盖）
 - `envFile` - 环境文件数组
 - `volumes` - 挂载卷数组
+- `ports` - 端口映射数组
 - `imageBuildArgs` - 镜像构建参数数组
 
 示例：
@@ -115,6 +116,7 @@ MANYOYO 配置参数分为两类，具有不同的合并行为：
 | 合并型 | `env` | 对象按 key 合并覆盖 | 全局 + `runs.<name>` + CLI（同名后者覆盖） |
 | 合并型 | `envFile` | 数组累加合并 | 全局 + `runs.<name>` + CLI 的绝对路径文件 |
 | 合并型 | `volumes` | 数组累加合并 | 所有挂载卷生效 |
+| 合并型 | `ports` | 数组累加合并 | 所有端口映射生效（透传 `--publish`） |
 | 合并型 | `imageBuildArgs` | 数组累加合并 | 所有构建参数生效 |
 
 ## 调试配置

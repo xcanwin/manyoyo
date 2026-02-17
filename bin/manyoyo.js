@@ -60,6 +60,7 @@ let IMAGE_BUILD_NEED = false;
 let IMAGE_BUILD_ARGS = [];
 let CONTAINER_ENVS = [];
 let CONTAINER_VOLUMES = [];
+let CONTAINER_PORTS = [];
 let MANYOYO_NAME = detectCommandName();
 let CONT_MODE_ARGS = [];
 let QUIET = {};
@@ -488,6 +489,10 @@ function addVolume(volume) {
     CONTAINER_VOLUMES.push("--volume", volume);
 }
 
+function addPort(port) {
+    CONTAINER_PORTS.push("--publish", String(port));
+}
+
 function addImageBuildArg(value) {
     IMAGE_BUILD_ARGS.push("--build-arg", value);
 }
@@ -813,6 +818,7 @@ async function setupCommander() {
         .option('-e, --env <env>', '设置环境变量 XXX=YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--ef, --env-file <file>', '设置环境变量通过文件 (仅支持绝对路径，如 /abs/path.env)', (value, previous) => [...(previous || []), value], [])
         .option('-v, --volume <volume>', '绑定挂载卷 XXX:YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
+        .option('-p, --port <port>', '设置端口映射 XXX:YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
         .option('--sp, --shell-prefix <command>', '临时环境变量 (作为-s前缀)')
         .option('-s, --shell <command>', '指定命令执行')
         .option('--ss, --shell-suffix <command>', '指定命令后缀 (追加到-s之后，等价于 -- <args>)')
@@ -936,6 +942,9 @@ async function setupCommander() {
     const volumeList = mergeArrayConfig(config.volumes, runConfig.volumes, options.volume);
     volumeList.forEach(v => addVolume(v));
 
+    const portList = mergeArrayConfig(config.ports, runConfig.ports, options.port);
+    portList.forEach(p => addPort(p));
+
     const buildArgList = mergeArrayConfig(config.imageBuildArgs, runConfig.imageBuildArgs, options.imageBuildArg);
     buildArgList.forEach(arg => addImageBuildArg(arg));
 
@@ -1000,6 +1009,7 @@ async function setupCommander() {
             envFile: envFileList,
             env: envMap,
             volumes: volumeList,
+            ports: portList,
             imageBuildArgs: buildArgList,
             containerMode: contModeValue || "",
             shellPrefix: EXEC_COMMAND_PREFIX.trim(),
@@ -1050,6 +1060,7 @@ function createRuntimeContext() {
         contModeArgs: CONT_MODE_ARGS,
         containerEnvs: CONTAINER_ENVS,
         containerVolumes: CONTAINER_VOLUMES,
+        containerPorts: CONTAINER_PORTS,
         quiet: QUIET,
         showCommand: SHOW_COMMAND,
         rmOnExit: RM_ON_EXIT,
@@ -1180,6 +1191,7 @@ function buildDockerRunArgs(runtime) {
         contModeArgs: runtime.contModeArgs,
         containerEnvs: runtime.containerEnvs,
         containerVolumes: runtime.containerVolumes,
+        containerPorts: runtime.containerPorts,
         defaultCommand: runtime.execCommand
     });
 }
@@ -1343,6 +1355,7 @@ async function runWebServerMode(runtime) {
         contModeArgs: runtime.contModeArgs,
         containerEnvs: runtime.containerEnvs,
         containerVolumes: runtime.containerVolumes,
+        containerPorts: runtime.containerPorts,
         validateHostPath: () => validateHostPath(runtime),
         formatDate,
         isValidContainerName,

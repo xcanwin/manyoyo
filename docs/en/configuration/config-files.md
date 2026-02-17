@@ -198,6 +198,21 @@ Mode descriptions:
 }
 ```
 
+#### ports
+- **Type**: String array
+- **Merge Method**: Accumulation merge
+- **Description**: Additional port mappings (passed through as `--publish`)
+- **Format**: Mapping string supported by Docker/Podman `--publish`
+- **Example**:
+```json5
+{
+    "ports": [
+        "8080:80",
+        "127.0.0.1:8443:443"
+    ]
+}
+```
+
 ### Command Configuration
 
 #### shellPrefix

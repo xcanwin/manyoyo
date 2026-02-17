@@ -21,6 +21,7 @@
     },
     "envFile": [],
     "volumes": [],
+    "ports": ["8888:8888"],
     "imageBuildArgs": [],
     "quiet": ["tip", "cmd"],
 
