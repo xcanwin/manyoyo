@@ -25,11 +25,11 @@ MANYOYO 支持三种容器模式，提供不同级别的容器嵌套能力。
 
 ```bash
 # 默认就是 common 模式
-manyoyo -y c
+manyoyo run -y c
 
 # 显式指定
-manyoyo -m common -y c
-manyoyo --cont-mode common -y c
+manyoyo run -m common -y c
+manyoyo run --cont-mode common -y c
 ```
 
 ### 适用场景
@@ -72,18 +72,18 @@ docker build     # ❌ 无法构建镜像
 
 ```bash
 # 使用 dind 模式
-manyoyo -m dind -y c
-manyoyo --cont-mode dind -y c
+manyoyo run -m dind -y c
+manyoyo run --cont-mode dind -y c
 
 # 进入 shell 使用
-manyoyo -n dind-dev -m dind -x /bin/bash
+manyoyo run -n dind-dev -m dind -x /bin/bash
 ```
 
 ### 容器内操作（简版）
 
 ```bash
 # 进入容器
-manyoyo -n dind-dev -m dind -x /bin/bash
+manyoyo run -n dind-dev -m dind -x /bin/bash
 
 # Podman（推荐）
 podman ps -a
@@ -151,8 +151,8 @@ docker ps -a
 
 ```bash
 # 使用 sock 模式（危险！）
-manyoyo -m sock -x /bin/bash
-manyoyo --cont-mode sock -x /bin/bash
+manyoyo run -m sock -x /bin/bash
+manyoyo run --cont-mode sock -x /bin/bash
 ```
 
 ::: danger 危险警告
@@ -170,7 +170,7 @@ Socket Mount 模式下，容器可以：
 
 ```bash
 # 进入容器
-manyoyo -n sock-dev -m sock -x /bin/bash
+manyoyo run -n sock-dev -m sock -x /bin/bash
 
 # 直接使用宿主机的 Podman/Docker
 $ podman ps -a     # 看到的是宿主机的容器
@@ -228,14 +228,14 @@ docker run -d malicious-image
 
 ```bash
 # 仅在需要时使用，完成后立即删除容器
-manyoyo -n temp-sock -m sock --rm-on-exit -x /bin/bash
+manyoyo run -n temp-sock -m sock --rm-on-exit -x /bin/bash
 ```
 
 #### 2. 监控和审计
 
 ```bash
 # 记录所有操作
-manyoyo -m sock -x /bin/bash 2>&1 | tee sock-audit.log
+manyoyo run -m sock -x /bin/bash 2>&1 | tee sock-audit.log
 
 # 定期检查容器
 docker ps -a
@@ -253,7 +253,7 @@ docker images
 
 ```bash
 # 如果只需要查看，使用只读挂载
-manyoyo -v "/var/run/docker.sock:/var/run/docker.sock:ro" -x /bin/bash
+manyoyo run -v "/var/run/docker.sock:/var/run/docker.sock:ro" -x /bin/bash
 ```
 
 ### 配置示例
@@ -339,18 +339,18 @@ Socket Mount 模式：
 
 **日常开发**（推荐 95% 的用户）：
 ```bash
-manyoyo -y c  # 默认 common 模式
+manyoyo run -y c  # 默认 common 模式
 ```
 
 **CI/CD 构建**（需要容器嵌套）：
 ```bash
-manyoyo -m dind -y c  # 使用 dind 模式
+manyoyo run -m dind -y c  # 使用 dind 模式
 ```
 
 **容器管理工具开发**（特殊场景）：
 ```bash
 # 谨慎评估后，如果必须使用
-manyoyo -m sock -x /bin/bash
+manyoyo run -m sock -x /bin/bash
 ```
 
 ## 故障排查
@@ -362,7 +362,7 @@ manyoyo -m sock -x /bin/bash
 **解决方案**：
 ```bash
 # 切换到 dind 模式
-manyoyo -n new-container -m dind -y c
+manyoyo run -n new-container -m dind -y c
 ```
 
 ### Docker-in-Docker 模式
@@ -414,7 +414,7 @@ groups | grep docker
 **解决方案**：
 ```bash
 # 立即停止使用 sock 模式
-manyoyo -n sock-container --crm
+manyoyo rm sock-container
 
 # 检查宿主机容器状态
 docker ps -a

@@ -27,27 +27,27 @@ manyoyo -V
 ## 3. 构建沙箱镜像
 
 ```bash
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 ```
 
 ## 4. 立即迁移配置
 
 ```bash
-manyoyo --init-config all
+manyoyo init all
 ```
 
 ## 5. 直接启动 Agent
 
 ```bash
-manyoyo -r claude
-manyoyo -r codex
-manyoyo -r gemini
-manyoyo -r opencode
+manyoyo run -r claude
+manyoyo run -r codex
+manyoyo run -r gemini
+manyoyo run -r opencode
 ```
 
 ## 故障排查
 
-如果 `--init-config` 提示某些变量未找到，直接编辑 `~/.manyoyo/manyoyo.json` 的对应 `runs.<agent>.env`：
+如果 `init` 提示某些变量未找到，直接编辑 `~/.manyoyo/manyoyo.json` 的对应 `runs.<agent>.env`：
 
 ```bash
 vim ~/.manyoyo/manyoyo.json

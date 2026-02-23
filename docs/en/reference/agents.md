@@ -12,20 +12,20 @@ Anthropic's official Claude AI command-line tool.
 
 **Shortcuts**:
 ```bash
-manyoyo -y c          # Recommended
-manyoyo -y claude
-manyoyo -y cc
+manyoyo run -y c          # Recommended
+manyoyo run -y claude
+manyoyo run -y cc
 ```
 
 **Equivalent to**:
 ```bash
-manyoyo -x claude --dangerously-skip-permissions
+manyoyo run -x claude --dangerously-skip-permissions
 ```
 
 **Resume session**:
 ```bash
-manyoyo -n <container-name> -- -c
-manyoyo -n <container-name> -- --continue
+manyoyo run -n <container-name> -- -c
+manyoyo run -n <container-name> -- --continue
 ```
 
 **Configuration example**:
@@ -52,16 +52,16 @@ export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
 **Common commands**:
 ```bash
 # Start YOLO mode
-manyoyo -r claude
+manyoyo run -r claude
 
 # View version
-manyoyo -r claude -- --version
+manyoyo run -r claude -- --version
 
 # View help
-manyoyo -r claude -- --help
+manyoyo run -r claude -- --help
 
 # Resume last session
-manyoyo -r claude -- -c
+manyoyo run -r claude -- -c
 ```
 
 ### Gemini
@@ -70,20 +70,20 @@ Google's Gemini AI command-line tool.
 
 **Shortcuts**:
 ```bash
-manyoyo -y gm         # Recommended
-manyoyo -y gemini
-manyoyo -y g
+manyoyo run -y gm         # Recommended
+manyoyo run -y gemini
+manyoyo run -y g
 ```
 
 **Equivalent to**:
 ```bash
-manyoyo -x gemini --yolo
+manyoyo run -x gemini --yolo
 ```
 
 **Resume session**:
 ```bash
-manyoyo -n <container-name> -- -r
-manyoyo -n <container-name> -- --resume
+manyoyo run -n <container-name> -- -r
+manyoyo run -n <container-name> -- --resume
 ```
 
 **Configuration example**:
@@ -105,13 +105,13 @@ export GEMINI_MODEL="gemini-2.0-flash-exp"
 **Common commands**:
 ```bash
 # Start YOLO mode
-manyoyo -r gemini
+manyoyo run -r gemini
 
 # View version
-manyoyo -r gemini -- --version
+manyoyo run -r gemini -- --version
 
 # Resume session
-manyoyo -r gemini -- -r
+manyoyo run -r gemini -- -r
 ```
 
 ### Codex
@@ -120,19 +120,19 @@ OpenAI's Codex command-line tool.
 
 **Shortcuts**:
 ```bash
-manyoyo -y cx         # Recommended
-manyoyo -y codex
+manyoyo run -y cx         # Recommended
+manyoyo run -y codex
 ```
 
 **Equivalent to**:
 ```bash
-manyoyo -x codex --dangerously-bypass-approvals-and-sandbox
+manyoyo run -x codex --dangerously-bypass-approvals-and-sandbox
 ```
 
 **Resume session**:
 ```bash
-manyoyo -n <container-name> -- resume --last
-manyoyo -n <container-name> -- resume <session-id>
+manyoyo run -n <container-name> -- resume --last
+manyoyo run -n <container-name> -- resume <session-id>
 ```
 
 **Configuration example**:
@@ -156,16 +156,16 @@ export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
 **Common commands**:
 ```bash
 # Start YOLO mode
-manyoyo -r codex
+manyoyo run -r codex
 
 # View session list
-manyoyo -r codex -- list
+manyoyo run -r codex -- list
 
 # Resume last session
-manyoyo -r codex -- resume --last
+manyoyo run -r codex -- resume --last
 
 # Resume specific session
-manyoyo -r codex -- resume <session-id>
+manyoyo run -r codex -- resume <session-id>
 ```
 
 ### OpenCode
@@ -174,19 +174,19 @@ Open-source AI code assistant.
 
 **Shortcuts**:
 ```bash
-manyoyo -y oc         # Recommended
-manyoyo -y opencode
+manyoyo run -y oc         # Recommended
+manyoyo run -y opencode
 ```
 
 **Equivalent to**:
 ```bash
-manyoyo -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
+manyoyo run -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
 ```
 
 **Resume session**:
 ```bash
-manyoyo -n <container-name> -- -c
-manyoyo -n <container-name> -- --continue
+manyoyo run -n <container-name> -- -c
+manyoyo run -n <container-name> -- --continue
 ```
 
 **Configuration example**:
@@ -208,13 +208,13 @@ export OPENAI_BASE_URL="https://api.openai.com/v1"
 **Common commands**:
 ```bash
 # Start YOLO mode
-manyoyo -r opencode
+manyoyo run -r opencode
 
 # View version
-manyoyo -r opencode -- --version
+manyoyo run -r opencode -- --version
 
 # Resume session
-manyoyo -r opencode -- -c
+manyoyo run -r opencode -- -c
 ```
 
 ## YOLO Mode Explanation
@@ -266,10 +266,10 @@ Host Machine
 
 ```bash
 # Create new session (auto-generate container name)
-manyoyo -y c
+manyoyo run -y c
 
 # Create named session
-manyoyo -n my-session -y c
+manyoyo run -n my-session -y c
 ```
 
 ### Resume Session
@@ -278,16 +278,16 @@ Different agents have different resume methods:
 
 ```bash
 # Claude Code
-manyoyo -n my-session -- -c
+manyoyo run -n my-session -- -c
 
 # Gemini
-manyoyo -n my-session -- -r
+manyoyo run -n my-session -- -r
 
 # Codex
-manyoyo -n my-session -- resume --last
+manyoyo run -n my-session -- resume --last
 
 # OpenCode
-manyoyo -n my-session -- -c
+manyoyo run -n my-session -- -c
 ```
 
 ### Session Persistence
@@ -299,14 +299,14 @@ Container state determines whether sessions are preserved:
 # Select 'y' in interactive prompt
 
 # Remove container (session lost)
-manyoyo -n my-session --crm
+manyoyo rm my-session
 ```
 
 ### View Sessions
 
 ```bash
 # List all container sessions
-manyoyo -l
+manyoyo ls
 
 # View specific container
 docker ps -a | grep my-session
@@ -318,10 +318,10 @@ docker ps -a | grep my-session
 
 ```bash
 # Start Claude Code
-manyoyo -n dev -y c
+manyoyo run -n dev -y c
 
 # After exit, enter shell
-manyoyo -n dev -x /bin/bash
+manyoyo run -n dev -x /bin/bash
 
 # Manually run other agents in shell
 gemini --yolo
@@ -332,14 +332,14 @@ codex --dangerously-bypass-approvals-and-sandbox
 
 ```bash
 # Claude Code container
-manyoyo -n claude-session -y c
+manyoyo run -n claude-session -y c
 
 # Codex container
-manyoyo -n codex-session -y cx
+manyoyo run -n codex-session -y cx
 
 # Switch as needed
-manyoyo -n claude-session -- -c
-manyoyo -n codex-session -- resume --last
+manyoyo run -n claude-session -- -c
+manyoyo run -n codex-session -- resume --last
 ```
 
 ## Cycling Between Agent and /bin/bash
@@ -350,20 +350,20 @@ MANYOYO supports flexible switching between AI agents and shell:
 
 ```bash
 # Start agent
-manyoyo -n dev -y c
+manyoyo run -n dev -y c
 
 # After working, exit agent
 
 # Select 'i' to enter interactive shell
 # Or use command
-manyoyo -n dev -x /bin/bash
+manyoyo run -n dev -x /bin/bash
 ```
 
 ### Switch from Shell to Agent
 
 ```bash
 # In shell
-manyoyo -n dev -x /bin/bash
+manyoyo run -n dev -x /bin/bash
 
 # Run agent directly inside container
 claude --dangerously-skip-permissions
@@ -371,19 +371,19 @@ gemini --yolo
 codex --dangerously-bypass-approvals-and-sandbox
 
 # Or exit and use command
-manyoyo -n dev -y c
+manyoyo run -n dev -y c
 ```
 
 ### Workflow Example
 
 ```bash
 # 1. Start Claude Code for development
-manyoyo -n project -y c
+manyoyo run -n project -y c
 
 # 2. AI helps write code...
 
 # 3. Exit, enter shell to check
-manyoyo -n project -x /bin/bash
+manyoyo run -n project -x /bin/bash
 
 # 4. Manually test in shell
 $ npm test
@@ -394,7 +394,7 @@ $ ls -la
 $ claude --dangerously-skip-permissions
 
 # 6. Or exit and resume
-manyoyo -n project -- -c
+manyoyo run -n project -- -c
 ```
 
 ## Tips and Best Practices
@@ -417,7 +417,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # Use configuration (simple)
-manyoyo -r claude
+manyoyo run -r claude
 ```
 
 ### Unified Container Naming
@@ -426,12 +426,12 @@ Use meaningful container names:
 
 ```bash
 # Name by project
-manyoyo -n webapp-claude -r claude
-manyoyo -n api-codex -r codex
+manyoyo run -n webapp-claude -r claude
+manyoyo run -n api-codex -r codex
 
 # Name by function
-manyoyo -n dev-claude -r claude
-manyoyo -n test-gemini -r gemini
+manyoyo run -n dev-claude -r claude
+manyoyo run -n test-gemini -r gemini
 ```
 
 ### Multi-Agent Collaboration
@@ -440,14 +440,14 @@ Use multiple agents in the same project:
 
 ```bash
 # Claude for architecture design
-manyoyo -n project-claude --hp ~/project -r claude
+manyoyo run -n project-claude --hp ~/project -r claude
 
 # Codex for code generation
-manyoyo -n project-codex --hp ~/project -r codex
+manyoyo run -n project-codex --hp ~/project -r codex
 
 # Switch usage
-manyoyo -n project-claude -- -c
-manyoyo -n project-codex -- resume --last
+manyoyo run -n project-claude -- -c
+manyoyo run -n project-codex -- resume --last
 ```
 
 ### Configure Environment Isolation
@@ -485,18 +485,18 @@ EOF
 **Check environment variables**:
 ```bash
 # Verify environment variables
-manyoyo -r claude --show-config
+manyoyo config show -r claude
 
 # Test environment variables
-manyoyo -r claude -x 'env | grep ANTHROPIC'
+manyoyo run -r claude -x 'env | grep ANTHROPIC'
 ```
 
 **Check image**:
 ```bash
 # Confirm agent is installed in image
-manyoyo -x which claude
-manyoyo -x which gemini
-manyoyo -x which codex
+manyoyo run -x which claude
+manyoyo run -x which gemini
+manyoyo run -x which codex
 ```
 
 ### Session Cannot Resume
@@ -504,7 +504,7 @@ manyoyo -x which codex
 **Check container status**:
 ```bash
 # Check if container exists
-manyoyo -l
+manyoyo ls
 docker ps -a | grep <container-name>
 
 # View container logs
@@ -514,13 +514,13 @@ docker logs <container-name>
 **Use correct resume command**:
 ```bash
 # Claude Code: -c or --continue
-manyoyo -n test -- -c
+manyoyo run -n test -- -c
 
 # Gemini: -r or --resume
-manyoyo -n test -- -r
+manyoyo run -n test -- -r
 
 # Codex: resume --last
-manyoyo -n test -- resume --last
+manyoyo run -n test -- resume --last
 ```
 
 ### API Authentication Failed
@@ -541,8 +541,8 @@ curl -H "x-api-key: $ANTHROPIC_AUTH_TOKEN" \
 vim ~/.manyoyo/env/anthropic_claudecode.env
 
 # Restart container
-manyoyo -n test --crm
-manyoyo -n test -r claude
+manyoyo rm test
+manyoyo run -n test -r claude
 ```
 
 ## Related Documentation

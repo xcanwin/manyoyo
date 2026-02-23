@@ -11,7 +11,7 @@ MANYOYO 支持两种方式设置环境变量：
 使用 `-e` 参数直接在命令行中指定环境变量：
 
 ```bash
-manyoyo -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" -x claude
+manyoyo run -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" -x claude
 ```
 
 **特点**：
@@ -24,7 +24,7 @@ manyoyo -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" 
 使用 `--ef` 参数从文件加载环境变量：
 
 ```bash
-manyoyo --ef /abs/path/anthropic_claudecode.env -x claude
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x claude
 ```
 
 **特点**：
@@ -67,7 +67,7 @@ MESSAGE="Hello World"
 `--ef` 仅支持绝对路径：
 
 ```bash
-manyoyo --ef /abs/path/myconfig.env
+manyoyo run --ef /abs/path/myconfig.env
 # 加载：指定绝对路径文件
 ```
 
@@ -99,10 +99,10 @@ EOF
 
 ```bash
 # 在任意目录下使用（绝对路径）
-manyoyo --ef $HOME/.manyoyo/env/anthropic_[claudecode]_claudecode.env -x claude
+manyoyo run --ef $HOME/.manyoyo/env/anthropic_[claudecode]_claudecode.env -x claude
 
 # 或结合 runs 配置使用
-manyoyo -r claude  # ~/.manyoyo/manyoyo.json 的 runs.claude 中指定 envFile
+manyoyo run -r claude  # ~/.manyoyo/manyoyo.json 的 runs.claude 中指定 envFile
 ```
 
 ### Codex 环境配置
@@ -123,10 +123,10 @@ EOF
 
 ```bash
 # 在任意目录下使用（绝对路径）
-manyoyo --ef $HOME/.manyoyo/env/openai_[gpt]_codex.env -x codex
+manyoyo run --ef $HOME/.manyoyo/env/openai_[gpt]_codex.env -x codex
 
 # 或结合 runs 配置使用
-manyoyo -r codex  # ~/.manyoyo/manyoyo.json 的 runs.codex 中指定 envFile
+manyoyo run -r codex  # ~/.manyoyo/manyoyo.json 的 runs.codex 中指定 envFile
 ```
 
 ### Gemini 环境配置
@@ -144,7 +144,7 @@ EOF
 使用环境文件：
 
 ```bash
-manyoyo --ef $HOME/.manyoyo/env/gemini.env -x gemini
+manyoyo run --ef $HOME/.manyoyo/env/gemini.env -x gemini
 ```
 
 ### OpenCode 环境配置
@@ -162,7 +162,7 @@ EOF
 使用环境文件：
 
 ```bash
-manyoyo --ef $HOME/.manyoyo/env/opencode.env -x opencode
+manyoyo run --ef $HOME/.manyoyo/env/opencode.env -x opencode
 ```
 
 ## 环境变量优先级
@@ -200,7 +200,7 @@ manyoyo --ef $HOME/.manyoyo/env/opencode.env -x opencode
 - `MANYOYO_SERVER_USER`
 - `MANYOYO_SERVER_PASS`
 
-这两个变量用于 `--server` 模式认证，不会注入到容器内业务进程。优先级详见：
+这两个变量用于 `serve` 模式认证，不会注入到容器内业务进程。优先级详见：
 
 - [配置系统概览](./README.md)
 - [网页服务认证与安全实践](../advanced/web-server-auth.md)
@@ -252,10 +252,10 @@ export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
 使用调试命令验证环境变量是否正确加载：
 ```bash
 # 查看最终配置
-manyoyo --show-config -r claude
+manyoyo config show -r claude
 
 # 在容器中验证
-manyoyo -r claude -x env | grep ANTHROPIC
+manyoyo run -r claude -x env | grep ANTHROPIC
 ```
 
 ## 故障排查
@@ -267,15 +267,15 @@ manyoyo -r claude -x env | grep ANTHROPIC
 **解决方案**：
 1. 检查文件格式（必须是 `.env` 格式）
 2. 确认文件路径正确
-3. 使用 `--show-config` 查看配置
+3. 使用 `config show` 查看配置
 4. 在容器中运行 `env` 命令检查
 
 ```bash
 # 检查配置
-manyoyo --show-config --ef /abs/path/myconfig.env
+manyoyo config show --ef /abs/path/myconfig.env
 
 # 在容器中检查环境变量
-manyoyo --ef /abs/path/myconfig.env -x env
+manyoyo run --ef /abs/path/myconfig.env -x env
 ```
 
 ### 环境变量值错误
@@ -289,7 +289,7 @@ manyoyo --ef /abs/path/myconfig.env -x env
 
 ```bash
 # 查看所有生效的环境变量
-manyoyo --ef /abs/path/myconfig.env -x 'env | sort'
+manyoyo run --ef /abs/path/myconfig.env -x 'env | sort'
 ```
 
 ## 相关文档

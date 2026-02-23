@@ -16,12 +16,12 @@
 - 文档语言策略：中文主维护 `docs/zh/`，英文 `docs/en/`。
 - 根目录历史中文页按需保留为兼容跳转页。
 - 配置合并规则：标量配置按“命令行参数 > runs.<name> > 全局配置 > 默认值”覆盖；数组配置（`envFile`/`volumes`/`imageBuildArgs`）按“全局配置 → runs.<name> → 命令行参数”追加合并；`env` 使用 map，按 key 合并覆盖（命令行参数 > runs.<name> > 全局配置）。
-- `--server` 网页模式采用全局认证网关；除登录路由外默认所有页面与接口都需认证。
+- `serve` 网页模式采用全局认证网关；除登录路由外默认所有页面与接口都需认证。
 
 ## 项目结构与模块组织
 - `bin/manyoyo.js`: CLI 入口与主流程编排（CommonJS）；参数解析、容器主流程优先就近维护。
 - `lib/container-run.js`: CLI/Web 共享的容器运行参数构造与命令展示。
-- `lib/web/server.js`: `--server` 网页服务、全局认证网关与 API 路由。
+- `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
 - `lib/web/frontend/`: 网页前端资源（`app/login` 的 `html/css/js`）。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
@@ -71,30 +71,32 @@
 - 文档改动同步更新 `docs/zh/` 与 `docs/en/`，保留兼容跳转页。
 
 ## 常见开发任务
-- 配置合并验证：`manyoyo --show-config`，`manyoyo -r <name> --show-config`。
-- 命令预览：`manyoyo -n test --show-command`，用于检查参数拼装。
-- 快速迁移已有 Agent 配置：`manyoyo --init-config all`，然后 `manyoyo -r claude`（或 `codex/gemini/opencode`）。
-- 动态容器名验证（`{now}`）：在运行配置写 `containerName: "my-<agent>-{now}"`，执行 `manyoyo -r <name> --show-config` 查看解析结果。
-- 环境文件解析：`manyoyo --ef /abs/path/myenv.env --show-config`。
-- 容器调试：`manyoyo -n <name> -x /bin/bash`。
-- 镜像构建：`manyoyo --ib --iv <x.y.z-后缀>`（如 `1.7.4-common`），可加 `--iba TOOL=common`。
-- 局域网监听网页服务：`manyoyo --server 0.0.0.0:3000 --server-user <user> --server-pass <pass>`。
+- 配置合并验证：`manyoyo config show`，`manyoyo config show -r <name>`。
+- 命令预览：`manyoyo config command -n test`，用于检查参数拼装。
+- 快速迁移已有 Agent 配置：`manyoyo init all`，然后 `manyoyo run -r claude`（或 `codex/gemini/opencode`）。
+- 动态容器名验证（`{now}`）：在运行配置写 `containerName: "my-<agent>-{now}"`，执行 `manyoyo config show -r <name>` 查看解析结果。
+- 环境文件解析：`manyoyo config show --ef /abs/path/myenv.env`。
+- 容器调试：`manyoyo run -n <name> -x /bin/bash`。
+- 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.0-common`），可加 `--iba TOOL=common`。
+- 局域网监听网页服务：`manyoyo serve 0.0.0.0:3000 -u <user> -P <pass>`。
 - 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`（需与启动参数/配置一致）。
-- 若未显式设置 `--server-pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。
+- 若未显式设置 `-P/--pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。
 - 带认证访问接口：`curl --noproxy '*' -b /tmp/manyoyo.cookie http://127.0.0.1:3000/api/sessions`。
 - 删除对话历史（保留容器）：`curl --noproxy '*' -b /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/api/sessions/<name>/remove-with-history`。
 
 ## 配置与路径提示
 - 配置模板：`config.example.json`。
 - 全局配置：`~/.manyoyo/manyoyo.json`（JSON5）。
-- 运行配置：`~/.manyoyo/manyoyo.json` 的 `runs.<name>`（`-r <name>` 仅按名称读取）。
-- 环境文件：`--ef/--env-file` 与 `envFile` 仅支持绝对路径（如 `/abs/path/name.env`）。
-- 初始化配置：`manyoyo --init-config [agents]` 会写入 `~/.manyoyo/manyoyo.json` 的 `runs.<agent>`（含 `env` map）。
-- 初始化覆盖行为：目标 `runs.<name>` 已存在时逐个询问；`--yes --init-config ...` 会自动覆盖。
+- 运行配置：`~/.manyoyo/manyoyo.json` 的 `runs.<name>`（通过 `run/config show/config command -r <name>` 按名称读取）。
+- 环境文件：`run/config show/config command` 的 `--ef/--env-file` 与 `envFile` 仅支持绝对路径（如 `/abs/path/name.env`）。
+- 初始化配置：`manyoyo init [agents]` 会写入 `~/.manyoyo/manyoyo.json` 的 `runs.<agent>`（含 `env` map）。
+- 初始化覆盖行为：目标 `runs.<name>` 已存在时逐个询问；`manyoyo init ... --yes` 会自动覆盖。
 - 网页认证配置：`serverUser`、`serverPass`（支持环境变量 `MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`）。
-- 网页服务监听：`--server` 支持 `<port>` 或 `<host:port>`，默认 `127.0.0.1:3000`。
+- 网页服务监听：`serve [listen]` 支持 `<port>` 或 `<host:port>`，默认 `127.0.0.1:3000`。
 - 网页认证参数优先级：命令行参数 > 运行配置 > 全局配置 > 环境变量 > 默认值。
-- 镜像版本格式：`imageVersion` 与 `--iv/--image-ver` 必须为 `x.y.z-后缀`（如 `1.7.4-common`）。
+- 镜像版本格式：`imageVersion` 与 `run/build --iv/--image-ver` 必须为 `x.y.z-后缀`（如 `1.8.0-common`）。
+- `--yes` 仅用于 `build` 与 `init` 子命令。
+- CLI 仅支持子命令入口；传入未定义参数会报 `unknown option`。
 - 缓存目录：`docker/cache/`，覆盖率：`coverage/`。
 
 ## 环境与兼容性
@@ -124,7 +126,7 @@
 - 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`）；其余路由默认要求认证。
 - 禁止在业务路由里零散补认证，优先在统一入口做认证兜底，避免后续漏校验。
 - 网页前端默认避免常驻高开销视觉效果：不要在常驻元素使用 `animation: ... infinite`，避免大面积叠加 `backdrop-filter` / `filter` 模糊；确需使用时仅限短时场景，并提供 `prefers-reduced-motion` 降级。
-- 当使用 `--server 0.0.0.0:<port>` 对外监听时，必须设置强密码，并通过防火墙限制访问来源。
+- 当使用 `serve 0.0.0.0:<port>` 对外监听时，必须设置强密码，并通过防火墙限制访问来源。
 - 新增容器模式或挂载选项时，不放宽安全校验。
 - `sock` 容器模式需明确安全风险提示（可访问宿主机 Docker socket）。
 - 涉及命令执行时优先使用参数数组，避免拼接 shell 字符串；新增输出涉及敏感信息时需脱敏。

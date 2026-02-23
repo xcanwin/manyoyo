@@ -35,14 +35,14 @@ MANYOYO 支持两种主要的配置方式：
 ## 配置文件路径规则
 
 ### 运行配置
-- `manyoyo -r claude` → 加载 `~/.manyoyo/manyoyo.json` 的 `runs.claude`
-- `manyoyo -r <name>` 仅支持 `runs.<name>` 名称，不支持文件路径
+- `manyoyo run -r claude` → 加载 `~/.manyoyo/manyoyo.json` 的 `runs.claude`
+- `manyoyo run -r <name>` 仅支持 `runs.<name>` 名称，不支持文件路径
 
 ### 全局配置
 - 运行任何 manyoyo 命令时，都会自动加载 `~/.manyoyo/manyoyo.json`（如果存在）
 
 ### 环境文件
-- `manyoyo --ef /abs/path/myenv.env` → 加载绝对路径环境文件
+- `manyoyo run --ef /abs/path/myenv.env` → 加载绝对路径环境文件
 - `--ef` 仅支持绝对路径，不支持短名称和相对路径
 
 ## 优先级机制
@@ -125,10 +125,10 @@ MANYOYO 配置参数分为两类，具有不同的合并行为：
 
 ```bash
 # 显示最终配置
-manyoyo --show-config
+manyoyo config show
 
 # 显示将要执行的命令
-manyoyo --show-command
+manyoyo config command
 ```
 
 这些调试命令会显示所有配置源的合并结果，帮助您理解配置的优先级和合并逻辑。
@@ -138,4 +138,4 @@ manyoyo --show-command
 - [环境变量详解](./environment.md) - 了解如何配置环境变量
 - [配置文件详解](./config-files.md) - 学习所有配置选项
 - [配置示例](./examples.md) - 查看实用的配置示例
-- [网页服务认证与安全实践](../advanced/web-server-auth.md) - 了解 `--server` 模式认证与安全建议
+- [网页服务认证与安全实践](../advanced/web-server-auth.md) - 了解 `serve` 模式认证与安全建议

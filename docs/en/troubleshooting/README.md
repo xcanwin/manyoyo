@@ -11,10 +11,10 @@ Use this page to quickly locate common MANYOYO issues and run the shortest diagn
 
 | Symptom | Possible Cause | Quick Command | Details |
 | --- | --- | --- | --- |
-| `manyoyo --ib` fails | network/disk/permission | `df -h`, `manyoyo --ib --iv 1.8.0-common` | [Build Issues](./build-errors.md) |
-| `pinging container registry failed` | local image not built | `manyoyo --ib --iv 1.8.0-common` | [Image Pull Failures](./build-errors.md#image-pull-failures) |
+| `manyoyo build` fails | network/disk/permission | `df -h`, `manyoyo build --iv 1.8.0-common` | [Build Issues](./build-errors.md) |
+| `pinging container registry failed` | local image not built | `manyoyo build --iv 1.8.0-common` | [Image Pull Failures](./build-errors.md#image-pull-failures) |
 | `permission denied` | Docker/Podman permission issue | `groups`, `docker ps` | [Permission Issues](./runtime-errors.md#permission-denied) |
-| env vars not effective | invalid `envFile` path/format | `manyoyo --ef /abs/path/example.env --show-config` | [Env Var Issues](./runtime-errors.md#environment-variables-not-taking-effect) |
+| env vars not effective | invalid `envFile` path/format | `manyoyo config show --ef /abs/path/example.env` | [Env Var Issues](./runtime-errors.md#environment-variables-not-taking-effect) |
 
 ## Minimal Diagnostic Flow
 
@@ -29,29 +29,29 @@ docker --version   # or podman --version
 2. Inspect final config and command
 
 ```bash
-manyoyo --show-config
-manyoyo --show-command
-manyoyo -r claude --show-config
+manyoyo config show
+manyoyo config command
+manyoyo config show -r claude
 ```
 
 3. Check images and containers
 
 ```bash
 docker images | grep manyoyo   # or podman images
-manyoyo -l
+manyoyo ls
 ```
 
 4. Verify env file loading (`--ef` only accepts absolute paths)
 
 ```bash
-manyoyo --ef /abs/path/anthropic_claudecode.env --show-config
-manyoyo --ef /abs/path/anthropic_claudecode.env -x env | grep ANTHROPIC
+manyoyo config show --ef /abs/path/anthropic_claudecode.env
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x env | grep ANTHROPIC
 ```
 
 ## Config Checks
 
 - Run profiles are under `runs.<name>` in `~/.manyoyo/manyoyo.json`.
-- `manyoyo -r <name>` reads `runs.<name>` from `~/.manyoyo/manyoyo.json`.
+- `manyoyo run -r <name>` reads `runs.<name>` from `~/.manyoyo/manyoyo.json`.
 - `envFile` must be an array of absolute paths.
 
 ## Getting Help
@@ -61,14 +61,14 @@ manyoyo --ef /abs/path/anthropic_claudecode.env -x env | grep ANTHROPIC
 ```bash
 uname -a
 manyoyo -V
-manyoyo --show-config
-manyoyo -l
+manyoyo config show
+manyoyo ls
 ```
 
 2. Export logs
 
 ```bash
-manyoyo --ib --iv 1.8.0-common 2>&1 | tee build-error.log
+manyoyo build --iv 1.8.0-common 2>&1 | tee build-error.log
 docker logs <container-name> 2>&1 | tee runtime-error.log  # or podman logs
 ```
 

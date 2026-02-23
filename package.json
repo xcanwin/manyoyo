@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "4.2.9",
+    "version": "5.0.0",
     "imageVersion": "1.8.0-common",
     "description": "AI Agent CLI Security Sandbox for Docker and Podman",
     "keywords": [
@@ -60,8 +60,13 @@
         "ws": "^8.19.0"
     },
     "devDependencies": {
-        "jest": "^29.7.0",
+        "jest": "^30.2.0",
         "vitepress": "^2.0.0-alpha.16"
+    },
+    "overrides": {
+        "glob": "^13.0.6",
+        "minimatch": "^10.2.2",
+        "test-exclude": "^8.0.0"
     },
     "jest": {
         "testMatch": [

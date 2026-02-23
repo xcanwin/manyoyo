@@ -55,19 +55,14 @@ let IMAGE_VERSION = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
 let EXEC_COMMAND = "";
 let EXEC_COMMAND_PREFIX = "";
 let EXEC_COMMAND_SUFFIX = "";
-let SHOULD_REMOVE = false;
-let IMAGE_BUILD_NEED = false;
 let IMAGE_BUILD_ARGS = [];
 let CONTAINER_ENVS = [];
 let CONTAINER_VOLUMES = [];
 let CONTAINER_PORTS = [];
-let MANYOYO_NAME = detectCommandName();
+const MANYOYO_NAME = detectCommandName();
 let CONT_MODE_ARGS = [];
 let QUIET = {};
-let SHOW_COMMAND = false;
-let YES_MODE = false;
 let RM_ON_EXIT = false;
-let SERVER_MODE = false;
 let SERVER_HOST = '127.0.0.1';
 let SERVER_PORT = 3000;
 let SERVER_AUTH_USER = "";
@@ -128,7 +123,7 @@ function validateServerHost(host, rawServer) {
         return value;
     }
 
-    console.error(`${RED}⚠️  错误: --server 地址格式应为 端口 或 host:port (例如 3000 / 0.0.0.0:3000): ${rawServer}${NC}`);
+    console.error(`${RED}⚠️  错误: serve 地址格式应为 端口 或 host:port (例如 3000 / 0.0.0.0:3000): ${rawServer}${NC}`);
     process.exit(1);
 }
 
@@ -161,13 +156,13 @@ function parseServerListen(rawServer) {
     }
 
     if (!/^\d+$/.test(portText)) {
-        console.error(`${RED}⚠️  错误: --server 端口必须是 1-65535 的整数: ${rawServer}${NC}`);
+        console.error(`${RED}⚠️  错误: serve 端口必须是 1-65535 的整数: ${rawServer}${NC}`);
         process.exit(1);
     }
 
     const port = Number(portText);
     if (port < 1 || port > 65535) {
-        console.error(`${RED}⚠️  错误: --server 端口超出范围 (1-65535): ${rawServer}${NC}`);
+        console.error(`${RED}⚠️  错误: serve 端口超出范围 (1-65535): ${rawServer}${NC}`);
         process.exit(1);
     }
 
@@ -189,7 +184,7 @@ function ensureWebServerAuthCredentials() {
 }
 
 /**
- * 敏感信息脱敏（用于 --show-config 输出）
+ * 敏感信息脱敏（用于 config show 输出）
  * @param {Object} obj - 配置对象
  * @returns {Object} 脱敏后的配置对象
  */
@@ -299,12 +294,12 @@ function getHelloTip(containerName, defaultCommand, runningCommand) {
         console.log(`${BLUE}----------------------------------------${NC}`);
         console.log(`📦 首次命令        : ${defaultCommand}`);
         if (resumeArg) {
-            console.log(`⚫ 恢复首次命令会话: ${CYAN}${MANYOYO_NAME} -n ${containerName} -- ${resumeArg}${NC}`);
+            console.log(`⚫ 恢复首次命令会话: ${CYAN}${MANYOYO_NAME} run -n ${containerName} -- ${resumeArg}${NC}`);
         }
-        console.log(`⚫ 执行首次命令    : ${GREEN}${MANYOYO_NAME} -n ${containerName}${NC}`);
-        console.log(`⚫ 执行指定命令    : ${GREEN}${MANYOYO_NAME} -n ${containerName} -x /bin/bash${NC}`);
+        console.log(`⚫ 执行首次命令    : ${GREEN}${MANYOYO_NAME} run -n ${containerName}${NC}`);
+        console.log(`⚫ 执行指定命令    : ${GREEN}${MANYOYO_NAME} run -n ${containerName} -x /bin/bash${NC}`);
         console.log(`⚫ 执行指定命令    : ${GREEN}docker exec -it ${containerName} /bin/bash${NC}`);
-        console.log(`⚫ 删除容器        : ${MANYOYO_NAME} -n ${containerName} --crm`);
+        console.log(`⚫ 删除容器        : ${MANYOYO_NAME} rm ${containerName}`);
         console.log("");
     }
 }
@@ -572,7 +567,7 @@ function showImagePullHint(err) {
     }
     const image = `${IMAGE_NAME}:${IMAGE_VERSION}`;
     console.log(`${YELLOW}💡 提示: 本地未找到镜像 ${image}，并且从 localhost 注册表拉取失败。${NC}`);
-    console.log(`${YELLOW}   你可以: (1) 更新 ~/.manyoyo/manyoyo.json 的 imageVersion。 (2) 或先执行 ${MANYOYO_NAME} --ib --iv <x.y.z-后缀> 构建镜像。${NC}`);
+    console.log(`${YELLOW}   你可以: (1) 更新 ~/.manyoyo/manyoyo.json 的 imageVersion。 (2) 或先执行 ${MANYOYO_NAME} build --iv <x.y.z-后缀> 构建镜像。${NC}`);
 }
 
 function runCmd(cmd, args, options = {}) {
@@ -763,11 +758,74 @@ function normalizeShellFullArgv(argv) {
     }
 }
 
+function appendArrayOption(command, flags, description) {
+    return command.option(
+        flags,
+        description,
+        (value, previous) => [...(previous || []), value],
+        []
+    );
+}
+
+function applyRunStyleOptions(command, options = {}) {
+    const includeRmOnExit = options.includeRmOnExit !== false;
+    const includeServePreview = options.includeServePreview === true;
+    const includeWebAuthOptions = options.includeWebAuthOptions === true;
+
+    command
+        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+        .option('--hp, --host-path <path>', '设置宿主机工作目录 (默认当前路径)')
+        .option('-n, --cont-name <name>', '设置容器名称')
+        .option('--cp, --cont-path <path>', '设置容器工作目录')
+        .option('-m, --cont-mode <mode>', '设置容器嵌套容器模式 (common, dind, sock)')
+        .option('--in, --image-name <name>', '指定镜像名称')
+        .option('--iv, --image-ver <version>', '指定镜像版本 (格式: x.y.z-后缀，如 1.7.4-common)');
+
+    appendArrayOption(command, '-e, --env <env>', '设置环境变量 XXX=YYY (可多次使用)');
+    appendArrayOption(command, '--ef, --env-file <file>', '设置环境变量通过文件 (仅支持绝对路径，如 /abs/path.env)');
+    appendArrayOption(command, '-v, --volume <volume>', '绑定挂载卷 XXX:YYY (可多次使用)');
+    appendArrayOption(command, '-p, --port <port>', '设置端口映射 XXX:YYY (可多次使用)');
+
+    command
+        .option('--sp, --shell-prefix <command>', '临时环境变量 (作为-s前缀)')
+        .option('-s, --shell <command>', '指定命令执行')
+        .option('--ss, --shell-suffix <command>', '指定命令后缀 (追加到-s之后，等价于 -- <args>)')
+        .option('-x, --shell-full <command...>', '指定完整命令执行 (代替--sp和-s和--命令)')
+        .option('-y, --yolo <cli>', '使AGENT无需确认 (claude/c, gemini/gm, codex/cx, opencode/oc)');
+
+    if (includeRmOnExit) {
+        command.option('--rm-on-exit', '退出后自动删除容器 (一次性模式)');
+    }
+
+    appendArrayOption(command, '-q, --quiet <item>', '静默显示 (可多次使用: cnew,crm,tip,cmd,full)');
+
+    if (includeServePreview) {
+        command
+            .option('--serve [listen]', '按 serve 模式解析配置 (支持 port 或 host:port)')
+            .option('-u, --user <username>', '网页服务登录用户名 (默认 admin)')
+            .option('-P, --pass <password>', '网页服务登录密码 (默认自动生成随机密码)');
+    }
+
+    if (includeWebAuthOptions) {
+        command
+            .option('-u, --user <username>', '网页服务登录用户名 (默认 admin)')
+            .option('-P, --pass <password>', '网页服务登录密码 (默认自动生成随机密码)');
+    }
+
+    return command;
+}
+
 async function setupCommander() {
     // Load config file
     const config = loadConfig();
 
     const program = new Command();
+    let selectedAction = '';
+    let selectedOptions = {};
+    const selectAction = (action, options = {}) => {
+        selectedAction = action;
+        selectedOptions = options;
+    };
 
     program
         .name(MANYOYO_NAME)
@@ -779,60 +837,94 @@ async function setupCommander() {
   ~/.manyoyo/run/c.json      运行配置示例
 
 路径规则:
-  -r name       → ~/.manyoyo/manyoyo.json 的 runs.name
-  --ef /abs/path.env → 绝对路径环境文件
-  --ss "<args>" → 显式设置命令后缀
-  -- <args...>  → 直接透传命令后缀（优先级最高）
+  run -r name         → ~/.manyoyo/manyoyo.json 的 runs.name
+  run --ef /abs/path.env → 绝对路径环境文件
+  run --ss "<args>"   → 显式设置命令后缀
+  run -- <args...>    → 直接透传命令后缀（优先级最高）
 
 示例:
-  ${MANYOYO_NAME} --update                            更新 MANYOYO 到最新版本
-  ${MANYOYO_NAME} --ib --iv ${IMAGE_VERSION_HELP_EXAMPLE}              构建镜像
-  ${MANYOYO_NAME} --init-config all                   从本机 Agent 配置初始化 ~/.manyoyo
-  ${MANYOYO_NAME} -r claude                           使用 manyoyo.json 的 runs.claude 快速启动
-  ${MANYOYO_NAME} -r codex --ss "resume --last"       使用命令后缀
-  ${MANYOYO_NAME} -n test --ef /abs/path/myenv.env -y c  使用绝对路径环境变量文件
-  ${MANYOYO_NAME} -n test -- -c                       恢复之前会话
-  ${MANYOYO_NAME} -x echo 123                         指定命令执行
-  ${MANYOYO_NAME} --server --server-user admin --server-pass 123456   启动带登录认证的网页服务
-  ${MANYOYO_NAME} --server 3000                       启动网页交互服务
-  ${MANYOYO_NAME} --server 0.0.0.0:3000               监听全部网卡，便于局域网访问
-  ${MANYOYO_NAME} -n test -q tip -q cmd               多次使用静默选项
+  ${MANYOYO_NAME} update                              更新 MANYOYO 到最新版本
+  ${MANYOYO_NAME} build --iv ${IMAGE_VERSION_HELP_EXAMPLE}             构建镜像
+  ${MANYOYO_NAME} init all                            从本机 Agent 配置初始化 ~/.manyoyo
+  ${MANYOYO_NAME} run -r claude                       使用 manyoyo.json 的 runs.claude 快速启动
+  ${MANYOYO_NAME} run -r codex --ss "resume --last"   使用命令后缀
+  ${MANYOYO_NAME} run -n test --ef /abs/path/myenv.env -y c  使用绝对路径环境变量文件
+  ${MANYOYO_NAME} run -n test -- -c                   恢复之前会话
+  ${MANYOYO_NAME} run -x "echo 123"                   指定命令执行
+  ${MANYOYO_NAME} serve 3000 -u admin -P 123456       启动带登录认证的网页服务
+  ${MANYOYO_NAME} serve 0.0.0.0:3000                  监听全部网卡，便于局域网访问
+  ${MANYOYO_NAME} run -n test -q tip -q cmd           多次使用静默选项
         `);
 
-    // Options
-    program
+    const runCommand = program.command('run').description('启动或连接容器并执行命令');
+    applyRunStyleOptions(runCommand);
+    runCommand.action(options => selectAction('run', options));
+
+    const buildCommand = program.command('build').description('构建 manyoyo 沙箱镜像');
+    buildCommand
         .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-        .option('--hp, --host-path <path>', '设置宿主机工作目录 (默认当前路径)')
-        .option('-n, --cont-name <name>', '设置容器名称')
-        .option('--cp, --cont-path <path>', '设置容器工作目录')
-        .option('-l, --cont-list', '列举容器')
-        .option('--crm, --cont-remove', '删除-n指定容器')
-        .option('-m, --cont-mode <mode>', '设置容器嵌套容器模式 (common, dind, sock)')
         .option('--in, --image-name <name>', '指定镜像名称')
         .option('--iv, --image-ver <version>', '指定镜像版本 (格式: x.y.z-后缀，如 1.7.4-common)')
-        .option('--ib, --image-build', '构建镜像')
-        .option('--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)', (value, previous) => [...(previous || []), value], [])
-        .option('--init-config [agents]', '初始化 Agent 配置到 ~/.manyoyo (all 或逗号分隔: claude,codex,gemini,opencode)')
-        .option('--update', '更新 MANYOYO（若检测为本地 file 安装则跳过）')
-        .option('--irm, --image-remove', '清理悬空镜像和 <none> 镜像')
-        .option('-e, --env <env>', '设置环境变量 XXX=YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
-        .option('--ef, --env-file <file>', '设置环境变量通过文件 (仅支持绝对路径，如 /abs/path.env)', (value, previous) => [...(previous || []), value], [])
-        .option('-v, --volume <volume>', '绑定挂载卷 XXX:YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
-        .option('-p, --port <port>', '设置端口映射 XXX:YYY (可多次使用)', (value, previous) => [...(previous || []), value], [])
-        .option('--sp, --shell-prefix <command>', '临时环境变量 (作为-s前缀)')
-        .option('-s, --shell <command>', '指定命令执行')
-        .option('--ss, --shell-suffix <command>', '指定命令后缀 (追加到-s之后，等价于 -- <args>)')
-        .option('-x, --shell-full <command...>', '指定完整命令执行 (代替--sp和-s和--命令)')
-        .option('-y, --yolo <cli>', '使AGENT无需确认 (claude/c, gemini/gm, codex/cx, opencode/oc)')
-        .option('--install <name>', `安装${MANYOYO_NAME}命令 (docker-cli-plugin)`)
-        .option('--show-config', '显示最终生效配置并退出')
-        .option('--show-command', '显示将执行的 docker run 命令并退出')
-        .option('--server [port]', '启动网页交互服务 (默认 127.0.0.1:3000，支持 host:port)')
-        .option('--server-user <username>', '网页服务登录用户名 (默认 admin)')
-        .option('--server-pass <password>', '网页服务登录密码 (默认自动生成随机密码)')
+        .option('--yes', '所有提示自动确认 (用于CI/脚本)');
+    appendArrayOption(buildCommand, '--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)');
+    buildCommand.action(options => selectAction('build', options));
+
+    const removeCommand = program.command('rm <name>').description('删除指定容器');
+    removeCommand
+        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+        .action((name, options) => selectAction('rm', { ...options, contName: name }));
+
+    program.command('ls')
+        .description('列举容器')
+        .action(() => selectAction('ls', { contList: true }));
+
+    const serveCommand = program.command('serve [listen]').description('启动网页交互服务 (默认 127.0.0.1:3000)');
+    applyRunStyleOptions(serveCommand, { includeRmOnExit: false, includeWebAuthOptions: true });
+    serveCommand.action((listen, options) => {
+        selectAction('serve', {
+            ...options,
+            server: listen === undefined ? true : listen,
+            serverUser: options.user,
+            serverPass: options.pass
+        });
+    });
+
+    const configCommand = program.command('config').description('查看解析后的配置或命令');
+    const configShowCommand = configCommand.command('show').description('显示最终生效配置并退出');
+    applyRunStyleOptions(configShowCommand, { includeRmOnExit: false, includeServePreview: true });
+    configShowCommand.action(options => {
+        const finalOptions = {
+            ...options,
+            showConfig: true
+        };
+        if (options.serve !== undefined) {
+            finalOptions.server = options.serve;
+            finalOptions.serverUser = options.user;
+            finalOptions.serverPass = options.pass;
+        }
+        selectAction('config-show', finalOptions);
+    });
+
+    const configRunCommand = configCommand.command('command').description('显示将执行的 docker run 命令并退出');
+    applyRunStyleOptions(configRunCommand, { includeRmOnExit: false });
+    configRunCommand.action(options => selectAction('config-command', options));
+
+    const initCommand = program.command('init [agents]').description('初始化 Agent 配置到 ~/.manyoyo');
+    initCommand
         .option('--yes', '所有提示自动确认 (用于CI/脚本)')
-        .option('--rm-on-exit', '退出后自动删除容器 (一次性模式)')
-        .option('-q, --quiet <item>', '静默显示 (可多次使用: cnew,crm,tip,cmd,full)', (value, previous) => [...(previous || []), value], []);
+        .action((agents, options) => selectAction('init', { ...options, initConfig: agents === undefined ? 'all' : agents }));
+
+    program.command('update')
+        .description('更新 MANYOYO（若检测为本地 file 安装则跳过）')
+        .action(() => selectAction('update', { update: true }));
+
+    program.command('install <name>')
+        .description(`安装${MANYOYO_NAME}命令 (docker-cli-plugin)`)
+        .action(name => selectAction('install', { install: name }));
+
+    program.command('prune')
+        .description('清理悬空镜像和 <none> 镜像')
+        .action(() => selectAction('prune', { imageRemove: true }));
 
     // Docker CLI plugin metadata check
     if (maybeHandleDockerPluginMetadata(process.argv)) {
@@ -847,25 +939,30 @@ async function setupCommander() {
         program.help();
     }
 
-    const isInitConfigMode = process.argv.some(arg => arg === '--init-config' || arg.startsWith('--init-config='));
-    const isUpdateMode = process.argv.includes('--update');
-    // init-config/update 只处理本地文件或 npm，不依赖 docker/podman
-    if (!isInitConfigMode && !isUpdateMode) {
-        // Ensure docker/podman is available
-        ensureDocker();
-    }
-
     // Pre-handle -x/--shell-full: treat all following args as a single command
     normalizeShellFullArgv(process.argv);
 
     // Parse arguments
     program.allowUnknownOption(false);
-    program.parse(process.argv);
+    await program.parseAsync(process.argv);
 
-    const options = program.opts();
+    if (!selectedAction) {
+        program.help();
+    }
 
-    if (options.yes) {
-        YES_MODE = true;
+    const options = selectedOptions;
+    const yesMode = Boolean(options.yes);
+    const isBuildMode = selectedAction === 'build';
+    const isRemoveMode = selectedAction === 'rm';
+    const isListMode = selectedAction === 'ls';
+    const isPruneMode = selectedAction === 'prune';
+    const isShowConfigMode = selectedAction === 'config-show';
+    const isShowCommandMode = selectedAction === 'config-command';
+    const isServerMode = options.server !== undefined;
+
+    const noDockerActions = new Set(['init', 'update', 'install', 'config-show']);
+    if (!noDockerActions.has(selectedAction)) {
+        ensureDocker();
     }
 
     if (options.update) {
@@ -875,7 +972,7 @@ async function setupCommander() {
 
     if (options.initConfig !== undefined) {
         await initAgentConfigs(options.initConfig, {
-            yesMode: YES_MODE,
+            yesMode,
             askQuestion,
             loadConfig,
             supportedAgents: SUPPORTED_INIT_AGENTS,
@@ -977,8 +1074,7 @@ async function setupCommander() {
         RM_ON_EXIT = true;
     }
 
-    if (options.server !== undefined) {
-        SERVER_MODE = true;
+    if (isServerMode) {
         const serverListen = parseServerListen(options.server);
         SERVER_HOST = serverListen.host;
         SERVER_PORT = serverListen.port;
@@ -995,11 +1091,11 @@ async function setupCommander() {
         SERVER_AUTH_PASS_AUTO = false;
     }
 
-    if (SERVER_MODE) {
+    if (isServerMode) {
         ensureWebServerAuthCredentials();
     }
 
-    if (options.showConfig) {
+    if (isShowConfigMode) {
         const finalConfig = {
             hostPath: HOST_PATH,
             containerName: CONTAINER_NAME,
@@ -1017,9 +1113,9 @@ async function setupCommander() {
             shellSuffix: EXEC_COMMAND_SUFFIX || "",
             yolo: yoloValue || "",
             quiet: quietValue || [],
-            server: SERVER_MODE,
-            serverHost: SERVER_MODE ? SERVER_HOST : null,
-            serverPort: SERVER_MODE ? SERVER_PORT : null,
+            server: isServerMode,
+            serverHost: isServerMode ? SERVER_HOST : null,
+            serverPort: isServerMode ? SERVER_PORT : null,
             serverUser: SERVER_AUTH_USER || "",
             serverPass: SERVER_AUTH_PASS || "",
             exec: {
@@ -1034,20 +1130,20 @@ async function setupCommander() {
         process.exit(0);
     }
 
-    if (options.showCommand) {
-        SHOW_COMMAND = true;
-    }
+    if (isListMode) { getContList(); process.exit(0); }
+    if (isPruneMode) { pruneDanglingImages(); process.exit(0); }
+    if (selectedAction === 'install') { installManyoyo(options.install); process.exit(0); }
 
-    if (options.contList) { getContList(); process.exit(0); }
-    if (options.contRemove) SHOULD_REMOVE = true;
-    if (options.imageBuild) IMAGE_BUILD_NEED = true;
-    if (options.imageRemove) { pruneDanglingImages(); process.exit(0); }
-    if (options.install) { installManyoyo(options.install); process.exit(0); }
-
-    return program;
+    return {
+        yesMode,
+        isBuildMode,
+        isRemoveMode,
+        isShowCommandMode,
+        isServerMode
+    };
 }
 
-function createRuntimeContext() {
+function createRuntimeContext(modeState = {}) {
     return {
         containerName: CONTAINER_NAME,
         hostPath: HOST_PATH,
@@ -1062,9 +1158,9 @@ function createRuntimeContext() {
         containerVolumes: CONTAINER_VOLUMES,
         containerPorts: CONTAINER_PORTS,
         quiet: QUIET,
-        showCommand: SHOW_COMMAND,
+        showCommand: Boolean(modeState.isShowCommandMode),
         rmOnExit: RM_ON_EXIT,
-        serverMode: SERVER_MODE,
+        serverMode: Boolean(modeState.isServerMode),
         serverHost: SERVER_HOST,
         serverPort: SERVER_PORT,
         serverAuthUser: SERVER_AUTH_USER,
@@ -1074,10 +1170,6 @@ function createRuntimeContext() {
 }
 
 function handleRemoveContainer(runtime) {
-    if (!SHOULD_REMOVE) {
-        return false;
-    }
-
     try {
         if (containerExists(runtime.containerName)) {
             removeContainer(runtime.containerName);
@@ -1087,7 +1179,6 @@ function handleRemoveContainer(runtime) {
     } catch (e) {
         console.log(`${RED}⚠️  错误: 未找到名为 ${runtime.containerName} 的容器。${NC}`);
     }
-    return true;
 }
 
 function validateHostPath(runtime) {
@@ -1380,8 +1471,8 @@ async function runWebServerMode(runtime) {
 async function main() {
     try {
         // 1. Setup commander and parse arguments
-        await setupCommander();
-        const runtime = createRuntimeContext();
+        const modeState = await setupCommander();
+        const runtime = createRuntimeContext(modeState);
 
         // 2. Start web server mode
         if (runtime.serverMode) {
@@ -1390,7 +1481,7 @@ async function main() {
         }
 
         // 3. Handle image build operation
-        if (IMAGE_BUILD_NEED) {
+        if (modeState.isBuildMode) {
             await buildImage({
                 imageBuildArgs: IMAGE_BUILD_ARGS,
                 imageName: runtime.imageName,
@@ -1399,7 +1490,7 @@ async function main() {
                 imageVersionBase: IMAGE_VERSION_BASE,
                 parseImageVersionTag,
                 manyoyoName: MANYOYO_NAME,
-                yesMode: YES_MODE,
+                yesMode: Boolean(modeState.yesMode),
                 dockerCmd: DOCKER_CMD,
                 rootDir: path.join(__dirname, '..'),
                 loadConfig,
@@ -1412,7 +1503,8 @@ async function main() {
         }
 
         // 4. Handle remove container operation
-        if (handleRemoveContainer(runtime)) {
+        if (modeState.isRemoveMode) {
+            handleRemoveContainer(runtime);
             return;
         }
 

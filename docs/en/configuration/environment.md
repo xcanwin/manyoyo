@@ -11,7 +11,7 @@ MANYOYO supports two methods for setting environment variables:
 Use the `-e` parameter to specify environment variables directly on the command line:
 
 ```bash
-manyoyo -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" -x claude
+manyoyo run -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" -x claude
 ```
 
 **Features**:
@@ -24,7 +24,7 @@ manyoyo -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" 
 Use the `--ef` parameter to load environment variables from a file:
 
 ```bash
-manyoyo --ef /abs/path/anthropic_claudecode.env -x claude
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x claude
 ```
 
 **Features**:
@@ -67,7 +67,7 @@ MESSAGE="Hello World"
 `--ef` accepts absolute paths only:
 
 ```bash
-manyoyo --ef /abs/path/myconfig.env
+manyoyo run --ef /abs/path/myconfig.env
 # Loads: file from the specified absolute path
 ```
 
@@ -99,10 +99,10 @@ Use environment file:
 
 ```bash
 # Use from any directory (absolute path)
-manyoyo --ef $HOME/.manyoyo/env/anthropic_[claudecode]_claudecode.env -x claude
+manyoyo run --ef $HOME/.manyoyo/env/anthropic_[claudecode]_claudecode.env -x claude
 
 # Or use with runs configuration
-manyoyo -r claude  # envFile specified in runs.claude
+manyoyo run -r claude  # envFile specified in runs.claude
 ```
 
 ### Codex Environment Configuration
@@ -123,10 +123,10 @@ Use environment file:
 
 ```bash
 # Use from any directory (absolute path)
-manyoyo --ef $HOME/.manyoyo/env/openai_[gpt]_codex.env -x codex
+manyoyo run --ef $HOME/.manyoyo/env/openai_[gpt]_codex.env -x codex
 
 # Or use with runs configuration
-manyoyo -r codex  # envFile specified in runs.codex
+manyoyo run -r codex  # envFile specified in runs.codex
 ```
 
 ### Gemini Environment Configuration
@@ -144,7 +144,7 @@ EOF
 Use environment file:
 
 ```bash
-manyoyo --ef $HOME/.manyoyo/env/gemini.env -x gemini
+manyoyo run --ef $HOME/.manyoyo/env/gemini.env -x gemini
 ```
 
 ### OpenCode Environment Configuration
@@ -162,7 +162,7 @@ EOF
 Use environment file:
 
 ```bash
-manyoyo --ef $HOME/.manyoyo/env/opencode.env -x opencode
+manyoyo run --ef $HOME/.manyoyo/env/opencode.env -x opencode
 ```
 
 ## Environment Variable Priority
@@ -200,7 +200,7 @@ Besides container `env` / `envFile`, MANYOYO also supports runtime env vars for 
 - `MANYOYO_SERVER_USER`
 - `MANYOYO_SERVER_PASS`
 
-These are used by `--server` auth and are not injected into container workloads. See:
+These are used by `serve` auth and are not injected into container workloads. See:
 
 - [Configuration System Overview](./README.md)
 - [Web Server Auth and Security](../advanced/web-server-auth.md)
@@ -252,10 +252,10 @@ Configure environment files in `runs` to avoid repetitive input:
 Use debugging commands to verify that environment variables are loaded correctly:
 ```bash
 # View final configuration
-manyoyo --show-config -r claude
+manyoyo config show -r claude
 
 # Verify in container
-manyoyo -r claude -x env | grep ANTHROPIC
+manyoyo run -r claude -x env | grep ANTHROPIC
 ```
 
 ## Troubleshooting
@@ -267,15 +267,15 @@ manyoyo -r claude -x env | grep ANTHROPIC
 **Solutions**:
 1. Check file format (must be `.env` format)
 2. Confirm file path is correct
-3. Use `--show-config` to view configuration
+3. Use `config show` to view configuration
 4. Run `env` command in container to check
 
 ```bash
 # Check configuration
-manyoyo --show-config --ef /abs/path/myconfig.env
+manyoyo config show --ef /abs/path/myconfig.env
 
 # Check environment variables in container
-manyoyo --ef /abs/path/myconfig.env -x env
+manyoyo run --ef /abs/path/myconfig.env -x env
 ```
 
 ### Environment Variable Value Incorrect
@@ -289,7 +289,7 @@ manyoyo --ef /abs/path/myconfig.env -x env
 
 ```bash
 # View all effective environment variables
-manyoyo --ef /abs/path/myconfig.env -x 'env | sort'
+manyoyo run --ef /abs/path/myconfig.env -x 'env | sort'
 ```
 
 ## Related Documentation

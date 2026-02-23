@@ -209,7 +209,7 @@ MANYOYO uses custom container images that include pre-installed AI CLI tools and
 
 ```bash
 # Build recommended version (common)
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 
 # Verify after build
 docker images | grep manyoyo  # or podman images
@@ -228,9 +228,9 @@ docker images | grep manyoyo  # or podman images
 Includes all supported AI CLI tools and development environments:
 
 ```bash
-manyoyo --ib --iv 1.8.0-full
+manyoyo build --iv 1.8.0-full
 # Or explicitly specify build args
-manyoyo --ib --iv 1.8.0-full --iba TOOL=full
+manyoyo build --iv 1.8.0-full --iba TOOL=full
 ```
 
 **Included Tools**:
@@ -248,7 +248,7 @@ manyoyo --ib --iv 1.8.0-full --iba TOOL=full
 Includes only commonly used components:
 
 ```bash
-manyoyo --ib --iba TOOL=common
+manyoyo build --iba TOOL=common
 ```
 
 **Included Tools**:
@@ -269,7 +269,7 @@ Select specific tool combinations:
 
 ```bash
 # Install only specified tools
-manyoyo --ib --iba TOOL=go,codex,java,gemini
+manyoyo build --iba TOOL=go,codex,java,gemini
 
 # Component descriptions:
 # - python: Python environment
@@ -286,11 +286,11 @@ manyoyo --ib --iba TOOL=go,codex,java,gemini
 
 ```bash
 # Custom image name and version
-manyoyo --ib --in myimage --iv 1.8.0-common
+manyoyo build --in myimage --iv 1.8.0-common
 # Generates image: myimage:1.8.0-common
 
 # Specify full image name
-manyoyo --ib --in localhost/myuser/sandbox --iv 1.0.0-common
+manyoyo build --in localhost/myuser/sandbox --iv 1.0.0-common
 # Generates image: localhost/myuser/sandbox:1.0.0-common
 ```
 
@@ -298,13 +298,13 @@ manyoyo --ib --in localhost/myuser/sandbox --iv 1.0.0-common
 
 ```bash
 # Skip Git SSL verification (development environments only)
-manyoyo --ib --iba GIT_SSL_NO_VERIFY=true
+manyoyo build --iba GIT_SSL_NO_VERIFY=true
 
 # Disable China mirrors (users outside China)
-manyoyo --ib --iba NODE_MIRROR= --iba NPM_REGISTRY=
+manyoyo build --iba NODE_MIRROR= --iba NPM_REGISTRY=
 
 # Use custom mirror sources
-manyoyo --ib --iba NODE_MIRROR=https://custom-mirror.com
+manyoyo build --iba NODE_MIRROR=https://custom-mirror.com
 ```
 
 ### Manual Build (Not Recommended)
@@ -386,36 +386,36 @@ docker images | grep manyoyo  # or podman images
 
 ```bash
 # Migrate existing claude/codex/gemini/opencode setup from host
-manyoyo --init-config all
+manyoyo init all
 ```
 
 ### 4. Create Test Container
 
 ```bash
 # Create and run test container
-manyoyo -n test-container -x echo "MANYOYO works!"
+manyoyo run -n test-container -x echo "MANYOYO works!"
 
 # View container
-manyoyo -l
+manyoyo ls
 
 # Delete test container
-manyoyo -n test-container --crm
+manyoyo rm test-container
 ```
 
 ### 5. Test AI CLI Tools
 
 ```bash
 # Use initialized run config (recommended)
-manyoyo -r claude
+manyoyo run -r claude
 
 # Or only check CLI version
-manyoyo -n test -x claude --version
+manyoyo run -n test -x claude --version
 
 # Test Python
-manyoyo -n test -x python3 --version
+manyoyo run -n test -x python3 --version
 
 # Test Node.js
-manyoyo -n test -x node --version
+manyoyo run -n test -x node --version
 ```
 
 ## Troubleshooting
@@ -433,7 +433,7 @@ curl -I https://mirrors.tencent.com
 df -h
 
 # Build minimal image first to verify base pipeline
-manyoyo --ib --iba TOOL=common
+manyoyo build --iba TOOL=common
 ```
 
 If you hit `permission denied`, run:
@@ -459,7 +459,7 @@ manyoyo -V
 
 ```bash
 # Build new version image
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 
 # Update global configuration
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
@@ -469,7 +469,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # Clean old images (optional)
-manyoyo --irm
+manyoyo prune
 docker system prune -a  # or podman system prune -a
 ```
 
@@ -495,7 +495,7 @@ docker ps -a | grep my | awk '{print $1}' | xargs docker rm
 docker images | grep manyoyo | awk '{print $3}' | xargs docker rmi
 
 # Clean dangling images
-manyoyo --irm
+manyoyo prune
 ```
 
 ## Next Steps

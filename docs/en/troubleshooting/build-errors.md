@@ -7,7 +7,7 @@ Default examples use `1.8.0-common`; replace the tag with your actual version if
 
 ### Problem Description
 
-Errors occur when executing `manyoyo --ib`, build process is interrupted.
+Errors occur when executing `manyoyo build`, build process is interrupted.
 
 ### Common Error Messages
 
@@ -60,14 +60,14 @@ df -h
 docker system prune -a  # or podman system prune -a
 
 # Clean dangling images
-manyoyo --irm
+manyoyo prune
 ```
 
 #### 3. Use --yes to Skip Confirmations
 
 ```bash
 # Skip all interactive confirmations
-manyoyo --ib --iv 1.8.0-common --yes
+manyoyo build --iv 1.8.0-common --yes
 ```
 
 #### 4. Modify Mirror Sources for International Users
@@ -82,24 +82,24 @@ Edit `docker/manyoyo.Dockerfile`, comment out mirror source related ARGs:
 
 Or use empty values:
 ```bash
-manyoyo --ib --iv 1.8.0-common --iba NODE_MIRROR= --iba NPM_REGISTRY=
+manyoyo build --iv 1.8.0-common --iba NODE_MIRROR= --iba NPM_REGISTRY=
 ```
 
 #### 5. Step-by-Step Build Debugging
 
 ```bash
 # First build basic version (faster, fewer issues)
-manyoyo --ib --iv 1.8.0-common --iba TOOL=common
+manyoyo build --iv 1.8.0-common --iba TOOL=common
 
 # After basic version succeeds, build full version
-manyoyo --ib --iv 1.8.0-full --iba TOOL=full
+manyoyo build --iv 1.8.0-full --iba TOOL=full
 ```
 
 #### 6. View Detailed Build Logs
 
 ```bash
 # Save build logs
-manyoyo --ib --iv 1.8.0-common 2>&1 | tee build.log
+manyoyo build --iv 1.8.0-common 2>&1 | tee build.log
 
 # Search for error keywords
 grep -i "error\|failed\|fatal" build.log
@@ -133,7 +133,7 @@ sudo systemctl restart docker
 **Solution**:
 ```bash
 # Skip Git SSL verification during build (not recommended, dev environments only)
-manyoyo --ib --iv 1.8.0-common --iba GIT_SSL_NO_VERIFY=true
+manyoyo build --iv 1.8.0-common --iba GIT_SSL_NO_VERIFY=true
 ```
 
 ## Image Pull Failures
@@ -155,7 +155,7 @@ MANYOYO uses local images by default (`localhost/xcanwin/manyoyo`), which need t
 
 ```bash
 # Build image
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 
 # Verify image
 docker images | grep manyoyo  # or podman images
@@ -182,7 +182,7 @@ EOF
 
 ```bash
 # Specify version via command line
-manyoyo --iv 1.8.0-common -y c
+manyoyo run --iv 1.8.0-common -y c
 ```
 
 ### Image Does Not Exist
@@ -195,10 +195,10 @@ manyoyo --iv 1.8.0-common -y c
 docker images | grep manyoyo
 
 # Use existing version
-manyoyo --iv <x.y.z-suffix> -y c
+manyoyo run --iv <x.y.z-suffix> -y c
 
 # Or build new version
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 ```
 
 ## Network Connection Issues
@@ -267,7 +267,7 @@ export HTTPS_PROXY=http://proxy.example.com:8080
 export NO_PROXY=localhost,127.0.0.1
 
 # Rebuild
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 ```
 
 ## Insufficient Disk Space
@@ -303,7 +303,7 @@ docker image prune      # Clean dangling images
 docker volume prune     # Clean unused volumes
 
 # MANYOYO provided cleanup command
-manyoyo --irm           # Clean dangling and <none> images
+manyoyo prune           # Clean dangling and <none> images
 ```
 
 #### 3. Move Docker/Podman Data Directory
@@ -366,7 +366,7 @@ newgrp docker
 docker ps
 
 # Solution 2: Use sudo (not recommended)
-sudo manyoyo --ib --iv 1.8.0-common
+sudo manyoyo build --iv 1.8.0-common
 ```
 
 ### File Permission Issues
@@ -433,7 +433,7 @@ docker version
 rm -rf docker/cache/
 
 # Rebuild (will re-download)
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 ```
 
 ### Cache Not Taking Effect
@@ -458,7 +458,7 @@ touch docker/cache/*
 
 ```bash
 # View detailed build process
-manyoyo --ib --iv 1.8.0-common 2>&1 | tee build.log
+manyoyo build --iv 1.8.0-common 2>&1 | tee build.log
 
 # Enable debugging in Docker
 export DOCKER_BUILDKIT=0  # Use traditional builder for more verbose output
@@ -483,7 +483,7 @@ podman build -t localhost/xcanwin/manyoyo:test-full \
 podman build --target=base -f docker/manyoyo.Dockerfile .
 
 # Test specific build arguments
-manyoyo --ib --iv 1.8.0-common --iba TOOL=common --yes
+manyoyo build --iv 1.8.0-common --iba TOOL=common --yes
 ```
 
 ## Related Documentation

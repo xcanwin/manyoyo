@@ -46,9 +46,9 @@
 ```bash
 npm install -g @xcanwin/manyoyo    # 安装
 podman pull ubuntu:24.04           # 仅 Podman 需要
-manyoyo --ib --iv 1.8.0-common     # 构建镜像
-manyoyo --init-config all          # 从本机 Agent 配置迁移到 ~/.manyoyo
-manyoyo -r claude                  # 使用 manyoyo.json 的 runs.claude 启动
+manyoyo build --iv 1.8.0-common     # 构建镜像
+manyoyo init all          # 从本机 Agent 配置迁移到 ~/.manyoyo
+manyoyo run -r claude                  # 使用 manyoyo.json 的 runs.claude 启动
 ```
 
 注意：YOLO/SOLO 会跳过权限确认，请确保在可控环境中使用。
@@ -97,13 +97,13 @@ npm install -g @xcanwin/manyoyo
 
 ```bash
 # 构建 common 版本（推荐）
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 
 # 构建 full 版本
-manyoyo --ib --iv 1.8.0-full
+manyoyo build --iv 1.8.0-full
 
 # 构建自定义版本
-manyoyo --ib --iba TOOL=go,codex,java,gemini
+manyoyo build --iba TOOL=go,codex,java,gemini
 ```
 
 - 首次构建会自动下载依赖到 `docker/cache/`，2天内再次构建会使用缓存，速度提升约 **5 倍**
@@ -112,25 +112,25 @@ manyoyo --ib --iba TOOL=go,codex,java,gemini
 
 ```bash
 # 配置迁移（推荐首步）
-manyoyo --init-config all
+manyoyo init all
 
 # 启动常见智能体
-manyoyo -y c          # Claude Code（或 claude / cc）
-manyoyo -y gm         # Gemini（或 gemini / g）
-manyoyo -y cx         # Codex（或 codex）
-manyoyo -y oc         # OpenCode（或 opencode）
-manyoyo --update      # 更新 MANYOYO（全局 npm 安装场景）
+manyoyo run -y c          # Claude Code（或 claude / cc）
+manyoyo run -y gm         # Gemini（或 gemini / g）
+manyoyo run -y cx         # Codex（或 codex）
+manyoyo run -y oc         # OpenCode（或 opencode）
+manyoyo update      # 更新 MANYOYO（全局 npm 安装场景）
 
 # 容器管理
-manyoyo -l
-manyoyo -n my-dev -x /bin/bash
-manyoyo -n my-dev --crm
-manyoyo --server 3000
-manyoyo --server 3000 --server-user admin --server-pass 123456
+manyoyo ls
+manyoyo run -n my-dev -x /bin/bash
+manyoyo rm my-dev
+manyoyo serve 3000
+manyoyo serve 3000 -u admin -P 123456
 
 # 调试配置与命令拼装
-manyoyo --show-config
-manyoyo --show-command
+manyoyo config show
+manyoyo config command
 ```
 
 ## 配置

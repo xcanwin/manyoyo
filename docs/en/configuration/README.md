@@ -35,14 +35,14 @@ Example:
 ## Configuration File Path Rules
 
 ### Run Configuration
-- `manyoyo -r claude` → Loads `runs.claude` from `~/.manyoyo/manyoyo.json`
-- `manyoyo -r <name>` only accepts `runs.<name>` names, not file paths
+- `manyoyo run -r claude` → Loads `runs.claude` from `~/.manyoyo/manyoyo.json`
+- `manyoyo run -r <name>` only accepts `runs.<name>` names, not file paths
 
 ### Global Configuration
 - When running any manyoyo command, `~/.manyoyo/manyoyo.json` is automatically loaded (if it exists)
 
 ### Environment Files
-- `manyoyo --ef /abs/path/myenv.env` → Loads environment file from absolute path
+- `manyoyo run --ef /abs/path/myenv.env` → Loads environment file from absolute path
 - `--ef` only accepts absolute paths (no short name / relative path)
 
 ## Priority Mechanism
@@ -125,10 +125,10 @@ Use the following commands to view the final effective configuration:
 
 ```bash
 # Display final configuration
-manyoyo --show-config
+manyoyo config show
 
 # Display command to be executed
-manyoyo --show-command
+manyoyo config command
 ```
 
 These debugging commands will display the merged results from all configuration sources, helping you understand the priority and merge logic of configurations.
@@ -138,4 +138,4 @@ These debugging commands will display the merged results from all configuration 
 - [Environment Variables Details](./environment.md) - Learn how to configure environment variables
 - [Configuration Files Details](./config-files.md) - Learn all configuration options
 - [Configuration Examples](./examples.md) - View practical configuration examples
-- [Web Server Auth and Security](../advanced/web-server-auth.md) - Learn auth behavior and security guidance for `--server`
+- [Web Server Auth and Security](../advanced/web-server-auth.md) - Learn auth behavior and security guidance for `serve`

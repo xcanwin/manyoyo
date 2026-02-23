@@ -30,7 +30,7 @@ This document primarily covers **dind mode**.
 
 ```bash
 # Start container in dind mode
-manyoyo -m dind -x /bin/bash
+manyoyo run -m dind -x /bin/bash
 
 # Use Podman inside the container (works out of the box)
 podman ps -a
@@ -61,7 +61,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # Start using the configuration
-manyoyo -r dind
+manyoyo run -r dind
 ```
 
 ## How It Works
@@ -101,7 +101,7 @@ MANYOYO's dind mode is based on the following technologies:
 **Usage**:
 ```bash
 # Enter dind container
-manyoyo -m dind -x /bin/bash
+manyoyo run -m dind -x /bin/bash
 
 # Use Podman directly
 podman ps -a
@@ -120,7 +120,7 @@ podman build -t myapp .
 **Usage**:
 ```bash
 # Enter dind container
-manyoyo -m dind -x /bin/bash
+manyoyo run -m dind -x /bin/bash
 
 # Start dockerd (run in background)
 nohup dockerd > /var/log/dockerd.log 2>&1 &
@@ -160,7 +160,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # 2. Start AI-assisted development
-manyoyo -r dind-dev
+manyoyo run -r dind-dev
 
 # 3. AI can help with:
 #    - Writing Dockerfile
@@ -169,7 +169,7 @@ manyoyo -r dind-dev
 #    - Debugging container issues
 
 # 4. Check after exiting
-manyoyo -n my-dind-dev -x /bin/bash
+manyoyo run -n my-dind-dev -x /bin/bash
 
 # 5. View containers and images created by AI
 podman ps -a
@@ -198,7 +198,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # 2. Run CI tasks
-manyoyo -r ci -x /bin/bash
+manyoyo run -r ci -x /bin/bash
 
 # 3. Run tests inside the container
 $ npm install
@@ -218,7 +218,7 @@ $ podman rm -f $(podman ps -aq)
 
 ```bash
 # Enter dind container
-manyoyo -m dind -x /bin/bash
+manyoyo run -m dind -x /bin/bash
 
 # Create test Dockerfile
 cat > Dockerfile.test << 'EOF'
@@ -341,7 +341,7 @@ docker build -t myapp .
 
 ```bash
 # Limit CPU and memory
-manyoyo -m dind -x "podman run --cpus=1 --memory=512m myapp"
+manyoyo run -m dind -x "podman run --cpus=1 --memory=512m myapp"
 ```
 
 #### 2. Use Non-privileged Mode (if possible)
@@ -486,7 +486,7 @@ podman ps -a --size
 
 ```bash
 # Use dind mode + Podman
-manyoyo -m dind -r claude
+manyoyo run -m dind -r claude
 
 # AI-assisted containerized application development
 # Fast iteration, testing, debugging
@@ -496,7 +496,7 @@ manyoyo -m dind -r claude
 
 ```bash
 # Use automation scripts
-manyoyo --yes -m dind -x "
+manyoyo run -m dind -x "
   podman build -t myapp:$CI_COMMIT_SHA . &&
   podman run --rm myapp:$CI_COMMIT_SHA npm test
 "

@@ -12,20 +12,20 @@ Anthropic 官方的 Claude AI 命令行工具。
 
 **快捷方式**：
 ```bash
-manyoyo -y c          # 推荐
-manyoyo -y claude
-manyoyo -y cc
+manyoyo run -y c          # 推荐
+manyoyo run -y claude
+manyoyo run -y cc
 ```
 
 **等同于**：
 ```bash
-manyoyo -x claude --dangerously-skip-permissions
+manyoyo run -x claude --dangerously-skip-permissions
 ```
 
 **恢复会话**：
 ```bash
-manyoyo -n <容器名> -- -c
-manyoyo -n <容器名> -- --continue
+manyoyo run -n <容器名> -- -c
+manyoyo run -n <容器名> -- --continue
 ```
 
 **配置示例**：
@@ -52,16 +52,16 @@ export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
 **常用命令**：
 ```bash
 # 启动 YOLO 模式
-manyoyo -r claude
+manyoyo run -r claude
 
 # 查看版本
-manyoyo -r claude -- --version
+manyoyo run -r claude -- --version
 
 # 查看帮助
-manyoyo -r claude -- --help
+manyoyo run -r claude -- --help
 
 # 恢复上次会话
-manyoyo -r claude -- -c
+manyoyo run -r claude -- -c
 ```
 
 ### Gemini
@@ -70,20 +70,20 @@ Google 的 Gemini AI 命令行工具。
 
 **快捷方式**：
 ```bash
-manyoyo -y gm         # 推荐
-manyoyo -y gemini
-manyoyo -y g
+manyoyo run -y gm         # 推荐
+manyoyo run -y gemini
+manyoyo run -y g
 ```
 
 **等同于**：
 ```bash
-manyoyo -x gemini --yolo
+manyoyo run -x gemini --yolo
 ```
 
 **恢复会话**：
 ```bash
-manyoyo -n <容器名> -- -r
-manyoyo -n <容器名> -- --resume
+manyoyo run -n <容器名> -- -r
+manyoyo run -n <容器名> -- --resume
 ```
 
 **配置示例**：
@@ -105,13 +105,13 @@ export GEMINI_MODEL="gemini-2.0-flash-exp"
 **常用命令**：
 ```bash
 # 启动 YOLO 模式
-manyoyo -r gemini
+manyoyo run -r gemini
 
 # 查看版本
-manyoyo -r gemini -- --version
+manyoyo run -r gemini -- --version
 
 # 恢复会话
-manyoyo -r gemini -- -r
+manyoyo run -r gemini -- -r
 ```
 
 ### Codex
@@ -120,19 +120,19 @@ OpenAI 的 Codex 命令行工具。
 
 **快捷方式**：
 ```bash
-manyoyo -y cx         # 推荐
-manyoyo -y codex
+manyoyo run -y cx         # 推荐
+manyoyo run -y codex
 ```
 
 **等同于**：
 ```bash
-manyoyo -x codex --dangerously-bypass-approvals-and-sandbox
+manyoyo run -x codex --dangerously-bypass-approvals-and-sandbox
 ```
 
 **恢复会话**：
 ```bash
-manyoyo -n <容器名> -- resume --last
-manyoyo -n <容器名> -- resume <session-id>
+manyoyo run -n <容器名> -- resume --last
+manyoyo run -n <容器名> -- resume <session-id>
 ```
 
 **配置示例**：
@@ -156,16 +156,16 @@ export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
 **常用命令**：
 ```bash
 # 启动 YOLO 模式
-manyoyo -r codex
+manyoyo run -r codex
 
 # 查看会话列表
-manyoyo -r codex -- list
+manyoyo run -r codex -- list
 
 # 恢复最后会话
-manyoyo -r codex -- resume --last
+manyoyo run -r codex -- resume --last
 
 # 恢复特定会话
-manyoyo -r codex -- resume <session-id>
+manyoyo run -r codex -- resume <session-id>
 ```
 
 ### OpenCode
@@ -174,19 +174,19 @@ manyoyo -r codex -- resume <session-id>
 
 **快捷方式**：
 ```bash
-manyoyo -y oc         # 推荐
-manyoyo -y opencode
+manyoyo run -y oc         # 推荐
+manyoyo run -y opencode
 ```
 
 **等同于**：
 ```bash
-manyoyo -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
+manyoyo run -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
 ```
 
 **恢复会话**：
 ```bash
-manyoyo -n <容器名> -- -c
-manyoyo -n <容器名> -- --continue
+manyoyo run -n <容器名> -- -c
+manyoyo run -n <容器名> -- --continue
 ```
 
 **配置示例**：
@@ -208,13 +208,13 @@ export OPENAI_BASE_URL="https://api.openai.com/v1"
 **常用命令**：
 ```bash
 # 启动 YOLO 模式
-manyoyo -r opencode
+manyoyo run -r opencode
 
 # 查看版本
-manyoyo -r opencode -- --version
+manyoyo run -r opencode -- --version
 
 # 恢复会话
-manyoyo -r opencode -- -c
+manyoyo run -r opencode -- -c
 ```
 
 ## YOLO 模式说明
@@ -266,10 +266,10 @@ MANYOYO 提供安全的容器隔离：
 
 ```bash
 # 创建新会话（自动生成容器名）
-manyoyo -y c
+manyoyo run -y c
 
 # 创建命名会话
-manyoyo -n my-session -y c
+manyoyo run -n my-session -y c
 ```
 
 ### 恢复会话
@@ -278,16 +278,16 @@ manyoyo -n my-session -y c
 
 ```bash
 # Claude Code
-manyoyo -n my-session -- -c
+manyoyo run -n my-session -- -c
 
 # Gemini
-manyoyo -n my-session -- -r
+manyoyo run -n my-session -- -r
 
 # Codex
-manyoyo -n my-session -- resume --last
+manyoyo run -n my-session -- resume --last
 
 # OpenCode
-manyoyo -n my-session -- -c
+manyoyo run -n my-session -- -c
 ```
 
 ### 会话持久化
@@ -299,14 +299,14 @@ manyoyo -n my-session -- -c
 # 选择 'y' 在交互式提示中
 
 # 删除容器（会话丢失）
-manyoyo -n my-session --crm
+manyoyo rm my-session
 ```
 
 ### 查看会话
 
 ```bash
 # 列出所有容器会话
-manyoyo -l
+manyoyo ls
 
 # 查看特定容器
 docker ps -a | grep my-session
@@ -318,10 +318,10 @@ docker ps -a | grep my-session
 
 ```bash
 # 启动 Claude Code
-manyoyo -n dev -y c
+manyoyo run -n dev -y c
 
 # 退出后，进入 shell
-manyoyo -n dev -x /bin/bash
+manyoyo run -n dev -x /bin/bash
 
 # 在 shell 中手动运行其他智能体
 gemini --yolo
@@ -332,14 +332,14 @@ codex --dangerously-bypass-approvals-and-sandbox
 
 ```bash
 # Claude Code 容器
-manyoyo -n claude-session -y c
+manyoyo run -n claude-session -y c
 
 # Codex 容器
-manyoyo -n codex-session -y cx
+manyoyo run -n codex-session -y cx
 
 # 根据需要切换
-manyoyo -n claude-session -- -c
-manyoyo -n codex-session -- resume --last
+manyoyo run -n claude-session -- -c
+manyoyo run -n codex-session -- resume --last
 ```
 
 ## 与 /bin/bash 循环切换
@@ -350,20 +350,20 @@ MANYOYO 支持在 AI 智能体和 shell 之间灵活切换：
 
 ```bash
 # 启动智能体
-manyoyo -n dev -y c
+manyoyo run -n dev -y c
 
 # 工作一段时间后，退出智能体
 
 # 选择 'i' 进入交互式 shell
 # 或使用命令
-manyoyo -n dev -x /bin/bash
+manyoyo run -n dev -x /bin/bash
 ```
 
 ### 从 Shell 切换到智能体
 
 ```bash
 # 在 shell 中
-manyoyo -n dev -x /bin/bash
+manyoyo run -n dev -x /bin/bash
 
 # 在容器内直接运行智能体
 claude --dangerously-skip-permissions
@@ -371,19 +371,19 @@ gemini --yolo
 codex --dangerously-bypass-approvals-and-sandbox
 
 # 或退出后使用命令
-manyoyo -n dev -y c
+manyoyo run -n dev -y c
 ```
 
 ### 工作流示例
 
 ```bash
 # 1. 启动 Claude Code 进行开发
-manyoyo -n project -y c
+manyoyo run -n project -y c
 
 # 2. AI 帮助编写代码...
 
 # 3. 退出，进入 shell 检查
-manyoyo -n project -x /bin/bash
+manyoyo run -n project -x /bin/bash
 
 # 4. 在 shell 中手动测试
 $ npm test
@@ -394,7 +394,7 @@ $ ls -la
 $ claude --dangerously-skip-permissions
 
 # 6. 或退出后恢复
-manyoyo -n project -- -c
+manyoyo run -n project -- -c
 ```
 
 ## 技巧和最佳实践
@@ -417,7 +417,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # 使用配置（简单）
-manyoyo -r claude
+manyoyo run -r claude
 ```
 
 ### 统一容器名称
@@ -426,12 +426,12 @@ manyoyo -r claude
 
 ```bash
 # 按项目命名
-manyoyo -n webapp-claude -r claude
-manyoyo -n api-codex -r codex
+manyoyo run -n webapp-claude -r claude
+manyoyo run -n api-codex -r codex
 
 # 按功能命名
-manyoyo -n dev-claude -r claude
-manyoyo -n test-gemini -r gemini
+manyoyo run -n dev-claude -r claude
+manyoyo run -n test-gemini -r gemini
 ```
 
 ### 多智能体协作
@@ -440,14 +440,14 @@ manyoyo -n test-gemini -r gemini
 
 ```bash
 # Claude 用于架构设计
-manyoyo -n project-claude --hp ~/project -r claude
+manyoyo run -n project-claude --hp ~/project -r claude
 
 # Codex 用于代码生成
-manyoyo -n project-codex --hp ~/project -r codex
+manyoyo run -n project-codex --hp ~/project -r codex
 
 # 切换使用
-manyoyo -n project-claude -- -c
-manyoyo -n project-codex -- resume --last
+manyoyo run -n project-claude -- -c
+manyoyo run -n project-codex -- resume --last
 ```
 
 ### 配置环境隔离
@@ -485,18 +485,18 @@ EOF
 **检查环境变量**：
 ```bash
 # 验证环境变量
-manyoyo -r claude --show-config
+manyoyo config show -r claude
 
 # 测试环境变量
-manyoyo -r claude -x 'env | grep ANTHROPIC'
+manyoyo run -r claude -x 'env | grep ANTHROPIC'
 ```
 
 **检查镜像**：
 ```bash
 # 确认智能体已安装在镜像中
-manyoyo -x which claude
-manyoyo -x which gemini
-manyoyo -x which codex
+manyoyo run -x which claude
+manyoyo run -x which gemini
+manyoyo run -x which codex
 ```
 
 ### 会话无法恢复
@@ -504,7 +504,7 @@ manyoyo -x which codex
 **检查容器状态**：
 ```bash
 # 查看容器是否存在
-manyoyo -l
+manyoyo ls
 docker ps -a | grep <容器名>
 
 # 查看容器日志
@@ -514,13 +514,13 @@ docker logs <容器名>
 **使用正确的恢复命令**：
 ```bash
 # Claude Code: -c 或 --continue
-manyoyo -n test -- -c
+manyoyo run -n test -- -c
 
 # Gemini: -r 或 --resume
-manyoyo -n test -- -r
+manyoyo run -n test -- -r
 
 # Codex: resume --last
-manyoyo -n test -- resume --last
+manyoyo run -n test -- resume --last
 ```
 
 ### API 认证失败
@@ -541,8 +541,8 @@ curl -H "x-api-key: $ANTHROPIC_AUTH_TOKEN" \
 vim ~/.manyoyo/env/anthropic_claudecode.env
 
 # 重新启动容器
-manyoyo -n test --crm
-manyoyo -n test -r claude
+manyoyo rm test
+manyoyo run -n test -r claude
 ```
 
 ## 相关文档

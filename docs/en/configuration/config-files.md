@@ -130,7 +130,7 @@ Mode descriptions:
 #### serverUser
 - **Type**: String
 - **Default**: `admin`
-- **Description**: Web login username (`--server` mode)
+- **Description**: Web login username (`serve` mode)
 - **Environment Variable**: `MANYOYO_SERVER_USER`
 - **Example**:
 ```json5
@@ -142,7 +142,7 @@ Mode descriptions:
 #### serverPass
 - **Type**: String
 - **Default**: Auto-generated random password when unset
-- **Description**: Web login password (`--server` mode)
+- **Description**: Web login password (`serve` mode)
 - **Environment Variable**: `MANYOYO_SERVER_PASS`
 - **Example**:
 ```json5
@@ -292,7 +292,7 @@ Mode descriptions:
 
 ```bash
 # Read from runs in manyoyo.json
-manyoyo -r claude
+manyoyo run -r claude
 # Loads: runs.claude in ~/.manyoyo/manyoyo.json
 ```
 
@@ -427,13 +427,13 @@ Global configuration + runs.<name> + Command-line arguments
 
 ```bash
 # Display merged results from all configuration sources
-manyoyo --show-config
+manyoyo config show
 
 # Display merged results for specific run configuration
-manyoyo -r claude --show-config
+manyoyo config show -r claude
 
 # Display command to be executed
-manyoyo -r claude --show-command
+manyoyo config command -r claude
 ```
 
 ### Common Configuration Issues
@@ -445,7 +445,7 @@ manyoyo -r claude --show-command
 **Solutions**:
 1. Check configuration file format (must be valid JSON5)
 2. Confirm file path is correct
-3. Use `--show-config` to view final configuration
+3. Use `config show` to view final configuration
 4. Note that override parameters only take the highest priority value
 
 ```bash
@@ -453,7 +453,7 @@ manyoyo -r claude --show-command
 cat ~/.manyoyo/manyoyo.json | jq '.runs.claude'
 
 # View final configuration
-manyoyo -r claude --show-config
+manyoyo config show -r claude
 ```
 
 #### Configuration Conflicts
@@ -462,7 +462,7 @@ manyoyo -r claude --show-config
 
 **Solutions**:
 1. Understand priority rules (override vs merge)
-2. Use `--show-config` to view final value
+2. Use `config show` to view final value
 3. Remove conflicting items from lower priority configurations if necessary
 
 #### Environment Variables Not Loaded
@@ -472,15 +472,15 @@ manyoyo -r claude --show-config
 **Solutions**:
 1. Confirm environment file path is correct
 2. Check environment file format
-3. Use `--show-config` to view loaded environment file list
+3. Use `config show` to view loaded environment file list
 4. Run `env` command in container to verify
 
 ```bash
 # View environment files in configuration
-manyoyo -r claude --show-config | grep envFile
+manyoyo config show -r claude | grep envFile
 
 # Verify environment variables in container
-manyoyo -r claude -x env | grep ANTHROPIC
+manyoyo run -r claude -x env | grep ANTHROPIC
 ```
 
 ## Best Practices
@@ -541,4 +541,4 @@ vim ~/.manyoyo/manyoyo.json
 - [Configuration System Overview](./README.md) - Understand configuration priority mechanism
 - [Environment Variables Details](./environment.md) - Learn how to configure environment variables
 - [Configuration Examples](./examples.md) - View more practical examples
-- [Web Server Auth and Security](../advanced/web-server-auth.md) - Auth behavior and security baseline for `--server`
+- [Web Server Auth and Security](../advanced/web-server-auth.md) - Auth behavior and security baseline for `serve`

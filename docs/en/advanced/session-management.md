@@ -26,11 +26,11 @@ Container AI Work Container   Continue  Cleanup
 
 ```bash
 # Auto-generate container name (based on timestamp)
-manyoyo -y c
+manyoyo run -y c
 # Generated name like: my-0204-1430
 
 # View container name
-manyoyo -l
+manyoyo ls
 ```
 
 **Naming Rule**: `my-{MMDD}-{HHMM}`
@@ -40,7 +40,7 @@ manyoyo -l
 
 ```bash
 # Create named session (recommended)
-manyoyo -n my-project -y c
+manyoyo run -n my-project -y c
 
 # Advantages:
 # - Easy to remember
@@ -64,7 +64,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 }
 EOF
 
-manyoyo -r project-a
+manyoyo run -r project-a
 
 # Method 2: Run profile with project path
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
@@ -81,7 +81,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 }
 EOF
 
-manyoyo -r project-b
+manyoyo run -r project-b
 ```
 
 ## Session Resumption
@@ -109,13 +109,13 @@ Container exited, please select an action:
 # You can resume the session later
 
 # Resume Claude Code session
-manyoyo -n my-project -- -c
+manyoyo run -n my-project -- -c
 
 # Resume Codex session
-manyoyo -n my-project -- resume --last
+manyoyo run -n my-project -- resume --last
 
 # Resume Gemini session
-manyoyo -n my-project -- -r
+manyoyo run -n my-project -- -r
 ```
 
 **Use Cases**:
@@ -139,7 +139,7 @@ manyoyo -n my-project -- -r
 
 ```bash
 # After selecting '1', re-enter using the startup command
-# For example, if started with 'manyoyo -y c'
+# For example, if started with 'manyoyo run -y c'
 # Then re-run 'claude --dangerously-skip-permissions'
 ```
 
@@ -202,43 +202,43 @@ Different AI CLI tools have different resume methods:
 
 ```bash
 # Resume last session
-manyoyo -n my-session -- -c
-manyoyo -n my-session -- --continue
+manyoyo run -n my-session -- -c
+manyoyo run -n my-session -- --continue
 
 # View available sessions
-manyoyo -n my-session -x "claude --list-sessions"
+manyoyo run -n my-session -x "claude --list-sessions"
 ```
 
 #### Codex
 
 ```bash
 # Resume last session
-manyoyo -n my-session -- resume --last
+manyoyo run -n my-session -- resume --last
 
 # Resume specific session
-manyoyo -n my-session -- resume <session-id>
+manyoyo run -n my-session -- resume <session-id>
 
 # List all sessions
-manyoyo -n my-session -- list
+manyoyo run -n my-session -- list
 ```
 
 #### Gemini
 
 ```bash
 # Resume session
-manyoyo -n my-session -- -r
-manyoyo -n my-session -- --resume
+manyoyo run -n my-session -- -r
+manyoyo run -n my-session -- --resume
 
 # Clear session history
-manyoyo -n my-session -- --clear
+manyoyo run -n my-session -- --clear
 ```
 
 #### OpenCode
 
 ```bash
 # Resume session
-manyoyo -n my-session -- -c
-manyoyo -n my-session -- --continue
+manyoyo run -n my-session -- -c
+manyoyo run -n my-session -- --continue
 ```
 
 ## Session Persistence
@@ -249,7 +249,7 @@ Container state is managed by Docker/Podman:
 
 ```bash
 # View all sessions (including stopped)
-manyoyo -l
+manyoyo ls
 docker ps -a | grep my
 
 # Container status
@@ -262,10 +262,10 @@ docker ps -a --format "table {{.Names}}\t{{.Status}}"
 
 ```bash
 # Mount current directory by default
-manyoyo -y c  # Current directory auto-mounted
+manyoyo run -y c  # Current directory auto-mounted
 
 # Specify working directory
-manyoyo --hp /path/to/project -y c
+manyoyo run --hp /path/to/project -y c
 
 # Code modifications are saved on host
 ```
@@ -274,10 +274,10 @@ manyoyo --hp /path/to/project -y c
 
 ```bash
 # Mount data directory
-manyoyo -v "/data:/workspace/data" -y c
+manyoyo run -v "/data:/workspace/data" -y c
 
 # Mount configuration files
-manyoyo -v "~/.gitconfig:/root/.gitconfig:ro" -y c
+manyoyo run -v "~/.gitconfig:/root/.gitconfig:ro" -y c
 ```
 
 #### 3. Use Volumes (Recommended)
@@ -287,7 +287,7 @@ manyoyo -v "~/.gitconfig:/root/.gitconfig:ro" -y c
 docker volume create myproject-data
 
 # Mount volume
-manyoyo -v "myproject-data:/workspace/data" -y c
+manyoyo run -v "myproject-data:/workspace/data" -y c
 
 # Data persists after container removal
 ```
@@ -303,7 +303,7 @@ Different AI tools store history in different locations:
 # Location: ~/.claude/sessions/
 
 # Mount session directory (optional)
-manyoyo -v "~/.claude:/root/.claude" -y c
+manyoyo run -v "~/.claude:/root/.claude" -y c
 ```
 
 #### Codex
@@ -313,7 +313,7 @@ manyoyo -v "~/.claude:/root/.claude" -y c
 # Location: ~/.codex/sessions/
 
 # Mount session directory
-manyoyo -v "~/.codex:/root/.codex" -y c
+manyoyo run -v "~/.codex:/root/.codex" -y c
 ```
 
 ## Multi-session Management
@@ -322,29 +322,29 @@ manyoyo -v "~/.codex:/root/.codex" -y c
 
 ```bash
 # Project A
-manyoyo -n project-a --hp ~/projects/a -y c
+manyoyo run -n project-a --hp ~/projects/a -y c
 
 # Project B
-manyoyo -n project-b --hp ~/projects/b -y c
+manyoyo run -n project-b --hp ~/projects/b -y c
 
 # Project C
-manyoyo -n project-c --hp ~/projects/c -y c
+manyoyo run -n project-c --hp ~/projects/c -y c
 
 # View all sessions
-manyoyo -l
+manyoyo ls
 ```
 
 ### Session Switching
 
 ```bash
 # Work in project A
-manyoyo -n project-a -- -c
+manyoyo run -n project-a -- -c
 
 # Switch to project B
-manyoyo -n project-b -- -c
+manyoyo run -n project-b -- -c
 
 # Switch to project C
-manyoyo -n project-c -- -c
+manyoyo run -n project-c -- -c
 ```
 
 ### Session Isolation
@@ -361,8 +361,8 @@ Each session is completely independent:
 
 ```bash
 # Remove single session
-manyoyo -n my-session --crm
-manyoyo -n my-session --cont-remove
+manyoyo rm my-session
+manyoyo rm my-session
 
 # Or use Docker command
 docker rm -f my-session
@@ -372,7 +372,7 @@ docker rm -f my-session
 
 ```bash
 # One-time session (auto-remove after exit)
-manyoyo -n temp --rm-on-exit -y c
+manyoyo run -n temp --rm-on-exit -y c
 
 # Use cases:
 # - Temporary testing
@@ -396,7 +396,7 @@ docker ps -a | grep my | awk '{print $1}' | xargs docker rm -f
 
 ```bash
 # List all MANYOYO sessions
-manyoyo -l
+manyoyo ls
 
 # Detailed status
 docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
@@ -422,7 +422,7 @@ docker logs --tail 100 my-session
 
 ```bash
 # Enter shell to check
-manyoyo -n my-session -x /bin/bash
+manyoyo run -n my-session -x /bin/bash
 
 # View processes
 $ ps aux
@@ -465,9 +465,9 @@ my-0204-1430
     └── debug
 
 # Quick start
-manyoyo -r webapp
-manyoyo -r api
-manyoyo -r mobile
+manyoyo run -r webapp
+manyoyo run -r api
+manyoyo run -r mobile
 ```
 
 ### 3. Data Backup
@@ -525,7 +525,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # Create new session based on template
-manyoyo -r template
+manyoyo run -r template
 # Copy runs.template to runs.newproject and update containerName
 ```
 
@@ -556,10 +556,10 @@ cat my-session.tar | docker import - my-session:imported
 ```bash
 # Multi-person collaboration (same container)
 # Person A creates session
-manyoyo -n shared-session -y c
+manyoyo run -n shared-session -y c
 
 # Person B enters same session
-manyoyo -n shared-session -x /bin/bash
+manyoyo run -n shared-session -x /bin/bash
 
 # Note: Not recommended for multiple people to use AI simultaneously
 ```
@@ -573,11 +573,11 @@ manyoyo -n shared-session -x /bin/bash
 **Solution**:
 ```bash
 # Check if container exists
-manyoyo -l
+manyoyo ls
 docker ps -a | grep my-session
 
 # If not exists, create new session
-manyoyo -n my-session -y c
+manyoyo run -n my-session -y c
 ```
 
 ### AI History Lost
@@ -590,7 +590,7 @@ manyoyo -n my-session -y c
 docker ps -a --format "{{.Names}}\t{{.CreatedAt}}"
 
 # Mount session directory (when creating next time)
-manyoyo -v "~/.claude:/root/.claude" -n my-session -y c
+manyoyo run -v "~/.claude:/root/.claude" -n my-session -y c
 ```
 
 ### Container Cannot Start
@@ -603,8 +603,8 @@ manyoyo -v "~/.claude:/root/.claude" -n my-session -y c
 docker logs my-session
 
 # Remove and recreate
-manyoyo -n my-session --crm
-manyoyo -n my-session -y c
+manyoyo rm my-session
+manyoyo run -n my-session -y c
 ```
 
 ## Integration with Skills Marketplace

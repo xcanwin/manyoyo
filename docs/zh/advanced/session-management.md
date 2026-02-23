@@ -25,11 +25,11 @@
 
 ```bash
 # 自动生成容器名（基于时间戳）
-manyoyo -y c
+manyoyo run -y c
 # 生成名称如：my-0204-1430
 
 # 查看容器名
-manyoyo -l
+manyoyo ls
 ```
 
 **命名规则**：`my-{月日}-{时分}`
@@ -39,7 +39,7 @@ manyoyo -l
 
 ```bash
 # 创建命名会话（推荐）
-manyoyo -n my-project -y c
+manyoyo run -n my-project -y c
 
 # 优势：
 # - 容易记忆
@@ -63,7 +63,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 }
 EOF
 
-manyoyo -r project-a
+manyoyo run -r project-a
 
 # 方式 2：带项目路径的运行配置
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
@@ -80,7 +80,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 }
 EOF
 
-manyoyo -r project-b
+manyoyo run -r project-b
 ```
 
 ## 会话恢复
@@ -108,13 +108,13 @@ manyoyo -r project-b
 # 稍后可以恢复会话
 
 # 恢复 Claude Code 会话
-manyoyo -n my-project -- -c
+manyoyo run -n my-project -- -c
 
 # 恢复 Codex 会话
-manyoyo -n my-project -- resume --last
+manyoyo run -n my-project -- resume --last
 
 # 恢复 Gemini 会话
-manyoyo -n my-project -- -r
+manyoyo run -n my-project -- -r
 ```
 
 **适用场景**：
@@ -138,7 +138,7 @@ manyoyo -n my-project -- -r
 
 ```bash
 # 选择 '1' 后，使用启动时的命令重新进入
-# 例如，如果启动时是 'manyoyo -y c'
+# 例如，如果启动时是 'manyoyo run -y c'
 # 则重新运行 'claude --dangerously-skip-permissions'
 ```
 
@@ -201,43 +201,43 @@ $ claude --version    # 检查工具版本
 
 ```bash
 # 恢复最后会话
-manyoyo -n my-session -- -c
-manyoyo -n my-session -- --continue
+manyoyo run -n my-session -- -c
+manyoyo run -n my-session -- --continue
 
 # 查看可用会话
-manyoyo -n my-session -x "claude --list-sessions"
+manyoyo run -n my-session -x "claude --list-sessions"
 ```
 
 #### Codex
 
 ```bash
 # 恢复最后会话
-manyoyo -n my-session -- resume --last
+manyoyo run -n my-session -- resume --last
 
 # 恢复特定会话
-manyoyo -n my-session -- resume <session-id>
+manyoyo run -n my-session -- resume <session-id>
 
 # 列出所有会话
-manyoyo -n my-session -- list
+manyoyo run -n my-session -- list
 ```
 
 #### Gemini
 
 ```bash
 # 恢复会话
-manyoyo -n my-session -- -r
-manyoyo -n my-session -- --resume
+manyoyo run -n my-session -- -r
+manyoyo run -n my-session -- --resume
 
 # 清除会话历史
-manyoyo -n my-session -- --clear
+manyoyo run -n my-session -- --clear
 ```
 
 #### OpenCode
 
 ```bash
 # 恢复会话
-manyoyo -n my-session -- -c
-manyoyo -n my-session -- --continue
+manyoyo run -n my-session -- -c
+manyoyo run -n my-session -- --continue
 ```
 
 ## 会话持久化
@@ -248,7 +248,7 @@ manyoyo -n my-session -- --continue
 
 ```bash
 # 查看所有会话（包括停止的）
-manyoyo -l
+manyoyo ls
 docker ps -a | grep my
 
 # 容器状态
@@ -261,10 +261,10 @@ docker ps -a --format "table {{.Names}}\t{{.Status}}"
 
 ```bash
 # 默认挂载当前目录
-manyoyo -y c  # 当前目录自动挂载
+manyoyo run -y c  # 当前目录自动挂载
 
 # 指定工作目录
-manyoyo --hp /path/to/project -y c
+manyoyo run --hp /path/to/project -y c
 
 # 代码修改会保存在宿主机
 ```
@@ -273,10 +273,10 @@ manyoyo --hp /path/to/project -y c
 
 ```bash
 # 挂载数据目录
-manyoyo -v "/data:/workspace/data" -y c
+manyoyo run -v "/data:/workspace/data" -y c
 
 # 挂载配置文件
-manyoyo -v "~/.gitconfig:/root/.gitconfig:ro" -y c
+manyoyo run -v "~/.gitconfig:/root/.gitconfig:ro" -y c
 ```
 
 #### 3. 使用 volumes（推荐）
@@ -286,7 +286,7 @@ manyoyo -v "~/.gitconfig:/root/.gitconfig:ro" -y c
 docker volume create myproject-data
 
 # 挂载卷
-manyoyo -v "myproject-data:/workspace/data" -y c
+manyoyo run -v "myproject-data:/workspace/data" -y c
 
 # 数据在容器删除后仍然保留
 ```
@@ -302,7 +302,7 @@ manyoyo -v "myproject-data:/workspace/data" -y c
 # 位置：~/.claude/sessions/
 
 # 挂载会话目录（可选）
-manyoyo -v "~/.claude:/root/.claude" -y c
+manyoyo run -v "~/.claude:/root/.claude" -y c
 ```
 
 #### Codex
@@ -312,7 +312,7 @@ manyoyo -v "~/.claude:/root/.claude" -y c
 # 位置：~/.codex/sessions/
 
 # 挂载会话目录
-manyoyo -v "~/.codex:/root/.codex" -y c
+manyoyo run -v "~/.codex:/root/.codex" -y c
 ```
 
 ## 多会话管理
@@ -321,29 +321,29 @@ manyoyo -v "~/.codex:/root/.codex" -y c
 
 ```bash
 # 项目 A
-manyoyo -n project-a --hp ~/projects/a -y c
+manyoyo run -n project-a --hp ~/projects/a -y c
 
 # 项目 B
-manyoyo -n project-b --hp ~/projects/b -y c
+manyoyo run -n project-b --hp ~/projects/b -y c
 
 # 项目 C
-manyoyo -n project-c --hp ~/projects/c -y c
+manyoyo run -n project-c --hp ~/projects/c -y c
 
 # 查看所有会话
-manyoyo -l
+manyoyo ls
 ```
 
 ### 会话切换
 
 ```bash
 # 在项目 A 中工作
-manyoyo -n project-a -- -c
+manyoyo run -n project-a -- -c
 
 # 切换到项目 B
-manyoyo -n project-b -- -c
+manyoyo run -n project-b -- -c
 
 # 切换到项目 C
-manyoyo -n project-c -- -c
+manyoyo run -n project-c -- -c
 ```
 
 ### 会话隔离
@@ -360,8 +360,8 @@ manyoyo -n project-c -- -c
 
 ```bash
 # 删除单个会话
-manyoyo -n my-session --crm
-manyoyo -n my-session --cont-remove
+manyoyo rm my-session
+manyoyo rm my-session
 
 # 或使用 Docker 命令
 docker rm -f my-session
@@ -371,7 +371,7 @@ docker rm -f my-session
 
 ```bash
 # 一次性会话（退出后自动删除）
-manyoyo -n temp --rm-on-exit -y c
+manyoyo run -n temp --rm-on-exit -y c
 
 # 适用场景：
 # - 临时测试
@@ -395,7 +395,7 @@ docker ps -a | grep my | awk '{print $1}' | xargs docker rm -f
 
 ```bash
 # 列出所有 MANYOYO 会话
-manyoyo -l
+manyoyo ls
 
 # 详细状态
 docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
@@ -421,7 +421,7 @@ docker logs --tail 100 my-session
 
 ```bash
 # 进入 shell 检查
-manyoyo -n my-session -x /bin/bash
+manyoyo run -n my-session -x /bin/bash
 
 # 查看进程
 $ ps aux
@@ -464,9 +464,9 @@ my-0204-1430
     └── debug
 
 # 快速启动
-manyoyo -r webapp
-manyoyo -r api
-manyoyo -r mobile
+manyoyo run -r webapp
+manyoyo run -r api
+manyoyo run -r mobile
 ```
 
 ### 3. 数据备份
@@ -524,7 +524,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # 基于模板创建新会话
-manyoyo -r template
+manyoyo run -r template
 # 复制 runs.template 为 runs.newproject 并修改 containerName
 ```
 
@@ -555,10 +555,10 @@ cat my-session.tar | docker import - my-session:imported
 ```bash
 # 多人协作（同一容器）
 # 人员 A 创建会话
-manyoyo -n shared-session -y c
+manyoyo run -n shared-session -y c
 
 # 人员 B 进入相同会话
-manyoyo -n shared-session -x /bin/bash
+manyoyo run -n shared-session -x /bin/bash
 
 # 注意：不推荐多人同时使用 AI
 ```
@@ -572,11 +572,11 @@ manyoyo -n shared-session -x /bin/bash
 **解决方案**：
 ```bash
 # 检查容器是否存在
-manyoyo -l
+manyoyo ls
 docker ps -a | grep my-session
 
 # 如果不存在，创建新会话
-manyoyo -n my-session -y c
+manyoyo run -n my-session -y c
 ```
 
 ### AI 历史丢失
@@ -589,7 +589,7 @@ manyoyo -n my-session -y c
 docker ps -a --format "{{.Names}}\t{{.CreatedAt}}"
 
 # 挂载会话目录（下次创建时）
-manyoyo -v "~/.claude:/root/.claude" -n my-session -y c
+manyoyo run -v "~/.claude:/root/.claude" -n my-session -y c
 ```
 
 ### 容器无法启动
@@ -602,8 +602,8 @@ manyoyo -v "~/.claude:/root/.claude" -n my-session -y c
 docker logs my-session
 
 # 删除并重新创建
-manyoyo -n my-session --crm
-manyoyo -n my-session -y c
+manyoyo rm my-session
+manyoyo run -n my-session -y c
 ```
 
 ## 与 Skills Marketplace 集成

@@ -29,8 +29,7 @@ manyoyo --version
 
 ```bash
 # List all MANYOYO containers
-manyoyo -l
-manyoyo --cont-list
+manyoyo ls
 
 # View using Docker/Podman commands
 docker ps -a | grep my
@@ -41,24 +40,24 @@ podman ps -a | grep my
 
 ```bash
 # Create and run container (auto-generate container name)
-manyoyo -x echo "Hello MANYOYO"
+manyoyo run -x echo "Hello MANYOYO"
 
 # Specify container name
-manyoyo -n my-dev -x /bin/bash
+manyoyo run -n my-dev -x /bin/bash
 
 # Use timestamp container name (default)
-manyoyo -y c  # Auto-generates name like my-0204-1430
+manyoyo run -y c  # Auto-generates name like my-0204-1430
 ```
 
 ### Delete Container
 
 ```bash
 # Delete specified container
-manyoyo -n my-dev --crm
-manyoyo -n my-dev --cont-remove
+manyoyo rm my-dev
+manyoyo rm my-dev
 
 # Auto-delete on exit (one-time mode)
-manyoyo -n temp --rm-on-exit -x /bin/bash
+manyoyo run -n temp --rm-on-exit -x /bin/bash
 ```
 
 ### Container Status
@@ -81,26 +80,26 @@ docker logs <container-name>
 
 ```bash
 # Execute single command
-manyoyo -x echo "Hello World"
+manyoyo run -x echo "Hello World"
 
 # Execute multiple commands (using && to connect)
-manyoyo -x 'echo "Start" && ls -la && echo "End"'
+manyoyo run -x 'echo "Start" && ls -la && echo "End"'
 
 # Use full command (-x or --shell-full)
-manyoyo --sf 'python3 --version'
+manyoyo run --shell-full 'python3 --version'
 ```
 
 ### Interactive Shell
 
 ```bash
 # Enter interactive bash
-manyoyo -x /bin/bash
+manyoyo run -x /bin/bash
 
 # Enter shell in existing container
-manyoyo -n my-dev -x /bin/bash
+manyoyo run -n my-dev -x /bin/bash
 
 # Specify working directory
-manyoyo --hp /path/to/project -x /bin/bash
+manyoyo run --hp /path/to/project -x /bin/bash
 ```
 
 ### Command Composition
@@ -111,14 +110,14 @@ MANYOYO supports three ways to compose commands:
 
 ```bash
 # Full command
-manyoyo -x 'claude --version'
+manyoyo run -x 'claude --version'
 ```
 
 #### 2. Using --shell-prefix, --shell, --
 
 ```bash
 # Set environment variable + command + arguments
-manyoyo --sp 'DEBUG=1' -s claude -- --version
+manyoyo run --sp 'DEBUG=1' -s claude -- --version
 
 # Equivalent to: DEBUG=1 claude --version
 ```
@@ -127,13 +126,13 @@ manyoyo --sp 'DEBUG=1' -s claude -- --version
 
 ```bash
 # Set command only
-manyoyo -s claude
+manyoyo run -s claude
 
 # Add prefix
-manyoyo --sp 'DEBUG=1' -s claude
+manyoyo run --sp 'DEBUG=1' -s claude
 
 # Add suffix arguments
-manyoyo -s claude -- --help
+manyoyo run -s claude -- --help
 ```
 
 ## AI CLI Shortcuts
@@ -144,46 +143,46 @@ MANYOYO provides shortcuts to launch AI CLI tools in YOLO/SOLO mode (skip permis
 
 ```bash
 # Using shortcuts
-manyoyo -y c          # Recommended
-manyoyo -y claude
-manyoyo -y cc
+manyoyo run -y c          # Recommended
+manyoyo run -y claude
+manyoyo run -y cc
 
 # Equivalent to
-manyoyo -x claude --dangerously-skip-permissions
+manyoyo run -x claude --dangerously-skip-permissions
 ```
 
 ### Gemini
 
 ```bash
 # Using shortcuts
-manyoyo -y gm         # Recommended
-manyoyo -y gemini
-manyoyo -y g
+manyoyo run -y gm         # Recommended
+manyoyo run -y gemini
+manyoyo run -y g
 
 # Equivalent to
-manyoyo -x gemini --yolo
+manyoyo run -x gemini --yolo
 ```
 
 ### Codex
 
 ```bash
 # Using shortcuts
-manyoyo -y cx         # Recommended
-manyoyo -y codex
+manyoyo run -y cx         # Recommended
+manyoyo run -y codex
 
 # Equivalent to
-manyoyo -x codex --dangerously-bypass-approvals-and-sandbox
+manyoyo run -x codex --dangerously-bypass-approvals-and-sandbox
 ```
 
 ### OpenCode
 
 ```bash
 # Using shortcuts
-manyoyo -y oc         # Recommended
-manyoyo -y opencode
+manyoyo run -y oc         # Recommended
+manyoyo run -y opencode
 
 # Equivalent to
-manyoyo -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
+manyoyo run -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
 ```
 
 ## Environment Variables and Configuration
@@ -192,12 +191,12 @@ manyoyo -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
 
 ```bash
 # String form (-e parameter)
-manyoyo -e "ANTHROPIC_BASE_URL=https://api.anthropic.com" \
+manyoyo run -e "ANTHROPIC_BASE_URL=https://api.anthropic.com" \
         -e "ANTHROPIC_AUTH_TOKEN=sk-xxx" \
         -x claude
 
 # Multiple environment variables
-manyoyo -e "VAR1=value1" \
+manyoyo run -e "VAR1=value1" \
         -e "VAR2=value2" \
         -e "VAR3=value3" \
         -x /bin/bash
@@ -207,23 +206,23 @@ manyoyo -e "VAR1=value1" \
 
 ```bash
 # Load environment file
-manyoyo --ef /abs/path/anthropic_claudecode.env -x claude
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x claude
 
 # Load multiple environment files
-manyoyo --ef /abs/path/base.env --ef /abs/path/anthropic_secrets.env -x claude
+manyoyo run --ef /abs/path/base.env --ef /abs/path/anthropic_secrets.env -x claude
 ```
 
 ### Using Run Configuration
 
 ```bash
 # Load run configuration
-manyoyo -r claude
+manyoyo run -r claude
 
 # Run configuration + override environment variables
-manyoyo -r claude -e "DEBUG=true"
+manyoyo run -r claude -e "DEBUG=true"
 
 # Run configuration + additional environment file
-manyoyo -r claude --ef /abs/path/additional.env
+manyoyo run -r claude --ef /abs/path/additional.env
 ```
 
 For detailed configuration, refer to [Configuration System](../configuration/README.md).
@@ -234,26 +233,26 @@ For detailed configuration, refer to [Configuration System](../configuration/REA
 
 ```bash
 # Default mount current directory
-manyoyo -y c  # Current directory mounted to same path in container
+manyoyo run -y c  # Current directory mounted to same path in container
 
 # Specify host working directory
-manyoyo --hp /path/to/project -y c
+manyoyo run --hp /path/to/project -y c
 
 # Specify container working directory
-manyoyo --cp /workspace -y c
+manyoyo run --cp /workspace -y c
 
 # Specify both
-manyoyo --hp /Users/me/project --cp /workspace -y c
+manyoyo run --hp /Users/me/project --cp /workspace -y c
 ```
 
 ### Additional Mounts
 
 ```bash
 # Mount single file
-manyoyo -v "/Users/me/.ssh/config:/root/.ssh/config:ro" -y c
+manyoyo run -v "/Users/me/.ssh/config:/root/.ssh/config:ro" -y c
 
 # Mount multiple directories
-manyoyo -v "/data:/workspace/data" \
+manyoyo run -v "/data:/workspace/data" \
         -v "/cache:/workspace/cache" \
         -y c
 
@@ -270,10 +269,10 @@ manyoyo -v "/data:/workspace/data" \
 
 ```bash
 # Create new session (auto-generate name)
-manyoyo -y c
+manyoyo run -y c
 
 # Create named session
-manyoyo -n my-project --ef /abs/path/anthropic.env -y c
+manyoyo run -n my-project --ef /abs/path/anthropic.env -y c
 ```
 
 ### Resume Session
@@ -282,16 +281,16 @@ Different AI CLI tools have different resume commands:
 
 ```bash
 # Claude Code
-manyoyo -n my-project -- -c
+manyoyo run -n my-project -- -c
 
 # Codex
-manyoyo -n my-project -- resume --last
+manyoyo run -n my-project -- resume --last
 
 # Gemini
-manyoyo -n my-project -- -r
+manyoyo run -n my-project -- -r
 
 # OpenCode
-manyoyo -n my-project -- -c
+manyoyo run -n my-project -- -c
 ```
 
 ### Interactive Session Prompt
@@ -320,17 +319,17 @@ Container exited, please choose an action:
 **Example**:
 ```bash
 # Start container
-manyoyo -n dev -y c
+manyoyo run -n dev -y c
 
 # After working for a while, exit
 # System prompts for action
 
 # Choose 'y' - Keep running
 # Resume session later
-manyoyo -n dev -- -c
+manyoyo run -n dev -- -c
 
 # Or choose 'i' - Enter shell to inspect
-manyoyo -n dev -x /bin/bash
+manyoyo run -n dev -x /bin/bash
 ```
 
 ## Silent Mode
@@ -341,26 +340,26 @@ Silent mode reduces output information, suitable for scripts and CI/CD.
 
 ```bash
 # Silent prompt messages
-manyoyo -q tip -x echo "Hello"
+manyoyo run -q tip -x echo "Hello"
 
 # Silent command display
-manyoyo -q cmd -x echo "Hello"
+manyoyo run -q cmd -x echo "Hello"
 
 # Silent all output
-manyoyo -q full -x echo "Hello"
+manyoyo run -q full -x echo "Hello"
 
 # Combine multiple silent options
-manyoyo -q tip -q cmd -x echo "Hello"
+manyoyo run -q tip -q cmd -x echo "Hello"
 ```
 
 ### Auto-confirmation
 
 ```bash
 # Skip all interactive confirmations (for scripts)
-manyoyo --yes --ib --iv 1.8.0-common
+manyoyo build --yes --iv 1.8.0-common
 
 # Combined usage
-manyoyo --yes -q full -x echo "Automated"
+manyoyo run -q full -x echo "Automated"
 ```
 
 ## Image Management
@@ -369,37 +368,36 @@ manyoyo --yes -q full -x echo "Automated"
 
 ```bash
 # Use default image name, specify version
-manyoyo --iv 1.8.0-full -y c
+manyoyo run --iv 1.8.0-full -y c
 
 # Use custom image
-manyoyo --in myuser/sandbox --iv 1.0.0-common -y c
+manyoyo run --in myuser/sandbox --iv 1.0.0-common -y c
 
 # Full image identifier
-manyoyo --in localhost/xcanwin/manyoyo --iv 1.8.0-full -y c
+manyoyo run --in localhost/xcanwin/manyoyo --iv 1.8.0-full -y c
 ```
 
 ### Build Image
 
 ```bash
 # Build default image
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 
 # Build custom image
-manyoyo --ib --in mysandbox --iv 1.0.0-common
+manyoyo build --in mysandbox --iv 1.0.0-common
 
 # Build minimal version
-manyoyo --ib --iba TOOL=common
+manyoyo build --iba TOOL=common
 
 # Build specific tools
-manyoyo --ib --iba TOOL=python,nodejs,claude
+manyoyo build --iba TOOL=python,nodejs,claude
 ```
 
 ### Clean Images
 
 ```bash
 # Clean dangling images and <none> images
-manyoyo --irm
-manyoyo --image-remove
+manyoyo prune
 
 # Clean using Docker/Podman
 docker system prune -a  # or podman system prune -a
@@ -412,13 +410,13 @@ docker image prune      # Only clean dangling images
 
 ```bash
 # Display final effective configuration
-manyoyo --show-config
+manyoyo config show
 
 # Display merged result of specific configuration
-manyoyo -r claude --show-config
+manyoyo config show -r claude
 
 # Display command to be executed
-manyoyo --show-command -r claude
+manyoyo config command -r claude
 ```
 
 ### View Logs
@@ -438,16 +436,16 @@ docker logs --tail 100 <container-name>
 
 ```bash
 # Enter container for debugging
-manyoyo -n debug -x /bin/bash
+manyoyo run -n debug -x /bin/bash
 
 # Check internal container state
-manyoyo -n debug -x 'env | sort'
-manyoyo -n debug -x 'ls -la'
-manyoyo -n debug -x 'which claude'
+manyoyo run -n debug -x 'env | sort'
+manyoyo run -n debug -x 'ls -la'
+manyoyo run -n debug -x 'which claude'
 
 # Test network
-manyoyo -n debug -x 'ping -c 3 api.anthropic.com'
-manyoyo -n debug -x 'curl -I https://api.anthropic.com'
+manyoyo run -n debug -x 'ping -c 3 api.anthropic.com'
+manyoyo run -n debug -x 'curl -I https://api.anthropic.com'
 ```
 
 ## Practical Tips
@@ -456,36 +454,36 @@ manyoyo -n debug -x 'curl -I https://api.anthropic.com'
 
 ```bash
 # Test if container is working
-manyoyo -x echo "Container works"
+manyoyo run -x echo "Container works"
 
 # Test environment variables
-manyoyo -e "TEST=123" -x 'echo $TEST'
+manyoyo run -e "TEST=123" -x 'echo $TEST'
 
 # Test mounts
-manyoyo -v "/tmp/test:/test" -x 'ls -la /test'
+manyoyo run -v "/tmp/test:/test" -x 'ls -la /test'
 ```
 
 ### One-time Container
 
 ```bash
 # Auto-delete after running
-manyoyo --rm-on-exit -x 'echo "Temporary"'
+manyoyo run --rm-on-exit -x 'echo "Temporary"'
 
 # For temporary testing
-manyoyo -n temp --rm-on-exit -x /bin/bash
+manyoyo run -n temp --rm-on-exit -x /bin/bash
 ```
 
 ### Quick Tool Switching
 
 ```bash
 # Start Claude Code
-manyoyo -r claude
+manyoyo run -r claude
 
 # After exit, switch to Codex
-manyoyo -r codex
+manyoyo run -r codex
 
 # Switch to interactive shell
-manyoyo -n current-container -x /bin/bash
+manyoyo run -n current-container -x /bin/bash
 ```
 
 ### Batch Operations
@@ -494,7 +492,7 @@ manyoyo -n current-container -x /bin/bash
 # Run commands in multiple projects
 for proj in project1 project2 project3; do
     cd $proj
-    manyoyo -n my-$proj -y c
+    manyoyo run -n my-$proj -y c
     cd ..
 done
 
@@ -508,36 +506,36 @@ docker ps -a | grep my-test | awk '{print $1}' | xargs docker rm
 
 ```bash
 # 1. Start development container
-manyoyo -n dev-project --ef /abs/path/anthropic.env -y c
+manyoyo run -n dev-project --ef /abs/path/anthropic.env -y c
 
 # 2. Work... (AI-assisted programming)
 
 # 3. After exit, keep running (choose 'y')
 
 # 4. Resume when needed
-manyoyo -n dev-project -- -c
+manyoyo run -n dev-project -- -c
 
 # 5. Enter shell to inspect
-manyoyo -n dev-project -x /bin/bash
+manyoyo run -n dev-project -x /bin/bash
 
 # 6. Remove container when done
-manyoyo -n dev-project --crm
+manyoyo rm dev-project
 ```
 
 ### Multi-project Workflow
 
 ```bash
 # Project A
-manyoyo -n project-a --hp ~/projects/a --ef /abs/path/claude.env -y c
+manyoyo run -n project-a --hp ~/projects/a --ef /abs/path/claude.env -y c
 
 # Project B
-manyoyo -n project-b --hp ~/projects/b --ef /abs/path/claude.env -y c
+manyoyo run -n project-b --hp ~/projects/b --ef /abs/path/claude.env -y c
 
 # Switch back to Project A
-manyoyo -n project-a -- -c
+manyoyo run -n project-a -- -c
 
 # List all project containers
-manyoyo -l
+manyoyo ls
 ```
 
 ### CI/CD Workflow
@@ -547,7 +545,7 @@ manyoyo -l
 #!/bin/bash
 
 # Set non-interactive mode
-manyoyo --yes -q full \
+manyoyo run -q full \
     -n ci-build \
     --rm-on-exit \
     -x 'npm install && npm test && npm run build'

@@ -1,15 +1,15 @@
 ---
 title: Web Server Auth and Security | MANYOYO
-description: Covers auth gateway behavior, priority rules, login flow, and exposure hardening for MANYOYO --server mode.
+description: Covers auth gateway behavior, priority rules, login flow, and exposure hardening for MANYOYO serve mode.
 ---
 
 # Web Server Auth and Security
 
-This page focuses on authentication behavior and minimum security baseline for `manyoyo --server`.
+This page focuses on authentication behavior and minimum security baseline for `manyoyo serve`.
 
 ## Listen Address and Startup
 
-`--server` supports:
+`serve` supports:
 
 - `<port>`, e.g. `3000`
 - `<host:port>`, e.g. `127.0.0.1:3000`, `0.0.0.0:3000`
@@ -18,13 +18,13 @@ Default listen address is `127.0.0.1:3000`.
 
 ```bash
 # Local access only (default)
-manyoyo --server
+manyoyo serve
 
 # Custom port
-manyoyo --server 3000
+manyoyo serve 3000
 
 # LAN access (requires strong password + firewall)
-manyoyo --server 0.0.0.0:3000 --server-user admin --server-pass 'StrongPassword'
+manyoyo serve 0.0.0.0:3000 -u admin -P 'StrongPassword'
 ```
 
 ## Auth Parameter Priority
@@ -47,7 +47,7 @@ Defaults:
 
 ## Auth Gateway Behavior
 
-`--server` mode uses a global auth gateway. All pages and APIs require authentication except login-related allowlist routes.
+`serve` mode uses a global auth gateway. All pages and APIs require authentication except login-related allowlist routes.
 
 Current anonymous allowlist:
 
@@ -88,8 +88,8 @@ curl --noproxy '*' -b /tmp/manyoyo.cookie \
 Check in this order:
 
 1. Ensure `/auth/login` succeeded and cookie is attached
-2. Ensure `--server-user` / `--server-pass` matches effective config
-3. Run `manyoyo --show-config` and verify final source of `serverUser` / `serverPass`
+2. Ensure `-u` / `-P` matches effective config
+3. Run `manyoyo config show` and verify final source of `serverUser` / `serverPass`
 
 ## Related Docs
 

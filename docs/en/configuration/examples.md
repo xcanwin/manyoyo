@@ -28,7 +28,7 @@ EOF2
 
 Usage:
 ```bash
-manyoyo -r claude
+manyoyo run -r claude
 ```
 
 ## Agent Configuration Examples
@@ -141,9 +141,9 @@ export OPENAI_MODEL="gpt-4-turbo"
 
 Usage:
 ```bash
-manyoyo -r dev
-manyoyo -r test
-manyoyo -r prod
+manyoyo run -r dev
+manyoyo run -r test
+manyoyo run -r prod
 ```
 
 ## Combined Configuration Examples
@@ -186,7 +186,7 @@ manyoyo -r prod
 
 **CLI override**:
 ```bash
-manyoyo -r claude -e "LOG_LEVEL=debug"
+manyoyo run -r claude -e "LOG_LEVEL=debug"
 ```
 
 ## Team Template Example
@@ -215,15 +215,15 @@ Usage:
 ```bash
 cp config.example.json ~/.manyoyo/manyoyo.json
 cp anthropic_team.example.env /abs/path/anthropic_team.env
-manyoyo -r team
+manyoyo run -r team
 ```
 
 ## Debugging Examples
 
 ```bash
-manyoyo -r claude --show-config
-manyoyo -r claude --show-command
-manyoyo -r claude -x env | grep ANTHROPIC
+manyoyo config show -r claude
+manyoyo config command -r claude
+manyoyo run -r claude -x env | grep ANTHROPIC
 ```
 
 ## Related Docs

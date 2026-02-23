@@ -56,8 +56,8 @@ describe('MANYOYO CLI', () => {
             expect(output).toMatch(/^\d+\.\d+\.\d+/);
         });
 
-        test('--show-config should output valid JSON', () => {
-            const output = execSync(`node ${BIN_PATH} --show-config`, { encoding: 'utf-8' });
+        test('config show should output valid JSON', () => {
+            const output = execSync(`node ${BIN_PATH} config show`, { encoding: 'utf-8' });
             const config = JSON.parse(output);
             expect(config).toHaveProperty('hostPath');
             expect(config).toHaveProperty('containerName');
@@ -66,7 +66,7 @@ describe('MANYOYO CLI', () => {
         });
 
         test('default imageVersion should match package imageVersion', () => {
-            const output = execSync(`node ${BIN_PATH} --show-config`, { encoding: 'utf-8' });
+            const output = execSync(`node ${BIN_PATH} config show`, { encoding: 'utf-8' });
             const config = JSON.parse(output);
             expect(config.imageVersion).toBe(PACKAGE_IMAGE_VERSION);
         });
@@ -77,9 +77,9 @@ describe('MANYOYO CLI', () => {
     // ==============================================================================
 
     describe('Sensitive Data Sanitization', () => {
-        test('--show-config should sanitize TOKEN values', () => {
+        test('config show should sanitize TOKEN values', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -e "ANTHROPIC_AUTH_TOKEN=sk-abcd1234efgh5678"`,
+                `node ${BIN_PATH} config show -e "ANTHROPIC_AUTH_TOKEN=sk-abcd1234efgh5678"`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -88,9 +88,9 @@ describe('MANYOYO CLI', () => {
             expect(tokenEnv).not.toContain('sk-abcd1234efgh5678');
         });
 
-        test('--show-config should sanitize KEY values', () => {
+        test('config show should sanitize KEY values', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -e "API_KEY=myverysecretkey123"`,
+                `node ${BIN_PATH} config show -e "API_KEY=myverysecretkey123"`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -98,9 +98,9 @@ describe('MANYOYO CLI', () => {
             expect(keyEnv).toContain('****');
         });
 
-        test('--show-config should not sanitize normal values', () => {
+        test('config show should not sanitize normal values', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -e "MY_VAR=normalvalue"`,
+                `node ${BIN_PATH} config show -e "MY_VAR=normalvalue"`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -116,7 +116,7 @@ describe('MANYOYO CLI', () => {
     describe('Input Validation', () => {
         test('should reject invalid container name', () => {
             expect(() => {
-                execSync(`node ${BIN_PATH} -n "invalid name" --show-config`, {
+                execSync(`node ${BIN_PATH} config show -n "invalid name"`, {
                     encoding: 'utf-8',
                     stdio: 'pipe'
                 });
@@ -125,7 +125,7 @@ describe('MANYOYO CLI', () => {
 
         test('should accept valid container name', () => {
             const output = execSync(
-                `node ${BIN_PATH} -n "valid-name-123" --show-config`,
+                `node ${BIN_PATH} config show -n "valid-name-123"`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -134,7 +134,7 @@ describe('MANYOYO CLI', () => {
 
         test('should reject env with invalid key', () => {
             expect(() => {
-                execSync(`node ${BIN_PATH} -e "123invalid=value" --show-config`, {
+                execSync(`node ${BIN_PATH} config show -e "123invalid=value"`, {
                     encoding: 'utf-8',
                     stdio: 'pipe'
                 });
@@ -143,7 +143,7 @@ describe('MANYOYO CLI', () => {
 
         test('should reject env with dangerous characters', () => {
             expect(() => {
-                execSync(`node ${BIN_PATH} -e "VAR=value;rm -rf" --show-config`, {
+                execSync(`node ${BIN_PATH} config show -e "VAR=value;rm -rf"`, {
                     encoding: 'utf-8',
                     stdio: 'pipe'
                 });
@@ -157,7 +157,7 @@ describe('MANYOYO CLI', () => {
 
             try {
                 const output = execSync(
-                    `node ${BIN_PATH} --show-config --ef "${envFilePath}"`,
+                    `node ${BIN_PATH} config show --ef "${envFilePath}"`,
                     { encoding: 'utf-8' }
                 );
                 const config = JSON.parse(output);
@@ -169,7 +169,7 @@ describe('MANYOYO CLI', () => {
 
         test('should reject non-absolute name for --ef', () => {
             expect(() => {
-                execSync(`node ${BIN_PATH} --show-config --ef myenv`, {
+                execSync(`node ${BIN_PATH} config show --ef myenv`, {
                     encoding: 'utf-8',
                     stdio: 'pipe'
                 });
@@ -178,7 +178,7 @@ describe('MANYOYO CLI', () => {
 
         test('should reject relative path for --ef', () => {
             expect(() => {
-                execSync(`node ${BIN_PATH} --show-config --ef ./myenv.env`, {
+                execSync(`node ${BIN_PATH} config show --ef ./myenv.env`, {
                     encoding: 'utf-8',
                     stdio: 'pipe'
                 });
@@ -197,7 +197,7 @@ describe('MANYOYO CLI', () => {
             });
 
             try {
-                const output = execSync(`node ${BIN_PATH} --show-config -r claude`, {
+                const output = execSync(`node ${BIN_PATH} config show -r claude`, {
                     encoding: 'utf-8',
                     env: { ...process.env, HOME: tempHome }
                 });
@@ -211,7 +211,7 @@ describe('MANYOYO CLI', () => {
 
         test('should reject absolute path for --run', () => {
             expect(() => {
-                execSync(`node ${BIN_PATH} --show-config -r /tmp/myconfig.json`, {
+                execSync(`node ${BIN_PATH} config show -r /tmp/myconfig.json`, {
                     encoding: 'utf-8',
                     stdio: 'pipe'
                 });
@@ -220,7 +220,7 @@ describe('MANYOYO CLI', () => {
 
         test('should reject relative path for --run', () => {
             expect(() => {
-                execSync(`node ${BIN_PATH} --show-config -r ./myconfig.json`, {
+                execSync(`node ${BIN_PATH} config show -r ./myconfig.json`, {
                     encoding: 'utf-8',
                     stdio: 'pipe'
                 });
@@ -235,7 +235,7 @@ describe('MANYOYO CLI', () => {
     describe('Configuration Merging', () => {
         test('command line should override defaults', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config --in custom-image --iv 2.0.0-common`,
+                `node ${BIN_PATH} config show --in custom-image --iv 2.0.0-common`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -245,7 +245,7 @@ describe('MANYOYO CLI', () => {
 
         test('should reject imageVersion without suffix', () => {
             expect(() => {
-                execSync(`node ${BIN_PATH} --show-config --iv 2.0.0`, {
+                execSync(`node ${BIN_PATH} config show --iv 2.0.0`, {
                     encoding: 'utf-8',
                     stdio: 'pipe'
                 });
@@ -254,7 +254,7 @@ describe('MANYOYO CLI', () => {
 
         test('multiple env values should be merged into env map', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -e "VAR1=value1" -e "VAR2=value2"`,
+                `node ${BIN_PATH} config show -e "VAR1=value1" -e "VAR2=value2"`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -276,14 +276,14 @@ describe('MANYOYO CLI', () => {
             });
 
             try {
-                const runOutput = execSync(`node ${BIN_PATH} --show-config -r demo`, {
+                const runOutput = execSync(`node ${BIN_PATH} config show -r demo`, {
                     encoding: 'utf-8',
                     env: { ...process.env, HOME: tempHome }
                 });
                 const runConfig = JSON.parse(runOutput);
                 expect(runConfig.shell).toBe('run-shell');
 
-                const cliOutput = execSync(`node ${BIN_PATH} --show-config -r demo -s cli-shell`, {
+                const cliOutput = execSync(`node ${BIN_PATH} config show -r demo -s cli-shell`, {
                     encoding: 'utf-8',
                     env: { ...process.env, HOME: tempHome }
                 });
@@ -309,7 +309,7 @@ describe('MANYOYO CLI', () => {
 
             try {
                 const output = execSync(
-                    `node ${BIN_PATH} --show-config -r envMap -e "VAR1=cli-value"`,
+                    `node ${BIN_PATH} config show -r envMap -e "VAR1=cli-value"`,
                     {
                         encoding: 'utf-8',
                         env: { ...process.env, HOME: tempHome }
@@ -337,7 +337,7 @@ describe('MANYOYO CLI', () => {
 
             try {
                 expect(() => {
-                    execSync(`node ${BIN_PATH} --show-config -r envArray`, {
+                    execSync(`node ${BIN_PATH} config show -r envArray`, {
                         encoding: 'utf-8',
                         env: { ...process.env, HOME: tempHome },
                         stdio: 'pipe'
@@ -350,7 +350,7 @@ describe('MANYOYO CLI', () => {
 
         test('multiple volumes should be merged', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -v "/tmp:/tmp" -v "/var:/var"`,
+                `node ${BIN_PATH} config show -v "/tmp:/tmp" -v "/var:/var"`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -360,7 +360,7 @@ describe('MANYOYO CLI', () => {
 
         test('multiple ports should be merged', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -p "8080:80" -p "53:53/udp"`,
+                `node ${BIN_PATH} config show -p "8080:80" -p "53:53/udp"`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -381,7 +381,7 @@ describe('MANYOYO CLI', () => {
 
             try {
                 const output = execSync(
-                    `node ${BIN_PATH} --show-config -r demo -p "9000:90"`,
+                    `node ${BIN_PATH} config show -r demo -p "9000:90"`,
                     {
                         encoding: 'utf-8',
                         env: { ...process.env, HOME: tempHome }
@@ -394,7 +394,7 @@ describe('MANYOYO CLI', () => {
             }
         });
 
-        test('--show-command should include publish args from --port', () => {
+        test('config command should include publish args from --port', () => {
             const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-show-command-'));
             const fakeDockerPath = path.join(tempDir, 'docker');
             fs.writeFileSync(fakeDockerPath, `#!/bin/sh
@@ -410,7 +410,7 @@ exit 0
 
             try {
                 const output = execSync(
-                    `node ${BIN_PATH} --show-command -n port-test -p "8080:80" -p "127.0.0.1:8443:443"`,
+                    `node ${BIN_PATH} config command -n port-test -p "8080:80" -p "127.0.0.1:8443:443"`,
                     {
                         encoding: 'utf-8',
                         env: {
@@ -428,7 +428,7 @@ exit 0
 
         test('--ss should set shell suffix', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -s codex --ss "-c"`,
+                `node ${BIN_PATH} config show -s codex --ss "-c"`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -449,7 +449,7 @@ exit 0
 
             try {
                 const output = execSync(
-                    `node ${BIN_PATH} --show-config -r codex`,
+                    `node ${BIN_PATH} config show -r codex`,
                     {
                         encoding: 'utf-8',
                         env: { ...process.env, HOME: tempHome }
@@ -465,7 +465,7 @@ exit 0
 
         test('-- should override --ss suffix', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -s codex --ss "-c" -- resume --last`,
+                `node ${BIN_PATH} config show -s codex --ss "-c" -- resume --last`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -484,7 +484,7 @@ exit 0
 
             try {
                 const output = execSync(
-                    `node ${BIN_PATH} --show-config -r opencode`,
+                    `node ${BIN_PATH} config show -r opencode`,
                     {
                         encoding: 'utf-8',
                         env: { ...process.env, HOME: tempHome }
@@ -505,7 +505,7 @@ exit 0
     describe('YOLO Mode', () => {
         test('-y c should set claude yolo mode', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -y c`,
+                `node ${BIN_PATH} config show -y c`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -516,7 +516,7 @@ exit 0
 
         test('-y gm should set gemini yolo mode', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -y gm`,
+                `node ${BIN_PATH} config show -y gm`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -526,7 +526,7 @@ exit 0
 
         test('-y cx should set codex yolo mode', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -y cx`,
+                `node ${BIN_PATH} config show -y cx`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -536,7 +536,7 @@ exit 0
 
         test('-y oc should set opencode yolo mode', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -y oc`,
+                `node ${BIN_PATH} config show -y oc`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -550,7 +550,7 @@ exit 0
     // ==============================================================================
 
     describe('Init Config', () => {
-        test('--init-config claude should extract existing claude settings', () => {
+        test('init claude should extract existing claude settings', () => {
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
             const claudeDir = path.join(tempHome, '.claude');
             const claudeSettingsPath = path.join(claudeDir, 'settings.json');
@@ -565,7 +565,7 @@ exit 0
             }, null, 4));
 
             try {
-                execSync(`node "${BIN_PATH}" --init-config claude`, {
+                execSync(`node "${BIN_PATH}" init claude`, {
                     encoding: 'utf-8',
                     env: { ...process.env, HOME: tempHome }
                 });
@@ -593,11 +593,11 @@ exit 0
             }
         });
 
-        test('--init-config codex should create template when source config is missing', () => {
+        test('init codex should create template when source config is missing', () => {
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
 
             try {
-                execSync(`node "${BIN_PATH}" --init-config codex`, {
+                execSync(`node "${BIN_PATH}" init codex`, {
                     encoding: 'utf-8',
                     env: {
                         ...process.env,
@@ -630,7 +630,7 @@ exit 0
             }
         });
 
-        test('--init-config opencode should map local auth.json when it exists', () => {
+        test('init opencode should map local auth.json when it exists', () => {
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
             const opencodeConfigDir = path.join(tempHome, '.config', 'opencode');
             const opencodeLocalShareDir = path.join(tempHome, '.local', 'share', 'opencode');
@@ -656,7 +656,7 @@ exit 0
             fs.writeFileSync(opencodeAuthPath, JSON.stringify({ token: 'demo' }, null, 4));
 
             try {
-                execSync(`node "${BIN_PATH}" --init-config opencode`, {
+                execSync(`node "${BIN_PATH}" init opencode`, {
                     encoding: 'utf-8',
                     env: { ...process.env, HOME: tempHome }
                 });
@@ -682,7 +682,7 @@ exit 0
             }
         });
 
-        test('--init-config should prompt and keep existing json when answering no', () => {
+        test('init should prompt and keep existing json when answering no', () => {
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
             const manyoyoConfigPath = path.join(tempHome, '.manyoyo', 'manyoyo.json');
             writeGlobalConfig(tempHome, {
@@ -694,7 +694,7 @@ exit 0
             });
 
             try {
-                const output = execSync(`node "${BIN_PATH}" --init-config claude`, {
+                const output = execSync(`node "${BIN_PATH}" init claude`, {
                     encoding: 'utf-8',
                     env: { ...process.env, HOME: tempHome },
                     input: 'n\n'
@@ -714,17 +714,25 @@ exit 0
     // ==============================================================================
 
     describe('Options', () => {
-        test('--yes option should be accepted', () => {
+        test('build --yes option should be accepted', () => {
             const output = execSync(
-                `node ${BIN_PATH} --help`,
+                `node ${BIN_PATH} build --help`,
                 { encoding: 'utf-8' }
             );
             expect(output).toContain('--yes');
         });
 
+        test('run should not expose --yes option', () => {
+            const output = execSync(
+                `node ${BIN_PATH} run --help`,
+                { encoding: 'utf-8' }
+            );
+            expect(output).not.toContain('--yes');
+        });
+
         test('--rm-on-exit option should be accepted', () => {
             const output = execSync(
-                `node ${BIN_PATH} --help`,
+                `node ${BIN_PATH} run --help`,
                 { encoding: 'utf-8' }
             );
             expect(output).toContain('--rm-on-exit');
@@ -732,54 +740,54 @@ exit 0
 
         test('--ss option should be accepted', () => {
             const output = execSync(
-                `node ${BIN_PATH} --help`,
+                `node ${BIN_PATH} run --help`,
                 { encoding: 'utf-8' }
             );
             expect(output).toContain('--ss');
         });
 
-        test('--server option should be accepted', () => {
+        test('serve subcommand should be accepted', () => {
             const output = execSync(
                 `node ${BIN_PATH} --help`,
                 { encoding: 'utf-8' }
             );
-            expect(output).toContain('--server');
+            expect(output).toContain('serve');
         });
 
         test('--port option should be accepted', () => {
             const output = execSync(
-                `node ${BIN_PATH} --help`,
+                `node ${BIN_PATH} run --help`,
                 { encoding: 'utf-8' }
             );
             expect(output).toContain('--port');
         });
 
-        test('--server-user and --server-pass options should be accepted', () => {
+        test('-u and -P options should be accepted', () => {
+            const output = execSync(
+                `node ${BIN_PATH} serve --help`,
+                { encoding: 'utf-8' }
+            );
+            expect(output).toContain('-u');
+            expect(output).toContain('-P');
+        });
+
+        test('init option should be accepted', () => {
             const output = execSync(
                 `node ${BIN_PATH} --help`,
                 { encoding: 'utf-8' }
             );
-            expect(output).toContain('--server-user');
-            expect(output).toContain('--server-pass');
+            expect(output).toContain('init');
         });
 
-        test('--init-config option should be accepted', () => {
+        test('update subcommand should be accepted', () => {
             const output = execSync(
                 `node ${BIN_PATH} --help`,
                 { encoding: 'utf-8' }
             );
-            expect(output).toContain('--init-config');
+            expect(output).toContain('update');
         });
 
-        test('--update option should be accepted', () => {
-            const output = execSync(
-                `node ${BIN_PATH} --help`,
-                { encoding: 'utf-8' }
-            );
-            expect(output).toContain('--update');
-        });
-
-        test('--update should invoke npm update when global install source is registry', () => {
+        test('update should invoke npm update when global install source is registry', () => {
             const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-update-'));
             const fakeNpmPath = path.join(tempDir, 'npm');
             const npmLogPath = path.join(tempDir, 'npm.log');
@@ -795,10 +803,10 @@ cat <<EOF
 EOF
 fi
 exit 0
-`, { mode: 0o755 });
+            `, { mode: 0o755 });
 
             try {
-                execSync(`"${process.execPath}" ${BIN_PATH} --update`, {
+                execSync(`"${process.execPath}" ${BIN_PATH} update`, {
                     encoding: 'utf-8',
                     env: {
                         ...process.env,
@@ -816,7 +824,7 @@ exit 0
             }
         });
 
-        test('--update should skip npm update when global install source is local file install', () => {
+        test('update should skip npm update when global install source is local file install', () => {
             const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-update-file-'));
             const fakeNpmPath = path.join(tempDir, 'npm');
             const npmLogPath = path.join(tempDir, 'npm.log');
@@ -833,10 +841,10 @@ cat <<EOF
 EOF
 fi
 exit 0
-`, { mode: 0o755 });
+            `, { mode: 0o755 });
 
             try {
-                execSync(`"${process.execPath}" ${BIN_PATH} --update`, {
+                execSync(`"${process.execPath}" ${BIN_PATH} update`, {
                     encoding: 'utf-8',
                     env: {
                         ...process.env,
@@ -854,9 +862,9 @@ exit 0
             }
         });
 
-        test('--show-config should include server mode and port', () => {
+        test('config show should include server mode and port', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config --server 39001`,
+                `node ${BIN_PATH} config show --serve 39001`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -864,9 +872,9 @@ exit 0
             expect(config.serverPort).toBe(39001);
         });
 
-        test('--show-config should parse server host and port', () => {
+        test('config show should parse server host and port', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config --server 0.0.0.0:39001`,
+                `node ${BIN_PATH} config show --serve 0.0.0.0:39001`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -875,9 +883,9 @@ exit 0
             expect(config.serverPort).toBe(39001);
         });
 
-        test('--show-config should default server user to admin', () => {
+        test('config show should default server user to admin', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config --server`,
+                `node ${BIN_PATH} config show --serve`,
                 {
                     encoding: 'utf-8',
                     env: {
@@ -891,9 +899,9 @@ exit 0
             expect(config.serverUser).toBe('admin');
         });
 
-        test('--show-config should include server auth config', () => {
+        test('config show should include server auth config', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config --server --server-user webadmin --server-pass topsecret`,
+                `node ${BIN_PATH} config show --serve -u webadmin -P topsecret`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
@@ -904,7 +912,7 @@ exit 0
 
         test('quiet options should work', () => {
             const output = execSync(
-                `node ${BIN_PATH} --show-config -q tip -q cmd`,
+                `node ${BIN_PATH} config show -q tip -q cmd`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);

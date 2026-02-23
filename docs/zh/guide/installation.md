@@ -209,7 +209,7 @@ MANYOYO 使用自定义的容器镜像，包含预装的 AI CLI 工具和开发�
 
 ```bash
 # 构建推荐版本（common）
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 
 # 构建后验证
 docker images | grep manyoyo  # 或 podman images
@@ -228,9 +228,9 @@ docker images | grep manyoyo  # 或 podman images
 包含所有支持的 AI CLI 工具和开发环境：
 
 ```bash
-manyoyo --ib --iv 1.8.0-full
+manyoyo build --iv 1.8.0-full
 # 或显式指定构建参数
-manyoyo --ib --iv 1.8.0-full --iba TOOL=full
+manyoyo build --iv 1.8.0-full --iba TOOL=full
 ```
 
 **包含工具**：
@@ -248,7 +248,7 @@ manyoyo --ib --iv 1.8.0-full --iba TOOL=full
 仅包含常用组件：
 
 ```bash
-manyoyo --ib --iba TOOL=common
+manyoyo build --iba TOOL=common
 ```
 
 **包含工具**：
@@ -269,7 +269,7 @@ manyoyo --ib --iba TOOL=common
 
 ```bash
 # 仅安装指定工具
-manyoyo --ib --iba TOOL=go,codex,java,gemini
+manyoyo build --iba TOOL=go,codex,java,gemini
 
 # 组件说明：
 # - python: Python 环境
@@ -286,11 +286,11 @@ manyoyo --ib --iba TOOL=go,codex,java,gemini
 
 ```bash
 # 自定义镜像名和版本
-manyoyo --ib --in myimage --iv 1.8.0-common
+manyoyo build --in myimage --iv 1.8.0-common
 # 生成镜像：myimage:1.8.0-common
 
 # 指定完整的镜像名
-manyoyo --ib --in localhost/myuser/sandbox --iv 1.0.0-common
+manyoyo build --in localhost/myuser/sandbox --iv 1.0.0-common
 # 生成镜像：localhost/myuser/sandbox:1.0.0-common
 ```
 
@@ -298,13 +298,13 @@ manyoyo --ib --in localhost/myuser/sandbox --iv 1.0.0-common
 
 ```bash
 # 跳过 Git SSL 验证（仅限开发环境）
-manyoyo --ib --iba GIT_SSL_NO_VERIFY=true
+manyoyo build --iba GIT_SSL_NO_VERIFY=true
 
 # 禁用国内镜像源（国外用户）
-manyoyo --ib --iba NODE_MIRROR= --iba NPM_REGISTRY=
+manyoyo build --iba NODE_MIRROR= --iba NPM_REGISTRY=
 
 # 使用自定义镜像源
-manyoyo --ib --iba NODE_MIRROR=https://custom-mirror.com
+manyoyo build --iba NODE_MIRROR=https://custom-mirror.com
 ```
 
 ### 手动构建（不推荐）
@@ -386,36 +386,36 @@ docker images | grep manyoyo  # 或 podman images
 
 ```bash
 # 从宿主机已有的 claude/codex/gemini/opencode 配置迁移
-manyoyo --init-config all
+manyoyo init all
 ```
 
 ### 4. 创建测试容器
 
 ```bash
 # 创建并运行测试容器
-manyoyo -n test-container -x echo "MANYOYO works!"
+manyoyo run -n test-container -x echo "MANYOYO works!"
 
 # 查看容器
-manyoyo -l
+manyoyo ls
 
 # 删除测试容器
-manyoyo -n test-container --crm
+manyoyo rm test-container
 ```
 
 ### 5. 测试 AI CLI 工具
 
 ```bash
 # 使用初始化后的运行配置（推荐）
-manyoyo -r claude
+manyoyo run -r claude
 
 # 或仅检查 CLI 版本
-manyoyo -n test -x claude --version
+manyoyo run -n test -x claude --version
 
 # 测试 Python
-manyoyo -n test -x python3 --version
+manyoyo run -n test -x python3 --version
 
 # 测试 Node.js
-manyoyo -n test -x node --version
+manyoyo run -n test -x node --version
 ```
 
 ## 故障排查
@@ -433,7 +433,7 @@ curl -I https://mirrors.tencent.com
 df -h
 
 # 先构建精简版本，验证基础链路
-manyoyo --ib --iba TOOL=common
+manyoyo build --iba TOOL=common
 ```
 
 如果遇到 `permission denied`，可先执行：
@@ -459,7 +459,7 @@ manyoyo -V
 
 ```bash
 # 构建新版本镜像
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 
 # 更新全局配置
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
@@ -469,7 +469,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # 清理旧镜像（可选）
-manyoyo --irm
+manyoyo prune
 docker system prune -a  # 或 podman system prune -a
 ```
 
@@ -495,7 +495,7 @@ docker ps -a | grep my | awk '{print $1}' | xargs docker rm
 docker images | grep manyoyo | awk '{print $3}' | xargs docker rmi
 
 # 清理悬空镜像
-manyoyo --irm
+manyoyo prune
 ```
 
 ## 下一步

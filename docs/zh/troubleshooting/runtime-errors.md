@@ -46,7 +46,7 @@ docker ps -a
 docker stop <冲突容器>
 
 # 或使用不同的容器名
-manyoyo -n my-$(date +%m%d-%H%M) -y c
+manyoyo run -n my-$(date +%m%d-%H%M) -y c
 ```
 
 #### 3. 检查挂载权限
@@ -69,7 +69,7 @@ chcon -Rt svirt_sandbox_file_t /path/to/host/dir
 
 ```bash
 # 直接进入 shell 调试
-manyoyo -n debug-container -x /bin/bash
+manyoyo run -n debug-container -x /bin/bash
 
 # 查看容器内部状态
 pwd
@@ -108,7 +108,7 @@ docker logs <容器名>
 # 3. 环境变量缺失导致程序崩溃
 
 # 保持容器运行（用于调试）
-manyoyo -n debug -x sleep infinity
+manyoyo run -n debug -x sleep infinity
 ```
 
 ### 镜像版本不匹配
@@ -118,7 +118,7 @@ manyoyo -n debug -x sleep infinity
 **解决方案**：
 ```bash
 # 查看当前使用的镜像
-manyoyo --show-config | grep imageVersion
+manyoyo config show | grep imageVersion
 
 # 查看可用镜像
 docker images | grep manyoyo
@@ -164,7 +164,7 @@ id | grep docker
 
 ```bash
 # 使用 sudo 运行
-sudo manyoyo -y c
+sudo manyoyo run -y c
 
 # 注意：使用 sudo 可能导致配置文件路径问题
 # 配置文件会从 /root/ 而不是 ~/
@@ -197,7 +197,7 @@ chmod 644 /path/to/file
 chmod 755 /path/to/dir
 
 # 对于只读文件，使用只读挂载
-manyoyo -v "/path/to/file:/container/file:ro" -y c
+manyoyo run -v "/path/to/file:/container/file:ro" -y c
 ```
 
 ### SELinux 权限问题
@@ -216,7 +216,7 @@ sudo setenforce 0
 chcon -Rt svirt_sandbox_file_t /path/to/host/dir
 
 # 或在挂载时添加 :z 或 :Z 标志
-manyoyo -v "/path/to/dir:/container/dir:z" -y c
+manyoyo run -v "/path/to/dir:/container/dir:z" -y c
 ```
 
 ## 环境变量未生效
@@ -283,37 +283,37 @@ ls -la ~/.manyoyo/env/
 ls ~/.manyoyo/env/ | grep -i anthropic
 
 # 测试加载
-manyoyo --ef /abs/path/anthropic_claudecode.env --show-config
+manyoyo config show --ef /abs/path/anthropic_claudecode.env
 ```
 
 **路径规则**：
 - `--ef` 仅支持绝对路径
 - 推荐写法：`--ef /abs/path/myconfig.env`
 
-#### 3. 使用 --show-config 查看配置
+#### 3. 使用 config show 查看配置
 
 ```bash
 # 查看最终生效的配置
-manyoyo --ef /abs/path/anthropic_claudecode.env --show-config
+manyoyo config show --ef /abs/path/anthropic_claudecode.env
 
 # 检查 envFile 是否正确加载
-manyoyo -r claude --show-config | grep -A 5 envFile
+manyoyo config show -r claude | grep -A 5 envFile
 
 # 检查 env 数组
-manyoyo -r claude --show-config | grep -A 20 '"env"'
+manyoyo config show -r claude | grep -A 20 '"env"'
 ```
 
 #### 4. 在容器中验证环境变量
 
 ```bash
 # 查看所有环境变量
-manyoyo --ef /abs/path/anthropic_claudecode.env -x env
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x env
 
 # 查看特定环境变量
-manyoyo --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC'
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC'
 
 # 测试 Claude Code
-manyoyo --ef /abs/path/anthropic_claudecode.env -x 'echo $ANTHROPIC_AUTH_TOKEN'
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x 'echo $ANTHROPIC_AUTH_TOKEN'
 ```
 
 #### 5. 检查配置优先级
@@ -344,17 +344,17 @@ manyoyo --ef /abs/path/anthropic_claudecode.env -x 'echo $ANTHROPIC_AUTH_TOKEN'
 grep -r "ANTHROPIC_AUTH_TOKEN" ~/.manyoyo/
 
 # 2. 查看最终值
-manyoyo --ef /abs/path/anthropic_claudecode.env -x 'echo "TOKEN=$ANTHROPIC_AUTH_TOKEN"'
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x 'echo "TOKEN=$ANTHROPIC_AUTH_TOKEN"'
 
 # 3. 检查是否有空格或特殊字符
-manyoyo --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC | cat -A'
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC | cat -A'
 
 # 4. 使用新环境文件测试
 cat > /tmp/test.env << 'EOF'
 export TEST_VAR="test-value"
 EOF
 
-manyoyo --ef /tmp/test.env -x 'echo $TEST_VAR'
+manyoyo run --ef /tmp/test.env -x 'echo $TEST_VAR'
 ```
 
 ## 容器内无法访问宿主机文件
@@ -372,18 +372,18 @@ manyoyo --ef /tmp/test.env -x 'echo $TEST_VAR'
 docker inspect <容器名> | jq '.[0].Mounts'
 
 # 默认挂载（当前目录）
-manyoyo -y c  # 挂载当前目录到容器同路径
+manyoyo run -y c  # 挂载当前目录到容器同路径
 
 # 自定义挂载
-manyoyo --hp /path/to/project -y c
+manyoyo run --hp /path/to/project -y c
 ```
 
 #### 2. 检查路径是否正确
 
 ```bash
 # 在容器中检查
-manyoyo -n test -x pwd
-manyoyo -n test -x ls -la
+manyoyo run -n test -x pwd
+manyoyo run -n test -x ls -la
 
 # 检查宿主机路径
 ls -la /path/to/project
@@ -396,7 +396,7 @@ ls -la /path/to/project
 ls -la /path/to/file
 
 # 容器内文件权限
-manyoyo -x ls -la /container/path/to/file
+manyoyo run -x ls -la /container/path/to/file
 
 # 如果是权限问题，修改宿主机文件权限
 chmod 644 /path/to/file
@@ -406,7 +406,7 @@ chmod 644 /path/to/file
 
 ```bash
 # 挂载额外的目录或文件
-manyoyo -v "/host/path:/container/path" -y c
+manyoyo run -v "/host/path:/container/path" -y c
 
 # 挂载多个路径
 manyoyo \
@@ -415,7 +415,7 @@ manyoyo \
     -y c
 
 # 只读挂载
-manyoyo -v "/sensitive:/container/sensitive:ro" -y c
+manyoyo run -v "/sensitive:/container/sensitive:ro" -y c
 ```
 
 #### 5. 配置文件中设置挂载
@@ -442,7 +442,7 @@ manyoyo -v "/sensitive:/container/sensitive:ro" -y c
 readlink -f /path/to/symlink
 
 # 挂载真实路径
-manyoyo --hp $(readlink -f /path/to/dir) -y c
+manyoyo run --hp $(readlink -f /path/to/dir) -y c
 
 # 或同时挂载目标路径
 manyoyo \
@@ -520,7 +520,7 @@ Error: Unauthorized
 **解决方案**：
 ```bash
 # 确保挂载了认证文件
-manyoyo -v "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json" -y cx
+manyoyo run -v "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json" -y cx
 
 # 或在配置文件中设置
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
@@ -602,11 +602,11 @@ EOF
 **解决方案**：
 ```bash
 # 1. 在容器中测试网络
-manyoyo -x ping -c 3 8.8.8.8
-manyoyo -x curl -I https://api.anthropic.com
+manyoyo run -x ping -c 3 8.8.8.8
+manyoyo run -x curl -I https://api.anthropic.com
 
 # 2. 检查 DNS
-manyoyo -x cat /etc/resolv.conf
+manyoyo run -x cat /etc/resolv.conf
 
 # 3. 配置 Docker/Podman DNS
 # Docker: /etc/docker/daemon.json
@@ -632,7 +632,7 @@ sudo firewall-cmd --reload
 **解决方案**：
 ```bash
 # 在容器中设置代理
-manyoyo -e "HTTP_PROXY=http://proxy:8080" \
+manyoyo run -e "HTTP_PROXY=http://proxy:8080" \
         -e "HTTPS_PROXY=http://proxy:8080" \
         -e "NO_PROXY=localhost,127.0.0.1" \
         -y c
@@ -644,7 +644,7 @@ export HTTPS_PROXY=http://proxy.example.com:8080
 export NO_PROXY=localhost,127.0.0.1
 EOF
 
-manyoyo --ef /abs/path/proxy.env --ef /abs/path/anthropic_claudecode.env -y c
+manyoyo run --ef /abs/path/proxy.env --ef /abs/path/anthropic_claudecode.env -y c
 ```
 
 ## 性能问题
@@ -659,8 +659,8 @@ manyoyo --ef /abs/path/proxy.env --ef /abs/path/anthropic_claudecode.env -y c
 docker images | grep manyoyo
 
 # 2. 使用精简版镜像
-manyoyo --ib --iv 1.8.0-common --iba TOOL=common
-manyoyo --iv 1.8.0-common -y c
+manyoyo build --iv 1.8.0-common --iba TOOL=common
+manyoyo run --iv 1.8.0-common -y c
 
 # 3. 清理无用资源
 docker system prune
@@ -696,20 +696,20 @@ df -h
 
 ```bash
 # 环境变量启用调试
-manyoyo -e "DEBUG=*" -y c
+manyoyo run -e "DEBUG=*" -y c
 
 # 查看 manyoyo 执行的命令
-manyoyo --show-command -r claude
+manyoyo config command -r claude
 
 # 查看最终配置
-manyoyo --show-config -r claude
+manyoyo config show -r claude
 ```
 
 ### 交互式调试
 
 ```bash
 # 进入容器 shell
-manyoyo -n debug-container -x /bin/bash
+manyoyo run -n debug-container -x /bin/bash
 
 # 在容器中手动测试
 pwd
@@ -730,10 +730,10 @@ echo $ANTHROPIC_AUTH_TOKEN
 
 ```bash
 # 创建干净的容器对比
-manyoyo -n clean-test --rm-on-exit -x /bin/bash
+manyoyo run -n clean-test --rm-on-exit -x /bin/bash
 
 # 创建问题容器对比
-manyoyo -n problem-test -r claude -x /bin/bash
+manyoyo run -n problem-test -r claude -x /bin/bash
 
 # 对比配置差异
 docker inspect clean-test > clean.json

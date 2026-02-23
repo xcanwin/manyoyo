@@ -27,27 +27,27 @@ Container runtime install/switch references:
 ## 3. Build sandbox image
 
 ```bash
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 ```
 
 ## 4. Migrate existing configs now
 
 ```bash
-manyoyo --init-config all
+manyoyo init all
 ```
 
 ## 5. Start agents directly
 
 ```bash
-manyoyo -r claude
-manyoyo -r codex
-manyoyo -r gemini
-manyoyo -r opencode
+manyoyo run -r claude
+manyoyo run -r codex
+manyoyo run -r gemini
+manyoyo run -r opencode
 ```
 
 ## Troubleshooting
 
-If `--init-config` reports missing variables, edit the related `runs.<agent>.env` in `~/.manyoyo/manyoyo.json`:
+If `init` reports missing variables, edit the related `runs.<agent>.env` in `~/.manyoyo/manyoyo.json`:
 
 ```bash
 vim ~/.manyoyo/manyoyo.json

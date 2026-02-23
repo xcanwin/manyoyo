@@ -29,8 +29,7 @@ manyoyo --version
 
 ```bash
 # 列出所有 MANYOYO 容器
-manyoyo -l
-manyoyo --cont-list
+manyoyo ls
 
 # 使用 Docker/Podman 命令查看
 docker ps -a | grep my
@@ -41,24 +40,24 @@ podman ps -a | grep my
 
 ```bash
 # 创建并运行容器（自动生成容器名）
-manyoyo -x echo "Hello MANYOYO"
+manyoyo run -x echo "Hello MANYOYO"
 
 # 指定容器名称
-manyoyo -n my-dev -x /bin/bash
+manyoyo run -n my-dev -x /bin/bash
 
 # 使用时间戳容器名（默认）
-manyoyo -y c  # 自动生成名称如 my-0204-1430
+manyoyo run -y c  # 自动生成名称如 my-0204-1430
 ```
 
 ### 删除容器
 
 ```bash
 # 删除指定容器
-manyoyo -n my-dev --crm
-manyoyo -n my-dev --cont-remove
+manyoyo rm my-dev
+manyoyo rm my-dev
 
 # 退出时自动删除（一次性模式）
-manyoyo -n temp --rm-on-exit -x /bin/bash
+manyoyo run -n temp --rm-on-exit -x /bin/bash
 ```
 
 ### 容器状态
@@ -81,26 +80,26 @@ docker logs <容器名>
 
 ```bash
 # 执行单个命令
-manyoyo -x echo "Hello World"
+manyoyo run -x echo "Hello World"
 
 # 执行多个命令（使用 && 连接）
-manyoyo -x 'echo "Start" && ls -la && echo "End"'
+manyoyo run -x 'echo "Start" && ls -la && echo "End"'
 
 # 使用完整命令（-x 或 --shell-full）
-manyoyo --sf 'python3 --version'
+manyoyo run --shell-full 'python3 --version'
 ```
 
 ### 交互式 Shell
 
 ```bash
 # 进入交互式 bash
-manyoyo -x /bin/bash
+manyoyo run -x /bin/bash
 
 # 在现有容器中进入 shell
-manyoyo -n my-dev -x /bin/bash
+manyoyo run -n my-dev -x /bin/bash
 
 # 指定工作目录
-manyoyo --hp /path/to/project -x /bin/bash
+manyoyo run --hp /path/to/project -x /bin/bash
 ```
 
 ### 命令组合
@@ -111,14 +110,14 @@ MANYOYO 支持三种方式组合命令：
 
 ```bash
 # 完整命令
-manyoyo -x 'claude --version'
+manyoyo run -x 'claude --version'
 ```
 
 #### 2. 使用 --shell-prefix, --shell, --
 
 ```bash
 # 设置环境变量 + 命令 + 参数
-manyoyo --sp 'DEBUG=1' -s claude -- --version
+manyoyo run --sp 'DEBUG=1' -s claude -- --version
 
 # 等同于：DEBUG=1 claude --version
 ```
@@ -127,13 +126,13 @@ manyoyo --sp 'DEBUG=1' -s claude -- --version
 
 ```bash
 # 仅设置命令
-manyoyo -s claude
+manyoyo run -s claude
 
 # 添加前缀
-manyoyo --sp 'DEBUG=1' -s claude
+manyoyo run --sp 'DEBUG=1' -s claude
 
 # 添加后缀参数
-manyoyo -s claude -- --help
+manyoyo run -s claude -- --help
 ```
 
 ## AI CLI 快捷方式
@@ -144,46 +143,46 @@ MANYOYO 提供快捷方式启动 AI CLI 工具的 YOLO/SOLO 模式（跳过权�
 
 ```bash
 # 使用快捷方式
-manyoyo -y c          # 推荐
-manyoyo -y claude
-manyoyo -y cc
+manyoyo run -y c          # 推荐
+manyoyo run -y claude
+manyoyo run -y cc
 
 # 等同于
-manyoyo -x claude --dangerously-skip-permissions
+manyoyo run -x claude --dangerously-skip-permissions
 ```
 
 ### Gemini
 
 ```bash
 # 使用快捷方式
-manyoyo -y gm         # 推荐
-manyoyo -y gemini
-manyoyo -y g
+manyoyo run -y gm         # 推荐
+manyoyo run -y gemini
+manyoyo run -y g
 
 # 等同于
-manyoyo -x gemini --yolo
+manyoyo run -x gemini --yolo
 ```
 
 ### Codex
 
 ```bash
 # 使用快捷方式
-manyoyo -y cx         # 推荐
-manyoyo -y codex
+manyoyo run -y cx         # 推荐
+manyoyo run -y codex
 
 # 等同于
-manyoyo -x codex --dangerously-bypass-approvals-and-sandbox
+manyoyo run -x codex --dangerously-bypass-approvals-and-sandbox
 ```
 
 ### OpenCode
 
 ```bash
 # 使用快捷方式
-manyoyo -y oc         # 推荐
-manyoyo -y opencode
+manyoyo run -y oc         # 推荐
+manyoyo run -y opencode
 
 # 等同于
-manyoyo -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
+manyoyo run -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
 ```
 
 ## 环境变量和配置
@@ -192,12 +191,12 @@ manyoyo -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
 
 ```bash
 # 字符串形式（-e 参数）
-manyoyo -e "ANTHROPIC_BASE_URL=https://api.anthropic.com" \
+manyoyo run -e "ANTHROPIC_BASE_URL=https://api.anthropic.com" \
         -e "ANTHROPIC_AUTH_TOKEN=sk-xxx" \
         -x claude
 
 # 多个环境变量
-manyoyo -e "VAR1=value1" \
+manyoyo run -e "VAR1=value1" \
         -e "VAR2=value2" \
         -e "VAR3=value3" \
         -x /bin/bash
@@ -207,23 +206,23 @@ manyoyo -e "VAR1=value1" \
 
 ```bash
 # 加载环境文件
-manyoyo --ef /abs/path/anthropic_claudecode.env -x claude
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x claude
 
 # 加载多个环境文件
-manyoyo --ef /abs/path/base.env --ef /abs/path/anthropic_secrets.env -x claude
+manyoyo run --ef /abs/path/base.env --ef /abs/path/anthropic_secrets.env -x claude
 ```
 
 ### 使用运行配置
 
 ```bash
 # 加载运行配置
-manyoyo -r claude
+manyoyo run -r claude
 
 # 运行配置 + 环境变量覆盖
-manyoyo -r claude -e "DEBUG=true"
+manyoyo run -r claude -e "DEBUG=true"
 
 # 运行配置 + 额外环境文件
-manyoyo -r claude --ef /abs/path/additional.env
+manyoyo run -r claude --ef /abs/path/additional.env
 ```
 
 详细配置请参考[配置系统](../configuration/README.md)。
@@ -234,26 +233,26 @@ manyoyo -r claude --ef /abs/path/additional.env
 
 ```bash
 # 默认挂载当前目录
-manyoyo -y c  # 当前目录挂载到容器相同路径
+manyoyo run -y c  # 当前目录挂载到容器相同路径
 
 # 指定宿主机工作目录
-manyoyo --hp /path/to/project -y c
+manyoyo run --hp /path/to/project -y c
 
 # 指定容器工作目录
-manyoyo --cp /workspace -y c
+manyoyo run --cp /workspace -y c
 
 # 同时指定两者
-manyoyo --hp /Users/me/project --cp /workspace -y c
+manyoyo run --hp /Users/me/project --cp /workspace -y c
 ```
 
 ### 额外挂载
 
 ```bash
 # 挂载单个文件
-manyoyo -v "/Users/me/.ssh/config:/root/.ssh/config:ro" -y c
+manyoyo run -v "/Users/me/.ssh/config:/root/.ssh/config:ro" -y c
 
 # 挂载多个目录
-manyoyo -v "/data:/workspace/data" \
+manyoyo run -v "/data:/workspace/data" \
         -v "/cache:/workspace/cache" \
         -y c
 
@@ -270,10 +269,10 @@ manyoyo -v "/data:/workspace/data" \
 
 ```bash
 # 创建新会话（自动生成名称）
-manyoyo -y c
+manyoyo run -y c
 
 # 创建命名会话
-manyoyo -n my-project --ef /abs/path/anthropic.env -y c
+manyoyo run -n my-project --ef /abs/path/anthropic.env -y c
 ```
 
 ### 恢复会话
@@ -282,16 +281,16 @@ manyoyo -n my-project --ef /abs/path/anthropic.env -y c
 
 ```bash
 # Claude Code
-manyoyo -n my-project -- -c
+manyoyo run -n my-project -- -c
 
 # Codex
-manyoyo -n my-project -- resume --last
+manyoyo run -n my-project -- resume --last
 
 # Gemini
-manyoyo -n my-project -- -r
+manyoyo run -n my-project -- -r
 
 # OpenCode
-manyoyo -n my-project -- -c
+manyoyo run -n my-project -- -c
 ```
 
 ### 交互式会话提示
@@ -320,17 +319,17 @@ manyoyo -n my-project -- -c
 **示例**：
 ```bash
 # 启动容器
-manyoyo -n dev -y c
+manyoyo run -n dev -y c
 
 # 工作一段时间后退出
 # 系统提示选择操作
 
 # 选择 'y' - 保持运行
 # 稍后恢复会话
-manyoyo -n dev -- -c
+manyoyo run -n dev -- -c
 
 # 或选择 'i' - 进入 shell 检查
-manyoyo -n dev -x /bin/bash
+manyoyo run -n dev -x /bin/bash
 ```
 
 ## 静默模式
@@ -341,26 +340,26 @@ manyoyo -n dev -x /bin/bash
 
 ```bash
 # 静默提示信息
-manyoyo -q tip -x echo "Hello"
+manyoyo run -q tip -x echo "Hello"
 
 # 静默命令显示
-manyoyo -q cmd -x echo "Hello"
+manyoyo run -q cmd -x echo "Hello"
 
 # 静默所有输出
-manyoyo -q full -x echo "Hello"
+manyoyo run -q full -x echo "Hello"
 
 # 组合多个静默选项
-manyoyo -q tip -q cmd -x echo "Hello"
+manyoyo run -q tip -q cmd -x echo "Hello"
 ```
 
 ### 自动确认
 
 ```bash
 # 跳过所有交互式确认（用于脚本）
-manyoyo --yes --ib --iv 1.8.0-common
+manyoyo build --yes --iv 1.8.0-common
 
 # 组合使用
-manyoyo --yes -q full -x echo "Automated"
+manyoyo run -q full -x echo "Automated"
 ```
 
 ## 镜像管理
@@ -369,37 +368,36 @@ manyoyo --yes -q full -x echo "Automated"
 
 ```bash
 # 使用默认镜像名，指定版本
-manyoyo --iv 1.8.0-full -y c
+manyoyo run --iv 1.8.0-full -y c
 
 # 使用自定义镜像
-manyoyo --in myuser/sandbox --iv 1.0.0-common -y c
+manyoyo run --in myuser/sandbox --iv 1.0.0-common -y c
 
 # 完整镜像标识
-manyoyo --in localhost/xcanwin/manyoyo --iv 1.8.0-full -y c
+manyoyo run --in localhost/xcanwin/manyoyo --iv 1.8.0-full -y c
 ```
 
 ### 构建镜像
 
 ```bash
 # 构建默认镜像
-manyoyo --ib --iv 1.8.0-common
+manyoyo build --iv 1.8.0-common
 
 # 构建自定义镜像
-manyoyo --ib --in mysandbox --iv 1.0.0-common
+manyoyo build --in mysandbox --iv 1.0.0-common
 
 # 构建精简版本
-manyoyo --ib --iba TOOL=common
+manyoyo build --iba TOOL=common
 
 # 构建特定工具
-manyoyo --ib --iba TOOL=python,nodejs,claude
+manyoyo build --iba TOOL=python,nodejs,claude
 ```
 
 ### 清理镜像
 
 ```bash
 # 清理悬空镜像和 <none> 镜像
-manyoyo --irm
-manyoyo --image-remove
+manyoyo prune
 
 # 使用 Docker/Podman 清理
 docker system prune -a  # 或 podman system prune -a
@@ -412,13 +410,13 @@ docker image prune      # 仅清理悬空镜像
 
 ```bash
 # 显示最终生效的配置
-manyoyo --show-config
+manyoyo config show
 
 # 显示特定配置的合并结果
-manyoyo -r claude --show-config
+manyoyo config show -r claude
 
 # 显示将要执行的命令
-manyoyo --show-command -r claude
+manyoyo config command -r claude
 ```
 
 ### 查看日志
@@ -438,16 +436,16 @@ docker logs --tail 100 <容器名>
 
 ```bash
 # 进入容器调试
-manyoyo -n debug -x /bin/bash
+manyoyo run -n debug -x /bin/bash
 
 # 检查容器内部状态
-manyoyo -n debug -x 'env | sort'
-manyoyo -n debug -x 'ls -la'
-manyoyo -n debug -x 'which claude'
+manyoyo run -n debug -x 'env | sort'
+manyoyo run -n debug -x 'ls -la'
+manyoyo run -n debug -x 'which claude'
 
 # 测试网络
-manyoyo -n debug -x 'ping -c 3 api.anthropic.com'
-manyoyo -n debug -x 'curl -I https://api.anthropic.com'
+manyoyo run -n debug -x 'ping -c 3 api.anthropic.com'
+manyoyo run -n debug -x 'curl -I https://api.anthropic.com'
 ```
 
 ## 实用技巧
@@ -456,36 +454,36 @@ manyoyo -n debug -x 'curl -I https://api.anthropic.com'
 
 ```bash
 # 测试容器是否正常
-manyoyo -x echo "Container works"
+manyoyo run -x echo "Container works"
 
 # 测试环境变量
-manyoyo -e "TEST=123" -x 'echo $TEST'
+manyoyo run -e "TEST=123" -x 'echo $TEST'
 
 # 测试挂载
-manyoyo -v "/tmp/test:/test" -x 'ls -la /test'
+manyoyo run -v "/tmp/test:/test" -x 'ls -la /test'
 ```
 
 ### 一次性容器
 
 ```bash
 # 运行后自动删除
-manyoyo --rm-on-exit -x 'echo "Temporary"'
+manyoyo run --rm-on-exit -x 'echo "Temporary"'
 
 # 用于临时测试
-manyoyo -n temp --rm-on-exit -x /bin/bash
+manyoyo run -n temp --rm-on-exit -x /bin/bash
 ```
 
 ### 快速切换工具
 
 ```bash
 # 启动 Claude Code
-manyoyo -r claude
+manyoyo run -r claude
 
 # 退出后，切换到 Codex
-manyoyo -r codex
+manyoyo run -r codex
 
 # 切换到交互式 shell
-manyoyo -n current-container -x /bin/bash
+manyoyo run -n current-container -x /bin/bash
 ```
 
 ### 批量操作
@@ -494,7 +492,7 @@ manyoyo -n current-container -x /bin/bash
 # 在多个项目中运行命令
 for proj in project1 project2 project3; do
     cd $proj
-    manyoyo -n my-$proj -y c
+    manyoyo run -n my-$proj -y c
     cd ..
 done
 
@@ -508,36 +506,36 @@ docker ps -a | grep my-test | awk '{print $1}' | xargs docker rm
 
 ```bash
 # 1. 启动开发容器
-manyoyo -n dev-project --ef /abs/path/anthropic.env -y c
+manyoyo run -n dev-project --ef /abs/path/anthropic.env -y c
 
 # 2. 工作...（AI 辅助编程）
 
 # 3. 退出后保持运行（选择 'y'）
 
 # 4. 需要时恢复
-manyoyo -n dev-project -- -c
+manyoyo run -n dev-project -- -c
 
 # 5. 进入 shell 检查
-manyoyo -n dev-project -x /bin/bash
+manyoyo run -n dev-project -x /bin/bash
 
 # 6. 完成后删除容器
-manyoyo -n dev-project --crm
+manyoyo rm dev-project
 ```
 
 ### 多项目工作流
 
 ```bash
 # 项目 A
-manyoyo -n project-a --hp ~/projects/a --ef /abs/path/claude.env -y c
+manyoyo run -n project-a --hp ~/projects/a --ef /abs/path/claude.env -y c
 
 # 项目 B
-manyoyo -n project-b --hp ~/projects/b --ef /abs/path/claude.env -y c
+manyoyo run -n project-b --hp ~/projects/b --ef /abs/path/claude.env -y c
 
 # 切换回项目 A
-manyoyo -n project-a -- -c
+manyoyo run -n project-a -- -c
 
 # 列出所有项目容器
-manyoyo -l
+manyoyo ls
 ```
 
 ### CI/CD 工作流
@@ -547,7 +545,7 @@ manyoyo -l
 #!/bin/bash
 
 # 设置非交互模式
-manyoyo --yes -q full \
+manyoyo run -q full \
     -n ci-build \
     --rm-on-exit \
     -x 'npm install && npm test && npm run build'

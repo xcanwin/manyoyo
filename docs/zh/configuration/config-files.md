@@ -130,7 +130,7 @@ MANYOYO 支持两种配置文件：
 #### serverUser
 - **类型**：字符串
 - **默认值**：`admin`
-- **说明**：网页服务登录用户名（`--server` 模式）
+- **说明**：网页服务登录用户名（`serve` 模式）
 - **环境变量**：`MANYOYO_SERVER_USER`
 - **示例**：
 ```json5
@@ -142,7 +142,7 @@ MANYOYO 支持两种配置文件：
 #### serverPass
 - **类型**：字符串
 - **默认值**：未设置时自动生成随机密码
-- **说明**：网页服务登录密码（`--server` 模式）
+- **说明**：网页服务登录密码（`serve` 模式）
 - **环境变量**：`MANYOYO_SERVER_PASS`
 - **示例**：
 ```json5
@@ -292,7 +292,7 @@ MANYOYO 支持两种配置文件：
 
 ```bash
 # 从 manyoyo.json 的 runs 读取
-manyoyo -r claude
+manyoyo run -r claude
 # 加载：~/.manyoyo/manyoyo.json 的 runs.claude
 ```
 
@@ -427,13 +427,13 @@ manyoyo -r claude
 
 ```bash
 # 显示所有配置源的合并结果
-manyoyo --show-config
+manyoyo config show
 
 # 显示特定运行配置的合并结果
-manyoyo -r claude --show-config
+manyoyo config show -r claude
 
 # 显示将要执行的命令
-manyoyo -r claude --show-command
+manyoyo config command -r claude
 ```
 
 ### 常见配置问题
@@ -445,7 +445,7 @@ manyoyo -r claude --show-command
 **解决方案**：
 1. 检查配置文件格式（必须是有效的 JSON5）
 2. 确认文件路径正确
-3. 使用 `--show-config` 查看最终配置
+3. 使用 `config show` 查看最终配置
 4. 注意覆盖型参数只取最高优先级的值
 
 ```bash
@@ -453,7 +453,7 @@ manyoyo -r claude --show-command
 cat ~/.manyoyo/manyoyo.json | jq '.runs.claude'
 
 # 查看最终配置
-manyoyo -r claude --show-config
+manyoyo config show -r claude
 ```
 
 #### 配置冲突
@@ -462,7 +462,7 @@ manyoyo -r claude --show-config
 
 **解决方案**：
 1. 理解优先级规则（覆盖型 vs 合并型）
-2. 使用 `--show-config` 查看最终值
+2. 使用 `config show` 查看最终值
 3. 必要时移除低优先级配置中的冲突项
 
 #### 环境变量未加载
@@ -472,15 +472,15 @@ manyoyo -r claude --show-config
 **解决方案**：
 1. 确认环境文件路径正确
 2. 检查环境文件格式
-3. 使用 `--show-config` 查看加载的环境文件列表
+3. 使用 `config show` 查看加载的环境文件列表
 4. 在容器中运行 `env` 命令验证
 
 ```bash
 # 查看配置中的环境文件
-manyoyo -r claude --show-config | grep envFile
+manyoyo config show -r claude | grep envFile
 
 # 在容器中验证环境变量
-manyoyo -r claude -x env | grep ANTHROPIC
+manyoyo run -r claude -x env | grep ANTHROPIC
 ```
 
 ## 最佳实践
@@ -541,4 +541,4 @@ vim ~/.manyoyo/manyoyo.json
 - [配置系统概览](./README.md) - 了解配置优先级机制
 - [环境变量详解](./environment.md) - 学习如何配置环境变量
 - [配置示例](./examples.md) - 查看更多实用示例
-- [网页服务认证与安全实践](../advanced/web-server-auth.md) - `--server` 模式认证与安全基线
+- [网页服务认证与安全实践](../advanced/web-server-auth.md) - `serve` 模式认证与安全基线

@@ -46,7 +46,7 @@ docker ps -a
 docker stop <conflicting-container>
 
 # Or use different container name
-manyoyo -n my-$(date +%m%d-%H%M) -y c
+manyoyo run -n my-$(date +%m%d-%H%M) -y c
 ```
 
 #### 3. Check Mount Permissions
@@ -69,7 +69,7 @@ chcon -Rt svirt_sandbox_file_t /path/to/host/dir
 
 ```bash
 # Enter shell directly for debugging
-manyoyo -n debug-container -x /bin/bash
+manyoyo run -n debug-container -x /bin/bash
 
 # View container internal state
 pwd
@@ -108,7 +108,7 @@ docker logs <container-name>
 # 3. Program crashed due to missing environment variables
 
 # Keep container running (for debugging)
-manyoyo -n debug -x sleep infinity
+manyoyo run -n debug -x sleep infinity
 ```
 
 ### Image Version Mismatch
@@ -118,7 +118,7 @@ manyoyo -n debug -x sleep infinity
 **Solution**:
 ```bash
 # View currently used image
-manyoyo --show-config | grep imageVersion
+manyoyo config show | grep imageVersion
 
 # View available images
 docker images | grep manyoyo
@@ -164,7 +164,7 @@ id | grep docker
 
 ```bash
 # Run with sudo
-sudo manyoyo -y c
+sudo manyoyo run -y c
 
 # Note: Using sudo may cause config file path issues
 # Config files will be from /root/ instead of ~/
@@ -197,7 +197,7 @@ chmod 644 /path/to/file
 chmod 755 /path/to/dir
 
 # For read-only files, use read-only mount
-manyoyo -v "/path/to/file:/container/file:ro" -y c
+manyoyo run -v "/path/to/file:/container/file:ro" -y c
 ```
 
 ### SELinux Permission Issues
@@ -216,7 +216,7 @@ sudo setenforce 0
 chcon -Rt svirt_sandbox_file_t /path/to/host/dir
 
 # Or add :z or :Z flag when mounting
-manyoyo -v "/path/to/dir:/container/dir:z" -y c
+manyoyo run -v "/path/to/dir:/container/dir:z" -y c
 ```
 
 ## Environment Variables Not Taking Effect
@@ -283,37 +283,37 @@ ls -la ~/.manyoyo/env/
 ls ~/.manyoyo/env/ | grep -i anthropic
 
 # Test loading
-manyoyo --ef /abs/path/anthropic_claudecode.env --show-config
+manyoyo config show --ef /abs/path/anthropic_claudecode.env
 ```
 
 **Path rules**:
 - `--ef` only accepts absolute paths
 - Recommended format: `--ef /abs/path/myconfig.env`
 
-#### 3. Use --show-config to View Configuration
+#### 3. Use config show to View Configuration
 
 ```bash
 # View final effective configuration
-manyoyo --ef /abs/path/anthropic_claudecode.env --show-config
+manyoyo config show --ef /abs/path/anthropic_claudecode.env
 
 # Check if envFile is loaded correctly
-manyoyo -r claude --show-config | grep -A 5 envFile
+manyoyo config show -r claude | grep -A 5 envFile
 
 # Check env array
-manyoyo -r claude --show-config | grep -A 20 '"env"'
+manyoyo config show -r claude | grep -A 20 '"env"'
 ```
 
 #### 4. Verify Environment Variables in Container
 
 ```bash
 # View all environment variables
-manyoyo --ef /abs/path/anthropic_claudecode.env -x env
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x env
 
 # View specific environment variable
-manyoyo --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC'
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC'
 
 # Test Claude Code
-manyoyo --ef /abs/path/anthropic_claudecode.env -x 'echo $ANTHROPIC_AUTH_TOKEN'
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x 'echo $ANTHROPIC_AUTH_TOKEN'
 ```
 
 #### 5. Check Configuration Priority
@@ -344,17 +344,17 @@ Environment variable loading order (later loaded overrides earlier):
 grep -r "ANTHROPIC_AUTH_TOKEN" ~/.manyoyo/
 
 # 2. View final value
-manyoyo --ef /abs/path/anthropic_claudecode.env -x 'echo "TOKEN=$ANTHROPIC_AUTH_TOKEN"'
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x 'echo "TOKEN=$ANTHROPIC_AUTH_TOKEN"'
 
 # 3. Check for spaces or special characters
-manyoyo --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC | cat -A'
+manyoyo run --ef /abs/path/anthropic_claudecode.env -x 'env | grep ANTHROPIC | cat -A'
 
 # 4. Test with new environment file
 cat > /tmp/test.env << 'EOF'
 export TEST_VAR="test-value"
 EOF
 
-manyoyo --ef /tmp/test.env -x 'echo $TEST_VAR'
+manyoyo run --ef /tmp/test.env -x 'echo $TEST_VAR'
 ```
 
 ## Cannot Access Host Files from Container
@@ -372,18 +372,18 @@ Container starts successfully, but cannot access or modify host files from withi
 docker inspect <container-name> | jq '.[0].Mounts'
 
 # Default mount (current directory)
-manyoyo -y c  # Mounts current directory to same path in container
+manyoyo run -y c  # Mounts current directory to same path in container
 
 # Custom mount
-manyoyo --hp /path/to/project -y c
+manyoyo run --hp /path/to/project -y c
 ```
 
 #### 2. Check Path is Correct
 
 ```bash
 # Check in container
-manyoyo -n test -x pwd
-manyoyo -n test -x ls -la
+manyoyo run -n test -x pwd
+manyoyo run -n test -x ls -la
 
 # Check host path
 ls -la /path/to/project
@@ -396,7 +396,7 @@ ls -la /path/to/project
 ls -la /path/to/file
 
 # Container file permissions
-manyoyo -x ls -la /container/path/to/file
+manyoyo run -x ls -la /container/path/to/file
 
 # If permission issue, modify host file permissions
 chmod 644 /path/to/file
@@ -406,7 +406,7 @@ chmod 644 /path/to/file
 
 ```bash
 # Mount additional directories or files
-manyoyo -v "/host/path:/container/path" -y c
+manyoyo run -v "/host/path:/container/path" -y c
 
 # Mount multiple paths
 manyoyo \
@@ -415,7 +415,7 @@ manyoyo \
     -y c
 
 # Read-only mount
-manyoyo -v "/sensitive:/container/sensitive:ro" -y c
+manyoyo run -v "/sensitive:/container/sensitive:ro" -y c
 ```
 
 #### 5. Configure Mounts in Configuration File
@@ -442,7 +442,7 @@ manyoyo -v "/sensitive:/container/sensitive:ro" -y c
 readlink -f /path/to/symlink
 
 # Mount real path
-manyoyo --hp $(readlink -f /path/to/dir) -y c
+manyoyo run --hp $(readlink -f /path/to/dir) -y c
 
 # Or mount both target paths
 manyoyo \
@@ -520,7 +520,7 @@ Error: Unauthorized
 **Solution**:
 ```bash
 # Ensure authentication file is mounted
-manyoyo -v "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json" -y cx
+manyoyo run -v "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json" -y cx
 
 # Or set in configuration file
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
@@ -602,11 +602,11 @@ EOF
 **Solution**:
 ```bash
 # 1. Test network in container
-manyoyo -x ping -c 3 8.8.8.8
-manyoyo -x curl -I https://api.anthropic.com
+manyoyo run -x ping -c 3 8.8.8.8
+manyoyo run -x curl -I https://api.anthropic.com
 
 # 2. Check DNS
-manyoyo -x cat /etc/resolv.conf
+manyoyo run -x cat /etc/resolv.conf
 
 # 3. Configure Docker/Podman DNS
 # Docker: /etc/docker/daemon.json
@@ -632,7 +632,7 @@ sudo firewall-cmd --reload
 **Solution**:
 ```bash
 # Set proxy in container
-manyoyo -e "HTTP_PROXY=http://proxy:8080" \
+manyoyo run -e "HTTP_PROXY=http://proxy:8080" \
         -e "HTTPS_PROXY=http://proxy:8080" \
         -e "NO_PROXY=localhost,127.0.0.1" \
         -y c
@@ -644,7 +644,7 @@ export HTTPS_PROXY=http://proxy.example.com:8080
 export NO_PROXY=localhost,127.0.0.1
 EOF
 
-manyoyo --ef /abs/path/proxy.env --ef /abs/path/anthropic_claudecode.env -y c
+manyoyo run --ef /abs/path/proxy.env --ef /abs/path/anthropic_claudecode.env -y c
 ```
 
 ## Performance Issues
@@ -659,8 +659,8 @@ manyoyo --ef /abs/path/proxy.env --ef /abs/path/anthropic_claudecode.env -y c
 docker images | grep manyoyo
 
 # 2. Use minimal image
-manyoyo --ib --iv 1.8.0-common --iba TOOL=common
-manyoyo --iv 1.8.0-common -y c
+manyoyo build --iv 1.8.0-common --iba TOOL=common
+manyoyo run --iv 1.8.0-common -y c
 
 # 3. Clean unused resources
 docker system prune
@@ -696,20 +696,20 @@ df -h
 
 ```bash
 # Enable debugging with environment variable
-manyoyo -e "DEBUG=*" -y c
+manyoyo run -e "DEBUG=*" -y c
 
 # View command executed by manyoyo
-manyoyo --show-command -r claude
+manyoyo config command -r claude
 
 # View final configuration
-manyoyo --show-config -r claude
+manyoyo config show -r claude
 ```
 
 ### Interactive Debugging
 
 ```bash
 # Enter container shell
-manyoyo -n debug-container -x /bin/bash
+manyoyo run -n debug-container -x /bin/bash
 
 # Manually test in container
 pwd
@@ -730,10 +730,10 @@ echo $ANTHROPIC_AUTH_TOKEN
 
 ```bash
 # Create clean container for comparison
-manyoyo -n clean-test --rm-on-exit -x /bin/bash
+manyoyo run -n clean-test --rm-on-exit -x /bin/bash
 
 # Create problem container for comparison
-manyoyo -n problem-test -r claude -x /bin/bash
+manyoyo run -n problem-test -r claude -x /bin/bash
 
 # Compare configuration differences
 docker inspect clean-test > clean.json

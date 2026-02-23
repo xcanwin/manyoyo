@@ -30,7 +30,7 @@ MANYOYO 提供两种容器嵌套方案：
 
 ```bash
 # 启动 dind 模式容器
-manyoyo -m dind -x /bin/bash
+manyoyo run -m dind -x /bin/bash
 
 # 在容器内使用 Podman（开箱即用）
 podman ps -a
@@ -61,7 +61,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # 使用配置启动
-manyoyo -r dind
+manyoyo run -r dind
 ```
 
 ## 工作原理
@@ -101,7 +101,7 @@ MANYOYO 的 dind 模式基于以下技术：
 **使用方法**：
 ```bash
 # 进入 dind 容器
-manyoyo -m dind -x /bin/bash
+manyoyo run -m dind -x /bin/bash
 
 # 直接使用 Podman
 podman ps -a
@@ -120,7 +120,7 @@ podman build -t myapp .
 **使用方法**：
 ```bash
 # 进入 dind 容器
-manyoyo -m dind -x /bin/bash
+manyoyo run -m dind -x /bin/bash
 
 # 启动 dockerd（后台运行）
 nohup dockerd > /var/log/dockerd.log 2>&1 &
@@ -160,7 +160,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # 2. 启动 AI 辅助开发
-manyoyo -r dind-dev
+manyoyo run -r dind-dev
 
 # 3. AI 可以帮助：
 #    - 编写 Dockerfile
@@ -169,7 +169,7 @@ manyoyo -r dind-dev
 #    - 调试容器问题
 
 # 4. 退出后检查
-manyoyo -n my-dind-dev -x /bin/bash
+manyoyo run -n my-dind-dev -x /bin/bash
 
 # 5. 查看 AI 创建的容器和镜像
 podman ps -a
@@ -198,7 +198,7 @@ cat > ~/.manyoyo/manyoyo.json << 'EOF'
 EOF
 
 # 2. 运行 CI 任务
-manyoyo -r ci -x /bin/bash
+manyoyo run -r ci -x /bin/bash
 
 # 3. 在容器内运行测试
 $ npm install
@@ -218,7 +218,7 @@ $ podman rm -f $(podman ps -aq)
 
 ```bash
 # 进入 dind 容器
-manyoyo -m dind -x /bin/bash
+manyoyo run -m dind -x /bin/bash
 
 # 创建测试 Dockerfile
 cat > Dockerfile.test << 'EOF'
@@ -341,7 +341,7 @@ docker build -t myapp .
 
 ```bash
 # 限制 CPU 和内存
-manyoyo -m dind -x "podman run --cpus=1 --memory=512m myapp"
+manyoyo run -m dind -x "podman run --cpus=1 --memory=512m myapp"
 ```
 
 #### 2. 使用非特权模式（如果可能）
@@ -486,7 +486,7 @@ podman ps -a --size
 
 ```bash
 # 使用 dind 模式 + Podman
-manyoyo -m dind -r claude
+manyoyo run -m dind -r claude
 
 # AI 辅助开发容器化应用
 # 快速迭代、测试、调试
@@ -496,7 +496,7 @@ manyoyo -m dind -r claude
 
 ```bash
 # 使用自动化脚本
-manyoyo --yes -m dind -x "
+manyoyo run -m dind -x "
   podman build -t myapp:$CI_COMMIT_SHA . &&
   podman run --rm myapp:$CI_COMMIT_SHA npm test
 "

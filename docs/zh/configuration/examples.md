@@ -28,7 +28,7 @@ EOF2
 
 使用：
 ```bash
-manyoyo -r claude
+manyoyo run -r claude
 ```
 
 ## 智能体配置示例
@@ -141,9 +141,9 @@ export OPENAI_MODEL="gpt-4-turbo"
 
 使用：
 ```bash
-manyoyo -r dev
-manyoyo -r test
-manyoyo -r prod
+manyoyo run -r dev
+manyoyo run -r test
+manyoyo run -r prod
 ```
 
 ## 组合配置示例
@@ -186,7 +186,7 @@ manyoyo -r prod
 
 **命令行覆盖**：
 ```bash
-manyoyo -r claude -e "LOG_LEVEL=debug"
+manyoyo run -r claude -e "LOG_LEVEL=debug"
 ```
 
 ## 团队模板示例
@@ -215,15 +215,15 @@ manyoyo -r claude -e "LOG_LEVEL=debug"
 ```bash
 cp config.example.json ~/.manyoyo/manyoyo.json
 cp anthropic_team.example.env /abs/path/anthropic_team.env
-manyoyo -r team
+manyoyo run -r team
 ```
 
 ## 调试示例
 
 ```bash
-manyoyo -r claude --show-config
-manyoyo -r claude --show-command
-manyoyo -r claude -x env | grep ANTHROPIC
+manyoyo config show -r claude
+manyoyo config command -r claude
+manyoyo run -r claude -x env | grep ANTHROPIC
 ```
 
 ## 相关文档

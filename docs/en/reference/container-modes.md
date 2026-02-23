@@ -25,11 +25,11 @@ MANYOYO supports three container modes, providing different levels of container 
 
 ```bash
 # Default is common mode
-manyoyo -y c
+manyoyo run -y c
 
 # Explicitly specify
-manyoyo -m common -y c
-manyoyo --cont-mode common -y c
+manyoyo run -m common -y c
+manyoyo run --cont-mode common -y c
 ```
 
 ### Use Cases
@@ -72,18 +72,18 @@ docker build     # ❌ Cannot build images
 
 ```bash
 # Use dind mode
-manyoyo -m dind -y c
-manyoyo --cont-mode dind -y c
+manyoyo run -m dind -y c
+manyoyo run --cont-mode dind -y c
 
 # Enter shell to use
-manyoyo -n dind-dev -m dind -x /bin/bash
+manyoyo run -n dind-dev -m dind -x /bin/bash
 ```
 
 ### Operations Inside Container (Quick)
 
 ```bash
 # Enter container
-manyoyo -n dind-dev -m dind -x /bin/bash
+manyoyo run -n dind-dev -m dind -x /bin/bash
 
 # Podman (recommended)
 podman ps -a
@@ -151,8 +151,8 @@ For complete configuration and end-to-end examples, see:
 
 ```bash
 # Use sock mode (dangerous!)
-manyoyo -m sock -x /bin/bash
-manyoyo --cont-mode sock -x /bin/bash
+manyoyo run -m sock -x /bin/bash
+manyoyo run --cont-mode sock -x /bin/bash
 ```
 
 ::: danger Danger Warning
@@ -170,7 +170,7 @@ In Socket Mount mode, the container can:
 
 ```bash
 # Enter container
-manyoyo -n sock-dev -m sock -x /bin/bash
+manyoyo run -n sock-dev -m sock -x /bin/bash
 
 # Directly use host's Podman/Docker
 $ podman ps -a     # Shows host's containers
@@ -228,14 +228,14 @@ If you must use sock mode, take these measures:
 
 ```bash
 # Only use when needed, delete container immediately after
-manyoyo -n temp-sock -m sock --rm-on-exit -x /bin/bash
+manyoyo run -n temp-sock -m sock --rm-on-exit -x /bin/bash
 ```
 
 #### 2. Monitoring and Auditing
 
 ```bash
 # Log all operations
-manyoyo -m sock -x /bin/bash 2>&1 | tee sock-audit.log
+manyoyo run -m sock -x /bin/bash 2>&1 | tee sock-audit.log
 
 # Regularly check containers
 docker ps -a
@@ -253,7 +253,7 @@ docker images
 
 ```bash
 # If only need to view, use read-only mount
-manyoyo -v "/var/run/docker.sock:/var/run/docker.sock:ro" -x /bin/bash
+manyoyo run -v "/var/run/docker.sock:/var/run/docker.sock:ro" -x /bin/bash
 ```
 
 ### Configuration Example
@@ -339,18 +339,18 @@ Need to run containers inside container?
 
 **Daily development** (Recommended for 95% of users):
 ```bash
-manyoyo -y c  # Default common mode
+manyoyo run -y c  # Default common mode
 ```
 
 **CI/CD builds** (Need container nesting):
 ```bash
-manyoyo -m dind -y c  # Use dind mode
+manyoyo run -m dind -y c  # Use dind mode
 ```
 
 **Container management tool development** (Special scenarios):
 ```bash
 # After careful evaluation, if must use
-manyoyo -m sock -x /bin/bash
+manyoyo run -m sock -x /bin/bash
 ```
 
 ## Troubleshooting
@@ -362,7 +362,7 @@ manyoyo -m sock -x /bin/bash
 **Solution**:
 ```bash
 # Switch to dind mode
-manyoyo -n new-container -m dind -y c
+manyoyo run -n new-container -m dind -y c
 ```
 
 ### Docker-in-Docker Mode
@@ -414,7 +414,7 @@ groups | grep docker
 **Solution**:
 ```bash
 # Immediately stop using sock mode
-manyoyo -n sock-container --crm
+manyoyo rm sock-container
 
 # Check host container status
 docker ps -a
