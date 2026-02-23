@@ -306,7 +306,7 @@ manyoyo rm my-session
 
 ```bash
 # 列出所有容器会话
-manyoyo ls
+manyoyo ps
 
 # 查看特定容器
 docker ps -a | grep my-session
@@ -504,7 +504,7 @@ manyoyo run -x which codex
 **检查容器状态**：
 ```bash
 # 查看容器是否存在
-manyoyo ls
+manyoyo ps
 docker ps -a | grep <容器名>
 
 # 查看容器日志

@@ -21,7 +21,7 @@ Use this page to quickly locate common MANYOYO issues and run the shortest diagn
 1. Basic checks
 
 ```bash
-manyoyo -V
+manyoyo -v
 node --version
 docker --version   # or podman --version
 ```
@@ -38,7 +38,7 @@ manyoyo config show -r claude
 
 ```bash
 docker images | grep manyoyo   # or podman images
-manyoyo ls
+manyoyo ps
 ```
 
 4. Verify env file loading (`--ef` only accepts absolute paths)
@@ -60,9 +60,9 @@ manyoyo run --ef /abs/path/anthropic_claudecode.env -x env | grep ANTHROPIC
 
 ```bash
 uname -a
-manyoyo -V
+manyoyo -v
 manyoyo config show
-manyoyo ls
+manyoyo ps
 ```
 
 2. Export logs

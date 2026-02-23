@@ -10,9 +10,10 @@ description: MANYOYO CLI option reference for container management, env injectio
 | Scenario | Command |
 | --- | --- |
 | View help | `manyoyo -h` |
-| View version | `manyoyo -V` |
+| View version | `manyoyo -v` |
 | Initialize config from local Agent setup | `manyoyo init all` |
-| List containers | `manyoyo ls` |
+| List containers | `manyoyo ps` |
+| List images | `manyoyo images` |
 | Create container and start Claude Code | `manyoyo run -n test --ef /abs/path/.env -y c` |
 | Enter shell | `manyoyo run -n test -x /bin/bash` |
 | Execute custom command | `manyoyo run -n test -x echo "hello world"` |

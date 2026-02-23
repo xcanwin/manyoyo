@@ -21,7 +21,7 @@
 1. 基础检查
 
 ```bash
-manyoyo -V
+manyoyo -v
 node --version
 docker --version   # 或 podman --version
 ```
@@ -38,7 +38,7 @@ manyoyo config show -r claude
 
 ```bash
 docker images | grep manyoyo   # 或 podman images
-manyoyo ls
+manyoyo ps
 ```
 
 4. 验证环境文件加载（`--ef` 仅支持绝对路径）
@@ -60,9 +60,9 @@ manyoyo run --ef /abs/path/anthropic_claudecode.env -x env | grep ANTHROPIC
 
 ```bash
 uname -a
-manyoyo -V
+manyoyo -v
 manyoyo config show
-manyoyo ls
+manyoyo ps
 ```
 
 2. 导出日志

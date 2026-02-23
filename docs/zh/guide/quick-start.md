@@ -15,7 +15,7 @@ description: 宿主机已可用 Claude/Codex/Gemini/OpenCode 时，最快把配�
 
 ```bash
 npm install -g @xcanwin/manyoyo
-manyoyo -V
+manyoyo -v
 ```
 
 ## 2. 安装 Podman / Docker

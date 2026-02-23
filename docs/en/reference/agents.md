@@ -306,7 +306,7 @@ manyoyo rm my-session
 
 ```bash
 # List all container sessions
-manyoyo ls
+manyoyo ps
 
 # View specific container
 docker ps -a | grep my-session
@@ -504,7 +504,7 @@ manyoyo run -x which codex
 **Check container status**:
 ```bash
 # Check if container exists
-manyoyo ls
+manyoyo ps
 docker ps -a | grep <container-name>
 
 # View container logs

@@ -19,7 +19,7 @@ manyoyo
 
 ```bash
 # 显示 MANYOYO 版本
-manyoyo -V
+manyoyo -v
 manyoyo --version
 ```
 
@@ -29,7 +29,7 @@ manyoyo --version
 
 ```bash
 # 列出所有 MANYOYO 容器
-manyoyo ls
+manyoyo ps
 
 # 使用 Docker/Podman 命令查看
 docker ps -a | grep my
@@ -364,6 +364,17 @@ manyoyo run -q full -x echo "Automated"
 
 ## 镜像管理
 
+### 列出镜像
+
+```bash
+# 列出所有 MANYOYO 镜像
+manyoyo images
+
+# 使用 Docker/Podman 命令查看
+docker images | grep manyoyo
+podman images | grep manyoyo
+```
+
 ### 指定镜像
 
 ```bash
@@ -535,7 +546,7 @@ manyoyo run -n project-b --hp ~/projects/b --ef /abs/path/claude.env -y c
 manyoyo run -n project-a -- -c
 
 # 列出所有项目容器
-manyoyo ls
+manyoyo ps
 ```
 
 ### CI/CD 工作流

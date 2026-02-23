@@ -122,7 +122,8 @@ manyoyo run -y oc         # OpenCode（或 opencode）
 manyoyo update      # 更新 MANYOYO（全局 npm 安装场景）
 
 # 容器管理
-manyoyo ls
+manyoyo ps
+manyoyo images
 manyoyo run -n my-dev -x /bin/bash
 manyoyo rm my-dev
 manyoyo serve 3000

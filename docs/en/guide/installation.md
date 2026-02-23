@@ -144,7 +144,7 @@ After installation, verify:
 
 ```bash
 # Check version
-manyoyo -V
+manyoyo -v
 
 # View help information
 manyoyo -h
@@ -367,7 +367,7 @@ After completing installation, perform the following verifications:
 
 ```bash
 # Check version
-manyoyo -V
+manyoyo -v
 
 # View help
 manyoyo -h
@@ -397,7 +397,7 @@ manyoyo init all
 manyoyo run -n test-container -x echo "MANYOYO works!"
 
 # View container
-manyoyo ls
+manyoyo ps
 
 # Delete test container
 manyoyo rm test-container
@@ -453,7 +453,7 @@ newgrp docker
 npm update -g @xcanwin/manyoyo
 
 # Verify new version
-manyoyo -V
+manyoyo -v
 ```
 
 ### Upgrade Image

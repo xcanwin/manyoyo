@@ -56,6 +56,20 @@ describe('MANYOYO CLI', () => {
             expect(output).toMatch(/^\d+\.\d+\.\d+/);
         });
 
+        test('-v should display version', () => {
+            const output = execSync(`node ${BIN_PATH} -v`, { encoding: 'utf-8' });
+            expect(output).toMatch(/^\d+\.\d+\.\d+/);
+        });
+
+        test('-V should be rejected', () => {
+            expect(() => {
+                execSync(`node ${BIN_PATH} -V`, {
+                    encoding: 'utf-8',
+                    stdio: 'pipe'
+                });
+            }).toThrow();
+        });
+
         test('config show should output valid JSON', () => {
             const output = execSync(`node ${BIN_PATH} config show`, { encoding: 'utf-8' });
             const config = JSON.parse(output);
@@ -752,6 +766,105 @@ exit 0
                 { encoding: 'utf-8' }
             );
             expect(output).toContain('serve');
+        });
+
+        test('ps subcommand should be accepted', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --help`,
+                { encoding: 'utf-8' }
+            );
+            expect(output).toContain('ps');
+        });
+
+        test('images subcommand should be accepted', () => {
+            const output = execSync(
+                `node ${BIN_PATH} --help`,
+                { encoding: 'utf-8' }
+            );
+            expect(output).toContain('images');
+        });
+
+        test('ls subcommand should be rejected', () => {
+            expect(() => {
+                execSync(`node ${BIN_PATH} ls`, {
+                    encoding: 'utf-8',
+                    stdio: 'pipe'
+                });
+            }).toThrow();
+        });
+
+        test('ps should list manyoyo containers', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ps-'));
+            const fakeDockerPath = path.join(tempDir, 'docker');
+            const dockerLogPath = path.join(tempDir, 'docker.log');
+
+            fs.writeFileSync(fakeDockerPath, `#!/bin/sh
+echo "$@" >> "${dockerLogPath}"
+if [ "$1" = "--version" ]; then
+  echo "Docker version 26.0.0"
+  exit 0
+fi
+if [ "$1" = "images" ]; then
+  echo "localhost/xcanwin/manyoyo:1.8.0-common"
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  printf "NAMES\\tSTATUS\\tSIZE\\tID\\tIMAGE\\tPORTS\\tNETWORKS\\tMOUNTS\\n"
+  printf "my-test\\tUp 1 minute\\t10MB\\tcont123\\tlocalhost/xcanwin/manyoyo:1.8.0-common\\t\\t\\t\\n"
+  exit 0
+fi
+exit 0
+            `, { mode: 0o755 });
+
+            try {
+                const output = execSync(`"${process.execPath}" ${BIN_PATH} ps`, {
+                    encoding: 'utf-8',
+                    env: {
+                        ...process.env,
+                        PATH: `${tempDir}:${process.env.PATH}`
+                    }
+                });
+                const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n');
+                expect(dockerArgs.some(line => line.startsWith('ps -a --size'))).toBe(true);
+                expect(output).toContain('my-test');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
+        test('images should list manyoyo images', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-images-'));
+            const fakeDockerPath = path.join(tempDir, 'docker');
+            const dockerLogPath = path.join(tempDir, 'docker.log');
+
+            fs.writeFileSync(fakeDockerPath, `#!/bin/sh
+echo "$@" >> "${dockerLogPath}"
+if [ "$1" = "--version" ]; then
+  echo "Docker version 26.0.0"
+  exit 0
+fi
+if [ "$1" = "images" ]; then
+  printf "localhost/xcanwin/manyoyo\\t1.8.0-common\\timg123\\t2 hours ago\\t1.2GB\\n"
+  exit 0
+fi
+exit 0
+            `, { mode: 0o755 });
+
+            try {
+                const output = execSync(`"${process.execPath}" ${BIN_PATH} images`, {
+                    encoding: 'utf-8',
+                    env: {
+                        ...process.env,
+                        PATH: `${tempDir}:${process.env.PATH}`
+                    }
+                });
+                const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n');
+                expect(dockerArgs.some(line => line.startsWith('images -a --format'))).toBe(true);
+                expect(output).toContain('REPOSITORY');
+                expect(output).toContain('localhost/xcanwin/manyoyo');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
         });
 
         test('--port option should be accepted', () => {

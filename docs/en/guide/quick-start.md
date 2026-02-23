@@ -15,7 +15,7 @@ Goal: migrate that working setup into MANYOYO with minimal steps.
 
 ```bash
 npm install -g @xcanwin/manyoyo
-manyoyo -V
+manyoyo -v
 ```
 
 ## 2. Install Podman / Docker

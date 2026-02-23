@@ -19,7 +19,7 @@ manyoyo
 
 ```bash
 # Display MANYOYO version
-manyoyo -V
+manyoyo -v
 manyoyo --version
 ```
 
@@ -29,7 +29,7 @@ manyoyo --version
 
 ```bash
 # List all MANYOYO containers
-manyoyo ls
+manyoyo ps
 
 # View using Docker/Podman commands
 docker ps -a | grep my
@@ -364,6 +364,17 @@ manyoyo run -q full -x echo "Automated"
 
 ## Image Management
 
+### List Images
+
+```bash
+# List all MANYOYO images
+manyoyo images
+
+# View using Docker/Podman commands
+docker images | grep manyoyo
+podman images | grep manyoyo
+```
+
 ### Specify Image
 
 ```bash
@@ -535,7 +546,7 @@ manyoyo run -n project-b --hp ~/projects/b --ef /abs/path/claude.env -y c
 manyoyo run -n project-a -- -c
 
 # List all project containers
-manyoyo ls
+manyoyo ps
 ```
 
 ### CI/CD Workflow

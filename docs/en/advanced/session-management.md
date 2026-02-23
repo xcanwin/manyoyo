@@ -30,7 +30,7 @@ manyoyo run -y c
 # Generated name like: my-0204-1430
 
 # View container name
-manyoyo ls
+manyoyo ps
 ```
 
 **Naming Rule**: `my-{MMDD}-{HHMM}`
@@ -249,7 +249,7 @@ Container state is managed by Docker/Podman:
 
 ```bash
 # View all sessions (including stopped)
-manyoyo ls
+manyoyo ps
 docker ps -a | grep my
 
 # Container status
@@ -331,7 +331,7 @@ manyoyo run -n project-b --hp ~/projects/b -y c
 manyoyo run -n project-c --hp ~/projects/c -y c
 
 # View all sessions
-manyoyo ls
+manyoyo ps
 ```
 
 ### Session Switching
@@ -396,7 +396,7 @@ docker ps -a | grep my | awk '{print $1}' | xargs docker rm -f
 
 ```bash
 # List all MANYOYO sessions
-manyoyo ls
+manyoyo ps
 
 # Detailed status
 docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
@@ -573,7 +573,7 @@ manyoyo run -n shared-session -x /bin/bash
 **Solution**:
 ```bash
 # Check if container exists
-manyoyo ls
+manyoyo ps
 docker ps -a | grep my-session
 
 # If not exists, create new session

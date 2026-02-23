@@ -10,9 +10,10 @@ description: MANYOYO 命令行参数与常用命令速查，覆盖容器管理�
 | 场景 | 命令 |
 | --- | --- |
 | 查看帮助 | `manyoyo -h` |
-| 查看版本 | `manyoyo -V` |
+| 查看版本 | `manyoyo -v` |
 | 从本机 Agent 初始化配置 | `manyoyo init all` |
-| 列出容器 | `manyoyo ls` |
+| 列出容器 | `manyoyo ps` |
+| 列出镜像 | `manyoyo images` |
 | 创建容器并启动 Claude Code | `manyoyo run -n test --ef /abs/path/.env -y c` |
 | 进入 shell | `manyoyo run -n test -x /bin/bash` |
 | 执行自定义命令 | `manyoyo run -n test -x echo "hello world"` |

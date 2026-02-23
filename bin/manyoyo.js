@@ -706,6 +706,22 @@ function getContList() {
     }
 }
 
+function getImageList() {
+    try {
+        const output = dockerExecArgs(['images', '-a', '--format', '{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}\t{{.Size}}']);
+        const lines = output
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line && line.includes('manyoyo'));
+        console.log('REPOSITORY\tTAG\tIMAGE ID\tCREATED\tSIZE');
+        if (lines.length > 0) {
+            console.log(lines.join('\n'));
+        }
+    } catch (e) {
+        console.log((e && e.stdout) || '');
+    }
+}
+
 function pruneDanglingImages() {
     console.log(`\n${YELLOW}清理悬空镜像...${NC}`);
     dockerExecArgs(['image', 'prune', '-f'], { stdio: 'inherit' });
@@ -820,6 +836,7 @@ async function setupCommander() {
     const config = loadConfig();
 
     const program = new Command();
+    program.enablePositionalOptions();
     let selectedAction = '';
     let selectedOptions = {};
     const selectAction = (action, options = {}) => {
@@ -829,7 +846,7 @@ async function setupCommander() {
 
     program
         .name(MANYOYO_NAME)
-        .version(BIN_VERSION, '-V, --version', '显示版本')
+        .version(BIN_VERSION, '-v, --version', '显示版本')
         .description('MANYOYO - AI Agent CLI Sandbox\nhttps://github.com/xcanwin/manyoyo')
         .addHelpText('after', `
 配置文件:
@@ -874,9 +891,13 @@ async function setupCommander() {
         .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
         .action((name, options) => selectAction('rm', { ...options, contName: name }));
 
-    program.command('ls')
+    program.command('ps')
         .description('列举容器')
-        .action(() => selectAction('ls', { contList: true }));
+        .action(() => selectAction('ps', { contList: true }));
+
+    program.command('images')
+        .description('列举镜像')
+        .action(() => selectAction('images', { imageList: true }));
 
     const serveCommand = program.command('serve [listen]').description('启动网页交互服务 (默认 127.0.0.1:3000)');
     applyRunStyleOptions(serveCommand, { includeRmOnExit: false, includeWebAuthOptions: true });
@@ -954,7 +975,8 @@ async function setupCommander() {
     const yesMode = Boolean(options.yes);
     const isBuildMode = selectedAction === 'build';
     const isRemoveMode = selectedAction === 'rm';
-    const isListMode = selectedAction === 'ls';
+    const isPsMode = selectedAction === 'ps';
+    const isImagesMode = selectedAction === 'images';
     const isPruneMode = selectedAction === 'prune';
     const isShowConfigMode = selectedAction === 'config-show';
     const isShowCommandMode = selectedAction === 'config-command';
@@ -1130,7 +1152,8 @@ async function setupCommander() {
         process.exit(0);
     }
 
-    if (isListMode) { getContList(); process.exit(0); }
+    if (isPsMode) { getContList(); process.exit(0); }
+    if (isImagesMode) { getImageList(); process.exit(0); }
     if (isPruneMode) { pruneDanglingImages(); process.exit(0); }
     if (selectedAction === 'install') { installManyoyo(options.install); process.exit(0); }
 

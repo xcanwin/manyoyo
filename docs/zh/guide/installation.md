@@ -144,7 +144,7 @@ source ~/.bashrc
 
 ```bash
 # 查看版本
-manyoyo -V
+manyoyo -v
 
 # 查看帮助信息
 manyoyo -h
@@ -367,7 +367,7 @@ touch docker/cache/*
 
 ```bash
 # 查看版本
-manyoyo -V
+manyoyo -v
 
 # 查看帮助
 manyoyo -h
@@ -397,7 +397,7 @@ manyoyo init all
 manyoyo run -n test-container -x echo "MANYOYO works!"
 
 # 查看容器
-manyoyo ls
+manyoyo ps
 
 # 删除测试容器
 manyoyo rm test-container
@@ -453,7 +453,7 @@ newgrp docker
 npm update -g @xcanwin/manyoyo
 
 # 验证新版本
-manyoyo -V
+manyoyo -v
 ```
 
 ### 升级镜像

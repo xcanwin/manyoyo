@@ -29,7 +29,7 @@ manyoyo run -y c
 # 生成名称如：my-0204-1430
 
 # 查看容器名
-manyoyo ls
+manyoyo ps
 ```
 
 **命名规则**：`my-{月日}-{时分}`
@@ -248,7 +248,7 @@ manyoyo run -n my-session -- --continue
 
 ```bash
 # 查看所有会话（包括停止的）
-manyoyo ls
+manyoyo ps
 docker ps -a | grep my
 
 # 容器状态
@@ -330,7 +330,7 @@ manyoyo run -n project-b --hp ~/projects/b -y c
 manyoyo run -n project-c --hp ~/projects/c -y c
 
 # 查看所有会话
-manyoyo ls
+manyoyo ps
 ```
 
 ### 会话切换
@@ -395,7 +395,7 @@ docker ps -a | grep my | awk '{print $1}' | xargs docker rm -f
 
 ```bash
 # 列出所有 MANYOYO 会话
-manyoyo ls
+manyoyo ps
 
 # 详细状态
 docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
@@ -572,7 +572,7 @@ manyoyo run -n shared-session -x /bin/bash
 **解决方案**：
 ```bash
 # 检查容器是否存在
-manyoyo ls
+manyoyo ps
 docker ps -a | grep my-session
 
 # 如果不存在，创建新会话
