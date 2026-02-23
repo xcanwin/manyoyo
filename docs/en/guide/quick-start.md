@@ -53,7 +53,7 @@ If `init` reports missing variables, edit the related `runs.<agent>.env` in `~/.
 vim ~/.manyoyo/manyoyo.json
 
 # Example: inspect runs.claude.env
-cat ~/.manyoyo/manyoyo.json | jq '.runs.claude.env'
+node -e "console.log(require('json5').parse(require('fs').readFileSync(process.env.HOME+'/.manyoyo/manyoyo.json','utf8')).runs?.claude?.env)"
 ```
 
 More issues: [Troubleshooting](../troubleshooting/README.md)

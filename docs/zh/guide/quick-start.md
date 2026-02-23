@@ -53,7 +53,7 @@ manyoyo run -r opencode
 vim ~/.manyoyo/manyoyo.json
 
 # 示例：查看 runs.claude.env
-cat ~/.manyoyo/manyoyo.json | jq '.runs.claude.env'
+node -e "console.log(require('json5').parse(require('fs').readFileSync(process.env.HOME+'/.manyoyo/manyoyo.json','utf8')).runs?.claude?.env)"
 ```
 
 更多问题见：[故障排查](../troubleshooting/README.md)
