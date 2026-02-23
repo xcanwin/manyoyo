@@ -227,6 +227,9 @@ Mode descriptions:
             "enabledScenes": ["cont-headless", "cont-headed", "host-headless", "host-headed"],
             "mcpDefaultHost": "host.docker.internal",
             "vncPasswordEnvKey": "VNC_PASSWORD",
+            "extensionDir": "/home/you/.manyoyo/plugin/playwright/extensions",
+            "extensionTmpDir": "/home/you/.manyoyo/plugin/playwright/tmp-crx",
+            "extensionProdversion": "132.0.0.0",
             "ports": {
                 "contHeadless": 8931,
                 "contHeaded": 8932,
@@ -240,6 +243,9 @@ Mode descriptions:
 ```
 
 `runs.<name>.plugins.playwright` can override global `plugins.playwright` for per-profile behavior.
+
+- `manyoyo playwright ext-sync` downloads extensions into `extensionDir`.
+- `manyoyo playwright up <scene> --ext <path>` appends extension directories for any scene (`--ext` can be repeated).
 
 ### Command Configuration
 

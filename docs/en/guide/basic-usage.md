@@ -90,10 +90,16 @@ manyoyo playwright up all
 # Start only one scene
 manyoyo playwright up cont-headless
 
+# Add browser extensions for any scene (repeat --ext)
+manyoyo playwright up host-headless --ext /abs/path/extA --ext /abs/path/extB
+
 # Status, health, and logs
 manyoyo playwright status all
 manyoyo playwright health all
 manyoyo playwright logs host-headless
+
+# Download and sync built-in extensions (writes to ~/.manyoyo/plugin/playwright/extensions)
+manyoyo playwright ext-sync --clean-tmp
 
 # Print MCP add commands
 manyoyo playwright mcp-add --host localhost

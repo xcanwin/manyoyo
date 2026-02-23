@@ -227,6 +227,9 @@ MANYOYO 支持两种配置文件：
             "enabledScenes": ["cont-headless", "cont-headed", "host-headless", "host-headed"],
             "mcpDefaultHost": "host.docker.internal",
             "vncPasswordEnvKey": "VNC_PASSWORD",
+            "extensionDir": "/home/you/.manyoyo/plugin/playwright/extensions",
+            "extensionTmpDir": "/home/you/.manyoyo/plugin/playwright/tmp-crx",
+            "extensionProdversion": "132.0.0.0",
             "ports": {
                 "contHeadless": 8931,
                 "contHeaded": 8932,
@@ -240,6 +243,9 @@ MANYOYO 支持两种配置文件：
 ```
 
 `runs.<name>.plugins.playwright` 可继续覆盖全局 `plugins.playwright`，便于区分不同运行配置。
+
+- `manyoyo playwright ext-sync` 会下载扩展到 `extensionDir`。
+- `manyoyo playwright up <scene> --ext <path>` 可为任意场景追加扩展目录（`--ext` 可多次使用）。
 
 ### 命令配置
 

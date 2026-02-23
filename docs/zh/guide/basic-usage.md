@@ -90,10 +90,16 @@ manyoyo playwright up all
 # 仅启动容器无头场景
 manyoyo playwright up cont-headless
 
+# 为任意场景追加浏览器扩展（可多次 --ext）
+manyoyo playwright up host-headless --ext /abs/path/extA --ext /abs/path/extB
+
 # 查看状态、健康检查与日志
 manyoyo playwright status all
 manyoyo playwright health all
 manyoyo playwright logs host-headless
+
+# 下载并同步内置扩展（写入 ~/.manyoyo/plugin/playwright/extensions）
+manyoyo playwright ext-sync --clean-tmp
 
 # 输出 MCP 接入命令
 manyoyo playwright mcp-add --host localhost

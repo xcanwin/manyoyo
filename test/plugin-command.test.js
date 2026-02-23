@@ -2,7 +2,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { PlaywrightPlugin } = require('../lib/services/playwright');
+const { PlaywrightPlugin, EXTENSIONS } = require('../lib/plugin/playwright');
 
 const BIN_PATH = path.join(__dirname, '../bin/manyoyo.js');
 
@@ -70,6 +70,17 @@ describe('manyoyo plugin commands', () => {
             });
         }).toThrow();
     });
+
+    test('playwright ext-sync command exists', () => {
+        const output = execSync(`node ${BIN_PATH} playwright ext-sync --help`, { encoding: 'utf-8' });
+        expect(output).toContain('ext-sync');
+        expect(output).toContain('--clean-tmp');
+    });
+
+    test('playwright up supports --ext option', () => {
+        const output = execSync(`node ${BIN_PATH} playwright up --help`, { encoding: 'utf-8' });
+        expect(output).toContain('--ext');
+    });
 });
 
 describe('PlaywrightPlugin runtime filtering', () => {
@@ -103,5 +114,32 @@ describe('PlaywrightPlugin runtime filtering', () => {
         const env = plugin.containerEnv('cont-headed', '/tmp/playwright.json');
         expect(typeof env.VNC_PASSWORD).toBe('string');
         expect(env.VNC_PASSWORD.length).toBeGreaterThan(0);
+    });
+
+    test('any scene can inject extension args via buildSceneConfig options', () => {
+        const extRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-'));
+        for (const [name] of EXTENSIONS) {
+            fs.mkdirSync(path.join(extRoot, name), { recursive: true });
+        }
+
+        try {
+            const plugin = new PlaywrightPlugin();
+            const extensionPaths = EXTENSIONS.map(([name]) => path.join(extRoot, name));
+            const cfg = plugin.buildSceneConfig('cont-headless', { extensionPaths });
+            const launchArgs = cfg.browser && cfg.browser.launchOptions && cfg.browser.launchOptions.args;
+
+            expect(Array.isArray(launchArgs)).toBe(true);
+            expect(launchArgs[0]).toContain('--disable-extensions-except=');
+            expect(launchArgs[1]).toContain('--load-extension=');
+            expect(launchArgs[0]).toContain(path.join(extRoot, EXTENSIONS[0][0]));
+        } finally {
+            fs.rmSync(extRoot, { recursive: true, force: true });
+        }
+    });
+
+    test('playwright default runtime paths use plugin directory', () => {
+        const plugin = new PlaywrightPlugin();
+        expect(plugin.config.configDir).toContain(path.join('.manyoyo', 'plugin', 'playwright', 'config'));
+        expect(plugin.config.runDir).toContain(path.join('.manyoyo', 'plugin', 'playwright', 'run'));
     });
 });

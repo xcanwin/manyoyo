@@ -14,7 +14,7 @@ const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/cont
 const { initAgentConfigs } = require('../lib/init-config');
 const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
-const { runPluginCommand } = require('../lib/services');
+const { runPluginCommand } = require('../lib/plugin');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_DEFAULT } = require('../package.json');
 const IMAGE_VERSION_BASE = String(IMAGE_VERSION_DEFAULT || '1.0.0').split('-')[0];
 const IMAGE_VERSION_HELP_EXAMPLE = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
@@ -873,7 +873,10 @@ async function setupCommander() {
             pluginAction: params.action || 'ls',
             pluginName: params.pluginName || 'playwright',
             pluginScene: params.scene || 'host-headless',
-            pluginHost: params.host || ''
+            pluginHost: params.host || '',
+            pluginExtensions: Array.isArray(params.extensions) ? params.extensions : [],
+            pluginCleanTmp: Boolean(params.cleanTmp),
+            pluginProdversion: params.prodversion || ''
         });
     };
 
@@ -889,14 +892,20 @@ async function setupCommander() {
 
         const actions = ['up', 'down', 'status', 'health', 'logs'];
         actions.forEach(action => {
-            command.command(`${action} [scene]`)
+            const sceneCommand = command.command(`${action} [scene]`)
                 .description(`${action} playwright 场景，scene 默认 host-headless`)
-                .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-                .action((scene, options) => selectPluginAction({
-                    action,
-                    pluginName: 'playwright',
-                    scene: scene || 'host-headless'
-                }, options));
+                .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)');
+
+            if (action === 'up') {
+                appendArrayOption(sceneCommand, '--ext <path>', '追加浏览器扩展目录（可多次传入；目录需包含 manifest.json）');
+            }
+
+            sceneCommand.action((scene, options) => selectPluginAction({
+                action,
+                pluginName: 'playwright',
+                scene: scene || 'host-headless',
+                extensions: action === 'up' ? (options.ext || []) : []
+            }, options));
         });
 
         command.command('mcp-add')
@@ -908,6 +917,19 @@ async function setupCommander() {
                 pluginName: 'playwright',
                 scene: 'all',
                 host: options.host || ''
+            }, options));
+
+        command.command('ext-sync')
+            .description('下载并解压 Playwright 扩展到本地插件目录')
+            .option('--prodversion <ver>', 'CRX 下载使用的 Chrome 版本号 (默认 132.0.0.0)')
+            .option('--clean-tmp', '同步完成后清理临时 CRX 目录')
+            .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+            .action(options => selectPluginAction({
+                action: 'ext-sync',
+                pluginName: 'playwright',
+                scene: 'all',
+                cleanTmp: Boolean(options.cleanTmp),
+                prodversion: options.prodversion || ''
             }, options));
     };
 
@@ -1095,7 +1117,10 @@ async function setupCommander() {
                 action: options.pluginAction,
                 pluginName: options.pluginName,
                 scene: options.pluginScene || 'host-headless',
-                host: options.pluginHost || ''
+                host: options.pluginHost || '',
+                extensions: Array.isArray(options.pluginExtensions) ? options.pluginExtensions : [],
+                cleanTmp: Boolean(options.pluginCleanTmp),
+                prodversion: options.pluginProdversion || ''
             },
             pluginGlobalConfig: config,
             pluginRunConfig: runConfig

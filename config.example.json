@@ -36,6 +36,12 @@
             "mcpDefaultHost": "host.docker.internal",
             // cont-headed 场景读取的密码环境变量名（默认 VNC_PASSWORD）
             "vncPasswordEnvKey": "VNC_PASSWORD",
+            // playwright ext-sync 下载目录（用于 manyoyo playwright up --ext）
+            "extensionDir": "/home/you/.manyoyo/plugin/playwright/extensions",
+            // playwright ext-sync 临时 CRX 目录
+            "extensionTmpDir": "/home/you/.manyoyo/plugin/playwright/tmp-crx",
+            // playwright ext-sync 的 CRX prodversion 参数
+            "extensionProdversion": "132.0.0.0",
             "ports": {
                 "contHeadless": 8931,
                 "contHeaded": 8932,

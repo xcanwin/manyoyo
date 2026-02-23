@@ -21,6 +21,8 @@ description: MANYOYO CLI option reference for container management, env injectio
 | Clean dangling images | `manyoyo prune` |
 | List Playwright plugin scenes | `manyoyo playwright ls` |
 | Start Playwright plugin scenes | `manyoyo playwright up all` |
+| Add browser extensions on startup | `manyoyo playwright up host-headless --ext /abs/path/extA --ext /abs/path/extB` |
+| Sync Playwright extensions to local directory | `manyoyo playwright ext-sync --clean-tmp` |
 | Start via plugin namespace | `manyoyo plugin playwright up host-headless` |
 | Print MCP add commands | `manyoyo playwright mcp-add --host localhost` |
 
@@ -42,7 +44,8 @@ description: MANYOYO CLI option reference for container management, env injectio
 | `init [agents]` | Initialize `~/.manyoyo` from local Agent configuration |
 | `serve [port]` | Start web interaction server (default `127.0.0.1:3000`, supports `<port>` or `<host:port>`) |
 | `playwright ls` | List enabled Playwright plugin scenes |
-| `playwright up/down/status/health/logs [scene]` | Manage Playwright scenes (default scene is `host-headless`) |
+| `playwright up/down/status/health/logs [scene]` | Manage Playwright scenes (default scene is `host-headless`; `up` supports repeated `--ext <path>`) |
+| `playwright ext-sync [--prodversion] [--clean-tmp]` | Download and extract built-in extensions to plugin directory |
 | `playwright mcp-add [--host]` | Print MCP add commands for Claude/Codex |
 | `plugin ls` | List current plugins with scene summary |
 | `plugin playwright ...` | Invoke Playwright through the plugin namespace |
