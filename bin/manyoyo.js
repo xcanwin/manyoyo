@@ -14,6 +14,7 @@ const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/cont
 const { initAgentConfigs } = require('../lib/init-config');
 const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
+const { runPluginCommand } = require('../lib/services');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_DEFAULT } = require('../package.json');
 const IMAGE_VERSION_BASE = String(IMAGE_VERSION_DEFAULT || '1.0.0').split('-')[0];
 const IMAGE_VERSION_HELP_EXAMPLE = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
@@ -236,6 +237,7 @@ function sanitizeSensitiveData(obj) {
  * @property {Object.<string, string|number|boolean>} [env] - 环境变量映射
  * @property {string[]} [envFile] - 环境文件数组
  * @property {string[]} [volumes] - 挂载卷数组
+ * @property {Object.<string, Object>} [plugins] - 可选插件配置映射（如 plugins.playwright）
  * @property {Object.<string, Object>} [runs] - 运行配置映射（-r <name>）
  * @property {string} [yolo] - YOLO 模式
  * @property {string} [containerMode] - 容器模式
@@ -698,11 +700,33 @@ function updateManyoyo() {
 
 function getContList() {
     try {
-        const result = execSync(`${DOCKER_CMD} ps -a --size --filter "ancestor=manyoyo" --filter "ancestor=$(${DOCKER_CMD} images -a --format '{{.Repository}}:{{.Tag}}' | grep manyoyo)" --format "table {{.Names}}\\t{{.Status}}\\t{{.Size}}\\t{{.ID}}\\t{{.Image}}\\t{{.Ports}}\\t{{.Networks}}\\t{{.Mounts}}"`,
-            { encoding: 'utf-8' });
-        console.log(result);
+        const output = dockerExecArgs([
+            'ps', '-a', '--size',
+            '--format', '{{.Names}}\t{{.Status}}\t{{.Size}}\t{{.ID}}\t{{.Image}}\t{{.Ports}}\t{{.Networks}}\t{{.Mounts}}'
+        ], { stdio: 'pipe' });
+
+        const rows = output
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean)
+            .filter(line => {
+                const cols = line.split('\t');
+                const name = cols[0] || '';
+                const image = cols[4] || '';
+                // include manyoyo runtime containers (image match)
+                // and plugin containers (both legacy manyoyo-* and new my-* prefixes)
+                return image.includes('manyoyo') || name.startsWith('manyoyo-') || name.startsWith('my-');
+            });
+
+        console.log('NO.\tNAMES\tSTATUS\tSIZE\tCONTAINER ID\tIMAGE\tPORTS\tNETWORKS\tMOUNTS');
+        if (rows.length > 0) {
+            const numberedRows = rows.map((line, index) => {
+                return `${index + 1}.\t${line}`;
+            });
+            console.log(numberedRows.join('\n'));
+        }
     } catch (e) {
-        console.log(e.stdout || '');
+        console.log((e && e.stdout) || '');
     }
 }
 
@@ -843,6 +867,49 @@ async function setupCommander() {
         selectedAction = action;
         selectedOptions = options;
     };
+    const selectPluginAction = (params = {}, options = {}) => {
+        selectAction('plugin', {
+            ...options,
+            pluginAction: params.action || 'ls',
+            pluginName: params.pluginName || 'playwright',
+            pluginScene: params.scene || 'host-headless',
+            pluginHost: params.host || ''
+        });
+    };
+
+    const registerPlaywrightAliasCommands = (command) => {
+        command.command('ls')
+            .description('列出 playwright 启用场景')
+            .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+            .action(options => selectPluginAction({
+                action: 'ls',
+                pluginName: 'playwright',
+                scene: 'all'
+            }, options));
+
+        const actions = ['up', 'down', 'status', 'health', 'logs'];
+        actions.forEach(action => {
+            command.command(`${action} [scene]`)
+                .description(`${action} playwright 场景，scene 默认 host-headless`)
+                .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+                .action((scene, options) => selectPluginAction({
+                    action,
+                    pluginName: 'playwright',
+                    scene: scene || 'host-headless'
+                }, options));
+        });
+
+        command.command('mcp-add')
+            .description('输出 playwright 的 MCP 接入命令')
+            .option('--host <host>', 'MCP URL 使用的主机名或IP (默认 host.docker.internal)')
+            .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+            .action(options => selectPluginAction({
+                action: 'mcp-add',
+                pluginName: 'playwright',
+                scene: 'all',
+                host: options.host || ''
+            }, options));
+    };
 
     program
         .name(MANYOYO_NAME)
@@ -870,6 +937,8 @@ async function setupCommander() {
   ${MANYOYO_NAME} run -x "echo 123"                   指定命令执行
   ${MANYOYO_NAME} serve 3000 -u admin -P 123456       启动带登录认证的网页服务
   ${MANYOYO_NAME} serve 0.0.0.0:3000                  监听全部网卡，便于局域网访问
+  ${MANYOYO_NAME} playwright up host-headless         启动 playwright 默认场景（推荐）
+  ${MANYOYO_NAME} plugin playwright up host-headless  通过 plugin 命名空间启动
   ${MANYOYO_NAME} run -n test -q tip -q cmd           多次使用静默选项
         `);
 
@@ -909,6 +978,21 @@ async function setupCommander() {
             serverPass: options.pass
         });
     });
+
+    const playwrightCommand = program.command('playwright').description('管理 playwright 插件服务（推荐）');
+    registerPlaywrightAliasCommands(playwrightCommand);
+
+    const pluginCommand = program.command('plugin').description('管理 manyoyo 插件');
+    pluginCommand.command('ls')
+        .description('列出可用插件与启用场景')
+        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+        .action(options => selectPluginAction({
+            action: 'ls',
+            pluginName: 'playwright',
+            scene: 'all'
+        }, options));
+    const pluginPlaywrightCommand = pluginCommand.command('playwright').description('管理 playwright 插件服务');
+    registerPlaywrightAliasCommands(pluginPlaywrightCommand);
 
     const configCommand = program.command('config').description('查看解析后的配置或命令');
     const configShowCommand = configCommand.command('show').description('显示最终生效配置并退出');
@@ -982,7 +1066,7 @@ async function setupCommander() {
     const isShowCommandMode = selectedAction === 'config-command';
     const isServerMode = options.server !== undefined;
 
-    const noDockerActions = new Set(['init', 'update', 'install', 'config-show']);
+    const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin']);
     if (!noDockerActions.has(selectedAction)) {
         ensureDocker();
     }
@@ -1001,6 +1085,21 @@ async function setupCommander() {
             colors: { RED, GREEN, YELLOW, CYAN, NC }
         });
         process.exit(0);
+    }
+
+    if (selectedAction === 'plugin') {
+        const runConfig = options.run ? loadRunConfig(options.run, config) : {};
+        return {
+            isPluginMode: true,
+            pluginRequest: {
+                action: options.pluginAction,
+                pluginName: options.pluginName,
+                scene: options.pluginScene || 'host-headless',
+                host: options.pluginHost || ''
+            },
+            pluginGlobalConfig: config,
+            pluginRunConfig: runConfig
+        };
     }
 
     // Load run config if specified
@@ -1162,7 +1261,8 @@ async function setupCommander() {
         isBuildMode,
         isRemoveMode,
         isShowCommandMode,
-        isServerMode
+        isServerMode,
+        isPluginMode: false
     };
 }
 
@@ -1495,6 +1595,18 @@ async function main() {
     try {
         // 1. Setup commander and parse arguments
         const modeState = await setupCommander();
+
+        if (modeState.isPluginMode) {
+            const exitCode = await runPluginCommand(modeState.pluginRequest, {
+                globalConfig: modeState.pluginGlobalConfig,
+                runConfig: modeState.pluginRunConfig,
+                projectRoot: path.join(__dirname, '..'),
+                stdout: process.stdout,
+                stderr: process.stderr
+            });
+            process.exit(exitCode);
+        }
+
         const runtime = createRuntimeContext(modeState);
 
         // 2. Start web server mode

@@ -1,0 +1,19 @@
+services:
+  playwright:
+    build:
+      context: .
+      dockerfile: headed.Dockerfile
+      args:
+        PLAYWRIGHT_MCP_BASE_IMAGE: mcr.microsoft.com/playwright/mcp:${PLAYWRIGHT_MCP_DOCKER_TAG:-latest}
+    image: ${PLAYWRIGHT_MCP_IMAGE:-localhost/xcanwin/manyoyo-playwright-headed}
+    container_name: ${PLAYWRIGHT_MCP_CONTAINER_NAME:-my-playwright-cont-headed}
+    init: true
+    stdin_open: true
+    ports:
+      - "127.0.0.1:${PLAYWRIGHT_MCP_PORT:-8932}:${PLAYWRIGHT_MCP_PORT:-8932}"
+      - "127.0.0.1:${PLAYWRIGHT_MCP_NOVNC_PORT:-6080}:6080"
+    environment:
+      VNC_PASSWORD: "${VNC_PASSWORD:?VNC_PASSWORD is required}"
+    volumes:
+      - ${PLAYWRIGHT_MCP_CONFIG_PATH:?PLAYWRIGHT_MCP_CONFIG_PATH is required}:/app/config/playwright.json:ro
+    command: ["node", "cli.js", "--config", "/app/config/playwright.json"]

@@ -19,6 +19,10 @@ description: MANYOYO 命令行参数与常用命令速查，覆盖容器管理�
 | 执行自定义命令 | `manyoyo run -n test -x echo "hello world"` |
 | 删除容器 | `manyoyo rm test` |
 | 清理悬空镜像 | `manyoyo prune` |
+| 查看 Playwright 插件场景 | `manyoyo playwright ls` |
+| 启动 Playwright 插件场景 | `manyoyo playwright up all` |
+| 通过命名空间启动 | `manyoyo plugin playwright up host-headless` |
+| 输出 MCP 接入命令 | `manyoyo playwright mcp-add --host localhost` |
 
 ## 常见参数速查
 
@@ -37,6 +41,11 @@ description: MANYOYO 命令行参数与常用命令速查，覆盖容器管理�
 | `update` | 更新 MANYOYO；若检测为本地 file 安装（`npm install -g .`/`npm link`）则跳过，否则执行 `npm update -g @xcanwin/manyoyo` |
 | `init [agents]` | 从本机 Agent 配置初始化 `~/.manyoyo` |
 | `serve [port]` | 启动网页交互服务（默认 `127.0.0.1:3000`，支持 `<port>` 或 `<host:port>`） |
+| `playwright ls` | 列出 Playwright 插件启用场景 |
+| `playwright up/down/status/health/logs [scene]` | 管理 Playwright 场景（scene 默认 `host-headless`） |
+| `playwright mcp-add [--host]` | 输出 Claude/Codex 的 MCP 接入命令 |
+| `plugin ls` | 列出当前插件及场景摘要 |
+| `plugin playwright ...` | 通过 plugin 命名空间调用 Playwright 插件 |
 | `-u <username>` | 网页服务登录用户名 |
 | `-P <password>` | 网页服务登录密码（未设置时自动生成随机密码） |
 | `-q` | 静默输出（可多次使用） |

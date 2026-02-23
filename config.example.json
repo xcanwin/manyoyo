@@ -25,6 +25,27 @@
     "imageBuildArgs": [],
     "quiet": ["tip", "cmd"],
 
+    // 可选插件（manyoyo playwright / manyoyo plugin playwright）
+    "plugins": {
+        "playwright": {
+            // mixed: 支持容器+宿主机；container: 仅容器；host: 仅宿主机
+            "runtime": "mixed",
+            // 启用场景（可按需裁剪）
+            "enabledScenes": ["cont-headless", "cont-headed", "host-headless", "host-headed"],
+            // mcp-add 默认 host（可改为 localhost / 127.0.0.1）
+            "mcpDefaultHost": "host.docker.internal",
+            // cont-headed 场景读取的密码环境变量名（默认 VNC_PASSWORD）
+            "vncPasswordEnvKey": "VNC_PASSWORD",
+            "ports": {
+                "contHeadless": 8931,
+                "contHeaded": 8932,
+                "hostHeadless": 8933,
+                "hostHeaded": 8934,
+                "contHeadedNoVnc": 6080
+            }
+        }
+    },
+
     // 运行配置集合：通过 -r <name> 读取 runs.<name>
     "runs": {
         "claude": {
@@ -33,6 +54,11 @@
             "shell": "claude",
             "env": {
                 "ANTHROPIC_MODEL": "claude-sonnet-4-5"
+            },
+            "plugins": {
+                "playwright": {
+                    "runtime": "container"
+                }
             }
         }
     }

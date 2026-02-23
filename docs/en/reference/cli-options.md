@@ -19,6 +19,10 @@ description: MANYOYO CLI option reference for container management, env injectio
 | Execute custom command | `manyoyo run -n test -x echo "hello world"` |
 | Remove container | `manyoyo rm test` |
 | Clean dangling images | `manyoyo prune` |
+| List Playwright plugin scenes | `manyoyo playwright ls` |
+| Start Playwright plugin scenes | `manyoyo playwright up all` |
+| Start via plugin namespace | `manyoyo plugin playwright up host-headless` |
+| Print MCP add commands | `manyoyo playwright mcp-add --host localhost` |
 
 ## Quick Parameter Reference
 
@@ -37,6 +41,11 @@ description: MANYOYO CLI option reference for container management, env injectio
 | `update` | Update MANYOYO; skip when detected as local file install (`npm install -g .`/`npm link`), otherwise run `npm update -g @xcanwin/manyoyo` |
 | `init [agents]` | Initialize `~/.manyoyo` from local Agent configuration |
 | `serve [port]` | Start web interaction server (default `127.0.0.1:3000`, supports `<port>` or `<host:port>`) |
+| `playwright ls` | List enabled Playwright plugin scenes |
+| `playwright up/down/status/health/logs [scene]` | Manage Playwright scenes (default scene is `host-headless`) |
+| `playwright mcp-add [--host]` | Print MCP add commands for Claude/Codex |
+| `plugin ls` | List current plugins with scene summary |
+| `plugin playwright ...` | Invoke Playwright through the plugin namespace |
 | `-u <username>` | Web login username |
 | `-P <password>` | Web login password (auto-generated random password if omitted) |
 | `-q` | Silent output (can be used multiple times) |

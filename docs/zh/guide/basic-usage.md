@@ -74,6 +74,31 @@ docker inspect <容器名>
 docker logs <容器名>
 ```
 
+## 插件编排（playwright）
+
+`manyoyo playwright` 或 `manyoyo plugin playwright` 用于管理 Playwright 插件。
+
+```bash
+# 查看启用场景
+manyoyo playwright ls
+# 或
+manyoyo plugin playwright ls
+
+# 启动全部场景（cont-headless/cont-headed/host-headless/host-headed）
+manyoyo playwright up all
+
+# 仅启动容器无头场景
+manyoyo playwright up cont-headless
+
+# 查看状态、健康检查与日志
+manyoyo playwright status all
+manyoyo playwright health all
+manyoyo playwright logs host-headless
+
+# 输出 MCP 接入命令
+manyoyo playwright mcp-add --host localhost
+```
+
 ## 运行命令
 
 ### 基本命令执行

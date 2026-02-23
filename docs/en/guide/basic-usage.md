@@ -74,6 +74,31 @@ docker inspect <container-name>
 docker logs <container-name>
 ```
 
+## Plugin Orchestration (`playwright`)
+
+Use `manyoyo playwright` or `manyoyo plugin playwright` to manage the Playwright plugin.
+
+```bash
+# List enabled scenes
+manyoyo playwright ls
+# or
+manyoyo plugin playwright ls
+
+# Start all scenes (cont-headless/cont-headed/host-headless/host-headed)
+manyoyo playwright up all
+
+# Start only one scene
+manyoyo playwright up cont-headless
+
+# Status, health, and logs
+manyoyo playwright status all
+manyoyo playwright health all
+manyoyo playwright logs host-headless
+
+# Print MCP add commands
+manyoyo playwright mcp-add --host localhost
+```
+
 ## Running Commands
 
 ### Basic Command Execution

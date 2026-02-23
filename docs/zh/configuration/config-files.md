@@ -213,6 +213,34 @@ MANYOYO 支持两种配置文件：
 }
 ```
 
+### 服务配置
+
+#### plugins.playwright
+- **类型**：对象
+- **说明**：`manyoyo playwright` / `manyoyo plugin playwright` 的 Playwright 插件配置
+- **示例**：
+```json5
+{
+    "plugins": {
+        "playwright": {
+            "runtime": "mixed",  // mixed | container | host
+            "enabledScenes": ["cont-headless", "cont-headed", "host-headless", "host-headed"],
+            "mcpDefaultHost": "host.docker.internal",
+            "vncPasswordEnvKey": "VNC_PASSWORD",
+            "ports": {
+                "contHeadless": 8931,
+                "contHeaded": 8932,
+                "hostHeadless": 8933,
+                "hostHeaded": 8934,
+                "contHeadedNoVnc": 6080
+            }
+        }
+    }
+}
+```
+
+`runs.<name>.plugins.playwright` 可继续覆盖全局 `plugins.playwright`，便于区分不同运行配置。
+
 ### 命令配置
 
 #### shellPrefix

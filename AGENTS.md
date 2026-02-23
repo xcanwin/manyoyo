@@ -51,7 +51,7 @@
 - 命名清晰简短；测试文件遵循 `*.test.js`。
 - 优先小步改动，避免无关重构，保持改动小、范围清晰。
 
-## 测试规范
+## 测试指引
 - 框架为 Jest（见 `package.json` 的 `jest` 配置）。
 - 新增功能优先补充对应领域测试文件的关键分支与异常路径（CLI 优先 `test/manyoyo.test.js`，Web 优先 `test/web-server-auth.test.js`）。
 - 修复 bug 时建议加入回归测试，并注明 case。
@@ -77,7 +77,7 @@
 - 动态容器名验证（`{now}`）：在运行配置写 `containerName: "my-<agent>-{now}"`，执行 `manyoyo config show -r <name>` 查看解析结果。
 - 环境文件解析：`manyoyo config show --ef /abs/path/myenv.env`。
 - 容器调试：`manyoyo run -n <name> -x /bin/bash`。
-- 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.0-common`），可加 `--iba TOOL=common`。
+- 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.1-common`），可加 `--iba TOOL=common`。
 - 局域网监听网页服务：`manyoyo serve 0.0.0.0:3000 -u <user> -P <pass>`。
 - 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`（需与启动参数/配置一致）。
 - 若未显式设置 `-P/--pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。
@@ -94,7 +94,7 @@
 - 网页认证配置：`serverUser`、`serverPass`（支持环境变量 `MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`）。
 - 网页服务监听：`serve [listen]` 支持 `<port>` 或 `<host:port>`，默认 `127.0.0.1:3000`。
 - 网页认证参数优先级：命令行参数 > 运行配置 > 全局配置 > 环境变量 > 默认值。
-- 镜像版本格式：`imageVersion` 与 `run/build --iv/--image-ver` 必须为 `x.y.z-后缀`（如 `1.8.0-common`）。
+- 镜像版本格式：`imageVersion` 与 `run/build --iv/--image-ver` 必须为 `x.y.z-后缀`（如 `1.8.1-common`）。
 - `--yes` 仅用于 `build` 与 `init` 子命令。
 - CLI 仅支持子命令入口；传入未定义参数会报 `unknown option`。
 - 缓存目录：`docker/cache/`，覆盖率：`coverage/`。

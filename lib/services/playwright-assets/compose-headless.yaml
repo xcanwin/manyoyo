@@ -1,0 +1,11 @@
+services:
+  playwright:
+    image: mcr.microsoft.com/playwright/mcp:${PLAYWRIGHT_MCP_DOCKER_TAG:-latest}
+    container_name: ${PLAYWRIGHT_MCP_CONTAINER_NAME:-my-playwright-cont-headless}
+    init: true
+    stdin_open: true
+    ports:
+      - "127.0.0.1:${PLAYWRIGHT_MCP_PORT:-8931}:${PLAYWRIGHT_MCP_PORT:-8931}"
+    volumes:
+      - ${PLAYWRIGHT_MCP_CONFIG_PATH:?PLAYWRIGHT_MCP_CONFIG_PATH is required}:/app/config/playwright.json:ro
+    command: ["--config", "/app/config/playwright.json"]

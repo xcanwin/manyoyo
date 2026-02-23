@@ -213,6 +213,34 @@ Mode descriptions:
 }
 ```
 
+### Service Configuration
+
+#### plugins.playwright
+- **Type**: Object
+- **Description**: Playwright plugin settings used by `manyoyo playwright` / `manyoyo plugin playwright`
+- **Example**:
+```json5
+{
+    "plugins": {
+        "playwright": {
+            "runtime": "mixed",  // mixed | container | host
+            "enabledScenes": ["cont-headless", "cont-headed", "host-headless", "host-headed"],
+            "mcpDefaultHost": "host.docker.internal",
+            "vncPasswordEnvKey": "VNC_PASSWORD",
+            "ports": {
+                "contHeadless": 8931,
+                "contHeaded": 8932,
+                "hostHeadless": 8933,
+                "hostHeaded": 8934,
+                "contHeadedNoVnc": 6080
+            }
+        }
+    }
+}
+```
+
+`runs.<name>.plugins.playwright` can override global `plugins.playwright` for per-profile behavior.
+
 ### Command Configuration
 
 #### shellPrefix
