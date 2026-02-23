@@ -844,7 +844,7 @@ async function setupCommander() {
 
 示例:
   ${MANYOYO_NAME} update                              更新 MANYOYO 到最新版本
-  ${MANYOYO_NAME} build --iv ${IMAGE_VERSION_HELP_EXAMPLE}             构建镜像
+  ${MANYOYO_NAME} build --iv ${IMAGE_VERSION_HELP_EXAMPLE} --yes       构建镜像
   ${MANYOYO_NAME} init all                            从本机 Agent 配置初始化 ~/.manyoyo
   ${MANYOYO_NAME} run -r claude                       使用 manyoyo.json 的 runs.claude 快速启动
   ${MANYOYO_NAME} run -r codex --ss "resume --last"   使用命令后缀

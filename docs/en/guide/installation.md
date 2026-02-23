@@ -253,6 +253,7 @@ manyoyo build --iba TOOL=common
 
 **Included Tools**:
 - Claude Code
+- Codex
 - Python, Node.js basic environments
 - Common CLI tools
 
@@ -260,7 +261,7 @@ manyoyo build --iba TOOL=common
 
 **Use Cases**:
 - Limited disk space
-- Only using Claude Code
+- Using Claude Code / Codex
 - Quick testing
 
 #### Custom Version

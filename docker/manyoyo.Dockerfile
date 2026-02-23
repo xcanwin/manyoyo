@@ -136,6 +136,8 @@ RUN <<EOX
     # 配置 node.js
     npm config set registry=${NPM_REGISTRY}
 
+    export GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY
+
     # 安装 LSP服务（python、typescript）
     npm install -g pyright typescript-language-server typescript
 
@@ -153,7 +155,7 @@ RUN <<EOX
     }
 }
 EOF
-    GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY claude plugin marketplace add https://github.com/anthropics/claude-plugins-official
+    claude plugin marketplace add https://github.com/anthropics/claude-plugins-official
     claude plugin install ralph-loop@claude-plugins-official
     claude plugin install typescript-lsp@claude-plugins-official
     claude plugin install pyright-lsp@claude-plugins-official
@@ -163,10 +165,38 @@ EOF
     case ",$TOOL," in *,full,*|*,java,*)
         claude plugin install jdtls-lsp@claude-plugins-official
     ;; esac
-
-    GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY claude plugin marketplace add https://github.com/anthropics/skills
-    claude plugin install example-skills@anthropic-agent-skills
+    claude plugin marketplace add https://github.com/anthropics/skills
     claude plugin install document-skills@anthropic-agent-skills
+
+    # 安装 Codex CLI
+    npm install -g @openai/codex
+    mkdir -p ~/.codex
+    cat > ~/.codex/config.toml <<EOF
+check_for_update_on_startup = false
+
+[analytics]
+enabled = false
+EOF
+    mkdir -p "$HOME/.codex/skills"
+    git clone --depth 1 https://github.com/openai/skills.git /tmp/openai-skills
+    cp -a /tmp/openai-skills/skills/.system "$HOME/.codex/skills/.system"
+    rm -rf /tmp/openai-skills
+    CODEX_INSTALLER="$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py"
+    python "$CODEX_INSTALLER" --repo openai/skills --path \
+        skills/.curated/doc \
+        skills/.curated/spreadsheet \
+        skills/.curated/pdf \
+        skills/.curated/security-best-practices \
+        skills/.curated/security-threat-model
+    python "$CODEX_INSTALLER" --repo anthropics/skills --path \
+        skills/pptx \
+        skills/theme-factory \
+        skills/frontend-design \
+        skills/canvas-design \
+        skills/doc-coauthoring \
+        skills/internal-comms \
+        skills/web-artifacts-builder \
+        skills/webapp-testing
 
     # 安装 Gemini CLI
     case ",$TOOL," in *,full,*|*,gemini,*)
@@ -195,18 +225,6 @@ EOF
         "name": "gemini-3-pro-preview"
     }
 }
-EOF
-    ;; esac
-
-    # 安装 Codex CLI
-    case ",$TOOL," in *,full,*|*,codex,*)
-        npm install -g @openai/codex
-        mkdir -p ~/.codex
-        cat > ~/.codex/config.toml <<EOF
-check_for_update_on_startup = false
-
-[analytics]
-enabled = false
 EOF
     ;; esac
 
