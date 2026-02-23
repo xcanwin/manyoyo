@@ -98,8 +98,8 @@ manyoyo playwright status all
 manyoyo playwright health all
 manyoyo playwright logs host-headless
 
-# 下载并同步内置扩展（写入 ~/.manyoyo/plugin/playwright/extensions）
-manyoyo playwright ext-sync --clean-tmp
+# 下载内置扩展到本地目录（写入 ~/.manyoyo/plugin/playwright/extensions）
+manyoyo playwright ext-download
 
 # 输出 MCP 接入命令
 manyoyo playwright mcp-add --host localhost

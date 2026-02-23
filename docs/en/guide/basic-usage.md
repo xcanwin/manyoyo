@@ -98,8 +98,8 @@ manyoyo playwright status all
 manyoyo playwright health all
 manyoyo playwright logs host-headless
 
-# Download and sync built-in extensions (writes to ~/.manyoyo/plugin/playwright/extensions)
-manyoyo playwright ext-sync --clean-tmp
+# Download built-in extensions to local directory (writes to ~/.manyoyo/plugin/playwright/extensions)
+manyoyo playwright ext-download
 
 # Print MCP add commands
 manyoyo playwright mcp-add --host localhost

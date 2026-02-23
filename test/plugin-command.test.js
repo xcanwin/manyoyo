@@ -71,10 +71,18 @@ describe('manyoyo plugin commands', () => {
         }).toThrow();
     });
 
-    test('playwright ext-sync command exists', () => {
-        const output = execSync(`node ${BIN_PATH} playwright ext-sync --help`, { encoding: 'utf-8' });
-        expect(output).toContain('ext-sync');
-        expect(output).toContain('--clean-tmp');
+    test('playwright ext-download command exists and removes old options', () => {
+        const output = execSync(`node ${BIN_PATH} playwright ext-download --help`, { encoding: 'utf-8' });
+        expect(output).toContain('ext-download');
+        expect(output).toContain('--prodversion');
+        expect(output).not.toContain('--clean-tmp');
+        expect(output).not.toContain('--run');
+    });
+
+    test('playwright help no longer lists ext-sync', () => {
+        const output = execSync(`node ${BIN_PATH} playwright --help`, { encoding: 'utf-8' });
+        expect(output).toContain('ext-download');
+        expect(output).not.toContain('ext-sync');
     });
 
     test('playwright up supports --ext option', () => {
@@ -141,5 +149,49 @@ describe('PlaywrightPlugin runtime filtering', () => {
         const plugin = new PlaywrightPlugin();
         expect(plugin.config.configDir).toContain(path.join('.manyoyo', 'plugin', 'playwright', 'config'));
         expect(plugin.config.runDir).toContain(path.join('.manyoyo', 'plugin', 'playwright', 'run'));
+    });
+
+    test('container extension paths are mapped to in-container mount targets', () => {
+        const extRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-mount-'));
+        const extA = path.join(extRoot, 'a');
+        const extB = path.join(extRoot, 'b');
+        fs.mkdirSync(extA, { recursive: true });
+        fs.mkdirSync(extB, { recursive: true });
+        fs.writeFileSync(path.join(extA, 'manifest.json'), '{"manifest_version":3}', 'utf8');
+        fs.writeFileSync(path.join(extB, 'manifest.json'), '{"manifest_version":3}', 'utf8');
+
+        try {
+            const plugin = new PlaywrightPlugin();
+            const mapped = plugin.buildContainerExtensionMounts([extA, extB]);
+            expect(mapped.containerPaths[0]).toContain('/app/extensions/ext-1-');
+            expect(mapped.containerPaths[1]).toContain('/app/extensions/ext-2-');
+            expect(mapped.volumeMounts[0]).toBe(`${extA}:${mapped.containerPaths[0]}:ro`);
+            expect(mapped.volumeMounts[1]).toBe(`${extB}:${mapped.containerPaths[1]}:ro`);
+        } finally {
+            fs.rmSync(extRoot, { recursive: true, force: true });
+        }
+    });
+
+    test('container compose override file is generated and removable', () => {
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-compose-override-'));
+        try {
+            const plugin = new PlaywrightPlugin({
+                globalConfig: {
+                    runDir: tempRunDir
+                }
+            });
+            const mounts = ['/tmp/ext-a:/app/extensions/ext-1-a:ro'];
+            const overridePath = plugin.ensureContainerComposeOverride('cont-headless', mounts);
+            const content = fs.readFileSync(overridePath, 'utf8');
+
+            expect(content).toContain('services:');
+            expect(content).toContain('playwright:');
+            expect(content).toContain('/tmp/ext-a:/app/extensions/ext-1-a:ro');
+
+            plugin.ensureContainerComposeOverride('cont-headless', []);
+            expect(fs.existsSync(overridePath)).toBe(false);
+        } finally {
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
     });
 });

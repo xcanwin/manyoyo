@@ -875,7 +875,6 @@ async function setupCommander() {
             pluginScene: params.scene || 'host-headless',
             pluginHost: params.host || '',
             pluginExtensions: Array.isArray(params.extensions) ? params.extensions : [],
-            pluginCleanTmp: Boolean(params.cleanTmp),
             pluginProdversion: params.prodversion || ''
         });
     };
@@ -919,16 +918,13 @@ async function setupCommander() {
                 host: options.host || ''
             }, options));
 
-        command.command('ext-sync')
-            .description('下载并解压 Playwright 扩展到本地插件目录')
+        command.command('ext-download')
+            .description('下载并解压 Playwright 扩展到 ~/.manyoyo/plugin/playwright/extensions/')
             .option('--prodversion <ver>', 'CRX 下载使用的 Chrome 版本号 (默认 132.0.0.0)')
-            .option('--clean-tmp', '同步完成后清理临时 CRX 目录')
-            .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
             .action(options => selectPluginAction({
-                action: 'ext-sync',
+                action: 'ext-download',
                 pluginName: 'playwright',
                 scene: 'all',
-                cleanTmp: Boolean(options.cleanTmp),
                 prodversion: options.prodversion || ''
             }, options));
     };
@@ -1119,7 +1115,6 @@ async function setupCommander() {
                 scene: options.pluginScene || 'host-headless',
                 host: options.pluginHost || '',
                 extensions: Array.isArray(options.pluginExtensions) ? options.pluginExtensions : [],
-                cleanTmp: Boolean(options.pluginCleanTmp),
                 prodversion: options.pluginProdversion || ''
             },
             pluginGlobalConfig: config,
