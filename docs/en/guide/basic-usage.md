@@ -90,8 +90,9 @@ manyoyo playwright up all
 # Start only one scene
 manyoyo playwright up cont-headless
 
-# Add browser extensions for any scene (repeat --ext)
-manyoyo playwright up host-headless --ext /abs/path/extA --ext /abs/path/extB
+# Add browser extensions for any scene (mix --ext-path and --ext-name)
+manyoyo playwright up host-headless --ext-path /abs/path/extA --ext-path /abs/path/extB
+manyoyo playwright up host-headless --ext-name adguard --ext-name privacy-badger
 
 # Status, health, and logs
 manyoyo playwright status all

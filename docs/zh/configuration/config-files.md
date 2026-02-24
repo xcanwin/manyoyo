@@ -243,7 +243,7 @@ MANYOYO 支持两种配置文件：
 `runs.<name>.plugins.playwright` 可继续覆盖全局 `plugins.playwright`，便于区分不同运行配置。
 
 - `manyoyo playwright ext-download` 会下载扩展到 `~/.manyoyo/plugin/playwright/extensions/`（临时目录会自动清理）。
-- `manyoyo playwright up <scene> --ext <path>` 可为任意场景追加扩展目录（`--ext` 可多次使用）。
+- `manyoyo playwright up <scene> --ext-path <path> --ext-name <name>` 可为任意场景追加扩展目录（两者均可多次使用，最终都会转为 Playwright 的扩展加载参数）。
 
 ### 命令配置
 

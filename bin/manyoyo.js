@@ -874,7 +874,8 @@ async function setupCommander() {
             pluginName: params.pluginName || 'playwright',
             pluginScene: params.scene || 'host-headless',
             pluginHost: params.host || '',
-            pluginExtensions: Array.isArray(params.extensions) ? params.extensions : [],
+            pluginExtensionPaths: Array.isArray(params.extensionPaths) ? params.extensionPaths : [],
+            pluginExtensionNames: Array.isArray(params.extensionNames) ? params.extensionNames : [],
             pluginProdversion: params.prodversion || ''
         });
     };
@@ -896,14 +897,16 @@ async function setupCommander() {
                 .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)');
 
             if (action === 'up') {
-                appendArrayOption(sceneCommand, '--ext <path>', '追加浏览器扩展目录（可多次传入；目录需包含 manifest.json）');
+                appendArrayOption(sceneCommand, '--ext-path <path>', '追加浏览器扩展目录（可多次传入；目录需包含 manifest.json）');
+                appendArrayOption(sceneCommand, '--ext-name <name>', '追加 ~/.manyoyo/plugin/playwright/extensions/ 下的扩展目录名（可多次传入）');
             }
 
             sceneCommand.action((scene, options) => selectPluginAction({
                 action,
                 pluginName: 'playwright',
                 scene: scene || 'host-headless',
-                extensions: action === 'up' ? (options.ext || []) : []
+                extensionPaths: action === 'up' ? (options.extPath || []) : [],
+                extensionNames: action === 'up' ? (options.extName || []) : []
             }, options));
         });
 
@@ -1114,7 +1117,8 @@ async function setupCommander() {
                 pluginName: options.pluginName,
                 scene: options.pluginScene || 'host-headless',
                 host: options.pluginHost || '',
-                extensions: Array.isArray(options.pluginExtensions) ? options.pluginExtensions : [],
+                extensionPaths: Array.isArray(options.pluginExtensionPaths) ? options.pluginExtensionPaths : [],
+                extensionNames: Array.isArray(options.pluginExtensionNames) ? options.pluginExtensionNames : [],
                 prodversion: options.pluginProdversion || ''
             },
             pluginGlobalConfig: config,

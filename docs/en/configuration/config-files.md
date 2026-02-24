@@ -243,7 +243,7 @@ Mode descriptions:
 `runs.<name>.plugins.playwright` can override global `plugins.playwright` for per-profile behavior.
 
 - `manyoyo playwright ext-download` downloads extensions into `~/.manyoyo/plugin/playwright/extensions/` (temp files are auto-cleaned).
-- `manyoyo playwright up <scene> --ext <path>` appends extension directories for any scene (`--ext` can be repeated).
+- `manyoyo playwright up <scene> --ext-path <path> --ext-name <name>` appends extension directories for any scene (both options can be repeated and are converted to Playwright extension launch args).
 
 ### Command Configuration
 

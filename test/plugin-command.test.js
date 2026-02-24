@@ -85,9 +85,11 @@ describe('manyoyo plugin commands', () => {
         expect(output).not.toContain('ext-sync');
     });
 
-    test('playwright up supports --ext option', () => {
+    test('playwright up supports --ext-path and --ext-name options', () => {
         const output = execSync(`node ${BIN_PATH} playwright up --help`, { encoding: 'utf-8' });
-        expect(output).toContain('--ext');
+        expect(output).toContain('--ext-path');
+        expect(output).toContain('--ext-name');
+        expect(output).not.toContain('--ext <path>');
     });
 });
 
@@ -145,6 +147,37 @@ describe('PlaywrightPlugin runtime filtering', () => {
         }
     });
 
+    test('resolveExtensionInputs merges extension path and extension name', () => {
+        const extRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-inputs-'));
+        const extPath = path.join(extRoot, 'from-path');
+        const extNameRoot = path.join(extRoot, 'names-root');
+        const extName = 'adguard';
+        const extNamePath = path.join(extNameRoot, extName);
+        fs.mkdirSync(extPath, { recursive: true });
+        fs.mkdirSync(extNamePath, { recursive: true });
+        fs.writeFileSync(path.join(extPath, 'manifest.json'), '{"manifest_version":3}', 'utf8');
+        fs.writeFileSync(path.join(extNamePath, 'manifest.json'), '{"manifest_version":3}', 'utf8');
+
+        try {
+            const plugin = new PlaywrightPlugin();
+            plugin.extensionDirPath = () => extNameRoot;
+            const extensionPaths = plugin.resolveExtensionInputs({
+                extensionPaths: [extPath],
+                extensionNames: [extName]
+            });
+            const cfg = plugin.buildSceneConfig('host-headless', { extensionPaths });
+            const launchArgs = cfg.browser && cfg.browser.launchOptions && cfg.browser.launchOptions.args;
+
+            expect(Array.isArray(launchArgs)).toBe(true);
+            expect(launchArgs[0]).toContain('--disable-extensions-except=');
+            expect(launchArgs[1]).toContain('--load-extension=');
+            expect(launchArgs[0]).toContain(extPath);
+            expect(launchArgs[0]).toContain(extNamePath);
+        } finally {
+            fs.rmSync(extRoot, { recursive: true, force: true });
+        }
+    });
+
     test('playwright default runtime paths use plugin directory', () => {
         const plugin = new PlaywrightPlugin();
         expect(plugin.config.configDir).toContain(path.join('.manyoyo', 'plugin', 'playwright', 'config'));
@@ -191,6 +224,147 @@ describe('PlaywrightPlugin runtime filtering', () => {
             plugin.ensureContainerComposeOverride('cont-headless', []);
             expect(fs.existsSync(overridePath)).toBe(false);
         } finally {
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('PlaywrightPlugin first-run bootstrap', () => {
+    test('container scene pulls base image when scene config is missing', async () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const plugin = new PlaywrightPlugin({
+            globalConfig: {
+                configDir: tempConfigDir,
+                runDir: tempRunDir,
+                runtime: 'container',
+                containerRuntime: 'docker',
+                dockerTag: '1.2.3'
+            }
+        });
+
+        const commands = [];
+        plugin.ensureCommandAvailable = jest.fn(() => true);
+        plugin.runCmd = jest.fn((args) => {
+            commands.push(args);
+            return { returncode: 0, stdout: '', stderr: '' };
+        });
+        plugin.waitForPort = jest.fn(async () => true);
+
+        try {
+            const rc = await plugin.startContainer('cont-headless');
+            expect(rc).toBe(0);
+            expect(commands[0]).toEqual(['docker', 'pull', 'mcr.microsoft.com/playwright/mcp:1.2.3']);
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('container scene does not pull image when scene config exists', async () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const plugin = new PlaywrightPlugin({
+            globalConfig: {
+                configDir: tempConfigDir,
+                runDir: tempRunDir,
+                runtime: 'container',
+                containerRuntime: 'docker',
+                dockerTag: '1.2.3'
+            }
+        });
+
+        const cfgPath = plugin.sceneConfigPath('cont-headless');
+        fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
+        fs.writeFileSync(cfgPath, '{"server":{}}\n', 'utf8');
+
+        const commands = [];
+        plugin.ensureCommandAvailable = jest.fn(() => true);
+        plugin.runCmd = jest.fn((args) => {
+            commands.push(args);
+            return { returncode: 0, stdout: '', stderr: '' };
+        });
+        plugin.waitForPort = jest.fn(async () => true);
+
+        try {
+            const rc = await plugin.startContainer('cont-headless');
+            expect(rc).toBe(0);
+            expect(commands.find(args => args[0] === 'docker' && args[1] === 'pull')).toBeUndefined();
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('host scene installs default browser when scene config is missing', async () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const plugin = new PlaywrightPlugin({
+            globalConfig: {
+                configDir: tempConfigDir,
+                runDir: tempRunDir,
+                runtime: 'host',
+                npmVersion: 'latest'
+            }
+        });
+
+        const commands = [];
+        plugin.ensureCommandAvailable = jest.fn(() => true);
+        plugin.runCmd = jest.fn((args) => {
+            commands.push(args);
+            return { returncode: 0, stdout: '', stderr: '' };
+        });
+        plugin.hostScenePids = jest.fn(() => []);
+        plugin.portReady = jest.fn(async () => false);
+        plugin.waitForPort = jest.fn(async () => true);
+        plugin.waitForHostPids = jest.fn(async () => [12345]);
+        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
+
+        try {
+            const rc = await plugin.startHost('host-headless');
+            expect(rc).toBe(0);
+            expect(commands[0]).toEqual(['npx', '-y', 'playwright-core', 'install', 'chromium']);
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('host scene does not install browser when scene config exists', async () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const plugin = new PlaywrightPlugin({
+            globalConfig: {
+                configDir: tempConfigDir,
+                runDir: tempRunDir,
+                runtime: 'host',
+                npmVersion: 'latest'
+            }
+        });
+
+        const cfgPath = plugin.sceneConfigPath('host-headless');
+        fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
+        fs.writeFileSync(cfgPath, '{"server":{}}\n', 'utf8');
+
+        const commands = [];
+        plugin.ensureCommandAvailable = jest.fn(() => true);
+        plugin.runCmd = jest.fn((args) => {
+            commands.push(args);
+            return { returncode: 0, stdout: '', stderr: '' };
+        });
+        plugin.hostScenePids = jest.fn(() => []);
+        plugin.portReady = jest.fn(async () => false);
+        plugin.waitForPort = jest.fn(async () => true);
+        plugin.waitForHostPids = jest.fn(async () => [12345]);
+        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
+
+        try {
+            const rc = await plugin.startHost('host-headless');
+            expect(rc).toBe(0);
+            const installCmd = commands.find(args => args[0] === 'npx' && args[2] === 'playwright-core');
+            expect(installCmd).toBeUndefined();
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });
         }
     });

@@ -90,8 +90,9 @@ manyoyo playwright up all
 # 仅启动容器无头场景
 manyoyo playwright up cont-headless
 
-# 为任意场景追加浏览器扩展（可多次 --ext）
-manyoyo playwright up host-headless --ext /abs/path/extA --ext /abs/path/extB
+# 为任意场景追加浏览器扩展（可混用 --ext-path 与 --ext-name）
+manyoyo playwright up host-headless --ext-path /abs/path/extA --ext-path /abs/path/extB
+manyoyo playwright up host-headless --ext-name adguard --ext-name privacy-badger
 
 # 查看状态、健康检查与日志
 manyoyo playwright status all
