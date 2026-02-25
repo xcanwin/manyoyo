@@ -79,6 +79,7 @@ ENV LANG=C.UTF-8 \
 # 合并系统依赖安装为单层，减少镜像体积
 RUN <<EOX
     # 配置 APT 镜像源
+    ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
     sed -i "s|http://[^/]*\.ubuntu\.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
 
     # 安装所有基础依赖
