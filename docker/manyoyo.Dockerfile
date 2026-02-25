@@ -182,13 +182,13 @@ EOF
     cp -a /tmp/openai-skills/skills/.system "$HOME/.codex/skills/.system"
     rm -rf /tmp/openai-skills
     CODEX_INSTALLER="$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py"
-    python "$CODEX_INSTALLER" --repo openai/skills --path \
+    python3 "$CODEX_INSTALLER" --repo openai/skills --path \
         skills/.curated/doc \
         skills/.curated/spreadsheet \
         skills/.curated/pdf \
         skills/.curated/security-best-practices \
         skills/.curated/security-threat-model
-    python "$CODEX_INSTALLER" --repo anthropics/skills --path \
+    python3 "$CODEX_INSTALLER" --repo anthropics/skills --path \
         skills/pptx \
         skills/theme-factory \
         skills/frontend-design \
