@@ -94,6 +94,46 @@ describe('manyoyo plugin commands', () => {
 });
 
 describe('PlaywrightPlugin runtime filtering', () => {
+    test('container runtime should auto-detect docker first', () => {
+        const ensureCommandSpy = jest.spyOn(PlaywrightPlugin.prototype, 'ensureCommandAvailable')
+            .mockImplementation((command) => command === 'docker');
+
+        try {
+            const plugin = new PlaywrightPlugin();
+            expect(plugin.config.containerRuntime).toBe('docker');
+        } finally {
+            ensureCommandSpy.mockRestore();
+        }
+    });
+
+    test('container runtime should fallback to podman when docker is unavailable', () => {
+        const ensureCommandSpy = jest.spyOn(PlaywrightPlugin.prototype, 'ensureCommandAvailable')
+            .mockImplementation((command) => command === 'podman');
+
+        try {
+            const plugin = new PlaywrightPlugin();
+            expect(plugin.config.containerRuntime).toBe('podman');
+        } finally {
+            ensureCommandSpy.mockRestore();
+        }
+    });
+
+    test('container runtime should respect explicit config', () => {
+        const ensureCommandSpy = jest.spyOn(PlaywrightPlugin.prototype, 'ensureCommandAvailable')
+            .mockImplementation(() => false);
+
+        try {
+            const plugin = new PlaywrightPlugin({
+                globalConfig: {
+                    containerRuntime: 'podman'
+                }
+            });
+            expect(plugin.config.containerRuntime).toBe('podman');
+        } finally {
+            ensureCommandSpy.mockRestore();
+        }
+    });
+
     test('runtime host only returns host scenes', () => {
         const plugin = new PlaywrightPlugin({
             globalConfig: {
