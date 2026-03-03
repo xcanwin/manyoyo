@@ -228,6 +228,8 @@ Mode descriptions:
             "mcpDefaultHost": "host.docker.internal",
             "vncPasswordEnvKey": "VNC_PASSWORD",
             "extensionProdversion": "132.0.0.0",
+            "navigatorPlatform": "MacIntel",
+            "disableWebRTC": false,
             "ports": {
                 "contHeadless": 8931,
                 "contHeaded": 8932,
@@ -244,6 +246,8 @@ Mode descriptions:
 
 - `manyoyo playwright ext-download` downloads extensions into `~/.manyoyo/plugin/playwright/extensions/` (temp files are auto-cleaned).
 - `manyoyo playwright up <scene> --ext-path <path> --ext-name <name>` appends extension directories for any scene (both options can be repeated and are converted to Playwright extension launch args).
+- `navigatorPlatform` injects `navigator.platform` (default `MacIntel` to match the built-in UA profile).
+- Set `disableWebRTC` to `true` to append WebRTC-disable launch args and inject a script that blocks WebRTC APIs.
 
 ### Command Configuration
 

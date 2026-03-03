@@ -38,6 +38,10 @@
             "vncPasswordEnvKey": "VNC_PASSWORD",
             // playwright ext-download 的 CRX prodversion 参数
             "extensionProdversion": "132.0.0.0",
+            // 注入 navigator.platform（默认与内置 UA 对齐为 MacIntel）
+            "navigatorPlatform": "MacIntel",
+            // 是否禁用 WebRTC（默认 false）
+            "disableWebRTC": false,
             "ports": {
                 "contHeadless": 8931,
                 "contHeaded": 8932,

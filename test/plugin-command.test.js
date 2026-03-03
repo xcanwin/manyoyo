@@ -199,6 +199,59 @@ describe('PlaywrightPlugin runtime filtering', () => {
         expect(contextOptions.extraHTTPHeaders).toEqual({ 'Accept-Language': 'zh-CN,zh;q=0.9' });
     });
 
+    test('ensureSceneConfig should inject init script for navigator.platform alignment', () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-init-script-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-init-script-run-'));
+        try {
+            const plugin = new PlaywrightPlugin({
+                globalConfig: {
+                    configDir: tempConfigDir,
+                    runDir: tempRunDir
+                }
+            });
+            const cfgPath = plugin.ensureSceneConfig('host-headless');
+            const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+            const initScripts = cfg.browser && cfg.browser.initScript;
+            const initScriptPath = Array.isArray(initScripts) ? initScripts[0] : '';
+            const initScriptContent = fs.readFileSync(initScriptPath, 'utf8');
+
+            expect(Array.isArray(initScripts)).toBe(true);
+            expect(fs.existsSync(initScriptPath)).toBe(true);
+            expect(initScriptContent).toContain("Object.defineProperty(navProto, 'platform'");
+            expect(initScriptContent).toContain('MacIntel');
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('disableWebRTC should append launch arg and disable script block', () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-webrtc-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-webrtc-run-'));
+        try {
+            const plugin = new PlaywrightPlugin({
+                globalConfig: {
+                    configDir: tempConfigDir,
+                    runDir: tempRunDir,
+                    disableWebRTC: true
+                }
+            });
+            const cfgPath = plugin.ensureSceneConfig('host-headless');
+            const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+            const launchArgs = (((cfg || {}).browser || {}).launchOptions || {}).args || [];
+            const initScripts = cfg.browser && cfg.browser.initScript;
+            const initScriptPath = Array.isArray(initScripts) ? initScripts[0] : '';
+            const initScriptContent = fs.readFileSync(initScriptPath, 'utf8');
+
+            expect(launchArgs).toContain('--disable-webrtc');
+            expect(initScriptContent).toContain('RTCPeerConnection');
+            expect(initScriptContent).toContain('getUserMedia');
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
     test('any scene can inject extension args via buildSceneConfig options', () => {
         const extRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-'));
         for (const [name] of EXTENSIONS) {
@@ -332,6 +385,39 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             const rc = await plugin.startContainer('cont-headless');
             expect(rc).toBe(0);
             expect(commands[0]).toEqual(['docker', 'pull', 'mcr.microsoft.com/playwright/mcp:1.2.3']);
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('container scene config should use in-container initScript path and mount init script file', async () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const plugin = new PlaywrightPlugin({
+            globalConfig: {
+                configDir: tempConfigDir,
+                runDir: tempRunDir,
+                runtime: 'container',
+                containerRuntime: 'docker',
+                dockerTag: '1.2.3'
+            }
+        });
+
+        plugin.ensureCommandAvailable = jest.fn(() => true);
+        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
+        plugin.waitForPort = jest.fn(async () => true);
+
+        try {
+            const rc = await plugin.startContainer('cont-headless');
+            expect(rc).toBe(0);
+
+            const cfg = JSON.parse(fs.readFileSync(plugin.sceneConfigPath('cont-headless'), 'utf8'));
+            expect(cfg.browser.initScript).toEqual(['/app/config/container-headless.init.js']);
+
+            const overridePath = plugin.sceneComposeOverridePath('cont-headless');
+            const overrideContent = fs.readFileSync(overridePath, 'utf8');
+            expect(overrideContent).toContain('/app/config/container-headless.init.js');
         } finally {
             fs.rmSync(tempConfigDir, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });

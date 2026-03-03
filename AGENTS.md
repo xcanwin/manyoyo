@@ -22,6 +22,8 @@
 ## 项目结构与模块组织
 - `bin/manyoyo.js`: CLI 入口与主流程编排（CommonJS）；参数解析、容器主流程优先就近维护。
 - `lib/container-run.js`: CLI/Web 共享的容器运行参数构造与命令展示。
+- `lib/plugin/index.js` + `lib/plugin/playwright.js`: 插件命令分发与 Playwright 插件主逻辑（场景配置、容器/宿主启动链路）。
+- `lib/plugin/playwright-assets/`: Playwright 容器场景 compose 与镜像资源模板。
 - `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
 - `lib/web/frontend/`: 网页前端资源（`app/login` 的 `html/css/js`）。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
@@ -55,6 +57,7 @@
 ## 测试指引
 - 框架为 Jest（见 `package.json` 的 `jest` 配置）。
 - 新增功能优先补充对应领域测试文件的关键分支与异常路径（CLI 优先 `test/manyoyo.test.js`，Web 优先 `test/web-server-auth.test.js`）。
+- 插件相关改动优先补充 `test/plugin-command.test.js`，至少覆盖 host/container 两类场景的关键分支（配置生成、参数透传、挂载或启动路径）。
 - 修复 bug 时建议加入回归测试，并注明 case。
 - 涉及网页服务认证时，至少验证未登录 `401`、登录成功可访问、登出后失效。
 
