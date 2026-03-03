@@ -126,6 +126,27 @@ describe('PlaywrightPlugin runtime filtering', () => {
         expect(env.VNC_PASSWORD.length).toBeGreaterThan(0);
     });
 
+    test('host-headless scene config should include anti-detection baseline', () => {
+        const plugin = new PlaywrightPlugin();
+        const cfg = plugin.buildSceneConfig('host-headless');
+        const launchArgs = (((cfg || {}).browser || {}).launchOptions || {}).args || [];
+        const contextOptions = (((cfg || {}).browser || {}).contextOptions || {});
+
+        expect(Array.isArray(launchArgs)).toBe(true);
+        expect(launchArgs).toContain('--disable-blink-features=AutomationControlled');
+        expect(launchArgs).toContain('--force-webrtc-ip-handling-policy=disable_non_proxied_udp');
+        expect(launchArgs).toContain('--lang=zh-CN');
+        expect(launchArgs).toContain('--window-size=1366,768');
+        expect(launchArgs.find(arg => arg.startsWith('--user-agent='))).toBeTruthy();
+
+        expect(contextOptions.userAgent).toContain('Chrome/');
+        expect(contextOptions.locale).toBe('zh-CN');
+        expect(contextOptions.timezoneId).toBe('Asia/Shanghai');
+        expect(contextOptions.viewport).toEqual({ width: 1366, height: 768 });
+        expect(contextOptions.screen).toEqual({ width: 1366, height: 768 });
+        expect(contextOptions.extraHTTPHeaders).toEqual({ 'Accept-Language': 'zh-CN,zh;q=0.9' });
+    });
+
     test('any scene can inject extension args via buildSceneConfig options', () => {
         const extRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-'));
         for (const [name] of EXTENSIONS) {
@@ -139,9 +160,11 @@ describe('PlaywrightPlugin runtime filtering', () => {
             const launchArgs = cfg.browser && cfg.browser.launchOptions && cfg.browser.launchOptions.args;
 
             expect(Array.isArray(launchArgs)).toBe(true);
-            expect(launchArgs[0]).toContain('--disable-extensions-except=');
-            expect(launchArgs[1]).toContain('--load-extension=');
-            expect(launchArgs[0]).toContain(path.join(extRoot, EXTENSIONS[0][0]));
+            const disableExtensionsArg = launchArgs.find(arg => arg.startsWith('--disable-extensions-except='));
+            const loadExtensionsArg = launchArgs.find(arg => arg.startsWith('--load-extension='));
+            expect(disableExtensionsArg).toBeTruthy();
+            expect(loadExtensionsArg).toBeTruthy();
+            expect(disableExtensionsArg).toContain(path.join(extRoot, EXTENSIONS[0][0]));
         } finally {
             fs.rmSync(extRoot, { recursive: true, force: true });
         }
@@ -169,10 +192,12 @@ describe('PlaywrightPlugin runtime filtering', () => {
             const launchArgs = cfg.browser && cfg.browser.launchOptions && cfg.browser.launchOptions.args;
 
             expect(Array.isArray(launchArgs)).toBe(true);
-            expect(launchArgs[0]).toContain('--disable-extensions-except=');
-            expect(launchArgs[1]).toContain('--load-extension=');
-            expect(launchArgs[0]).toContain(extPath);
-            expect(launchArgs[0]).toContain(extNamePath);
+            const disableExtensionsArg = launchArgs.find(arg => arg.startsWith('--disable-extensions-except='));
+            const loadExtensionsArg = launchArgs.find(arg => arg.startsWith('--load-extension='));
+            expect(disableExtensionsArg).toBeTruthy();
+            expect(loadExtensionsArg).toBeTruthy();
+            expect(disableExtensionsArg).toContain(extPath);
+            expect(disableExtensionsArg).toContain(extNamePath);
         } finally {
             fs.rmSync(extRoot, { recursive: true, force: true });
         }
