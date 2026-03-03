@@ -323,7 +323,7 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         try {
             const rc = await plugin.startHost('host-headless');
             expect(rc).toBe(0);
-            expect(commands[0]).toEqual(['npx', '-y', 'playwright-core', 'install', 'chromium']);
+            expect(commands[0]).toEqual(['npx', '-y', 'playwright-core', 'install', '--with-deps', 'chromium']);
         } finally {
             fs.rmSync(tempConfigDir, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });
