@@ -126,6 +126,18 @@ describe('PlaywrightPlugin runtime filtering', () => {
         expect(env.VNC_PASSWORD.length).toBeGreaterThan(0);
     });
 
+    test('cont-headed up env should auto-generate 16-char password when env is missing', () => {
+        const plugin = new PlaywrightPlugin({
+            globalConfig: {
+                runtime: 'container'
+            }
+        });
+        const env = plugin.containerEnv('cont-headed', '/tmp/playwright.json', { requireVncPassword: true });
+
+        expect(typeof env.VNC_PASSWORD).toBe('string');
+        expect(env.VNC_PASSWORD).toMatch(/^[A-Za-z0-9]{16}$/);
+    });
+
     test('host-headless scene config should include anti-detection baseline', () => {
         const plugin = new PlaywrightPlugin();
         const cfg = plugin.buildSceneConfig('host-headless');
@@ -328,8 +340,7 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             globalConfig: {
                 configDir: tempConfigDir,
                 runDir: tempRunDir,
-                runtime: 'host',
-                npmVersion: 'latest'
+                runtime: 'host'
             }
         });
 
@@ -343,12 +354,13 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         plugin.portReady = jest.fn(async () => false);
         plugin.waitForPort = jest.fn(async () => true);
         plugin.waitForHostPids = jest.fn(async () => [12345]);
+        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
         plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
 
         try {
             const rc = await plugin.startHost('host-headless');
             expect(rc).toBe(0);
-            expect(commands[0]).toEqual(['npx', '-y', 'playwright-core', 'install', '--with-deps', 'chromium']);
+            expect(commands[0]).toEqual(['/mock/bin/playwright', 'install', '--with-deps', 'chromium']);
         } finally {
             fs.rmSync(tempConfigDir, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });
@@ -362,8 +374,7 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             globalConfig: {
                 configDir: tempConfigDir,
                 runDir: tempRunDir,
-                runtime: 'host',
-                npmVersion: 'latest'
+                runtime: 'host'
             }
         });
 
@@ -381,12 +392,13 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         plugin.portReady = jest.fn(async () => false);
         plugin.waitForPort = jest.fn(async () => true);
         plugin.waitForHostPids = jest.fn(async () => [12345]);
+        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
         plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
 
         try {
             const rc = await plugin.startHost('host-headless');
             expect(rc).toBe(0);
-            const installCmd = commands.find(args => args[0] === 'npx' && args[2] === 'playwright-core');
+            const installCmd = commands.find(args => args[0] === '/mock/bin/playwright' && args[1] === 'install');
             expect(installCmd).toBeUndefined();
         } finally {
             fs.rmSync(tempConfigDir, { recursive: true, force: true });
