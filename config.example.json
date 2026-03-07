@@ -11,6 +11,14 @@
     "shellPrefix": "",
     "shell": "",
     "shellSuffix": "",
+    // 仅首次创建容器时执行一次（创建后、常规 shell 前）
+    "first": {
+        "shellPrefix": "",
+        "shell": "",
+        "shellSuffix": "",
+        "env": {},
+        "envFile": []
+    },
     "yolo": "",
     "serverUser": "admin",
     "serverPass": "change-this-password",
@@ -58,6 +66,9 @@
             "containerName": "my-claude-{now}",
             "yolo": "c",
             "shell": "claude",
+            "first": {
+                "shell": "echo first-init"
+            },
             "env": {
                 "ANTHROPIC_MODEL": "claude-sonnet-4-5"
             },

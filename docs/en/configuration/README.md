@@ -47,7 +47,7 @@ Example:
 
 ## Priority Mechanism
 
-MANYOYO configuration parameters are divided into two categories with different merging behaviors:
+MANYOYO configuration parameters are divided into three categories with different merging behaviors:
 
 ### Override Parameters
 These parameters only take the value from the highest priority:
@@ -92,6 +92,13 @@ Merge parameters include:
 - `ports` - Port mapping array
 - `imageBuildArgs` - Image build argument array
 
+### First-Run Bootstrap Parameters (`first.*`)
+These parameters run once only **after a new container is created and before regular command execution**. They are skipped when reusing an existing container:
+
+- `first.shellPrefix` / `first.shell` / `first.shellSuffix`: override type (`runs.<name>.first` > global `first`)
+- `first.env`: merged by key (global `first.env` + `runs.<name>.first.env`)
+- `first.envFile`: array accumulation (global `first.envFile` + `runs.<name>.first.envFile`)
+
 Example:
 ```bash
 # Global configuration: env: {"VAR1":"value1"}
@@ -118,6 +125,9 @@ Example:
 | Merge | `volumes` | Array accumulation merge | All mount volumes take effect |
 | Merge | `ports` | Array accumulation merge | All port mappings take effect (pass-through as `--publish`) |
 | Merge | `imageBuildArgs` | Array accumulation merge | All build arguments take effect |
+| First bootstrap | `first.shellPrefix/shell/shellSuffix` | Override (run first overrides global first) | Runs only once on new container creation |
+| First bootstrap | `first.env` | Map merge by key | Global `first.env` + `runs.<name>.first.env` |
+| First bootstrap | `first.envFile` | Array accumulation merge | Global `first.envFile` + `runs.<name>.first.envFile` |
 
 ## Debugging Configuration
 

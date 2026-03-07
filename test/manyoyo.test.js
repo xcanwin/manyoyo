@@ -20,6 +20,10 @@ function writeGlobalConfig(homeDir, configObj) {
     );
 }
 
+function writeExecutable(filePath, content) {
+    fs.writeFileSync(filePath, content, { mode: 0o755 });
+}
+
 describe('MANYOYO CLI', () => {
     // ==============================================================================
     // 基础命令测试
@@ -336,6 +340,58 @@ describe('MANYOYO CLI', () => {
                 }));
             } finally {
                 fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('first config should merge by global + runs for env/envFile/shell', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-merge-'));
+            const envDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-env-'));
+            const globalFirstEnvFile = path.join(envDir, 'global-first.env');
+            const runFirstEnvFile = path.join(envDir, 'run-first.env');
+            fs.writeFileSync(globalFirstEnvFile, 'GLOBAL_FIRST=1\n');
+            fs.writeFileSync(runFirstEnvFile, 'RUN_FIRST=1\n');
+
+            writeGlobalConfig(tempHome, {
+                first: {
+                    env: {
+                        FIRST_A: 'global-a',
+                        FIRST_B: 'global-b'
+                    },
+                    envFile: [globalFirstEnvFile],
+                    shellPrefix: 'GLOBAL=1',
+                    shell: 'global-first',
+                    shellSuffix: '--init'
+                },
+                runs: {
+                    demo: {
+                        first: {
+                            env: {
+                                FIRST_A: 'run-a'
+                            },
+                            envFile: [runFirstEnvFile],
+                            shell: 'run-first'
+                        }
+                    }
+                }
+            });
+
+            try {
+                const output = execSync(`node ${BIN_PATH} config show -r demo`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome }
+                });
+                const config = JSON.parse(output);
+                expect(config.first.env).toEqual(expect.objectContaining({
+                    FIRST_A: 'run-a',
+                    FIRST_B: 'global-b'
+                }));
+                expect(config.first.envFile).toEqual([globalFirstEnvFile, runFirstEnvFile]);
+                expect(config.first.shellPrefix).toBe('GLOBAL=1');
+                expect(config.first.shell).toBe('run-first');
+                expect(config.first.shellSuffix).toBe(' --init');
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+                fs.rmSync(envDir, { recursive: true, force: true });
             }
         });
 
@@ -718,6 +774,275 @@ exit 0
                 const manyoyoConfig = JSON.parse(fs.readFileSync(manyoyoConfigPath, 'utf-8'));
                 expect(manyoyoConfig.runs.claude).toEqual({ keep: true });
             } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+    });
+
+    // ==============================================================================
+    // first 预执行测试
+    // ==============================================================================
+
+    describe('First Bootstrap', () => {
+        test('new container should execute first command before regular command', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-run-'));
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-home-'));
+            const envDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-env-'));
+            const statePath = path.join(tempDir, 'state.txt');
+            const dockerLogPath = path.join(tempDir, 'docker.log');
+            const fakeDockerPath = path.join(tempDir, 'docker');
+            const firstEnvFilePath = path.join(envDir, 'first.env');
+            fs.writeFileSync(firstEnvFilePath, 'FROM_FILE=file-first\n');
+
+            writeExecutable(fakeDockerPath, `#!/bin/sh
+echo "$@" >> "${dockerLogPath}"
+STATE_FILE="${statePath}"
+if [ "$1" = "--version" ]; then
+  echo "Docker version 26.0.0"
+  exit 0
+fi
+if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
+  if [ -f "$STATE_FILE" ]; then
+    cat "$STATE_FILE"
+  fi
+  exit 0
+fi
+if [ "$1" = "run" ]; then
+  shift
+  while [ $# -gt 0 ]; do
+    if [ "$1" = "--name" ]; then
+      shift
+      echo "$1" > "$STATE_FILE"
+      break
+    fi
+    shift
+  done
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "-f" ]; then
+  if [ "$3" = "{{.State.Status}}" ]; then
+    echo "running"
+    exit 0
+  fi
+  if [ "$3" = "{{index .Config.Labels \\"manyoyo.default_cmd\\"}}" ]; then
+    echo "regular-cmd"
+    exit 0
+  fi
+fi
+if [ "$1" = "exec" ]; then
+  exit 0
+fi
+if [ "$1" = "rm" ]; then
+  rm -f "$STATE_FILE"
+  exit 0
+fi
+exit 0
+`);
+
+            writeGlobalConfig(tempHome, {
+                runs: {
+                    demo: {
+                        containerName: 'first-new-test',
+                        shell: 'regular-cmd',
+                        first: {
+                            shell: 'first-cmd',
+                            env: {
+                                FIRST_ONLY: '1'
+                            },
+                            envFile: [firstEnvFilePath]
+                        }
+                    }
+                }
+            });
+
+            try {
+                execSync(`node ${BIN_PATH} run -r demo`, {
+                    encoding: 'utf-8',
+                    input: '\n',
+                    env: {
+                        ...process.env,
+                        HOME: tempHome,
+                        PATH: `${tempDir}:${process.env.PATH}`
+                    }
+                });
+
+                const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n').filter(Boolean);
+                const firstExecIndex = dockerArgs.findIndex(line =>
+                    line.includes('exec --env FROM_FILE=file-first --env FIRST_ONLY=1 first-new-test /bin/bash -c first-cmd')
+                );
+                const regularExecIndex = dockerArgs.findIndex(line =>
+                    line.includes('exec -it first-new-test /bin/bash -c regular-cmd')
+                );
+
+                expect(firstExecIndex).toBeGreaterThan(-1);
+                expect(regularExecIndex).toBeGreaterThan(-1);
+                expect(firstExecIndex).toBeLessThan(regularExecIndex);
+                expect(dockerArgs[regularExecIndex]).not.toContain('FIRST_ONLY=1');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+                fs.rmSync(tempHome, { recursive: true, force: true });
+                fs.rmSync(envDir, { recursive: true, force: true });
+            }
+        });
+
+        test('existing container should skip first command', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-existing-'));
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-existing-home-'));
+            const statePath = path.join(tempDir, 'state.txt');
+            const dockerLogPath = path.join(tempDir, 'docker.log');
+            const fakeDockerPath = path.join(tempDir, 'docker');
+            fs.writeFileSync(statePath, 'existing-test\n');
+
+            writeExecutable(fakeDockerPath, `#!/bin/sh
+echo "$@" >> "${dockerLogPath}"
+if [ "$1" = "--version" ]; then
+  echo "Docker version 26.0.0"
+  exit 0
+fi
+if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
+  cat "${statePath}"
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "-f" ]; then
+  if [ "$3" = "{{.State.Status}}" ]; then
+    echo "running"
+    exit 0
+  fi
+  if [ "$3" = "{{index .Config.Labels \\"manyoyo.default_cmd\\"}}" ]; then
+    echo "regular-existing-cmd"
+    exit 0
+  fi
+fi
+if [ "$1" = "exec" ]; then
+  exit 0
+fi
+if [ "$1" = "start" ]; then
+  exit 0
+fi
+exit 0
+`);
+
+            writeGlobalConfig(tempHome, {
+                runs: {
+                    demo: {
+                        containerName: 'existing-test',
+                        shell: 'regular-existing-cmd',
+                        first: {
+                            shell: 'first-should-not-run',
+                            env: {
+                                FIRST_ONLY: '1'
+                            }
+                        }
+                    }
+                }
+            });
+
+            try {
+                execSync(`node ${BIN_PATH} run -r demo`, {
+                    encoding: 'utf-8',
+                    input: '\n',
+                    env: {
+                        ...process.env,
+                        HOME: tempHome,
+                        PATH: `${tempDir}:${process.env.PATH}`
+                    }
+                });
+
+                const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n').filter(Boolean);
+                expect(dockerArgs.some(line => line.includes('first-should-not-run'))).toBe(false);
+                expect(dockerArgs.some(line => line.includes('exec -it existing-test /bin/bash -c regular-existing-cmd'))).toBe(true);
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('should stop when first command fails', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-fail-'));
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-fail-home-'));
+            const statePath = path.join(tempDir, 'state.txt');
+            const dockerLogPath = path.join(tempDir, 'docker.log');
+            const fakeDockerPath = path.join(tempDir, 'docker');
+
+            writeExecutable(fakeDockerPath, `#!/bin/sh
+echo "$@" >> "${dockerLogPath}"
+STATE_FILE="${statePath}"
+if [ "$1" = "--version" ]; then
+  echo "Docker version 26.0.0"
+  exit 0
+fi
+if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
+  if [ -f "$STATE_FILE" ]; then
+    cat "$STATE_FILE"
+  fi
+  exit 0
+fi
+if [ "$1" = "run" ]; then
+  shift
+  while [ $# -gt 0 ]; do
+    if [ "$1" = "--name" ]; then
+      shift
+      echo "$1" > "$STATE_FILE"
+      break
+    fi
+    shift
+  done
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "-f" ] && [ "$3" = "{{.State.Status}}" ]; then
+  echo "running"
+  exit 0
+fi
+if [ "$1" = "exec" ]; then
+  case "$*" in
+    *"first-fail"*)
+      exit 12
+      ;;
+  esac
+  exit 0
+fi
+if [ "$1" = "rm" ]; then
+  rm -f "$STATE_FILE"
+  exit 0
+fi
+exit 0
+`);
+
+            writeGlobalConfig(tempHome, {
+                runs: {
+                    demo: {
+                        containerName: 'first-fail-test',
+                        shell: 'regular-after-fail',
+                        first: {
+                            shell: 'first-fail'
+                        }
+                    }
+                }
+            });
+
+            try {
+                expect(() => {
+                    execSync(`node ${BIN_PATH} run -r demo`, {
+                        encoding: 'utf-8',
+                        input: '\n',
+                        stdio: 'pipe',
+                        env: {
+                            ...process.env,
+                            HOME: tempHome,
+                            PATH: `${tempDir}:${process.env.PATH}`
+                        }
+                    });
+                }).toThrow();
+
+                const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n').filter(Boolean);
+                expect(dockerArgs.some(line =>
+                    line.includes('exec first-fail-test /bin/bash -c first-fail')
+                )).toBe(true);
+                expect(dockerArgs.some(line =>
+                    line.includes('exec -it first-fail-test /bin/bash -c regular-after-fail')
+                )).toBe(false);
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }
         });

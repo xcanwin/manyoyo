@@ -38,6 +38,9 @@ MANYOYO supports two types of configuration files:
 ```json5
 {
     "envFile": ["/abs/path/anthropic_claudecode.env"],
+    "first": {
+        "shell": "echo first-init"
+    },
     "shellSuffix": "-c",
     "yolo": "c"
 }
@@ -283,6 +286,26 @@ Mode descriptions:
 }
 ```
 
+#### first
+- **Type**: Object (map)
+- **Description**: Runs once only after new container creation and before regular command execution; skipped when reusing existing containers
+- **Fields**:
+  - `first.shellPrefix` / `first.shell` / `first.shellSuffix`: override type (`runs.<name>.first` > global `first`)
+  - `first.env`: merge by key (global `first.env` + `runs.<name>.first.env`)
+  - `first.envFile`: array accumulation (global `first.envFile` + `runs.<name>.first.envFile`)
+- **Example**:
+```json5
+{
+    "first": {
+        "shell": "echo setup-once",
+        "env": {
+            "BOOTSTRAP": "1"
+        },
+        "envFile": ["/abs/path/first.env"]
+    }
+}
+```
+
 #### yolo
 - **Type**: String
 - **Values**: `c`, `gm`, `cx`, `oc` (or full names `claude`, `gemini`, `codex`, `opencode`)
@@ -360,6 +383,14 @@ Command-line arguments > runs.<name> > Global configuration > Environment variab
 Accumulated merge in order:
 ```
 Global configuration + runs.<name> + Command-line arguments
+```
+
+### First-Run Bootstrap Parameters
+`first` applies only in new-container stage and has no CLI override:
+```
+first.shellPrefix/shell/shellSuffix: runs.<name>.first > global first
+first.env: global first.env + runs.<name>.first.env (key override)
+first.envFile: global first.envFile + runs.<name>.first.envFile
 ```
 
 ## Complete Configuration Examples

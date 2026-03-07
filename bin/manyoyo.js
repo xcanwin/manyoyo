@@ -56,8 +56,12 @@ let IMAGE_VERSION = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
 let EXEC_COMMAND = "";
 let EXEC_COMMAND_PREFIX = "";
 let EXEC_COMMAND_SUFFIX = "";
+let FIRST_EXEC_COMMAND = "";
+let FIRST_EXEC_COMMAND_PREFIX = "";
+let FIRST_EXEC_COMMAND_SUFFIX = "";
 let IMAGE_BUILD_ARGS = [];
 let CONTAINER_ENVS = [];
+let FIRST_CONTAINER_ENVS = [];
 let CONTAINER_VOLUMES = [];
 let CONTAINER_PORTS = [];
 const MANYOYO_NAME = detectCommandName();
@@ -236,6 +240,7 @@ function sanitizeSensitiveData(obj) {
  * @property {string} [imageVersion] - 镜像版本
  * @property {Object.<string, string|number|boolean>} [env] - 环境变量映射
  * @property {string[]} [envFile] - 环境文件数组
+ * @property {{shellPrefix?:string,shell?:string,shellSuffix?:string,env?:Object.<string,string|number|boolean>,envFile?:string[]}} [first] - 仅首次创建容器执行的一次性命令配置
  * @property {string[]} [volumes] - 挂载卷数组
  * @property {Object.<string, Object>} [plugins] - 可选插件配置映射（如 plugins.playwright）
  * @property {Object.<string, Object>} [runs] - 运行配置映射（-r <name>）
@@ -436,12 +441,27 @@ function normalizeCliEnvMap(envList) {
     return envMap;
 }
 
-function addEnv(env) {
-    const parsed = parseEnvEntry(env);
-    CONTAINER_ENVS.push("--env", `${parsed.key}=${parsed.value}`);
+function normalizeFirstConfig(firstConfig, sourceLabel) {
+    if (firstConfig === undefined || firstConfig === null) {
+        return {};
+    }
+    if (typeof firstConfig !== 'object' || Array.isArray(firstConfig)) {
+        console.error(`${RED}⚠️  错误: ${sourceLabel} 的 first 必须是对象(map)，例如 {"shell":"init.sh"}${NC}`);
+        process.exit(1);
+    }
+    return firstConfig;
 }
 
-function addEnvFile(envFile) {
+function addEnvTo(targetEnvs, env) {
+    const parsed = parseEnvEntry(env);
+    targetEnvs.push("--env", `${parsed.key}=${parsed.value}`);
+}
+
+function addEnv(env) {
+    addEnvTo(CONTAINER_ENVS, env);
+}
+
+function addEnvFileTo(targetEnvs, envFile) {
     const filePath = String(envFile || '').trim();
     if (!path.isAbsolute(filePath)) {
         console.error(`${RED}⚠️  错误: --env-file 仅支持绝对路径: ${envFile}${NC}`);
@@ -472,7 +492,7 @@ function addEnvFile(envFile) {
                 }
 
                 if (key) {
-                    CONTAINER_ENVS.push("--env", `${key}=${value}`);
+                    targetEnvs.push("--env", `${key}=${value}`);
                 }
             }
         }
@@ -480,6 +500,10 @@ function addEnvFile(envFile) {
     }
     console.error(`${RED}⚠️  未找到环境文件: ${envFile}${NC}`);
     return {};
+}
+
+function addEnvFile(envFile) {
+    return addEnvFileTo(CONTAINER_ENVS, envFile);
 }
 
 function addVolume(volume) {
@@ -1128,6 +1152,8 @@ async function setupCommander() {
 
     // Load run config if specified
     const runConfig = options.run ? loadRunConfig(options.run, config) : {};
+    const globalFirstConfig = normalizeFirstConfig(config.first, '全局配置');
+    const runFirstConfig = normalizeFirstConfig(runConfig.first, '运行配置');
 
     // Merge configs: command line > run config > global config > defaults
     // Override mode (scalar values): use first defined value
@@ -1158,6 +1184,18 @@ async function setupCommander() {
     if (mergedShellSuffix) {
         EXEC_COMMAND_SUFFIX = normalizeCommandSuffix(mergedShellSuffix);
     }
+    const mergedFirstShellPrefix = pickConfigValue(runFirstConfig.shellPrefix, globalFirstConfig.shellPrefix);
+    if (mergedFirstShellPrefix) {
+        FIRST_EXEC_COMMAND_PREFIX = `${mergedFirstShellPrefix} `;
+    }
+    const mergedFirstShell = pickConfigValue(runFirstConfig.shell, globalFirstConfig.shell);
+    if (mergedFirstShell) {
+        FIRST_EXEC_COMMAND = mergedFirstShell;
+    }
+    const mergedFirstShellSuffix = pickConfigValue(runFirstConfig.shellSuffix, globalFirstConfig.shellSuffix);
+    if (mergedFirstShellSuffix) {
+        FIRST_EXEC_COMMAND_SUFFIX = normalizeCommandSuffix(mergedFirstShellSuffix);
+    }
 
     // Basic name validation to reduce injection risk
     validateName('containerName', CONTAINER_NAME, SAFE_CONTAINER_NAME_PATTERN);
@@ -1180,6 +1218,18 @@ async function setupCommander() {
         ...normalizeCliEnvMap(options.env)
     };
     Object.entries(envMap).forEach(([key, value]) => addEnv(`${key}=${value}`));
+
+    const firstEnvFileList = [
+        ...toArray(globalFirstConfig.envFile),
+        ...toArray(runFirstConfig.envFile)
+    ].filter(Boolean);
+    firstEnvFileList.forEach(ef => addEnvFileTo(FIRST_CONTAINER_ENVS, ef));
+
+    const firstEnvMap = {
+        ...normalizeJsonEnvMap(globalFirstConfig.env, '全局配置 first'),
+        ...normalizeJsonEnvMap(runFirstConfig.env, '运行配置 first')
+    };
+    Object.entries(firstEnvMap).forEach(([key, value]) => addEnvTo(FIRST_CONTAINER_ENVS, `${key}=${value}`));
 
     const volumeList = mergeArrayConfig(config.volumes, runConfig.volumes, options.volume);
     volumeList.forEach(v => addVolume(v));
@@ -1267,6 +1317,18 @@ async function setupCommander() {
                 prefix: EXEC_COMMAND_PREFIX,
                 shell: EXEC_COMMAND,
                 suffix: EXEC_COMMAND_SUFFIX
+            },
+            first: {
+                envFile: firstEnvFileList,
+                env: firstEnvMap,
+                shellPrefix: FIRST_EXEC_COMMAND_PREFIX.trim(),
+                shell: FIRST_EXEC_COMMAND || "",
+                shellSuffix: FIRST_EXEC_COMMAND_SUFFIX || "",
+                exec: {
+                    prefix: FIRST_EXEC_COMMAND_PREFIX,
+                    shell: FIRST_EXEC_COMMAND,
+                    suffix: FIRST_EXEC_COMMAND_SUFFIX
+                }
             }
         };
         // 敏感信息脱敏
@@ -1300,8 +1362,12 @@ function createRuntimeContext(modeState = {}) {
         execCommand: EXEC_COMMAND,
         execCommandPrefix: EXEC_COMMAND_PREFIX,
         execCommandSuffix: EXEC_COMMAND_SUFFIX,
+        firstExecCommand: FIRST_EXEC_COMMAND,
+        firstExecCommandPrefix: FIRST_EXEC_COMMAND_PREFIX,
+        firstExecCommandSuffix: FIRST_EXEC_COMMAND_SUFFIX,
         contModeArgs: CONT_MODE_ARGS,
         containerEnvs: CONTAINER_ENVS,
+        firstContainerEnvs: FIRST_CONTAINER_ENVS,
         containerVolumes: CONTAINER_VOLUMES,
         containerPorts: CONTAINER_PORTS,
         quiet: QUIET,
@@ -1379,6 +1445,42 @@ function joinExecCommand(prefix, command, suffix) {
     return `${prefix || ''}${command || ''}${suffix || ''}`;
 }
 
+function executeFirstCommand(runtime) {
+    if (!runtime.firstExecCommand || !String(runtime.firstExecCommand).trim()) {
+        return;
+    }
+
+    const firstCommand = joinExecCommand(
+        runtime.firstExecCommandPrefix,
+        runtime.firstExecCommand,
+        runtime.firstExecCommandSuffix
+    );
+
+    if (!(runtime.quiet.cmd || runtime.quiet.full)) {
+        console.log(`${BLUE}----------------------------------------${NC}`);
+        console.log(`⚙️  首次预执行命令: ${YELLOW}${firstCommand}${NC}`);
+    }
+
+    const firstExecArgs = [
+        'exec',
+        ...(runtime.firstContainerEnvs || []),
+        runtime.containerName,
+        '/bin/bash',
+        '-c',
+        firstCommand
+    ];
+    const firstExecResult = spawnSync(`${DOCKER_CMD}`, firstExecArgs, { stdio: 'inherit' });
+    if (firstExecResult.error) {
+        throw firstExecResult.error;
+    }
+    if (typeof firstExecResult.status === 'number' && firstExecResult.status !== 0) {
+        throw new Error(`首次预执行命令失败，退出码: ${firstExecResult.status}`);
+    }
+    if (firstExecResult.signal) {
+        throw new Error(`首次预执行命令被信号终止: ${firstExecResult.signal}`);
+    }
+}
+
 /**
  * 创建新容器
  * @returns {Promise<string>} 默认命令
@@ -1411,6 +1513,9 @@ async function createNewContainer(runtime) {
 
     // Wait for container to be ready
     await waitForContainerReady(runtime.containerName);
+
+    // Run one-time bootstrap command for newly created containers only.
+    executeFirstCommand(runtime);
 
     return defaultCommand;
 }

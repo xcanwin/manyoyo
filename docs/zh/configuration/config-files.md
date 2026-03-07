@@ -38,6 +38,9 @@ MANYOYO 支持两种配置文件：
 ```json5
 {
     "envFile": ["/abs/path/anthropic_claudecode.env"],
+    "first": {
+        "shell": "echo first-init"
+    },
     "shellSuffix": "-c",
     "yolo": "c"
 }
@@ -283,6 +286,26 @@ MANYOYO 支持两种配置文件：
 }
 ```
 
+#### first
+- **类型**：对象（map）
+- **说明**：仅在新建容器后、常规命令前执行一次；复用已有容器时不执行
+- **字段**：
+  - `first.shellPrefix` / `first.shell` / `first.shellSuffix`：覆盖型（`runs.<name>.first` > 全局 `first`）
+  - `first.env`：按 key 合并（全局 `first.env` + `runs.<name>.first.env`）
+  - `first.envFile`：数组累加（全局 `first.envFile` + `runs.<name>.first.envFile`）
+- **示例**：
+```json5
+{
+    "first": {
+        "shell": "echo setup-once",
+        "env": {
+            "BOOTSTRAP": "1"
+        },
+        "envFile": ["/abs/path/first.env"]
+    }
+}
+```
+
 #### yolo
 - **类型**：字符串
 - **可选值**：`c`, `gm`, `cx`, `oc`（或完整名称 `claude`, `gemini`, `codex`, `opencode`）
@@ -360,6 +383,14 @@ manyoyo run -r claude
 按顺序累加合并：
 ```
 全局配置 + runs.<name> + 命令行参数
+```
+
+### 首次预执行参数
+`first` 仅用于新建容器阶段，不支持命令行覆盖：
+```
+first.shellPrefix/shell/shellSuffix: runs.<name>.first > 全局 first
+first.env: 全局 first.env + runs.<name>.first.env（按 key 覆盖）
+first.envFile: 全局 first.envFile + runs.<name>.first.envFile
 ```
 
 ## 完整配置示例
