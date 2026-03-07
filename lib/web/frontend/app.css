@@ -437,20 +437,24 @@ textarea:focus-visible {
     box-shadow: inset 3px 0 0 var(--accent), 0 0 0 2px rgba(196, 85, 31, 0.14);
 }
 
-.session-item.history-only {
-    color: #b3ab9f;
+.session-item.status-history:not(.active),
+.session-item.status-stopped:not(.active),
+.session-item.status-unknown:not(.active) {
+    border-color: rgba(181, 146, 99, 0.22);
+    background: rgba(255, 252, 247, 0.72);
+    box-shadow: none;
 }
 
-.session-item.history-only .session-name,
-.session-item.history-only .session-count,
-.session-item.history-only .session-time {
-    color: #b3ab9f;
-}
-
-.session-item.history-only .session-status {
-    background: #f7f3ed;
-    border-color: #e3dbd1;
-    color: #b3ab9f;
+.session-item.status-history:not(.active) .session-name,
+.session-item.status-history:not(.active) .session-meta,
+.session-item.status-history:not(.active) .session-time,
+.session-item.status-stopped:not(.active) .session-name,
+.session-item.status-stopped:not(.active) .session-meta,
+.session-item.status-stopped:not(.active) .session-time,
+.session-item.status-unknown:not(.active) .session-name,
+.session-item.status-unknown:not(.active) .session-meta,
+.session-item.status-unknown:not(.active) .session-time {
+    opacity: 0.25;
 }
 
 .session-name {
@@ -845,6 +849,23 @@ body.terminal-mode .composer {
 
 .msg.pending .bubble {
     opacity: 0.78;
+}
+
+body.agent-mode .msg.origin-command .bubble,
+body.agent-mode .msg.origin-command .msg-meta,
+body.agent-mode .msg.origin-command .msg-exit {
+    opacity: 0.25;
+}
+
+body.command-mode .msg.origin-agent .bubble,
+body.command-mode .msg.origin-agent .msg-meta,
+body.command-mode .msg.origin-agent .msg-exit {
+    opacity: 0.25;
+}
+
+body.agent-mode .msg.origin-command .bubble,
+body.command-mode .msg.origin-agent .bubble {
+    box-shadow: none;
 }
 
 .bubble pre {
