@@ -638,10 +638,7 @@ body.mobile-actions-open .header-actions {
     gap: 10px;
     margin: 10px 8px 4px;
     min-height: 36px;
-    padding: 8px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: rgba(255, 251, 244, 0.9);
+    padding: 4px 8px;
 }
 
 .mode-switch-left {
@@ -692,6 +689,39 @@ body.terminal-mode #modeTerminalBtn {
     display: none;
     flex-direction: column;
     margin: 4px 0 0;
+}
+
+.term-keybar {
+    display: flex;
+    gap: 4px;
+    padding: 4px 6px;
+    background: #1a1a1a;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.term-key-btn {
+    background: rgba(255, 255, 255, 0.07);
+    color: #bbb;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 4px;
+    padding: 2px 9px;
+    font-size: 12px;
+    font-family: monospace;
+    cursor: pointer;
+    user-select: none;
+    line-height: 1.6;
+}
+
+.term-key-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #eee;
+}
+
+.term-key-btn.is-active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent-strong);
 }
 
 #terminalScreen {

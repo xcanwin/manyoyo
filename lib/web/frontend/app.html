@@ -68,12 +68,22 @@
                 <div class="mode-switch-left">
                     <button type="button" id="modeAgentBtn" class="secondary is-active">AGENT 模式</button>
                     <button type="button" id="modeCommandBtn" class="secondary">命令模式</button>
-                    <button type="button" id="modeTerminalBtn" class="secondary">交互终端</button>
+                    <button type="button" id="modeTerminalBtn" class="secondary">终端模式</button>
                 </div>
 
             </section>
             <section id="messages"></section>
             <section id="terminalPanel" hidden>
+                <div id="terminalKeybar" class="term-keybar" aria-label="终端快捷键">
+                    <button type="button" class="term-key-btn" data-key="esc">esc</button>
+                    <button type="button" class="term-key-btn" data-key="tab">tab</button>
+                    <button type="button" class="term-key-btn term-ctrl-btn" data-key="ctrl">ctrl</button>
+                    <button type="button" class="term-key-btn term-alt-btn" data-key="alt">alt</button>&nbsp;&nbsp;
+                    <button type="button" class="term-key-btn" data-key="left">&nbsp;◀&nbsp;</button>
+                    <button type="button" class="term-key-btn" data-key="up">&nbsp;▲&nbsp;</button>
+                    <button type="button" class="term-key-btn" data-key="down">&nbsp;▼&nbsp;</button>
+                    <button type="button" class="term-key-btn" data-key="right">&nbsp;▶&nbsp;</button>
+                </div>
                 <div id="terminalScreen" aria-label="终端输出区域"></div>
 
             </section>
