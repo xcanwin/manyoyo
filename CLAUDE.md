@@ -51,6 +51,11 @@ npm ci --include=optional
 npm run docs:build       # 检查 dead links
 
 npm install -g .         # 本地安装调试
+
+# 运行单个测试文件
+npx jest test/manyoyo.test.js
+# 按测试名称匹配运行
+npx jest --testNamePattern="关键词"
 ```
 
 ## TDD 模式
