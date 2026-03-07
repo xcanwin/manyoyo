@@ -652,17 +652,6 @@ body.terminal-mode #modeTerminalBtn {
     border-color: var(--accent-strong);
 }
 
-.mode-terminal-controls {
-    display: none;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-}
-
-body.terminal-mode .mode-terminal-controls {
-    display: inline-flex;
-}
-
 #messages {
     min-height: 0;
     overflow-y: auto;
@@ -682,28 +671,13 @@ body.terminal-mode .mode-terminal-controls {
     min-height: 0;
     display: none;
     flex-direction: column;
-    gap: 8px;
-    margin: 10px 8px 0;
-    padding: 12px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: rgba(255, 251, 245, 0.9);
-}
-
-.terminal-status {
-    display: inline-block;
-    color: var(--muted);
-    font-size: 12px;
-    white-space: nowrap;
+    margin: 4px 0 0;
 }
 
 #terminalScreen {
     flex: 1;
     min-height: 0;
     height: 100%;
-    border-radius: 12px;
-    border: 1px solid #2a3544;
-    box-shadow: inset 0 0 0 1px rgba(255, 209, 102, 0.14);
     overflow: hidden;
     background: var(--terminal-bg);
 }
@@ -711,16 +685,11 @@ body.terminal-mode .mode-terminal-controls {
 #terminalScreen .xterm {
     width: 100%;
     height: 100%;
-    padding: 8px 6px;
+    padding: 4px 6px;
 }
 
 #terminalScreen .xterm-screen {
     width: 100%;
-}
-
-.terminal-foot {
-    color: var(--muted);
-    font-size: 12px;
 }
 
 body.command-mode #messages {
@@ -1120,24 +1089,9 @@ body.command-mode .msg.origin-agent .bubble {
         min-width: 0;
     }
 
-    .mode-terminal-controls,
     .mode-switch button {
         flex: 0 0 auto;
-    }
-
-    .mode-switch button {
         min-width: 84px;
-    }
-
-    .mode-terminal-controls {
-        gap: 6px;
-        width: 100%;
-    }
-
-    .terminal-status {
-        max-width: 5.2em;
-        overflow: hidden;
-        text-overflow: ellipsis;
     }
 
     #commandInput {
