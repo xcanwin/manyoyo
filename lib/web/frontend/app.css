@@ -877,6 +877,83 @@ body.command-mode .msg.origin-agent .bubble {
     line-height: 1.55;
 }
 
+.bubble .md-content {
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+.bubble .md-content > :first-child {
+    margin-top: 0;
+}
+
+.bubble .md-content > :last-child {
+    margin-bottom: 0;
+}
+
+.bubble .md-content p,
+.bubble .md-content ul,
+.bubble .md-content ol,
+.bubble .md-content blockquote,
+.bubble .md-content pre,
+.bubble .md-content table {
+    margin: 0.6em 0;
+}
+
+.bubble .md-content ul,
+.bubble .md-content ol {
+    padding-left: 1.4em;
+}
+
+.bubble .md-content code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 1px 5px;
+    border-radius: 6px;
+    background: rgba(194, 149, 79, 0.16);
+}
+
+.bubble .md-content pre {
+    border-radius: 8px;
+    padding: 9px 10px;
+    border: 1px solid #e6d2b7;
+    background: rgba(255, 244, 224, 0.72);
+    overflow-x: auto;
+}
+
+.bubble .md-content pre code {
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.bubble .md-content blockquote {
+    margin-left: 0;
+    padding-left: 10px;
+    border-left: 3px solid #dcb788;
+    color: #66492d;
+}
+
+.bubble .md-content table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.bubble .md-content th,
+.bubble .md-content td {
+    border: 1px solid #e6d2b7;
+    padding: 4px 6px;
+    text-align: left;
+}
+
+.bubble .md-content a {
+    color: #8a4f17;
+    text-decoration-color: rgba(138, 79, 23, 0.45);
+}
+
 .composer {
     border-top: 1px solid rgba(181, 146, 99, 0.45);
     margin-top: 10px;

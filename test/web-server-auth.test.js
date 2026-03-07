@@ -128,6 +128,33 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
+    test('should require auth for marked vendor asset and allow after login', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-vendor-marked-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+
+            const unauth = await request(`${baseUrl}/app/vendor/marked.min.js`);
+            expect(unauth.response.status).toBe(401);
+
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const authed = await request(`${baseUrl}/app/vendor/marked.min.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(authed.response.status).toBe(200);
+            expect(authed.response.headers.get('content-type')).toContain('application/javascript');
+            expect(authed.text).toContain('marked');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should support get and save JSON5 config in web api', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-config-'));
         const port = await getFreePort();
