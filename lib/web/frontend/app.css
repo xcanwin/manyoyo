@@ -1021,6 +1021,7 @@ body.command-mode .msg.origin-agent .bubble {
         min-height: auto;
         overflow: hidden;
         z-index: 1;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     #messages,
@@ -1109,23 +1110,28 @@ body.command-mode .msg.origin-agent .bubble {
 
     .mode-switch {
         margin: 8px 8px 2px;
-        overflow-x: auto;
+        flex-wrap: wrap;
         padding: 8px;
         gap: 8px;
     }
 
-    .mode-switch-left,
+    .mode-switch-left {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
     .mode-terminal-controls,
     .mode-switch button {
         flex: 0 0 auto;
     }
 
     .mode-switch button {
-        min-width: 90px;
+        min-width: 84px;
     }
 
     .mode-terminal-controls {
         gap: 6px;
+        width: 100%;
     }
 
     .terminal-status {
