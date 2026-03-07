@@ -291,6 +291,7 @@ Mode descriptions:
 - **Description**: Prompt execution template for `AGENT` mode in `serve` web UI; must contain `{prompt}` placeholder
 - **Priority**: `createOptions.agentPromptCommand > runs.<name>.agentPromptCommand > global agentPromptCommand > empty`
 - **Auto infer**: when empty, the system infers a default template from the command program in the merged `shell/yolo` command for common agents (`claude/gemini/codex/opencode`)
+- **Context continuity**: with prior history, the system tries agent resume first; if resume is unavailable or fails, it injects a recent history window automatically
 - **Example**:
 ```json5
 {

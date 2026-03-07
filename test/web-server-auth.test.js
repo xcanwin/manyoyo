@@ -507,4 +507,267 @@ process.exit(0);
             fs.rmSync(tempHost, { recursive: true, force: true });
         }
     });
+
+    test('should inject recent agent history for subsequent turns when resume is unavailable', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-context-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  process.stdout.write(command + '\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'echo AGENT:{prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const turn1 = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'first question' })
+            });
+            expect(turn1.response.status).toBe(200);
+            expect(turn1.json).toEqual(expect.objectContaining({
+                contextMode: 'first-turn',
+                resumeAttempted: false,
+                resumeSucceeded: false
+            }));
+
+            const turn2 = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'second question' })
+            });
+            expect(turn2.response.status).toBe(200);
+            expect(turn2.json).toEqual(expect.objectContaining({
+                contextMode: 'history-injected',
+                resumeAttempted: false,
+                resumeSucceeded: false
+            }));
+            expect(String(turn2.json.output || '')).toContain('当前问题: second question');
+            expect(String(turn2.json.output || '')).toContain('用户: first question');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should fallback to history injection when resume fails', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-resume-fallback-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  if (command.trim() === 'claude -r') {
+    process.stderr.write('resume failed\\n');
+    process.exit(1);
+    return;
+  }
+  process.stdout.write(command + '\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'claude -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const turn1 = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'hello' })
+            });
+            expect(turn1.response.status).toBe(200);
+
+            const turn2 = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'who am i' })
+            });
+            expect(turn2.response.status).toBe(200);
+            expect(turn2.json).toEqual(expect.objectContaining({
+                contextMode: 'history-injected',
+                resumeAttempted: true,
+                resumeSucceeded: false
+            }));
+            expect(String(turn2.json.output || '')).toContain('当前问题: who am i');
+
+            const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            expect(persisted).toEqual(expect.objectContaining({
+                agentProgram: 'claude',
+                resumeSupported: true,
+                lastResumeOk: false
+            }));
+            expect(String(persisted.lastResumeError || '')).toContain('resume failed');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should skip history injection when resume succeeds', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-resume-ok-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  if (command.trim() === 'claude -r') {
+    process.stdout.write('resume ok\\n');
+    process.exit(0);
+    return;
+  }
+  process.stdout.write(command + '\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'claude -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const turn1 = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'hello' })
+            });
+            expect(turn1.response.status).toBe(200);
+
+            const turn2 = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'who am i' })
+            });
+            expect(turn2.response.status).toBe(200);
+            expect(turn2.json).toEqual(expect.objectContaining({
+                contextMode: 'resume',
+                resumeAttempted: true,
+                resumeSucceeded: true
+            }));
+            expect(String(turn2.json.output || '')).toContain("claude -p 'who am i'");
+            expect(String(turn2.json.output || '')).not.toContain('以下是当前会话最近对话历史');
+
+            const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            expect(persisted).toEqual(expect.objectContaining({
+                agentProgram: 'claude',
+                resumeSupported: true,
+                lastResumeOk: true
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
 });

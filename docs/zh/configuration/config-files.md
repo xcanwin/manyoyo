@@ -291,6 +291,7 @@ MANYOYO 支持两种配置文件：
 - **说明**：`serve` 网页 `AGENT` 模式的提示词执行模板，必须包含 `{prompt}` 占位符
 - **优先级**：`createOptions.agentPromptCommand > runs.<name>.agentPromptCommand > 全局 agentPromptCommand > 空`
 - **自动推断**：当该值为空时，系统会基于 `shell/yolo` 合成后的完整命令主体自动识别常见 Agent（`claude/gemini/codex/opencode`）并填充默认模板
+- **连续上下文**：有历史时会优先尝试 Agent 恢复命令；恢复失败或不支持时自动注入最近历史窗口
 - **示例**：
 ```json5
 {
