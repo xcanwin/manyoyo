@@ -23,7 +23,16 @@ function getFreePort() {
 }
 
 async function request(url, options = {}) {
-    const response = await fetch(url, options);
+    const method = (options.method || 'GET').toUpperCase();
+    const mergedOptions = Object.assign({}, options);
+    // 非只读请求自动携带 X-Requested-With 头，与前端 api() 行为保持一致（CSRF 防护）
+    if (method !== 'GET' && method !== 'HEAD') {
+        mergedOptions.headers = Object.assign(
+            { 'X-Requested-With': 'XMLHttpRequest' },
+            options.headers || {}
+        );
+    }
+    const response = await fetch(url, mergedOptions);
     const text = await response.text();
     let json = null;
     try {
