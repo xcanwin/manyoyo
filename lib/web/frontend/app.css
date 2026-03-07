@@ -104,17 +104,16 @@ body::after {
     z-index: 1;
     height: 100vh;
     height: 100dvh;
-    padding: 18px;
+    padding: 0;
     display: grid;
     grid-template-columns: minmax(282px, 334px) minmax(0, 1fr);
-    gap: 16px;
+    gap: 0;
 }
 
 .sidebar,
 .main {
-    border-radius: 18px;
-    border: 1px solid var(--line);
-    box-shadow: var(--shadow-soft);
+    border-radius: 0;
+    border: none;
 }
 
 .sidebar {
@@ -125,6 +124,7 @@ body::after {
     gap: 12px;
     background:
         linear-gradient(165deg, #fffefd 0%, #f8f1e7 100%);
+    border-right: 1px solid var(--line);
     animation: panelIn 320ms ease both;
 }
 
@@ -989,13 +989,14 @@ body.command-mode .msg.origin-agent .bubble {
 
     .sidebar {
         position: fixed;
-        left: max(10px, env(safe-area-inset-left));
-        top: max(10px, env(safe-area-inset-top));
-        bottom: max(10px, env(safe-area-inset-bottom));
+        left: env(safe-area-inset-left, 0px);
+        top: env(safe-area-inset-top, 0px);
+        bottom: env(safe-area-inset-bottom, 0px);
         width: min(86vw, 346px);
         max-width: 346px;
         max-height: none;
         background: rgba(255, 252, 246, 0.98);
+        border-radius: 0;
         z-index: 40;
         transform: translateX(calc(-100% - 16px));
         opacity: 0;
@@ -1012,10 +1013,10 @@ body.command-mode .msg.origin-agent .bubble {
 
     .main {
         position: fixed;
-        left: max(10px, env(safe-area-inset-left));
-        right: max(10px, env(safe-area-inset-right));
-        top: max(10px, env(safe-area-inset-top));
-        bottom: max(10px, env(safe-area-inset-bottom));
+        left: env(safe-area-inset-left, 0px);
+        right: env(safe-area-inset-right, 0px);
+        top: env(safe-area-inset-top, 0px);
+        bottom: env(safe-area-inset-bottom, 0px);
         height: auto;
         min-height: auto;
         overflow: hidden;
