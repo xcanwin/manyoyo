@@ -128,7 +128,7 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
-    test('should require auth for marked vendor asset and allow after login', async () => {
+    test('should require auth for markdown assets and allow after login', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-vendor-marked-'));
         const port = await getFreePort();
         let handle = null;
@@ -137,16 +137,34 @@ describe('Web Server Auth Gateway', () => {
             handle = await startWebServer(buildServerOptions(tempHost, port));
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
 
-            const unauth = await request(`${baseUrl}/app/vendor/marked.min.js`);
-            expect(unauth.response.status).toBe(401);
+            const unauthVendor = await request(`${baseUrl}/app/vendor/marked.min.js`);
+            expect(unauthVendor.response.status).toBe(401);
+            const unauthRenderer = await request(`${baseUrl}/app/frontend/markdown-renderer.js`);
+            expect(unauthRenderer.response.status).toBe(401);
+            const unauthStyle = await request(`${baseUrl}/app/frontend/markdown.css`);
+            expect(unauthStyle.response.status).toBe(401);
 
             const authCookie = await loginAndGetCookie(baseUrl);
-            const authed = await request(`${baseUrl}/app/vendor/marked.min.js`, {
+            const authedVendor = await request(`${baseUrl}/app/vendor/marked.min.js`, {
                 headers: { Cookie: authCookie }
             });
-            expect(authed.response.status).toBe(200);
-            expect(authed.response.headers.get('content-type')).toContain('application/javascript');
-            expect(authed.text).toContain('marked');
+            expect(authedVendor.response.status).toBe(200);
+            expect(authedVendor.response.headers.get('content-type')).toContain('application/javascript');
+            expect(authedVendor.text).toContain('marked');
+
+            const authedRenderer = await request(`${baseUrl}/app/frontend/markdown-renderer.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(authedRenderer.response.status).toBe(200);
+            expect(authedRenderer.response.headers.get('content-type')).toContain('application/javascript');
+            expect(authedRenderer.text).toContain('window.ManyoyoMarkdown');
+
+            const authedStyle = await request(`${baseUrl}/app/frontend/markdown.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(authedStyle.response.status).toBe(200);
+            expect(authedStyle.response.headers.get('content-type')).toContain('text/css');
+            expect(authedStyle.text).toContain('.md-content');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
