@@ -225,7 +225,7 @@ describe('Web Server Auth Gateway', () => {
                         containerPath: '/workspace/custom',
                         imageName: 'localhost/xcanwin/manyoyo',
                         imageVersion: '1.7.4-common',
-                        shell: 'claude',
+                        shell: 'codex --dangerously-bypass-approvals-and-sandbox',
                         env: { A: '1' },
                         volumes: [`${tempHost}:/workspace/custom`],
                         ports: ['8080:80', '53:53/udp']
@@ -236,7 +236,7 @@ describe('Web Server Auth Gateway', () => {
             expect(created.response.status).toBe(200);
             expect(created.json).toEqual(expect.objectContaining({
                 name: 'my-web-create',
-                applied: expect.objectContaining({ portCount: 2 })
+                applied: expect.objectContaining({ portCount: 2, agentEnabled: true })
             }));
             expect(waitForContainerReady).toHaveBeenCalledWith('my-web-create');
             expect(dockerExecArgs).toHaveBeenCalled();
@@ -255,6 +255,11 @@ describe('Web Server Auth Gateway', () => {
                 '--publish',
                 '53:53/udp'
             ]));
+            const historyPath = path.join(tempHost, 'web-history', 'my-web-create.json');
+            const historyJson = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+            expect(historyJson).toEqual(expect.objectContaining({
+                agentPromptCommand: 'codex exec {prompt}'
+            }));
 
             const legacy = await request(`${baseUrl}/api/sessions`, {
                 method: 'POST',
@@ -266,6 +271,32 @@ describe('Web Server Auth Gateway', () => {
             });
             expect(legacy.response.status).toBe(200);
             expect(legacy.json).toEqual(expect.objectContaining({ name: 'my-legacy-name' }));
+
+            const yoloCreated = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    createOptions: {
+                        containerName: 'my-web-create-yolo',
+                        hostPath: tempHost,
+                        imageName: 'localhost/xcanwin/manyoyo',
+                        imageVersion: '1.7.4-common',
+                        yolo: 'c'
+                    }
+                })
+            });
+            expect(yoloCreated.response.status).toBe(200);
+            expect(yoloCreated.json).toEqual(expect.objectContaining({
+                applied: expect.objectContaining({ agentEnabled: true })
+            }));
+            const yoloHistoryPath = path.join(tempHost, 'web-history', 'my-web-create-yolo.json');
+            const yoloHistory = JSON.parse(fs.readFileSync(yoloHistoryPath, 'utf-8'));
+            expect(yoloHistory).toEqual(expect.objectContaining({
+                agentPromptCommand: 'claude -p {prompt}'
+            }));
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -333,6 +364,142 @@ process.exit(0);
             expect(runRes.response.status).toBe(200);
             expect(runRes.json).toEqual(expect.objectContaining({ exitCode: 0 }));
             expect(String(runRes.json.output || '')).toContain('uid=0(root)');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should expose agentEnabled and execute prompt with escaped template in agent api', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-run-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  process.stdout.write(command + '\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: '2025-01-01T00:00:00.000Z',
+                messages: [],
+                agentPromptCommand: 'echo AGENT:{prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const sessionsRes = await request(`${baseUrl}/api/sessions`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(sessionsRes.response.status).toBe(200);
+            const target = (sessionsRes.json.sessions || []).find(item => item.name === 'demo');
+            expect(target).toEqual(expect.objectContaining({ agentEnabled: true }));
+
+            const runRes = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: `hello 'world'` })
+            });
+            expect(runRes.response.status).toBe(200);
+            expect(String(runRes.json.output || '')).toContain("echo AGENT:'hello ");
+            expect(String(runRes.json.output || '')).toContain("'\"'\"'world'\"'\"''");
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should reject agent api when template missing or prompt empty', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-invalid-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: []
+            }, null, 4),
+            'utf-8'
+        );
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo2.json'),
+            JSON.stringify({
+                containerName: 'demo2',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'echo {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const noTemplateRes = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'hello' })
+            });
+            expect(noTemplateRes.response.status).toBe(400);
+            expect(noTemplateRes.json).toEqual(expect.objectContaining({
+                error: '当前会话未配置 agentPromptCommand'
+            }));
+
+            const emptyPromptRes = await request(`${baseUrl}/api/sessions/demo2/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: '' })
+            });
+            expect(emptyPromptRes.response.status).toBe(400);
+            expect(emptyPromptRes.json).toEqual(expect.objectContaining({ error: 'prompt 不能为空' }));
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();

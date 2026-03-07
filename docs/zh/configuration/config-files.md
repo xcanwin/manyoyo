@@ -286,6 +286,18 @@ MANYOYO 支持两种配置文件：
 }
 ```
 
+#### agentPromptCommand
+- **类型**：字符串
+- **说明**：`serve` 网页 `AGENT` 模式的提示词执行模板，必须包含 `{prompt}` 占位符
+- **优先级**：`createOptions.agentPromptCommand > runs.<name>.agentPromptCommand > 全局 agentPromptCommand > 空`
+- **自动推断**：当该值为空时，系统会基于 `shell/yolo` 合成后的完整命令主体自动识别常见 Agent（`claude/gemini/codex/opencode`）并填充默认模板
+- **示例**：
+```json5
+{
+    "agentPromptCommand": "codex exec --plain-text {prompt}"
+}
+```
+
 #### first
 - **类型**：对象（map）
 - **说明**：仅在新建容器后、常规命令前执行一次；复用已有容器时不执行

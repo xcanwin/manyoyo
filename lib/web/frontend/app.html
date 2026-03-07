@@ -66,6 +66,7 @@
             <section class="mode-switch" id="modeSwitch">
                 <div class="mode-switch-left">
                     <button type="button" id="modeCommandBtn" class="secondary is-active">命令模式</button>
+                    <button type="button" id="modeAgentBtn" class="secondary">AGENT 模式</button>
                     <button type="button" id="modeTerminalBtn" class="secondary">交互终端</button>
                 </div>
                 <div class="mode-terminal-controls">
@@ -85,7 +86,7 @@
                     <button type="submit" id="sendBtn">发送</button>
                 </div>
                 <div class="composer-foot">
-                    <span>Enter 发送 · Shift/Alt + Enter 换行</span>
+                    <span id="composerHint">Enter 发送 · Shift/Alt + Enter 换行</span>
                     <span id="sendState" class="send-state">未选择会话</span>
                 </div>
             </form>
@@ -140,6 +141,7 @@
                         <label>shell<input id="createShell" placeholder="例如 claude / codex" /></label>
                         <label>shellSuffix<input id="createShellSuffix" placeholder="例如 --dangerously-skip-permissions" /></label>
                         <label>yolo<input id="createYolo" placeholder="例如 c / cx / gm / oc" /></label>
+                        <label>agentPromptCommand<input id="createAgentPromptCommand" placeholder="例如 codex exec --plain-text {prompt}" /></label>
                     </div>
                     <label class="text-block">env (KEY=VALUE，每行一项)
                         <textarea id="createEnv" placeholder="KEY=value"></textarea>

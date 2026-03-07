@@ -7,6 +7,8 @@ description: Covers auth gateway behavior, priority rules, login flow, and expos
 
 This page focuses on authentication behavior and minimum security baseline for `manyoyo serve`.
 
+The web UI provides three interaction modes: `Command`, `AGENT`, and `Interactive Terminal`. `AGENT` mode requires `agentPromptCommand` to be configured on the session (template must include `{prompt}`).
+
 ## Listen Address and Startup
 
 `serve` supports:

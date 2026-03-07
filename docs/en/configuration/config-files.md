@@ -286,6 +286,18 @@ Mode descriptions:
 }
 ```
 
+#### agentPromptCommand
+- **Type**: String
+- **Description**: Prompt execution template for `AGENT` mode in `serve` web UI; must contain `{prompt}` placeholder
+- **Priority**: `createOptions.agentPromptCommand > runs.<name>.agentPromptCommand > global agentPromptCommand > empty`
+- **Auto infer**: when empty, the system infers a default template from the command program in the merged `shell/yolo` command for common agents (`claude/gemini/codex/opencode`)
+- **Example**:
+```json5
+{
+    "agentPromptCommand": "codex exec --plain-text {prompt}"
+}
+```
+
 #### first
 - **Type**: Object (map)
 - **Description**: Runs once only after new container creation and before regular command execution; skipped when reusing existing containers

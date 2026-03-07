@@ -11,6 +11,7 @@
     "shellPrefix": "",
     "shell": "",
     "shellSuffix": "",
+    "agentPromptCommand": "",
     // 仅首次创建容器时执行一次（创建后、常规 shell 前）
     "first": {
         "shellPrefix": "",
@@ -66,6 +67,7 @@
             "containerName": "my-claude-{now}",
             "yolo": "c",
             "shell": "claude",
+            "agentPromptCommand": "claude -p {prompt}",
             "first": {
                 "shell": "echo first-init"
             },

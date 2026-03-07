@@ -641,6 +641,7 @@ textarea:focus-visible {
 }
 
 body.command-mode #modeCommandBtn,
+body.agent-mode #modeAgentBtn,
 body.terminal-mode #modeTerminalBtn {
     color: #ffffff;
     background: var(--accent);
@@ -722,11 +723,23 @@ body.command-mode #messages {
     display: flex;
 }
 
+body.agent-mode #messages {
+    display: flex;
+}
+
 body.command-mode #terminalPanel {
     display: none;
 }
 
+body.agent-mode #terminalPanel {
+    display: none;
+}
+
 body.command-mode .composer {
+    display: block;
+}
+
+body.agent-mode .composer {
     display: block;
 }
 
