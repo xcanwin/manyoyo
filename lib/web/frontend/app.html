@@ -50,6 +50,13 @@
                         <h1 id="activeTitle">未选择会话</h1>
                         <button
                             type="button"
+                            id="modeToggle"
+                            class="secondary"
+                            aria-expanded="false"
+                            aria-controls="modeMenu"
+                        >AGENT 模式</button>
+                        <button
+                            type="button"
                             id="mobileActionsToggle"
                             class="secondary mobile-actions-toggle"
                             aria-expanded="false"
@@ -58,20 +65,17 @@
                     </div>
                     <div id="activeMeta">请选择左侧会话</div>
                 </div>
+                <div class="mode-menu" id="modeMenu">
+                    <button type="button" id="modeAgentBtn" class="secondary is-active" aria-pressed="true">AGENT 模式</button>
+                    <button type="button" id="modeCommandBtn" class="secondary" aria-pressed="false">命令模式</button>
+                    <button type="button" id="modeTerminalBtn" class="secondary" aria-pressed="false">终端模式</button>
+                </div>
                 <div class="header-actions" id="headerActions">
                     <button type="button" id="refreshBtn" class="secondary">刷新</button>
                     <button type="button" id="removeBtn" class="danger-outline">删除容器</button>
                     <button type="button" id="removeAllBtn" class="danger">删除对话</button>
                 </div>
             </header>
-            <section class="mode-switch" id="modeSwitch">
-                <div class="mode-switch-left">
-                    <button type="button" id="modeAgentBtn" class="secondary is-active">AGENT 模式</button>
-                    <button type="button" id="modeCommandBtn" class="secondary">命令模式</button>
-                    <button type="button" id="modeTerminalBtn" class="secondary">终端模式</button>
-                </div>
-
-            </section>
             <section id="messages"></section>
             <section id="terminalPanel" hidden>
                 <div id="terminalKeybar" class="term-keybar" aria-label="终端快捷键">

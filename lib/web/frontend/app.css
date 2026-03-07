@@ -558,7 +558,7 @@ textarea:focus-visible {
     min-height: 0;
     padding: 14px;
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 0;
     background:
         linear-gradient(165deg, rgba(255, 251, 243, 0.95) 0%, rgba(247, 237, 223, 0.95) 100%);
@@ -631,39 +631,31 @@ body.mobile-actions-open .header-actions {
     display: grid;
 }
 
-.mode-switch {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    margin: 10px 8px 4px;
-    min-height: 36px;
-    padding: 4px 8px;
+#modeToggle {
+    position: relative;
 }
 
-.mode-switch-left {
-    display: inline-flex;
-    align-items: center;
+.mode-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 8px;
+    z-index: 8;
+    width: min(200px, calc(100vw - 36px));
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fffaf2;
+    box-shadow: var(--shadow-strong);
+    grid-template-columns: 1fr;
     gap: 8px;
-    min-width: 0;
 }
 
-.mode-switch button {
-    min-width: 102px;
-    color: var(--text);
-    background: #f7eee1;
-    border-color: #e0c6a5;
+body.mode-menu-open .mode-menu {
+    display: grid;
 }
 
-.mode-switch button.is-active {
-    color: #ffffff;
-    background: var(--accent);
-    border-color: var(--accent-strong);
-}
-
-body.command-mode #modeCommandBtn,
-body.agent-mode #modeAgentBtn,
-body.terminal-mode #modeTerminalBtn {
+.mode-menu button.is-active {
     color: #ffffff;
     background: var(--accent);
     border-color: var(--accent-strong);
@@ -1094,23 +1086,6 @@ body.command-mode .msg.origin-agent .bubble {
 
     #activeMeta {
         display: none;
-    }
-
-    .mode-switch {
-        margin: 8px 8px 2px;
-        flex-wrap: wrap;
-        padding: 8px;
-        gap: 8px;
-    }
-
-    .mode-switch-left {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-
-    .mode-switch button {
-        flex: 0 0 auto;
-        min-width: 84px;
     }
 
     #commandInput {
