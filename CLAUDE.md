@@ -7,17 +7,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 AI 编程助手（Claude Code、Gemini、Codex、OpenCode）的 YOLO/SOLO 模式提供隔离的 Docker/Podman 容器环境。项目主要使用中文文档，附带英文翻译。
 
 **核心特性：**
-- 单文件 Node.js CLI 工具（`bin/manyoyo.js`），依赖极少
+- Node.js CLI 工具（入口 `bin/manyoyo.js`，核心逻辑拆分至 `lib/` 各模块）
 - 多阶段 Docker 构建，智能缓存 Node.js、JDT LSP 和 gopls
-- 配置级联：命令行参数 > 运行配置 > 全局配置 > 默认值
+- 配置级联：命令行参数 > `runs.<name>` > 全局配置 > 默认值
 - 安全优先设计：路径验证、敏感数据脱敏、容器隔离模式
+- Web 服务器模式（xterm.js 终端 + WebSocket + 登录鉴权）
+- 插件系统（Playwright MCP 浏览器自动化，含容器/宿主机多场景）
+- Agent 会话恢复（Claude、Gemini、Codex、OpenCode）
 
 ## 项目结构
 
 ```
 manyoyo/
 ├── bin/
-│   └── manyoyo.js           # 单文件 CLI 入口与核心逻辑（CommonJS）
+│   └── manyoyo.js           # CLI 入口：配置加载、容器生命周期、Commander.js 路由
+├── lib/
+│   ├── container-run.js     # buildContainerRunArgs / buildContainerRunCommand
+│   ├── image-build.js       # prepareBuildCache / buildImage（含缓存管理）
+│   ├── agent-resume.js      # 各 agent 会话恢复参数与 prompt 命令模板
+│   ├── init-config.js       # AI agent 初始化配置（读取 claude/codex 等配置文件）
+│   ├── plugin/
+│   │   ├── index.js         # 插件路由（当前支持 playwright）
+│   │   ├── playwright.js    # Playwright 插件：场景管理、MCP 集成、扩展下载
+│   │   └── playwright-assets/  # Docker Compose 及 Dockerfile 场景模板
+│   └── web/
+│       ├── server.js        # HTTP + WebSocket 服务器（xterm.js 终端、agent 对话、登录鉴权）
+│       └── frontend/        # 前端静态文件（app.html/js/css、login、markdown 渲染）
 ├── docker/
 │   ├── manyoyo.Dockerfile   # 镜像构建文件
 │   └── cache/               # 构建缓存目录（Node.js、JDT LSP、gopls）
@@ -31,7 +46,9 @@ manyoyo/
 │   │   └── troubleshooting/ # 构建错误、运行时错误
 │   └── en/                  # 英文文档（翻译）
 ├── test/
-│   └── manyoyo.test.js      # Jest 测试文件
+│   ├── manyoyo.test.js           # CLI 主流程测试
+│   ├── web-server-auth.test.js   # Web 鉴权测试
+│   └── plugin-command.test.js    # 插件命令测试
 ├── assets/                  # 资源文件（Logo、截图等）
 ├── coverage/                # 测试覆盖率报告（git ignored）
 ├── config.example.json      # 配置文件模板
@@ -42,7 +59,8 @@ manyoyo/
 ```
 
 **关键目录说明：**
-- `bin/manyoyo.js`：改动尽量就近、可读，避免跨区重排
+- `bin/manyoyo.js`：仅保留入口逻辑，核心功能提取到 `lib/` 对应模块；改动就近、可读
+- `lib/`：按功能拆分的模块，各文件顶部使用 `'use strict'`
 - `docker/cache/`：首次构建时自动下载依赖，缓存有效期 2 天
 - `docs/zh/` 与 `docs/en/`：结构需保持一致，同步更新
 - `test/`：所有测试文件使用 `*.test.js` 命名
@@ -52,19 +70,23 @@ manyoyo/
 ### 测试
 ```bash
 npm test              # 运行所有测试（含覆盖率）
-npm run test:unit     # 仅运行单元测试
+npm run test:unit     # 仅运行单元测试（开发阶段优先用此命令）
 npm run lint          # 代码检查（当前为空实现）
 ```
 
 ### 文档
 ```bash
+# 提交前或校验文档时，先用 ci 安装再构建（顺序执行，勿并行）
+npm ci --include=optional
+npm run docs:build    # 构建文档站点，检查 dead links
 npm run docs:dev      # 启动 VitePress 开发服务器（localhost:5173）
-npm run docs:build    # 构建文档站点
 npm run docs:preview  # 预览构建后的文档（localhost:4173）
 ```
 
 ### 安装
 ```bash
+npm install           # 开发阶段安装/更新依赖（会更新 package-lock.json）
+npm ci --include=optional  # 提交前/CI 用，可复现安装
 npm install -g .      # 全局安装（开发用）
 npm link              # 或创建符号链接
 npm run install-link  # 或使用快捷脚本
@@ -109,9 +131,9 @@ module.exports = { validateName };
 
 ## 核心架构
 
-### 单文件 CLI 设计
+### CLI 架构概览
 
-整个 CLI 逻辑位于 `bin/manyoyo.js`（约 1300 行），按功能分区：
+CLI 入口为 `bin/manyoyo.js`，核心功能按模块拆分到 `lib/`。`bin/manyoyo.js` 中按功能分区：
 
 #### 1. **配置管理区域**（SECTION: Configuration Management）
    - **三层配置系统：**
@@ -119,8 +141,10 @@ module.exports = { validateName };
      - 运行配置：`~/.manyoyo/run/<name>.json`
      - 命令行参数（最高优先级）
    - **配置合并策略：**
-     - 覆盖模式（标量值）：`containerName`、`imageName`、`yolo`、`containerMode`
-     - 合并模式（数组）：`env`、`envFile`、`volumes`、`imageBuildArgs`
+     - 覆盖模式（标量值）：`containerName`、`imageName`、`yolo`、`containerMode`、`shell`、`agentPromptCommand` 等
+     - 合并模式（Object）：`env`（按 key 覆盖合并）
+     - 合并模式（数组）：`envFile`、`volumes`、`ports`、`imageBuildArgs`
+   - **新增配置字段：** `serverUser`/`serverPass`（Web 鉴权）、`agentPromptCommand`（Agent 提示命令模板）、`first`（首次建容器执行的一次性命令）、`quiet`（静默项数组）、`plugins`（插件配置）、`runs`（运行配置集合）
    - **核心函数：**
      - `loadConfig()`：加载全局配置文件
      - `loadRunConfig(name)`：加载运行配置文件
@@ -179,14 +203,32 @@ module.exports = { validateName };
      - `addImageBuildArg()`：添加构建参数
      - `pruneDanglingImages()`：清理悬空镜像
 
+#### 6b. **lib/ 核心模块**
+
+以下功能已从 `bin/manyoyo.js` 提取至独立模块：
+
+- **`lib/container-run.js`**：`buildContainerRunArgs(options)`、`buildContainerRunCommand(dockerCmd, args)` — 构建 `docker run` 参数数组与命令字符串
+- **`lib/image-build.js`**：`prepareBuildCache(ctx)`（下载/校验 Node.js 等缓存）、`buildImage(ctx)`（执行多阶段构建）
+- **`lib/agent-resume.js`**：`resolveAgentResumeArg(command)`（获取各 agent 的会话恢复参数）、`buildAgentResumeCommand(agentProgram, resumeId)`、`resolveAgentPromptCommandTemplate(agentProgram)`
+  - 各 agent 恢复参数映射：Claude/Gemini → `-r`，Codex → `resume`，OpenCode → `-c`
+- **`lib/init-config.js`**：`initAgentConfigs(options)` — 读取 claude/codex 等 agent 的既有配置文件，生成初始化配置
+- **`lib/plugin/index.js`**：`runPluginCommand(request, options)` — 插件路由，当前仅支持 `playwright`
+- **`lib/plugin/playwright.js`**：PlaywrightPlugin 类，管理 4 种场景（`cont-headless`、`cont-headed`、`host-headless`、`host-headed`）；支持 MCP 集成（`mcp-add/rm`）、浏览器扩展下载（`ext-download`）
+- **`lib/web/server.js`**：`startWebServer(options)` — HTTP + WebSocket 服务器
+  - xterm.js 终端会话（最多 20 个）、Agent 对话（COMMAND/AGENT 两种模式）、会话历史持久化至 `~/.manyoyo/web-history/<containerName>.json`
+  - Cookie 鉴权（TTL 12 小时），密码可自动生成
+  - `YOLO_COMMAND_MAP` 与 `bin/manyoyo.js` 保持一致，修改时需同步两处
+
 #### 7. **命令行界面**（SECTION: Command Line Interface）
    - **CLI 解析**（`setupCommander()` 函数）：
      - 使用 Commander.js 解析命令行参数
      - 定义所有 CLI 选项和默认值
      - 合并全局配置、运行配置和命令行参数
+     - **CLI 仅支持子命令入口**，传入未定义参数会报 `unknown option`
+     - `--yes` 仅用于 `build` 与 `init` 子命令
    - **配置显示：**
-     - `--show-config`：显示最终配置（敏感数据已脱敏）
-     - `--show-command`：显示 Docker 命令但不执行
+     - `manyoyo config show`：显示最终配置（敏感数据已脱敏）
+     - `manyoyo config command -n test`：显示 Docker 命令但不执行
 
 #### 8. **容器生命周期管理**（SECTION: Container Lifecycle Management）
    - **容器创建**（`createNewContainer()` 函数）：
@@ -235,14 +277,19 @@ module.exports = { validateName };
 - 示例位于 `config.example.json`
 - 架构通过 `loadConfig()` 函数中的 JSDoc 定义
 
-**运行配置：** `~/.manyoyo/run/<name>.json`
-- 通过 `manyoyo -r <name>` 加载
-- 与全局配置相同的架构
-- 用于保存预设配置（如 `claude.json`、`gemini.json`）
+**运行配置：** 全局配置中的 `runs.<name>` 字段
+- 通过 `manyoyo -r <name>` 或 `manyoyo run -r <name>` 加载
+- 与全局配置相同的字段结构，支持覆盖和合并
+- 示例：`runs.claude`、`runs.gemini`（见 `config.example.json`）
 
-**环境文件：** `~/.manyoyo/env/<name>.env`
+**环境文件：** `--ef/--env-file` 及配置的 `envFile` 字段**仅支持绝对路径**（如 `/abs/path/name.env`）
 - Bash 风格导出语法：`export KEY="value"` 或 `KEY=value`
 - 安全过滤：阻止 shell 元字符、命令替换、控制字符
+
+**注意：**
+- `env` 字段为 **Object 对象**（`{"KEY": "value"}`），非数组；全局与 run 配置的 `env` 按 key 合并覆盖（命令行 > runs > 全局）
+- `envFile`、`volumes`、`ports`、`imageBuildArgs` 为数组，按全局 → runs → 命令行顺序**追加**合并
+- `containerName` 支持 `{now}` 模板（解析为 `MMDD-HHmm`），如 `"my-claude-{now}"`
 
 ### 安全措施
 
@@ -262,6 +309,12 @@ module.exports = { validateName };
 4. **命令执行：**
    - 使用 `spawnSync()` 配合参数数组（非 shell 字符串）防止注入
    - `buildDockerRunArgs()` 返回字符串数组以安全执行
+
+5. **Web 鉴权安全规则：**
+   - 所有页面与接口默认要求认证，匿名放行仅限 allowlist（当前：`/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`）
+   - 新增 Web 接口/页面时，必须走全局认证网关，禁止在业务路由里零散补鉴权
+   - `serverUser`/`serverPass` 支持环境变量 `MANYOYO_SERVER_USER`/`MANYOYO_SERVER_PASS`；未设置密码时系统自动生成并打印到终端
+   - 对外监听（`0.0.0.0`）时必须设置强密码并配合防火墙限制来源
 
 ## 常见开发任务
 
@@ -312,27 +365,20 @@ manyoyo --ef anthropic --show-config
 - 配置验证
 - 命令解析
 
-**测试规范：**
-1. **新增功能测试：**
-   - 在 `test/manyoyo.test.js` 中按现有模式添加测试用例
-   - 优先测试关键分支与异常路径
-   - 覆盖边界条件和错误处理
+**测试文件路由：**
+- CLI 改动 → `test/manyoyo.test.js`
+- Web 服务/鉴权改动 → `test/web-server-auth.test.js`（至少验证未登录 401、登录成功可访问、登出后失效）
+- 插件改动 → `test/plugin-command.test.js`（至少覆盖 host/container 两类场景的关键分支）
 
-2. **Bug 修复测试：**
-   - 修复 bug 时建议加入回归测试
-   - 测试用例注释中注明相关 issue 或 bug 描述
-   - 确保修复后的代码不会再次出现相同问题
+**TDD 工作流（默认适用于新功能、行为变更、bug 修复；纯文档改动可例外）：**
+1. **Red**：先写失败测试，按变更领域选对应文件，最小 case
+2. **Green**：只做最小代码改动让测试通过，避免顺手重构
+3. **Refactor**：在测试持续通过前提下整理命名或重复逻辑
+4. 开发中优先跑 `npm run test:unit`；提交前跑 `npm test`
+5. 每个 bug fix 至少补一个回归用例（先失败后通过）
 
-3. **测试执行：**
-   ```bash
-   npm test              # 运行全部测试并生成覆盖率
-   npm run test:unit     # 仅运行单元测试
-   ```
-
-4. **覆盖率：**
-   - 测试覆盖率报告输出到 `coverage/` 目录
-   - 重点关注新增代码的测试覆盖率
-   - 不强制要求 100% 覆盖率，但关键路径必须覆盖
+**覆盖率：**
+- 报告输出到 `coverage/`，不强制 100%，但关键路径必须覆盖
 
 ## 文档系统
 
@@ -448,9 +494,8 @@ npm test 输出结果...
 
 **发布前检查清单：**
 1. **版本号一致性：**
-   - `package.json` 的 `version` 字段
-   - `bin/manyoyo.js` 中的 `IMAGE_VERSION` 常量
-   - `bin/manyoyo.js` 中的 `IMAGE_VERSION_BASE` 常量
+   - `package.json` 的 `version` 字段（CLI 版本）
+   - `package.json` 的 `imageVersion` 字段（镜像版本，格式 `x.y.z-variant`，`bin/manyoyo.js` 从此字段读取）
    - 文档中的示例版本号（`docs/zh/` 和 `docs/en/`）
    - `README.md` 中的示例版本号
 
@@ -479,18 +524,19 @@ npm test 输出结果...
 ### 配置文件路径
 
 配置文件的详细说明参见 [核心架构 - 配置文件](#配置文件) 部分。快速参考：
-- 全局配置：`~/.manyoyo/manyoyo.json`
-- 运行配置：`~/.manyoyo/run/<name>.json`
+- 全局配置：`~/.manyoyo/manyoyo.json`（含 `runs.<name>` 运行配置）
 - 环境文件：`~/.manyoyo/env/<name>.env`
+- Web 历史：`~/.manyoyo/web-history/<containerName>.json`
 
 ## 常用模式
 
 ### 添加新的 YOLO 智能体
 
 1. 更新 `bin/manyoyo.js` 中的 `setYolo()` 函数（位于 `SECTION: YOLO Mode and Container Mode Configuration`）
-2. 为短别名添加 case
-3. 在 `docs/zh/reference/agents.md` 和 `docs/en/reference/agents.md` 中文档化
-4. 更新 README.md 示例
+2. 同步更新 `lib/web/server.js` 中的 `YOLO_COMMAND_MAP`（两处需保持一致）
+3. 为短别名添加 case
+4. 在 `docs/zh/reference/agents.md` 和 `docs/en/reference/agents.md` 中文档化
+5. 更新 README.md 示例
 
 ### 添加新的容器模式
 
@@ -501,12 +547,18 @@ npm test 输出结果...
 
 ### 添加新的配置选项
 
-1. 添加到配置架构 JSDoc 注释（位于 `SECTION: Configuration Management`）
+1. 添加到配置架构 JSDoc 注释（`@typedef Config`，位于 `SECTION: Configuration Management`）
 2. 如需要，更新 `loadConfig()` / `loadRunConfig()`
 3. 在 `setupCommander()` 中添加 CLI 选项（位于 `SECTION: Command Line Interface`）
-4. 在配置合并逻辑中处理
+4. 在配置合并逻辑中处理（注意区分覆盖模式和合并模式）
 5. 更新 `config.example.json`
 6. 在 `docs/configuration/` 目录中文档化
+
+### 新增/修改 lib/ 模块
+
+- 保持 `'use strict';` 在文件顶部，使用 CommonJS `module.exports`
+- 模块只暴露纯函数或类，不依赖全局状态
+- `bin/manyoyo.js` 负责传入上下文（`ctx` 对象），模块不直接读取全局变量
 
 ## 代码定位快速参考
 
