@@ -177,6 +177,9 @@ check_for_update_on_startup = false
 
 [analytics]
 enabled = false
+
+[tui]
+status_line = ["used-tokens", "context-used", "model-with-reasoning", "current-dir", "five-hour-limit", "weekly-limit"]
 EOF
     mkdir -p "$HOME/.codex/skills"
     git clone --depth 1 https://github.com/openai/skills.git /tmp/openai-skills
