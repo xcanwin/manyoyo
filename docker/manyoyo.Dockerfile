@@ -131,9 +131,9 @@ EOX
 
 # 从 cache-stage 复制 Node.js（缓存或下载）
 COPY --from=cache-stage /opt/node /usr/local
+COPY ./docker/res/ /tmp/docker-res/
 ARG GIT_SSL_NO_VERIFY=false
 
-COPY ./docker/res/claude/statusline.sh /root/.claude/statusline.sh
 RUN <<EOX
     # 配置 node.js
     npm config set registry=${NPM_REGISTRY}
@@ -146,24 +146,10 @@ RUN <<EOX
     # 安装 Claude CLI
     npm install -g @anthropic-ai/claude-code
     mkdir -p ~/.claude/plugins/marketplaces/
-    cat > ~/.claude.json <<EOF
-{
-    "bypassPermissionsModeAccepted": true,
-    "hasCompletedOnboarding": true,
-    "env": {
-        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-        "CLAUDE_CODE_HIDE_ACCOUNT_INFO": "1",
-        "DISABLE_AUTOUPDATER": "1"
-    }
-}
-    cat > ~/.claude/settings.json <<EOF
-{
-    "statusLine": {
-        "type": "command",
-        "command": "bash /root/.claude/statusline.sh"
-    }
-}
-EOF
+    cp /tmp/docker-res/claude/claude.json ~/.claude.json
+    cp /tmp/docker-res/claude/settings.json ~/.claude/settings.json
+    cp /tmp/docker-res/claude/statusline.sh ~/.claude/statusline.sh
+    chmod +x ~/.claude/statusline.sh
     claude plugin marketplace add https://github.com/anthropics/claude-plugins-official
     claude plugin install ralph-loop@claude-plugins-official
     claude plugin install typescript-lsp@claude-plugins-official
@@ -180,15 +166,7 @@ EOF
     # 安装 Codex CLI
     npm install -g @openai/codex
     mkdir -p ~/.codex
-    cat > ~/.codex/config.toml <<EOF
-check_for_update_on_startup = false
-
-[analytics]
-enabled = false
-
-[tui]
-status_line = ["used-tokens", "context-used", "model-with-reasoning", "current-dir", "five-hour-limit", "weekly-limit"]
-EOF
+    cp /tmp/docker-res/codex/config.toml ~/.codex/config.toml
     mkdir -p "$HOME/.codex/skills"
     git clone --depth 1 https://github.com/openai/skills.git /tmp/openai-skills
     cp -a /tmp/openai-skills/skills/.system "$HOME/.codex/skills/.system"
@@ -215,59 +193,14 @@ EOF
         npm install -g @google/gemini-cli
         mkdir -p ~/.gemini/ ~/.gemini/tmp/bin
         ln -s $(which rg) ~/.gemini/tmp/bin/rg
-        cat > ~/.gemini/settings.json <<EOF
-{
-    "privacy": {
-        "usageStatisticsEnabled": false
-    },
-    "general": {
-        "previewFeatures": true,
-        "enableAutoUpdate": false,
-        "enableAutoUpdateNotification": false
-    },
-    "ui": {
-        "showLineNumbers": false
-    },
-    "security": {
-        "auth": {
-            "selectedType": "oauth-personal"
-        }
-    },
-    "model": {
-        "name": "gemini-3-pro-preview"
-    }
-}
-EOF
+        cp /tmp/docker-res/gemini/settings.json ~/.gemini/settings.json
     ;; esac
 
     # 安装 OpenCode CLI
     case ",$TOOL," in *,full,*|*,opencode,*)
         npm install -g opencode-ai
         mkdir -p ~/.config/opencode/
-        cat > ~/.config/opencode/opencode.json <<EOF
-{
-    "\$schema": "https://opencode.ai/config.json",
-    "autoupdate": false,
-    "model": "Custom_Provider/{env:OPENAI_MODEL}",
-    "provider": {
-        "Custom_Provider": {
-            "npm": "@ai-sdk/openai-compatible",
-            "options": {
-                "baseURL": "{env:OPENAI_BASE_URL}",
-                "apiKey": "{env:OPENAI_API_KEY}",
-                "headers": {
-                   "User-Agent": "opencode"
-                }
-            },
-            "models": {
-                "{env:OPENAI_MODEL}": {},
-                "claude-sonnet-4-5-20250929": {},
-                "gpt-5.2": {}
-            }
-        }
-    }
-}
-EOF
+        cp /tmp/docker-res/opencode/opencode.json ~/.config/opencode/opencode.json
     ;; esac
 
     # 清理
@@ -324,13 +257,12 @@ RUN <<EOX
     rm -rf /tmp/gopls-cache
 EOX
 
+# 配置 supervisor
+COPY ./docker/res/common/supervisor/s.conf /etc/supervisor/conf.d/s.conf
+
 RUN <<EOX
-    # 配置 supervisor
-    cat > /etc/supervisor/conf.d/s.conf << EOF
-[supervisord]
-user=root
-nodaemon=true
-EOF
+    # 清理
+    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
 EOX
 
 WORKDIR /tmp

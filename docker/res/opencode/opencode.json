@@ -1,0 +1,22 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "autoupdate": false,
+    "model": "Custom_Provider/{env:OPENAI_MODEL}",
+    "provider": {
+        "Custom_Provider": {
+            "npm": "@ai-sdk/openai-compatible",
+            "options": {
+                "baseURL": "{env:OPENAI_BASE_URL}",
+                "apiKey": "{env:OPENAI_API_KEY}",
+                "headers": {
+                   "User-Agent": "opencode"
+                }
+            },
+            "models": {
+                "{env:OPENAI_MODEL}": {},
+                "claude-sonnet-4-5-20250929": {},
+                "gpt-5.2": {}
+            }
+        }
+    }
+}

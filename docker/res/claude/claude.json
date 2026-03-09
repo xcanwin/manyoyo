@@ -1,0 +1,9 @@
+{
+    "bypassPermissionsModeAccepted": true,
+    "hasCompletedOnboarding": true,
+    "env": {
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        "CLAUDE_CODE_HIDE_ACCOUNT_INFO": "1",
+        "DISABLE_AUTOUPDATER": "1"
+    }
+}

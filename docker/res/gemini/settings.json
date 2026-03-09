@@ -1,0 +1,21 @@
+{
+    "privacy": {
+        "usageStatisticsEnabled": false
+    },
+    "general": {
+        "previewFeatures": true,
+        "enableAutoUpdate": false,
+        "enableAutoUpdateNotification": false
+    },
+    "ui": {
+        "showLineNumbers": false
+    },
+    "security": {
+        "auth": {
+            "selectedType": "oauth-personal"
+        }
+    },
+    "model": {
+        "name": "gemini-3-pro-preview"
+    }
+}
