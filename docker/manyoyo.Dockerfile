@@ -133,6 +133,7 @@ EOX
 COPY --from=cache-stage /opt/node /usr/local
 ARG GIT_SSL_NO_VERIFY=false
 
+COPY ./docker/res/claude/statusline.sh /root/.claude/statusline.sh
 RUN <<EOX
     # 配置 node.js
     npm config set registry=${NPM_REGISTRY}
@@ -153,6 +154,13 @@ RUN <<EOX
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
         "CLAUDE_CODE_HIDE_ACCOUNT_INFO": "1",
         "DISABLE_AUTOUPDATER": "1"
+    }
+}
+    cat > ~/.claude/settings.json <<EOF
+{
+    "statusLine": {
+        "type": "command",
+        "command": "bash /root/.claude/statusline.sh"
     }
 }
 EOF
