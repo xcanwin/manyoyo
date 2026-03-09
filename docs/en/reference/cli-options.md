@@ -42,14 +42,14 @@ description: MANYOYO CLI option reference for container management, env injectio
 | `build --iba` | Pass image build arguments (e.g., `TOOL=common`) |
 | `update` | Update MANYOYO; skip when detected as local file install (`npm install -g .`/`npm link`), otherwise run `npm update -g @xcanwin/manyoyo` |
 | `init [agents]` | Initialize `~/.manyoyo` from local Agent configuration |
-| `serve [port]` | Start web interaction server (default `127.0.0.1:3000`, supports `<port>` or `<host:port>`) |
+| `serve [listen]` | Start web interaction server (default `127.0.0.1:3000`, only supports `<ip:port>`) |
 | `playwright ls` | List enabled Playwright plugin scenes |
 | `playwright up/down/status/health/logs [scene]` | Manage Playwright scenes (default scene is `host-headless`; `up` supports repeated `--ext-path <path>` and `--ext-name <name>`) |
 | `playwright ext-download [--prodversion]` | Download and extract built-in extensions to `~/.manyoyo/plugin/playwright/extensions/` (temp dir is auto-cleaned) |
 | `playwright mcp-add [--host]` | Print MCP add commands for Claude/Codex |
 | `plugin ls` | List current plugins with scene summary |
 | `plugin playwright ...` | Invoke Playwright through the plugin namespace |
-| `-u <username>` | Web login username |
+| `-U <username>` | Web login username |
 | `-P <password>` | Web login password (auto-generated random password if omitted) |
 | `-q` | Silent output (can be used multiple times) |
 
@@ -61,7 +61,7 @@ description: MANYOYO CLI option reference for container management, env injectio
 
 ## Web Authentication Notes
 
-- `serve` accepts both `3000` and `0.0.0.0:3000`
+- `serve` only accepts `<ip:port>`, for example `127.0.0.1:3000` or `0.0.0.0:3000`
 - Web auth priority: command-line arguments > `runs.<name>` > global configuration > environment variables > defaults
 - Environment variable keys: `MANYOYO_SERVER_USER`, `MANYOYO_SERVER_PASS`
 - See [Web Server Auth and Security](../advanced/web-server-auth.md) for login flow and security baseline

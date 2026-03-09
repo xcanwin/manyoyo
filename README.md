@@ -126,8 +126,8 @@ manyoyo ps
 manyoyo images
 manyoyo run -n my-dev -x /bin/bash
 manyoyo rm my-dev
-manyoyo serve 3000
-manyoyo serve 3000 -u admin -P 123456
+manyoyo serve 127.0.0.1:3000
+manyoyo serve 127.0.0.1:3000 -U admin -P 123456
 
 # 调试配置与命令拼装
 manyoyo config show

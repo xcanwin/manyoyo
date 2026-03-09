@@ -1302,12 +1302,21 @@ exit 0
 
         test('config show should include server mode and port', () => {
             const output = execSync(
-                `node ${BIN_PATH} config show --serve 39001`,
+                `node ${BIN_PATH} config show --serve 127.0.0.1:39001`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
             expect(config.server).toBe(true);
             expect(config.serverPort).toBe(39001);
+        });
+
+        test('config show should reject serve port-only format', () => {
+            expect(() => {
+                execSync(
+                    `node ${BIN_PATH} config show --serve 39001`,
+                    { encoding: 'utf-8', stdio: 'pipe' }
+                );
+            }).toThrow();
         });
 
         test('config show should parse server host and port', () => {
@@ -1339,13 +1348,22 @@ exit 0
 
         test('config show should include server auth config', () => {
             const output = execSync(
-                `node ${BIN_PATH} config show --serve -u webadmin -P topsecret`,
+                `node ${BIN_PATH} config show --serve -U webadmin -P topsecret`,
                 { encoding: 'utf-8' }
             );
             const config = JSON.parse(output);
             expect(config.serverUser).toBe('webadmin');
             expect(config.serverPass).toContain('****');
             expect(config.serverPass).not.toBe('topsecret');
+        });
+
+        test('config show should reject legacy short user option -u', () => {
+            expect(() => {
+                execSync(
+                    `node ${BIN_PATH} config show --serve -u webadmin -P topsecret`,
+                    { encoding: 'utf-8', stdio: 'pipe' }
+                );
+            }).toThrow();
         });
 
         test('quiet options should work', () => {

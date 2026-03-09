@@ -122,13 +122,12 @@ function mergeArrayConfig(globalValue, runValue, cliValue) {
 function validateServerHost(host, rawServer) {
     const value = String(host || '').trim();
     const isIp = net.isIP(value) !== 0;
-    const isHostName = /^[A-Za-z0-9.-]+$/.test(value);
 
-    if (isIp || isHostName) {
+    if (isIp) {
         return value;
     }
 
-    console.error(`${RED}⚠️  错误: serve 地址格式应为 端口 或 host:port (例如 3000 / 0.0.0.0:3000): ${rawServer}${NC}`);
+    console.error(`${RED}⚠️  错误: serve 地址格式必须为 <ip:port> (例如 127.0.0.1:3000 / 0.0.0.0:3000): ${rawServer}${NC}`);
     process.exit(1);
 }
 
@@ -142,8 +141,8 @@ function parseServerListen(rawServer) {
         return { host: '127.0.0.1', port: 3000 };
     }
 
-    let host = '127.0.0.1';
-    let portText = value;
+    let host = '';
+    let portText = '';
 
     const ipv6Match = value.match(/^\[([^\]]+)\]:(\d+)$/);
     if (ipv6Match) {
@@ -151,12 +150,14 @@ function parseServerListen(rawServer) {
         portText = ipv6Match[2].trim();
     } else {
         const lastColonIndex = value.lastIndexOf(':');
-        if (lastColonIndex > 0) {
-            const maybePort = value.slice(lastColonIndex + 1).trim();
-            if (/^\d+$/.test(maybePort)) {
-                host = value.slice(0, lastColonIndex).trim();
-                portText = maybePort;
-            }
+        if (lastColonIndex <= 0) {
+            console.error(`${RED}⚠️  错误: serve 地址格式必须为 <ip:port> (例如 127.0.0.1:3000 / 0.0.0.0:3000): ${rawServer}${NC}`);
+            process.exit(1);
+        }
+        const maybePort = value.slice(lastColonIndex + 1).trim();
+        if (/^\d+$/.test(maybePort)) {
+            host = value.slice(0, lastColonIndex).trim();
+            portText = maybePort;
         }
     }
 
@@ -229,6 +230,149 @@ function sanitizeSensitiveData(obj) {
         }
     }
     return result;
+}
+
+function stripAnsi(text) {
+    if (typeof text !== 'string') return '';
+    return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function sanitizeServeLogText(input) {
+    let text = stripAnsi(String(input || ''));
+    if (!text) return text;
+
+    text = text.replace(/(--pass|-P)\s+\S+/gi, '$1 ****');
+    text = text.replace(
+        /\b(MANYOYO_SERVER_PASS|OPENAI_API_KEY|ANTHROPIC_AUTH_TOKEN|GEMINI_API_KEY|GOOGLE_API_KEY|OPENCODE_API_KEY)\s*=\s*([^\s'"]+)/gi,
+        '$1=****'
+    );
+    text = text.replace(
+        /("?(?:password|pass|token|api[_-]?key|authorization|cookie)"?\s*[:=]\s*)("[^"]*"|'[^']*'|[^,\s]+)/gi,
+        '$1"****"'
+    );
+    return text;
+}
+
+function formatServeLogValue(value) {
+    if (value instanceof Error) {
+        return sanitizeServeLogText(value.stack || value.message || String(value));
+    }
+    if (typeof value === 'object' && value !== null) {
+        try {
+            return sanitizeServeLogText(JSON.stringify(sanitizeSensitiveData(value)));
+        } catch (e) {
+            return sanitizeServeLogText(String(value));
+        }
+    }
+    return sanitizeServeLogText(String(value));
+}
+
+function getServeProcessSnapshot() {
+    return {
+        pid: process.pid,
+        ppid: process.ppid,
+        cwd: process.cwd(),
+        argv: Array.isArray(process.argv) ? process.argv.slice() : []
+    };
+}
+
+function createServeLogger() {
+    function pad2(n) {
+        return String(n).padStart(2, '0');
+    }
+
+    function getLocalDateTag(date = new Date()) {
+        const y = date.getFullYear();
+        const m = pad2(date.getMonth() + 1);
+        const d = pad2(date.getDate());
+        return `${y}-${m}-${d}`;
+    }
+
+    function formatLocalTimestamp(date = new Date()) {
+        const y = date.getFullYear();
+        const m = pad2(date.getMonth() + 1);
+        const d = pad2(date.getDate());
+        const hh = pad2(date.getHours());
+        const mm = pad2(date.getMinutes());
+        const ss = pad2(date.getSeconds());
+        const ms = String(date.getMilliseconds()).padStart(3, '0');
+        const offsetMinutes = -date.getTimezoneOffset();
+        const sign = offsetMinutes >= 0 ? '+' : '-';
+        const abs = Math.abs(offsetMinutes);
+        const offH = pad2(Math.floor(abs / 60));
+        const offM = pad2(abs % 60);
+        return `${y}-${m}-${d}T${hh}:${mm}:${ss}.${ms}${sign}${offH}:${offM}`;
+    }
+
+    const logDir = path.join(os.homedir(), '.manyoyo', 'logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    const dateTag = getLocalDateTag();
+    const logPath = path.join(logDir, `serve-${dateTag}.log`);
+
+    function write(level, message, extra) {
+        const ts = formatLocalTimestamp();
+        const parts = [
+            `[${ts}]`,
+            `[pid:${process.pid}]`,
+            `[${String(level || 'INFO').toUpperCase()}]`,
+            formatServeLogValue(message)
+        ];
+        if (extra !== undefined) {
+            parts.push(formatServeLogValue(extra));
+        }
+        fs.appendFileSync(logPath, `${parts.join(' ')}\n`);
+    }
+
+    return {
+        path: logPath,
+        info: (message, extra) => write('INFO', message, extra),
+        warn: (message, extra) => write('WARN', message, extra),
+        error: (message, extra) => write('ERROR', message, extra)
+    };
+}
+
+function installServeProcessDiagnostics(logger) {
+    if (!logger || typeof logger.info !== 'function') return;
+    if (global.__manyoyoServeDiagInstalled) return;
+    global.__manyoyoServeDiagInstalled = true;
+
+    const signalExitCode = {
+        SIGINT: 130,
+        SIGTERM: 143,
+        SIGHUP: 129
+    };
+
+    process.on('uncaughtException', err => {
+        logger.error('uncaughtException', {
+            error: err,
+            process: getServeProcessSnapshot()
+        });
+        process.exit(1);
+    });
+
+    process.on('unhandledRejection', reason => {
+        logger.error('unhandledRejection', {
+            reason,
+            process: getServeProcessSnapshot()
+        });
+        process.exit(1);
+    });
+
+    ['SIGINT', 'SIGTERM', 'SIGHUP'].forEach(signal => {
+        process.on(signal, () => {
+            logger.warn(`received ${signal}, process will exit`, {
+                signal,
+                process: getServeProcessSnapshot()
+            });
+            process.exit(signalExitCode[signal] || 1);
+        });
+    });
+
+    process.on('exit', code => {
+        logger.info(`process exit with code=${code}`, {
+            process: getServeProcessSnapshot()
+        });
+    });
 }
 
 /**
@@ -865,14 +1009,14 @@ function applyRunStyleOptions(command, options = {}) {
 
     if (includeServePreview) {
         command
-            .option('--serve [listen]', '按 serve 模式解析配置 (支持 port 或 host:port)')
-            .option('-u, --user <username>', '网页服务登录用户名 (默认 admin)')
+            .option('--serve [listen]', '按 serve 模式解析配置 (仅支持 <ip:port>)')
+            .option('-U, --user <username>', '网页服务登录用户名 (默认 admin)')
             .option('-P, --pass <password>', '网页服务登录密码 (默认自动生成随机密码)');
     }
 
     if (includeWebAuthOptions) {
         command
-            .option('-u, --user <username>', '网页服务登录用户名 (默认 admin)')
+            .option('-U, --user <username>', '网页服务登录用户名 (默认 admin)')
             .option('-P, --pass <password>', '网页服务登录密码 (默认自动生成随机密码)');
     }
 
@@ -980,7 +1124,7 @@ async function setupCommander() {
   ${MANYOYO_NAME} run -n test --ef /abs/path/myenv.env -y c  使用绝对路径环境变量文件
   ${MANYOYO_NAME} run -n test -- -c                   恢复之前会话
   ${MANYOYO_NAME} run -x "echo 123"                   指定命令执行
-  ${MANYOYO_NAME} serve 3000 -u admin -P 123456       启动带登录认证的网页服务
+  ${MANYOYO_NAME} serve 127.0.0.1:3000 -U admin -P 123456  启动带登录认证的网页服务
   ${MANYOYO_NAME} serve 0.0.0.0:3000                  监听全部网卡，便于局域网访问
   ${MANYOYO_NAME} playwright up host-headless         启动 playwright 默认场景（推荐）
   ${MANYOYO_NAME} plugin playwright up host-headless  通过 plugin 命名空间启动
@@ -1378,7 +1522,8 @@ function createRuntimeContext(modeState = {}) {
         serverPort: SERVER_PORT,
         serverAuthUser: SERVER_AUTH_USER,
         serverAuthPass: SERVER_AUTH_PASS,
-        serverAuthPassAuto: SERVER_AUTH_PASS_AUTO
+        serverAuthPassAuto: SERVER_AUTH_PASS_AUTO,
+        logger: null
     };
 }
 
@@ -1716,7 +1861,8 @@ async function runWebServerMode(runtime) {
             BLUE,
             CYAN,
             NC
-        }
+        },
+        logger: runtime.logger
     });
 }
 
@@ -1740,6 +1886,16 @@ async function main() {
 
         // 2. Start web server mode
         if (runtime.serverMode) {
+            const serveLogger = createServeLogger();
+            runtime.logger = serveLogger;
+            installServeProcessDiagnostics(serveLogger);
+            serveLogger.info('serve startup requested', {
+                host: runtime.serverHost,
+                port: runtime.serverPort,
+                user: runtime.serverAuthUser || 'admin(auto/default)',
+                process: getServeProcessSnapshot()
+            });
+            console.log(`${CYAN}📝 serve 日志文件: ${YELLOW}${serveLogger.path}${NC}`);
             await runWebServerMode(runtime);
             return;
         }

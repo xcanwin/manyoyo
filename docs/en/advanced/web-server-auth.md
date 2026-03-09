@@ -11,10 +11,7 @@ The web UI provides three interaction modes: `Command`, `AGENT`, and `Interactiv
 
 ## Listen Address and Startup
 
-`serve` supports:
-
-- `<port>`, e.g. `3000`
-- `<host:port>`, e.g. `127.0.0.1:3000`, `0.0.0.0:3000`
+`serve` only supports `<ip:port>`, e.g. `127.0.0.1:3000`, `0.0.0.0:3000`.
 
 Default listen address is `127.0.0.1:3000`.
 
@@ -22,11 +19,11 @@ Default listen address is `127.0.0.1:3000`.
 # Local access only (default)
 manyoyo serve
 
-# Custom port
-manyoyo serve 3000
+# Custom listen address
+manyoyo serve 127.0.0.1:3000
 
 # LAN access (requires strong password + firewall)
-manyoyo serve 0.0.0.0:3000 -u admin -P 'StrongPassword'
+manyoyo serve 0.0.0.0:3000 -U admin -P 'StrongPassword'
 ```
 
 ## Auth Parameter Priority
