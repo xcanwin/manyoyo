@@ -982,27 +982,27 @@ function applyRunStyleOptions(command, options = {}) {
 
     command
         .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-        .option('--hp, --host-path <path>', '设置宿主机工作目录 (默认当前路径)')
+        .option('--hp, --host-path <path>', '设置宿主机工作目录 (默认: 当前路径)')
         .option('-n, --cont-name <name>', '设置容器名称')
         .option('--cp, --cont-path <path>', '设置容器工作目录')
-        .option('-m, --cont-mode <mode>', '设置容器嵌套容器模式 (common, dind, sock)')
+        .option('-m, --cont-mode <mode>', '设置容器嵌套模式 (common, dind, sock; 注意: sock 模式可访问宿主机 Docker socket，风险较高)')
         .option('--in, --image-name <name>', '指定镜像名称')
         .option('--iv, --image-ver <version>', '指定镜像版本 (格式: x.y.z-后缀，如 1.7.4-common)');
 
     appendArrayOption(command, '-e, --env <env>', '设置环境变量 XXX=YYY (可多次使用)');
-    appendArrayOption(command, '--ef, --env-file <file>', '设置环境变量通过文件 (仅支持绝对路径，如 /abs/path.env)');
+    appendArrayOption(command, '--ef, --env-file <file>', '从环境文件加载变量 (仅支持绝对路径，如 /abs/path.env; 相对路径会报错)');
     appendArrayOption(command, '-v, --volume <volume>', '绑定挂载卷 XXX:YYY (可多次使用)');
     appendArrayOption(command, '-p, --port <port>', '设置端口映射 XXX:YYY (可多次使用)');
 
     command
-        .option('--sp, --shell-prefix <command>', '临时环境变量 (作为-s前缀)')
-        .option('-s, --shell <command>', '指定命令执行')
-        .option('--ss, --shell-suffix <command>', '指定命令后缀 (追加到-s之后，等价于 -- <args>)')
-        .option('--first-shell-prefix <command>', '首次预执行命令前缀 (仅新建容器时生效)')
-        .option('--first-shell <command>', '首次预执行命令 (仅新建容器时生效)')
-        .option('--first-shell-suffix <command>', '首次预执行命令后缀 (仅新建容器时生效)')
-        .option('-x, --shell-full <command...>', '指定完整命令执行 (代替--sp和-s和--命令)')
-        .option('-y, --yolo <cli>', '使AGENT无需确认 (claude/c, gemini/gm, codex/cx, opencode/oc)');
+        .option('--sp, --shell-prefix <command>', '主命令前缀 (常用于临时环境变量)')
+        .option('-s, --shell <command>', '主命令')
+        .option('--ss, --shell-suffix <command>', '主命令后缀 (追加到 -s 之后，等价于 -- <args>)')
+        .option('--first-shell-prefix <command>', '首次预执行命令前缀 (仅新建容器生效; 容器已存在时忽略)')
+        .option('--first-shell <command>', '首次预执行命令 (仅新建容器生效; 容器已存在时忽略)')
+        .option('--first-shell-suffix <command>', '首次预执行命令后缀 (仅新建容器生效; 容器已存在时忽略)')
+        .option('-x, --shell-full <command...>', '完整命令 (与 --sp/-s/--ss/-- 互斥)')
+        .option('-y, --yolo <cli>', '使 AGENT 无需确认 (claude(c), gemini(gm), codex(cx), opencode(oc))');
     appendArrayOption(command, '--first-env <env>', '首次预执行环境变量 XXX=YYY (可多次使用)');
     appendArrayOption(command, '--first-env-file <file>', '首次预执行环境变量文件 (仅支持绝对路径，如 /abs/path.env)');
 
@@ -1010,7 +1010,7 @@ function applyRunStyleOptions(command, options = {}) {
         command.option('--rm-on-exit', '退出后自动删除容器 (一次性模式)');
     }
 
-    appendArrayOption(command, '-q, --quiet <item>', '静默显示 (可多次使用: cnew,crm,tip,cmd,full)');
+    appendArrayOption(command, '-q, --quiet <item>', '静默输出 (可多次使用: cnew, crm, tip, cmd, full)');
 
     if (includeServePreview) {
         command
@@ -1066,7 +1066,7 @@ async function setupCommander() {
         const actions = ['up', 'down', 'status', 'health', 'logs'];
         actions.forEach(action => {
             const sceneCommand = command.command(`${action} [scene]`)
-                .description(`${action} playwright 场景，scene 默认 host-headless`)
+                .description(`执行 playwright ${action} 场景（scene 默认 host-headless）`)
                 .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)');
 
             if (action === 'up') {
@@ -1128,7 +1128,7 @@ async function setupCommander() {
   ${MANYOYO_NAME} run -r codex --ss "resume --last"   使用命令后缀
   ${MANYOYO_NAME} run -n test --ef /path/ab.env -y c  使用绝对路径环境变量文件
   ${MANYOYO_NAME} run -n test -- -c                   恢复之前会话
-  ${MANYOYO_NAME} run -x "echo 123"                   指定命令执行
+  ${MANYOYO_NAME} run -x "echo 123"                   使用完整命令
   ${MANYOYO_NAME} serve 127.0.0.1:3000                启动本机网页服务
   ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P 123 &>/dev/null &  后台启动并监听全部网卡
   ${MANYOYO_NAME} playwright up host-headless         启动 playwright 默认场景（推荐）
@@ -1136,7 +1136,16 @@ async function setupCommander() {
   ${MANYOYO_NAME} run -n test -q tip -q cmd           多次使用静默选项
         `);
 
-    const runCommand = program.command('run').description('启动或连接容器并执行命令');
+    const runCommand = program.command('run').description('启动（容器不存在时）或连接（容器已存在时）容器并执行命令');
+    runCommand.addHelpText('after', `
+Examples:
+  ${MANYOYO_NAME} run -r codex
+  ${MANYOYO_NAME} run --rm-on-exit -x /bin/bash -lc "node -v"
+  ${MANYOYO_NAME} run -n demo --first-shell "npm ci" -s "npm test"
+
+Notes:
+  参数优先级与合并规则（标量覆盖、数组追加、env 按 key 合并）请用 ${MANYOYO_NAME} config show --help 或查看文档。
+`);
     applyRunStyleOptions(runCommand);
     runCommand.action(options => selectAction('run', options));
 
@@ -1218,7 +1227,7 @@ async function setupCommander() {
         .action(() => selectAction('update', { update: true }));
 
     program.command('install <name>')
-        .description(`安装${MANYOYO_NAME}命令 (docker-cli-plugin)`)
+        .description(`安装 ${MANYOYO_NAME} 命令 (docker-cli-plugin)`)
         .action(name => selectAction('install', { install: name }));
 
     program.command('prune')

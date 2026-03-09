@@ -48,7 +48,7 @@ MANYOYO supports two types of configuration files:
 
 ## Configuration Options Details
 
-Refer to `config.example.json` to view all configurable items. Below are detailed explanations:
+Refer to `manyoyo.example.json` to view all configurable items. Below are detailed explanations:
 
 ### Container Basic Configuration
 
@@ -600,7 +600,7 @@ manyoyo run -r claude -x env | grep ANTHROPIC
 ```bash
 # Commit to version control
 .manyoyo.json           # Project configuration
-config.example.json     # Configuration example
+manyoyo.example.json     # Configuration example
 
 # Exclude sensitive information
 .gitignore:

@@ -191,7 +191,7 @@ manyoyo run -r claude -e "LOG_LEVEL=debug"
 
 ## 团队模板示例
 
-**团队模板**（`config.example.json`）：
+**团队模板**（`manyoyo.example.json`）：
 ```json5
 {
     "imageName": "localhost/team/manyoyo",
@@ -213,7 +213,7 @@ manyoyo run -r claude -e "LOG_LEVEL=debug"
 
 使用：
 ```bash
-cp config.example.json ~/.manyoyo/manyoyo.json
+cp manyoyo.example.json ~/.manyoyo/manyoyo.json
 cp anthropic_team.example.env /abs/path/anthropic_team.env
 manyoyo run -r team
 ```

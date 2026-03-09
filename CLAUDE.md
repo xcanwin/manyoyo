@@ -37,7 +37,7 @@ docker/
   cache/                # 构建缓存（Node.js、JDT LSP、gopls），有效期 2 天
 docs/zh/                # 中文文档（主维护），docs/en/ 为翻译，结构需保持一致
 test/                   # *.test.js，Jest 框架
-config.example.json     # 配置文件模板
+manyoyo.example.json     # 配置文件模板
 ```
 
 ## 开发命令
@@ -140,7 +140,7 @@ npx jest --testNamePattern="关键词"
 2. 更新 `loadConfig()` / `loadRunConfig()`
 3. 在 `setupCommander()` 中添加 CLI 选项
 4. 处理配置合并（注意覆盖 vs 追加）
-5. 更新 `config.example.json` 和 `docs/configuration/`
+5. 更新 `manyoyo.example.json` 和 `docs/configuration/`
 
 ## 版本对齐
 
@@ -152,4 +152,4 @@ npx jest --testNamePattern="关键词"
 
 - 简短中文动词短语，文档用 `docs:` 前缀，不超过 50 字。
 - 未明确要求时不自动提交；需要时先给出 commit message 和命令让用户确认。
-- 提交前：`npm test` 通过；涉及文档：`npm ci --include=optional && npm run docs:build` 无错误；涉及新配置：更新 `config.example.json`；涉及文档结构调整：中英文同步更新。
+- 提交前：`npm test` 通过；涉及文档：`npm ci --include=optional && npm run docs:build` 无错误；涉及新配置：更新 `manyoyo.example.json`；涉及文档结构调整：中英文同步更新。

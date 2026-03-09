@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "5.3.3",
+    "version": "5.3.4",
     "imageVersion": "1.8.4-common",
     "description": "AI Agent CLI Security Sandbox for Docker and Podman",
     "keywords": [
@@ -50,7 +50,7 @@
         "README.md",
         "LICENSE",
         "docker/manyoyo.Dockerfile",
-        "config.example.json"
+        "manyoyo.example.json"
     ],
     "dependencies": {
         "@playwright/mcp": "0.0.68",

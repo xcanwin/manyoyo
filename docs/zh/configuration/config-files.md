@@ -48,7 +48,7 @@ MANYOYO 支持两种配置文件：
 
 ## 配置选项详解
 
-参考 `config.example.json` 查看所有可配置项。以下是详细说明：
+参考 `manyoyo.example.json` 查看所有可配置项。以下是详细说明：
 
 ### 容器基础配置
 
@@ -600,7 +600,7 @@ manyoyo run -r claude -x env | grep ANTHROPIC
 ```bash
 # 提交到版本控制
 .manyoyo.json           # 项目配置
-config.example.json     # 配置示例
+manyoyo.example.json     # 配置示例
 
 # 排除敏感信息
 .gitignore:

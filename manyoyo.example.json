@@ -1,38 +1,48 @@
 {
     // MANYOYO 全局配置文件，保存到 ~/.manyoyo/manyoyo.json
 
-    // 覆盖型参数（命令行 > runs.<name> > 全局配置）
+    // 容器基础参数（覆盖型：命令行 > runs.<name> > 全局配置 > 默认值）
     "containerName": "my-dev",
     "hostPath": "/path/to/your/project",
     "containerPath": "/path/to/your/project",
     "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.8.0-common",
+    "imageVersion": "1.8.4-common",
     "containerMode": "common",
+
+    // 容器启动环境（env 按 key 合并覆盖；其余数组参数会累加）
+    // 仅支持绝对路径，如 /abs/path.env
+    "envFile": [],
+    "env": {
+        "IS_SANDBOX": "1"
+    },
+    "volumes": [],
+    "ports": ["8888:8888"],
+
+    // 仅首次创建容器时执行一次（创建后、常规 shell 前）
+    "first": {
+        // 仅支持绝对路径，如 /abs/path.env
+        "envFile": [],
+        "env": {},
+        "shellPrefix": "",
+        "shell": "",
+        "shellSuffix": ""
+    },
+
+    // 常规命令参数（覆盖型：命令行 > runs.<name> > 全局配置 > 默认值）
     "shellPrefix": "",
     "shell": "",
     "shellSuffix": "",
     "agentPromptCommand": "",
-    // 仅首次创建容器时执行一次（创建后、常规 shell 前）
-    "first": {
-        "shellPrefix": "",
-        "shell": "",
-        "shellSuffix": "",
-        "env": {},
-        "envFile": []
-    },
     "yolo": "",
+    "quiet": ["tip", "cmd"],
+
+    // 构建参数（数组累加）
+    "imageBuildArgs": [],
+
+    // 网页认证参数（覆盖型；支持环境变量兜底）
+    // 优先级：命令行 > runs.<name> > 全局配置 > 环境变量 > 默认值
     "serverUser": "admin",
     "serverPass": "change-this-password",
-
-    // 合并型参数（env 按 key 合并覆盖；其余数组参数会累加）
-    "env": {
-        "IS_SANDBOX": "1"
-    },
-    "envFile": [],
-    "volumes": [],
-    "ports": ["8888:8888"],
-    "imageBuildArgs": [],
-    "quiet": ["tip", "cmd"],
 
     // 可选插件（manyoyo playwright / manyoyo plugin playwright）
     "plugins": {
@@ -65,15 +75,15 @@
     "runs": {
         "claude": {
             "containerName": "my-claude-{now}",
-            "yolo": "c",
-            "shell": "claude",
-            "agentPromptCommand": "claude -p {prompt}",
-            "first": {
-                "shell": "echo first-init"
-            },
             "env": {
                 "ANTHROPIC_MODEL": "claude-sonnet-4-5"
             },
+            "first": {
+                "shell": "echo first-init"
+            },
+            "shell": "claude",
+            "agentPromptCommand": "claude -p {prompt}",
+            "yolo": "c",
             "plugins": {
                 "playwright": {
                     "runtime": "container"

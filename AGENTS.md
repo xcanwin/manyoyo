@@ -30,7 +30,7 @@
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docs/`: VitePress 文档；中文主目录 `docs/zh/`，英文 `docs/en/`；结构需保持一致。
 - `test/`: Jest 测试，文件名 `*.test.js`（如 `test/manyoyo.test.js`、`test/web-server-auth.test.js`）。
-- `assets/` 与 `config.example.json`: 资源与配置模板。
+- `assets/` 与 `manyoyo.example.json`: 资源与配置模板。
 
 ## 目录速查
 - `docs/zh/guide/` `docs/zh/configuration/` `docs/zh/reference/` `docs/zh/advanced/` `docs/zh/troubleshooting/`
@@ -81,7 +81,7 @@
 - 动态容器名验证（`{now}`）：在运行配置写 `containerName: "my-<agent>-{now}"`，执行 `manyoyo config show -r <name>` 查看解析结果。
 - 环境文件解析：`manyoyo config show --ef /abs/path/myenv.env`。
 - 容器调试：`manyoyo run -n <name> -x /bin/bash`。
-- 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.1-common`），可加 `--iba TOOL=common`。
+- 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.4-common`），可加 `--iba TOOL=common`。
 - 局域网监听网页服务：`manyoyo serve 0.0.0.0:3000 -U <user> -P <pass>`。
 - 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`（需与启动参数/配置一致）。
 - 若未显式设置 `-P/--pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。
@@ -89,7 +89,7 @@
 - 删除对话历史（保留容器）：`curl --noproxy '*' -b /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/api/sessions/<name>/remove-with-history`。
 
 ## 配置与路径提示
-- 配置模板：`config.example.json`。
+- 配置模板：`manyoyo.example.json`。
 - 全局配置：`~/.manyoyo/manyoyo.json`（JSON5）。
 - 运行配置：`~/.manyoyo/manyoyo.json` 的 `runs.<name>`（通过 `run/config show/config command -r <name>` 按名称读取）。
 - 环境文件：`run/config show/config command` 的 `--ef/--env-file` 与 `envFile` 仅支持绝对路径（如 `/abs/path/name.env`）。
@@ -107,7 +107,7 @@
 - 运行环境：`node` >= 22，容器运行时支持 `podman` 或 `docker`。
 - CLI 入口：`manyoyo` 与 `my` 指向同一可执行文件。
 - 发布检查：核对 `package.json` 的 `version` 与 `imageVersion` 是否匹配文档。
-- 包含文件：`README.md` `LICENSE` `docker/manyoyo.Dockerfile` `config.example.json` 需与发布一致。
+- 包含文件：`README.md` `LICENSE` `docker/manyoyo.Dockerfile` `manyoyo.example.json` 需与发布一致。
 - 入口脚本：`bin/manyoyo.js` 变更时同步检查 `package.json` 的 `bin` 字段。
 - 版本对齐：`IMAGE_VERSION` `IMAGE_VERSION_BASE` `imageVersion` 与文档示例保持一致。
 - 文档版本：`docs/zh/` `docs/en/` 与 `README.md` 示例保持一致。
@@ -124,8 +124,8 @@
 - 文档目录首页统一使用 `README.md`（不再使用 `index.md`），并保持 `zh/en` 目录结构对齐。
 - 文档内部链接优先使用仓库相对 `.md`/`README.md` 路径，保证 GitHub 网页浏览可直接跳转；站点路由由 VitePress 兼容。
 - 文档修改后运行 `npm run docs:build`，检查 dead links 与导航行为。
-- 配置模板见 `config.example.json`；用户配置默认在 `~/.manyoyo/`。
-- 新增配置项或 CLI 选项时，同步更新 `config.example.json`、`docs/zh/` 与 `docs/en/`；必要时同步 `README.md` 示例。
+- 配置模板见 `manyoyo.example.json`；用户配置默认在 `~/.manyoyo/`。
+- 新增配置项或 CLI 选项时，同步更新 `manyoyo.example.json`、`docs/zh/` 与 `docs/en/`；必要时同步 `README.md` 示例。
 - 新增网页接口/页面时，默认走全局认证网关；仅登录相关路由允许匿名访问。
 - 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`）；其余路由默认要求认证。
 - 禁止在业务路由里零散补认证，优先在统一入口做认证兜底，避免后续漏校验。
