@@ -95,9 +95,9 @@ MANYOYO 配置参数分为三类，具有不同的合并行为：
 ### 首次预执行参数（`first.*`）
 这些参数仅在**新建容器后、常规命令前**执行一次，复用已有容器时不会执行：
 
-- `first.shellPrefix` / `first.shell` / `first.shellSuffix`：覆盖型（`runs.<name>.first` > 全局 `first`）
-- `first.env`：按 key 合并（全局 `first.env` + `runs.<name>.first.env`）
-- `first.envFile`：数组累加（全局 `first.envFile` + `runs.<name>.first.envFile`）
+- `first.shellPrefix` / `first.shell` / `first.shellSuffix`：覆盖型（命令行 > `runs.<name>.first` > 全局 `first`）
+- `first.env`：按 key 合并（全局 `first.env` + `runs.<name>.first.env` + 命令行 `--first-env`）
+- `first.envFile`：数组累加（全局 `first.envFile` + `runs.<name>.first.envFile` + 命令行 `--first-env-file`）
 
 示例：
 ```bash
@@ -125,9 +125,9 @@ MANYOYO 配置参数分为三类，具有不同的合并行为：
 | 合并型 | `volumes` | 数组累加合并 | 所有挂载卷生效 |
 | 合并型 | `ports` | 数组累加合并 | 所有端口映射生效（透传 `--publish`） |
 | 合并型 | `imageBuildArgs` | 数组累加合并 | 所有构建参数生效 |
-| 首次预执行 | `first.shellPrefix/shell/shellSuffix` | 覆盖型（run first 覆盖 global first） | 仅新建容器时执行一次 |
-| 首次预执行 | `first.env` | 对象按 key 合并覆盖 | 全局 `first.env` + `runs.<name>.first.env` |
-| 首次预执行 | `first.envFile` | 数组累加合并 | 全局 `first.envFile` + `runs.<name>.first.envFile` |
+| 首次预执行 | `first.shellPrefix/shell/shellSuffix` | 覆盖型（CLI > run first > global first） | 仅新建容器时执行一次 |
+| 首次预执行 | `first.env` | 对象按 key 合并覆盖 | 全局 `first.env` + `runs.<name>.first.env` + CLI `--first-env` |
+| 首次预执行 | `first.envFile` | 数组累加合并 | 全局 `first.envFile` + `runs.<name>.first.envFile` + CLI `--first-env-file` |
 
 ## 调试配置
 

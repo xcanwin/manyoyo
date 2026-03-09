@@ -399,11 +399,11 @@ Global configuration + runs.<name> + Command-line arguments
 ```
 
 ### First-Run Bootstrap Parameters
-`first` applies only in new-container stage and has no CLI override:
+`first` applies only in the new-container stage and supports CLI override/append:
 ```
-first.shellPrefix/shell/shellSuffix: runs.<name>.first > global first
-first.env: global first.env + runs.<name>.first.env (key override)
-first.envFile: global first.envFile + runs.<name>.first.envFile
+first.shellPrefix/shell/shellSuffix: command line > runs.<name>.first > global first
+first.env: global first.env + runs.<name>.first.env + --first-env (key override)
+first.envFile: global first.envFile + runs.<name>.first.envFile + --first-env-file
 ```
 
 ## Complete Configuration Examples

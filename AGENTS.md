@@ -76,13 +76,13 @@
 
 ## 常见开发任务
 - 配置合并验证：`manyoyo config show`，`manyoyo config show -r <name>`。
-- 命令预览：`manyoyo config command -n test`，用于检查参数拼装。
+- 命令预览：`manyoyo config command -r <name>`，用于检查参数拼装。
 - 快速迁移已有 Agent 配置：`manyoyo init all`，然后 `manyoyo run -r claude`（或 `codex/gemini/opencode`）。
 - 动态容器名验证（`{now}`）：在运行配置写 `containerName: "my-<agent>-{now}"`，执行 `manyoyo config show -r <name>` 查看解析结果。
 - 环境文件解析：`manyoyo config show --ef /abs/path/myenv.env`。
 - 容器调试：`manyoyo run -n <name> -x /bin/bash`。
 - 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.1-common`），可加 `--iba TOOL=common`。
-- 局域网监听网页服务：`manyoyo serve 0.0.0.0:3000 -u <user> -P <pass>`。
+- 局域网监听网页服务：`manyoyo serve 0.0.0.0:3000 -U <user> -P <pass>`。
 - 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`（需与启动参数/配置一致）。
 - 若未显式设置 `-P/--pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。
 - 带认证访问接口：`curl --noproxy '*' -b /tmp/manyoyo.cookie http://127.0.0.1:3000/api/sessions`。

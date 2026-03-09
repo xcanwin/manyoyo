@@ -399,11 +399,11 @@ manyoyo run -r claude
 ```
 
 ### 首次预执行参数
-`first` 仅用于新建容器阶段，不支持命令行覆盖：
+`first` 仅用于新建容器阶段，支持命令行覆盖/追加：
 ```
-first.shellPrefix/shell/shellSuffix: runs.<name>.first > 全局 first
-first.env: 全局 first.env + runs.<name>.first.env（按 key 覆盖）
-first.envFile: 全局 first.envFile + runs.<name>.first.envFile
+first.shellPrefix/shell/shellSuffix: 命令行参数 > runs.<name>.first > 全局 first
+first.env: 全局 first.env + runs.<name>.first.env + 命令行 --first-env（按 key 覆盖）
+first.envFile: 全局 first.envFile + runs.<name>.first.envFile + 命令行 --first-env-file
 ```
 
 ## 完整配置示例

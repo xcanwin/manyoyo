@@ -95,9 +95,9 @@ Merge parameters include:
 ### First-Run Bootstrap Parameters (`first.*`)
 These parameters run once only **after a new container is created and before regular command execution**. They are skipped when reusing an existing container:
 
-- `first.shellPrefix` / `first.shell` / `first.shellSuffix`: override type (`runs.<name>.first` > global `first`)
-- `first.env`: merged by key (global `first.env` + `runs.<name>.first.env`)
-- `first.envFile`: array accumulation (global `first.envFile` + `runs.<name>.first.envFile`)
+- `first.shellPrefix` / `first.shell` / `first.shellSuffix`: override type (CLI > `runs.<name>.first` > global `first`)
+- `first.env`: merged by key (global `first.env` + `runs.<name>.first.env` + CLI `--first-env`)
+- `first.envFile`: array accumulation (global `first.envFile` + `runs.<name>.first.envFile` + CLI `--first-env-file`)
 
 Example:
 ```bash
@@ -125,9 +125,9 @@ Example:
 | Merge | `volumes` | Array accumulation merge | All mount volumes take effect |
 | Merge | `ports` | Array accumulation merge | All port mappings take effect (pass-through as `--publish`) |
 | Merge | `imageBuildArgs` | Array accumulation merge | All build arguments take effect |
-| First bootstrap | `first.shellPrefix/shell/shellSuffix` | Override (run first overrides global first) | Runs only once on new container creation |
-| First bootstrap | `first.env` | Map merge by key | Global `first.env` + `runs.<name>.first.env` |
-| First bootstrap | `first.envFile` | Array accumulation merge | Global `first.envFile` + `runs.<name>.first.envFile` |
+| First bootstrap | `first.shellPrefix/shell/shellSuffix` | Override (CLI > run first > global first) | Runs only once on new container creation |
+| First bootstrap | `first.env` | Map merge by key | Global `first.env` + `runs.<name>.first.env` + CLI `--first-env` |
+| First bootstrap | `first.envFile` | Array accumulation merge | Global `first.envFile` + `runs.<name>.first.envFile` + CLI `--first-env-file` |
 
 ## Debugging Configuration
 

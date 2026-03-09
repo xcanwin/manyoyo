@@ -395,6 +395,64 @@ describe('MANYOYO CLI', () => {
             }
         });
 
+        test('first config should allow cli override for env/envFile/shell', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-cli-'));
+            const envDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-cli-env-'));
+            const globalFirstEnvFile = path.join(envDir, 'global-first.env');
+            const runFirstEnvFile = path.join(envDir, 'run-first.env');
+            const cliFirstEnvFile = path.join(envDir, 'cli-first.env');
+            fs.writeFileSync(globalFirstEnvFile, 'GLOBAL_FIRST=1\n');
+            fs.writeFileSync(runFirstEnvFile, 'RUN_FIRST=1\n');
+            fs.writeFileSync(cliFirstEnvFile, 'CLI_FIRST=1\n');
+
+            writeGlobalConfig(tempHome, {
+                first: {
+                    env: {
+                        FIRST_A: 'global-a',
+                        FIRST_B: 'global-b'
+                    },
+                    envFile: [globalFirstEnvFile],
+                    shellPrefix: 'GLOBAL=1',
+                    shell: 'global-first',
+                    shellSuffix: '--global'
+                },
+                runs: {
+                    demo: {
+                        first: {
+                            env: {
+                                FIRST_A: 'run-a'
+                            },
+                            envFile: [runFirstEnvFile],
+                            shell: 'run-first'
+                        }
+                    }
+                }
+            });
+
+            try {
+                const output = execSync(
+                    `node ${BIN_PATH} config show -r demo --first-env "FIRST_A=cli-a" --first-env "FIRST_C=cli-c" --first-env-file "${cliFirstEnvFile}" --first-shell-prefix "CLI=1" --first-shell "cli-first" --first-shell-suffix "--cli"`,
+                    {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome }
+                    }
+                );
+                const config = JSON.parse(output);
+                expect(config.first.env).toEqual(expect.objectContaining({
+                    FIRST_A: 'cli-a',
+                    FIRST_B: 'global-b',
+                    FIRST_C: 'cli-c'
+                }));
+                expect(config.first.envFile).toEqual([globalFirstEnvFile, runFirstEnvFile, cliFirstEnvFile]);
+                expect(config.first.shellPrefix).toBe('CLI=1');
+                expect(config.first.shell).toBe('cli-first');
+                expect(config.first.shellSuffix).toBe(' --cli');
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+                fs.rmSync(envDir, { recursive: true, force: true });
+            }
+        });
+
         test('run config env array should be rejected', () => {
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-env-array-'));
             writeGlobalConfig(tempHome, {

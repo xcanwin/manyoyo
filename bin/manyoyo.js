@@ -998,8 +998,13 @@ function applyRunStyleOptions(command, options = {}) {
         .option('--sp, --shell-prefix <command>', '临时环境变量 (作为-s前缀)')
         .option('-s, --shell <command>', '指定命令执行')
         .option('--ss, --shell-suffix <command>', '指定命令后缀 (追加到-s之后，等价于 -- <args>)')
+        .option('--first-shell-prefix <command>', '首次预执行命令前缀 (仅新建容器时生效)')
+        .option('--first-shell <command>', '首次预执行命令 (仅新建容器时生效)')
+        .option('--first-shell-suffix <command>', '首次预执行命令后缀 (仅新建容器时生效)')
         .option('-x, --shell-full <command...>', '指定完整命令执行 (代替--sp和-s和--命令)')
         .option('-y, --yolo <cli>', '使AGENT无需确认 (claude/c, gemini/gm, codex/cx, opencode/oc)');
+    appendArrayOption(command, '--first-env <env>', '首次预执行环境变量 XXX=YYY (可多次使用)');
+    appendArrayOption(command, '--first-env-file <file>', '首次预执行环境变量文件 (仅支持绝对路径，如 /abs/path.env)');
 
     if (includeRmOnExit) {
         command.option('--rm-on-exit', '退出后自动删除容器 (一次性模式)');
@@ -1106,14 +1111,14 @@ async function setupCommander() {
         .description('MANYOYO - AI Agent CLI Sandbox\nhttps://github.com/xcanwin/manyoyo')
         .addHelpText('after', `
 配置文件:
-  ~/.manyoyo/manyoyo.json    全局配置文件 (JSON5格式，支持注释)
-  ~/.manyoyo/run/c.json      运行配置示例
+  ~/.manyoyo/manyoyo.json   全局配置文件 (JSON5格式，支持注释)
+  ~/.manyoyo/run/c.json     运行配置示例
 
 路径规则:
-  run -r name         → ~/.manyoyo/manyoyo.json 的 runs.name
-  run --ef /abs/path.env → 绝对路径环境文件
-  run --ss "<args>"   → 显式设置命令后缀
-  run -- <args...>    → 直接透传命令后缀（优先级最高）
+  run -r name               → ~/.manyoyo/manyoyo.json 的 runs.name
+  run --ef /abs/path.env    → 绝对路径环境文件
+  run --ss "<args>"         → 显式设置命令后缀
+  run -- <args...>          → 直接透传命令后缀（优先级最高）
 
 示例:
   ${MANYOYO_NAME} update                              更新 MANYOYO 到最新版本
@@ -1121,11 +1126,11 @@ async function setupCommander() {
   ${MANYOYO_NAME} init all                            从本机 Agent 配置初始化 ~/.manyoyo
   ${MANYOYO_NAME} run -r claude                       使用 manyoyo.json 的 runs.claude 快速启动
   ${MANYOYO_NAME} run -r codex --ss "resume --last"   使用命令后缀
-  ${MANYOYO_NAME} run -n test --ef /abs/path/myenv.env -y c  使用绝对路径环境变量文件
+  ${MANYOYO_NAME} run -n test --ef /path/ab.env -y c  使用绝对路径环境变量文件
   ${MANYOYO_NAME} run -n test -- -c                   恢复之前会话
   ${MANYOYO_NAME} run -x "echo 123"                   指定命令执行
-  ${MANYOYO_NAME} serve 127.0.0.1:3000 -U admin -P 123456  启动带登录认证的网页服务
-  ${MANYOYO_NAME} serve 0.0.0.0:3000                  监听全部网卡，便于局域网访问
+  ${MANYOYO_NAME} serve 127.0.0.1:3000                启动本机网页服务
+  ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P 123 &>/dev/null &  后台启动并监听全部网卡
   ${MANYOYO_NAME} playwright up host-headless         启动 playwright 默认场景（推荐）
   ${MANYOYO_NAME} plugin playwright up host-headless  通过 plugin 命名空间启动
   ${MANYOYO_NAME} run -n test -q tip -q cmd           多次使用静默选项
@@ -1328,15 +1333,15 @@ async function setupCommander() {
     if (mergedShellSuffix) {
         EXEC_COMMAND_SUFFIX = normalizeCommandSuffix(mergedShellSuffix);
     }
-    const mergedFirstShellPrefix = pickConfigValue(runFirstConfig.shellPrefix, globalFirstConfig.shellPrefix);
+    const mergedFirstShellPrefix = pickConfigValue(options.firstShellPrefix, runFirstConfig.shellPrefix, globalFirstConfig.shellPrefix);
     if (mergedFirstShellPrefix) {
         FIRST_EXEC_COMMAND_PREFIX = `${mergedFirstShellPrefix} `;
     }
-    const mergedFirstShell = pickConfigValue(runFirstConfig.shell, globalFirstConfig.shell);
+    const mergedFirstShell = pickConfigValue(options.firstShell, runFirstConfig.shell, globalFirstConfig.shell);
     if (mergedFirstShell) {
         FIRST_EXEC_COMMAND = mergedFirstShell;
     }
-    const mergedFirstShellSuffix = pickConfigValue(runFirstConfig.shellSuffix, globalFirstConfig.shellSuffix);
+    const mergedFirstShellSuffix = pickConfigValue(options.firstShellSuffix, runFirstConfig.shellSuffix, globalFirstConfig.shellSuffix);
     if (mergedFirstShellSuffix) {
         FIRST_EXEC_COMMAND_SUFFIX = normalizeCommandSuffix(mergedFirstShellSuffix);
     }
@@ -1365,13 +1370,15 @@ async function setupCommander() {
 
     const firstEnvFileList = [
         ...toArray(globalFirstConfig.envFile),
-        ...toArray(runFirstConfig.envFile)
+        ...toArray(runFirstConfig.envFile),
+        ...(options.firstEnvFile || [])
     ].filter(Boolean);
     firstEnvFileList.forEach(ef => addEnvFileTo(FIRST_CONTAINER_ENVS, ef));
 
     const firstEnvMap = {
         ...normalizeJsonEnvMap(globalFirstConfig.env, '全局配置 first'),
-        ...normalizeJsonEnvMap(runFirstConfig.env, '运行配置 first')
+        ...normalizeJsonEnvMap(runFirstConfig.env, '运行配置 first'),
+        ...normalizeCliEnvMap(options.firstEnv)
     };
     Object.entries(firstEnvMap).forEach(([key, value]) => addEnvTo(FIRST_CONTAINER_ENVS, `${key}=${value}`));
 
