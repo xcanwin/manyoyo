@@ -1,69 +1,139 @@
 ---
 title: 命令参考 | MANYOYO
-description: MANYOYO 命令行参数与常用命令速查，覆盖容器管理、环境变量注入、YOLO/SOLO 模式、调试与清理操作。
+description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频命令速查。
 ---
 
 # 命令参考
 
-## 常用命令
+本文以当前 `manyoyo --help` 与各子命令 `--help` 为准，优先说明命令分层、参数归属和高频用法。
 
-| 场景 | 命令 |
+## 主命令结构
+
+| 命令 | 用途 |
 | --- | --- |
-| 查看帮助 | `manyoyo -h` |
-| 查看版本 | `manyoyo -v` |
-| 从本机 Agent 初始化配置 | `manyoyo init all` |
-| 列出容器 | `manyoyo ps` |
-| 列出镜像 | `manyoyo images` |
-| 创建容器并启动 Claude Code | `manyoyo run -n test --ef /abs/path/.env -y c` |
-| 进入 shell | `manyoyo run -n test -x /bin/bash` |
-| 执行自定义命令 | `manyoyo run -n test -x echo "hello world"` |
-| 删除容器 | `manyoyo rm test` |
-| 清理悬空镜像 | `manyoyo prune` |
-| 查看 Playwright 插件场景 | `manyoyo playwright ls` |
-| 启动 Playwright 插件场景 | `manyoyo playwright up all` |
-| 启动时追加浏览器扩展 | `manyoyo playwright up host-headless --ext-path /abs/path/extA --ext-name adguard` |
-| 下载 Playwright 扩展到本地目录 | `manyoyo playwright ext-download` |
-| 通过命名空间启动 | `manyoyo plugin playwright up host-headless` |
-| 输出 MCP 接入命令 | `manyoyo playwright mcp-add --host localhost` |
+| `manyoyo run` | 启动或连接容器，并在容器内执行命令 |
+| `manyoyo build` | 构建沙箱镜像 |
+| `manyoyo rm <name>` | 删除指定容器 |
+| `manyoyo ps` | 列举容器 |
+| `manyoyo images` | 列举镜像 |
+| `manyoyo serve [listen]` | 启动网页交互服务，默认 `127.0.0.1:3000` |
+| `manyoyo playwright` | 管理 Playwright 插件服务 |
+| `manyoyo plugin` | 插件命名空间；目前常见用法是 `plugin playwright ...` |
+| `manyoyo config show` | 显示最终生效配置 |
+| `manyoyo config command` | 显示将执行的容器命令 |
+| `manyoyo init [agents]` | 初始化本机 Agent 配置到 `~/.manyoyo` |
+| `manyoyo update` | 更新 MANYOYO；本地 file 安装场景会跳过 |
+| `manyoyo install <name>` | 安装 manyoyo 命令（docker-cli-plugin） |
+| `manyoyo prune` | 清理悬空镜像和 `<none>` 镜像 |
 
-## 常见参数速查
+## 参数归属
+
+### `run` / `config show` / `config command`
+
+这三组命令共享同一套核心运行参数，常用项如下：
 
 | 参数 | 说明 |
 | --- | --- |
-| `run -n, --cont-name` | 容器名称 |
-| `run -y` | 快速进入 Agent 模式 |
-| `run -x` | 在容器内执行命令 |
-| `run -e` | 直接传入环境变量 |
-| `run -p` | 直接传入端口映射（等价 `--publish`） |
-| `run --ef` | 读取环境变量文件（仅支持绝对路径） |
-| `run -r` | 读取 `~/.manyoyo/manyoyo.json` 的 `runs.<name>` |
-| `build` | 构建沙箱镜像 |
-| `run/build --iv` | 指定镜像版本标签（格式：`x.y.z-后缀`，如 `1.8.0-common`） |
-| `build --iba` | 传递镜像构建参数（如 `TOOL=common`） |
-| `update` | 更新 MANYOYO；若检测为本地 file 安装（`npm install -g .`/`npm link`）则跳过，否则执行 `npm update -g @xcanwin/manyoyo` |
-| `init [agents]` | 从本机 Agent 配置初始化 `~/.manyoyo` |
-| `serve [listen]` | 启动网页交互服务（默认 `127.0.0.1:3000`，仅支持 `<ip:port>`） |
-| `playwright ls` | 列出 Playwright 插件启用场景 |
-| `playwright up/down/status/health/logs [scene]` | 管理 Playwright 场景（scene 默认 `host-headless`；`up` 支持 `--ext-path <path>` 与 `--ext-name <name>` 多次追加扩展） |
-| `playwright ext-download [--prodversion]` | 下载并解压内置扩展到 `~/.manyoyo/plugin/playwright/extensions/`（临时目录自动清理） |
-| `playwright mcp-add [--host]` | 输出 Claude/Codex 的 MCP 接入命令 |
-| `plugin ls` | 列出当前插件及场景摘要 |
-| `plugin playwright ...` | 通过 plugin 命名空间调用 Playwright 插件 |
-| `-U <username>` | 网页服务登录用户名 |
-| `-P <password>` | 网页服务登录密码（未设置时自动生成随机密码） |
-| `-q` | 静默输出（可多次使用） |
+| `-r, --run <name>` | 读取 `~/.manyoyo/manyoyo.json` 的 `runs.<name>` |
+| `--hp, --host-path <path>` | 宿主机工作目录 |
+| `-n, --cont-name <name>` | 容器名称 |
+| `--cp, --cont-path <path>` | 容器工作目录 |
+| `-m, --cont-mode <mode>` | 容器模式：`common` / `dind` / `sock` |
+| `--in, --image-name <name>` | 镜像名称 |
+| `--iv, --image-ver <version>` | 镜像版本，格式必须为 `x.y.z-后缀`，如 `1.8.4-common` |
+| `-e, --env <env>` | 追加环境变量，可多次传入 |
+| `--ef, --env-file <file>` | 追加环境文件，仅支持绝对路径 |
+| `-v, --volume <volume>` | 追加挂载卷，可多次传入 |
+| `-p, --port <port>` | 追加端口映射，可多次传入 |
+| `--sp` / `-s` / `--ss` / `-- <args...>` | 组合前缀、主命令和后缀参数 |
+| `-x, --shell-full <command...>` | 直接传完整命令；与 `--sp/-s/--ss/--` 互斥 |
+| `-y, --yolo <cli>` | 快速进入 Agent 的免确认模式 |
+| `--first-shell*` / `--first-env*` | 仅首次创建容器时执行 |
+| `--rm-on-exit` | 退出后自动删除容器，仅 `run` 支持 |
+| `-q, --quiet <item>` | 静默输出，可多次使用 |
 
-## 配置文件规则
+### `serve`
 
-- `manyoyo run -r claude` 会读取 `~/.manyoyo/manyoyo.json` 的 `runs.claude`
-- `manyoyo run --ef /abs/path/my.env` 仅支持绝对路径环境文件
-- 任何命令都会优先加载全局配置 `~/.manyoyo/manyoyo.json`
+`serve` 继承大部分 `run` 参数，并额外增加网页认证参数：
 
-## 网页服务认证说明
+| 参数 | 说明 |
+| --- | --- |
+| `[listen]` | 监听地址，仅支持 `<port>` 或 `<host:port>` |
+| `-U, --user <username>` | 登录用户名，默认 `admin` |
+| `-P, --pass <password>` | 登录密码；未设置时启动时随机生成 |
 
-- `serve` 仅支持 `<ip:port>`，例如 `127.0.0.1:3000`、`0.0.0.0:3000`
-- 网页认证参数优先级：命令行参数 > `runs.<name>` > 全局配置 > 环境变量 > 默认值
-- 环境变量键名：`MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`
-- 建议参考 [网页服务认证与安全实践](../advanced/web-server-auth.md) 了解登录与安全基线
+### `build`
 
-完整参数请以 `README.md` 为准。
+| 参数 | 说明 |
+| --- | --- |
+| `-r, --run <name>` | 读取运行配置 |
+| `--in, --image-name <name>` | 指定镜像名称 |
+| `--iv, --image-ver <version>` | 指定镜像版本 |
+| `--iba, --image-build-arg <arg>` | 传递 Dockerfile 构建参数，可多次使用 |
+| `--yes` | 自动确认所有提示 |
+
+### `playwright`
+
+| 命令 | 用途 |
+| --- | --- |
+| `manyoyo playwright ls` | 列出可用场景 |
+| `manyoyo playwright up [scene]` | 启动场景，默认 `host-headless` |
+| `manyoyo playwright down [scene]` | 停止场景 |
+| `manyoyo playwright status [scene]` | 查看状态 |
+| `manyoyo playwright health [scene]` | 健康检查 |
+| `manyoyo playwright logs [scene]` | 查看日志 |
+| `manyoyo playwright mcp-add` | 输出 MCP 接入命令 |
+| `manyoyo playwright ext-download` | 下载内置扩展到本地目录 |
+
+`playwright up` 额外支持：
+
+| 参数 | 说明 |
+| --- | --- |
+| `--ext-path <path>` | 追加扩展目录，目录内需包含 `manifest.json` |
+| `--ext-name <name>` | 追加 `~/.manyoyo/plugin/playwright/extensions/` 下的扩展 |
+
+## 高频命令
+
+```bash
+# 查看帮助
+manyoyo --help
+manyoyo run --help
+manyoyo config show --help
+
+# 初始化并启动
+manyoyo init all
+manyoyo run -r claude
+manyoyo run -r codex --ss "resume --last"
+
+# 调试配置和命令拼装
+manyoyo config show -r claude
+manyoyo config command -r claude
+
+# 自定义命令
+manyoyo run --rm-on-exit -x /bin/bash
+manyoyo run -n demo --first-shell "npm ci" -s "npm test"
+
+# 网页服务
+manyoyo serve 127.0.0.1:3000
+manyoyo serve 0.0.0.0:3000 -U admin -P strong-password
+
+# Playwright
+manyoyo playwright ls
+manyoyo playwright up host-headless
+manyoyo plugin playwright up host-headless
+manyoyo playwright mcp-add --host localhost
+```
+
+## 配置与优先级
+
+- 标量参数优先级：命令行参数 > `runs.<name>` > 全局配置 > 默认值
+- 数组参数 `envFile` / `volumes` / `imageBuildArgs`：按“全局配置 → `runs.<name>` → 命令行参数”追加合并
+- `env`：按 key 合并覆盖，优先级同标量参数
+- `serve` 认证参数优先级：命令行参数 > `runs.<name>` > 全局配置 > 环境变量 > 默认值
+- `--ef` 与 `--first-env-file` 仅支持绝对路径
+
+## 安全提醒
+
+- `sock` 模式会让容器访问宿主机 Docker socket，风险最高
+- `-y, --yolo` 会跳过 Agent 权限确认，适合可控环境
+- `serve 0.0.0.0:<port>` 对外监听时必须设置强密码，并配合防火墙限制来源

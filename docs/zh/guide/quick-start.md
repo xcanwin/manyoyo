@@ -27,7 +27,7 @@ manyoyo -v
 ## 3. 构建沙箱镜像
 
 ```bash
-manyoyo build --iv 1.8.0-common
+manyoyo build --iv 1.8.4-common
 ```
 
 ## 4. 立即迁移配置
@@ -43,6 +43,14 @@ manyoyo run -r claude
 manyoyo run -r codex
 manyoyo run -r gemini
 manyoyo run -r opencode
+```
+
+如果只想先验证帮助与配置链路，可先执行：
+
+```bash
+manyoyo --help
+manyoyo run --help
+manyoyo config show -r claude
 ```
 
 ## 故障排查

@@ -27,7 +27,7 @@ Container runtime install/switch references:
 ## 3. Build sandbox image
 
 ```bash
-manyoyo build --iv 1.8.0-common
+manyoyo build --iv 1.8.4-common
 ```
 
 ## 4. Migrate existing configs now
@@ -43,6 +43,14 @@ manyoyo run -r claude
 manyoyo run -r codex
 manyoyo run -r gemini
 manyoyo run -r opencode
+```
+
+If you want to verify the help output and config path first, run:
+
+```bash
+manyoyo --help
+manyoyo run --help
+manyoyo config show -r claude
 ```
 
 ## Troubleshooting

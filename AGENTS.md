@@ -42,6 +42,7 @@
 - `npm install`: 开发阶段安装/更新依赖（会更新 `package-lock.json`）。
 - `npm ci --include=optional`: 提交前与 CI 的可复现安装（CI 不再执行 `npm install`）。
 - `npm test`: 运行全部测试并生成覆盖率（输出到 `coverage/`）。
+- `npm test` 也会执行入口文档示例版本检查（当前覆盖 `README.md`、`quick-start`、`basic-usage`、`cli-options`），要求其示例版本与 `package.json.imageVersion` 保持同一主版本号。
 - `npm run test:unit`: 仅跑 `test/` 下的单元测试。
 - `npm run lint`: 占位的 lint 检查（不做风格约束）。
 - `npm run docs:dev|build|preview`: 启动/构建/预览文档站点。提交前或文档校验时先执行 `npm ci --include=optional`，再执行 `npm run docs:build`（不要并行）。

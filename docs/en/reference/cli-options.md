@@ -1,69 +1,139 @@
 ---
 title: CLI Reference | MANYOYO
-description: MANYOYO CLI option reference for container management, env injection, YOLO/SOLO modes, debugging, and cleanup commands.
+description: MANYOYO CLI structure, option ownership, and common commands based on the latest --help output.
 ---
 
-# Command Reference
+# CLI Reference
 
-## Common Commands
+This page follows the current `manyoyo --help` and subcommand `--help` output. It focuses on command layout, option ownership, and high-frequency workflows.
 
-| Scenario | Command |
+## Top-level commands
+
+| Command | Purpose |
 | --- | --- |
-| View help | `manyoyo -h` |
-| View version | `manyoyo -v` |
-| Initialize config from local Agent setup | `manyoyo init all` |
-| List containers | `manyoyo ps` |
-| List images | `manyoyo images` |
-| Create container and start Claude Code | `manyoyo run -n test --ef /abs/path/.env -y c` |
-| Enter shell | `manyoyo run -n test -x /bin/bash` |
-| Execute custom command | `manyoyo run -n test -x echo "hello world"` |
-| Remove container | `manyoyo rm test` |
-| Clean dangling images | `manyoyo prune` |
-| List Playwright plugin scenes | `manyoyo playwright ls` |
-| Start Playwright plugin scenes | `manyoyo playwright up all` |
-| Add browser extensions on startup | `manyoyo playwright up host-headless --ext-path /abs/path/extA --ext-name adguard` |
-| Download Playwright extensions to local directory | `manyoyo playwright ext-download` |
-| Start via plugin namespace | `manyoyo plugin playwright up host-headless` |
-| Print MCP add commands | `manyoyo playwright mcp-add --host localhost` |
+| `manyoyo run` | Start or reconnect to a container and run commands inside it |
+| `manyoyo build` | Build the sandbox image |
+| `manyoyo rm <name>` | Remove a container |
+| `manyoyo ps` | List containers |
+| `manyoyo images` | List images |
+| `manyoyo serve [listen]` | Start the web UI server, default `127.0.0.1:3000` |
+| `manyoyo playwright` | Manage the Playwright plugin service |
+| `manyoyo plugin` | Plugin namespace; common use is `plugin playwright ...` |
+| `manyoyo config show` | Print the final resolved configuration |
+| `manyoyo config command` | Print the generated container command |
+| `manyoyo init [agents]` | Initialize local Agent configs into `~/.manyoyo` |
+| `manyoyo update` | Update MANYOYO; skipped for local file installs |
+| `manyoyo install <name>` | Install the `manyoyo` command as a docker-cli-plugin |
+| `manyoyo prune` | Clean dangling and `<none>` images |
 
-## Quick Parameter Reference
+## Option ownership
 
-| Parameter | Description |
+### `run` / `config show` / `config command`
+
+These commands share the same core runtime options:
+
+| Option | Description |
 | --- | --- |
-| `run -n, --cont-name` | Container name |
-| `run -y` | Quick enter Agent mode |
-| `run -x` | Execute command in container |
-| `run -e` | Pass environment variables directly |
-| `run -p` | Pass port mappings directly (same as `--publish`) |
-| `run --ef` | Read environment variable file (absolute path only) |
-| `run -r` | Read `runs.<name>` from `~/.manyoyo/manyoyo.json` |
-| `build` | Build sandbox image |
-| `run/build --iv` | Specify image version tag (format: `x.y.z-suffix`, e.g. `1.8.0-common`) |
-| `build --iba` | Pass image build arguments (e.g., `TOOL=common`) |
-| `update` | Update MANYOYO; skip when detected as local file install (`npm install -g .`/`npm link`), otherwise run `npm update -g @xcanwin/manyoyo` |
-| `init [agents]` | Initialize `~/.manyoyo` from local Agent configuration |
-| `serve [listen]` | Start web interaction server (default `127.0.0.1:3000`, only supports `<ip:port>`) |
-| `playwright ls` | List enabled Playwright plugin scenes |
-| `playwright up/down/status/health/logs [scene]` | Manage Playwright scenes (default scene is `host-headless`; `up` supports repeated `--ext-path <path>` and `--ext-name <name>`) |
-| `playwright ext-download [--prodversion]` | Download and extract built-in extensions to `~/.manyoyo/plugin/playwright/extensions/` (temp dir is auto-cleaned) |
-| `playwright mcp-add [--host]` | Print MCP add commands for Claude/Codex |
-| `plugin ls` | List current plugins with scene summary |
-| `plugin playwright ...` | Invoke Playwright through the plugin namespace |
-| `-U <username>` | Web login username |
-| `-P <password>` | Web login password (auto-generated random password if omitted) |
-| `-q` | Silent output (can be used multiple times) |
+| `-r, --run <name>` | Load `runs.<name>` from `~/.manyoyo/manyoyo.json` |
+| `--hp, --host-path <path>` | Host working directory |
+| `-n, --cont-name <name>` | Container name |
+| `--cp, --cont-path <path>` | Container working directory |
+| `-m, --cont-mode <mode>` | Container mode: `common`, `dind`, `sock` |
+| `--in, --image-name <name>` | Image name |
+| `--iv, --image-ver <version>` | Image version; must be `x.y.z-suffix`, for example `1.8.4-common` |
+| `-e, --env <env>` | Append environment variables, repeatable |
+| `--ef, --env-file <file>` | Append env files, absolute paths only |
+| `-v, --volume <volume>` | Append bind mounts, repeatable |
+| `-p, --port <port>` | Append port mappings, repeatable |
+| `--sp` / `-s` / `--ss` / `-- <args...>` | Compose prefix, main command, and suffix args |
+| `-x, --shell-full <command...>` | Pass the full command directly; mutually exclusive with `--sp/-s/--ss/--` |
+| `-y, --yolo <cli>` | Start supported Agents in no-confirmation mode |
+| `--first-shell*` / `--first-env*` | Run only when the container is created for the first time |
+| `--rm-on-exit` | Remove the container after exit; `run` only |
+| `-q, --quiet <item>` | Quiet selected output, repeatable |
 
-## Configuration File Rules
+### `serve`
 
-- `manyoyo run -r claude` will read `runs.claude` from `~/.manyoyo/manyoyo.json`
-- `manyoyo run --ef /abs/path/my.env` only accepts absolute env-file paths
-- Any command will prioritize loading the global configuration `~/.manyoyo/manyoyo.json`
+`serve` reuses most `run` options and adds web auth options:
 
-## Web Authentication Notes
+| Option | Description |
+| --- | --- |
+| `[listen]` | Listen address, supports `<port>` or `<host:port>` |
+| `-U, --user <username>` | Login username, default `admin` |
+| `-P, --pass <password>` | Login password; randomly generated at startup if omitted |
 
-- `serve` only accepts `<ip:port>`, for example `127.0.0.1:3000` or `0.0.0.0:3000`
-- Web auth priority: command-line arguments > `runs.<name>` > global configuration > environment variables > defaults
-- Environment variable keys: `MANYOYO_SERVER_USER`, `MANYOYO_SERVER_PASS`
-- See [Web Server Auth and Security](../advanced/web-server-auth.md) for login flow and security baseline
+### `build`
 
-For complete parameters, please refer to `README.md`.
+| Option | Description |
+| --- | --- |
+| `-r, --run <name>` | Load run configuration |
+| `--in, --image-name <name>` | Set image name |
+| `--iv, --image-ver <version>` | Set image version |
+| `--iba, --image-build-arg <arg>` | Pass Dockerfile build args, repeatable |
+| `--yes` | Auto-confirm prompts |
+
+### `playwright`
+
+| Command | Purpose |
+| --- | --- |
+| `manyoyo playwright ls` | List available scenes |
+| `manyoyo playwright up [scene]` | Start a scene, default `host-headless` |
+| `manyoyo playwright down [scene]` | Stop a scene |
+| `manyoyo playwright status [scene]` | Show status |
+| `manyoyo playwright health [scene]` | Run health check |
+| `manyoyo playwright logs [scene]` | Show logs |
+| `manyoyo playwright mcp-add` | Print MCP integration commands |
+| `manyoyo playwright ext-download` | Download built-in extensions locally |
+
+Extra options for `playwright up`:
+
+| Option | Description |
+| --- | --- |
+| `--ext-path <path>` | Append an extension directory containing `manifest.json` |
+| `--ext-name <name>` | Append an extension under `~/.manyoyo/plugin/playwright/extensions/` |
+
+## Common workflows
+
+```bash
+# Help
+manyoyo --help
+manyoyo run --help
+manyoyo config show --help
+
+# Initialize and start
+manyoyo init all
+manyoyo run -r claude
+manyoyo run -r codex --ss "resume --last"
+
+# Inspect config and generated command
+manyoyo config show -r claude
+manyoyo config command -r claude
+
+# Custom commands
+manyoyo run --rm-on-exit -x /bin/bash
+manyoyo run -n demo --first-shell "npm ci" -s "npm test"
+
+# Web server
+manyoyo serve 127.0.0.1:3000
+manyoyo serve 0.0.0.0:3000 -U admin -P strong-password
+
+# Playwright
+manyoyo playwright ls
+manyoyo playwright up host-headless
+manyoyo plugin playwright up host-headless
+manyoyo playwright mcp-add --host localhost
+```
+
+## Configuration and precedence
+
+- Scalar options: command line > `runs.<name>` > global config > defaults
+- Array options `envFile`, `volumes`, `imageBuildArgs`: appended in order global config -> `runs.<name>` -> command line
+- `env`: merged by key with the same priority as scalar options
+- `serve` auth options: command line > `runs.<name>` > global config > environment variables > defaults
+- `--ef` and `--first-env-file` accept absolute paths only
+
+## Security notes
+
+- `sock` mode exposes the host Docker socket to the container and is the highest-risk mode
+- `-y, --yolo` skips Agent confirmation and should stay in controlled environments
+- For `serve 0.0.0.0:<port>`, set a strong password and restrict source IPs with firewall rules

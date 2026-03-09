@@ -46,7 +46,7 @@
 ```bash
 npm install -g @xcanwin/manyoyo    # 安装
 podman pull ubuntu:24.04           # 仅 Podman 需要
-manyoyo build --iv 1.8.0-common     # 构建镜像
+manyoyo build --iv 1.8.4-common     # 构建镜像
 manyoyo init all          # 从本机 Agent 配置迁移到 ~/.manyoyo
 manyoyo run -r claude                  # 使用 manyoyo.json 的 runs.claude 启动
 ```
@@ -97,10 +97,10 @@ npm install -g @xcanwin/manyoyo
 
 ```bash
 # 构建 common 版本（推荐）
-manyoyo build --iv 1.8.0-common
+manyoyo build --iv 1.8.4-common
 
 # 构建 full 版本
-manyoyo build --iv 1.8.0-full
+manyoyo build --iv 1.8.4-full
 
 # 构建自定义版本
 manyoyo build --iba TOOL=go,codex,java,gemini
@@ -136,7 +136,7 @@ manyoyo config command
 
 ## 配置
 
-配置优先级：命令行参数 > runs.<name> > 全局配置 > 默认值  
+配置优先级：命令行参数 > runs.<name> > 全局配置 > 默认值
 详细说明请参考：
 - [配置系统概览](https://xcanwin.github.io/manyoyo/zh/configuration/)
 - [环境变量详解](https://xcanwin.github.io/manyoyo/zh/configuration/environment)
