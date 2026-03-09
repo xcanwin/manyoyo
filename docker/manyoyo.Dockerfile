@@ -258,7 +258,7 @@ RUN <<EOX
 EOX
 
 # 配置 supervisor
-COPY ./docker/res/common/supervisor/s.conf /etc/supervisor/conf.d/s.conf
+COPY ./docker/res/supervisor/s.conf /etc/supervisor/conf.d/s.conf
 
 RUN <<EOX
     # 清理
