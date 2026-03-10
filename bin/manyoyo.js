@@ -16,6 +16,12 @@ const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
 const { runPluginCommand } = require('../lib/plugin');
 const { buildManyoyoLogPath } = require('../lib/log-path');
+const {
+    sanitizeSensitiveData,
+    sanitizeServeLogText,
+    formatServeLogValue,
+    getServeProcessSnapshot
+} = require('../lib/serve-log');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_DEFAULT } = require('../package.json');
 const IMAGE_VERSION_BASE = String(IMAGE_VERSION_DEFAULT || '1.0.0').split('-')[0];
 const IMAGE_VERSION_HELP_EXAMPLE = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
@@ -188,93 +194,6 @@ function ensureWebServerAuthCredentials() {
         SERVER_AUTH_PASS = crypto.randomBytes(12).toString('hex');
         SERVER_AUTH_PASS_AUTO = true;
     }
-}
-
-/**
- * 敏感信息脱敏（用于 config show 输出）
- * @param {Object} obj - 配置对象
- * @returns {Object} 脱敏后的配置对象
- */
-function sanitizeSensitiveData(obj) {
-    const sensitiveKeys = ['KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'PASS', 'AUTH', 'CREDENTIAL'];
-
-    function sanitizeValue(key, value) {
-        if (typeof value !== 'string') return value;
-        const upperKey = key.toUpperCase();
-        if (sensitiveKeys.some(k => upperKey.includes(k))) {
-            if (value.length <= 8) return '****';
-            return value.slice(0, 4) + '****' + value.slice(-4);
-        }
-        return value;
-    }
-
-    function sanitizeArray(arr) {
-        return arr.map(item => {
-            if (typeof item === 'string' && item.includes('=')) {
-                const idx = item.indexOf('=');
-                const key = item.slice(0, idx);
-                const value = item.slice(idx + 1);
-                return `${key}=${sanitizeValue(key, value)}`;
-            }
-            return item;
-        });
-    }
-
-    const result = {};
-    for (const [key, value] of Object.entries(obj)) {
-        if (Array.isArray(value)) {
-            result[key] = sanitizeArray(value);
-        } else if (typeof value === 'object' && value !== null) {
-            result[key] = sanitizeSensitiveData(value);
-        } else {
-            result[key] = sanitizeValue(key, value);
-        }
-    }
-    return result;
-}
-
-function stripAnsi(text) {
-    if (typeof text !== 'string') return '';
-    return text.replace(/\x1b\[[0-9;]*m/g, '');
-}
-
-function sanitizeServeLogText(input) {
-    let text = stripAnsi(String(input || ''));
-    if (!text) return text;
-
-    text = text.replace(/(--pass|-P)\s+\S+/gi, '$1 ****');
-    text = text.replace(
-        /\b(MANYOYO_SERVER_PASS|OPENAI_API_KEY|ANTHROPIC_AUTH_TOKEN|GEMINI_API_KEY|GOOGLE_API_KEY|OPENCODE_API_KEY)\s*=\s*([^\s'"]+)/gi,
-        '$1=****'
-    );
-    text = text.replace(
-        /("?(?:password|pass|token|api[_-]?key|authorization|cookie)"?\s*[:=]\s*)("[^"]*"|'[^']*'|[^,\s]+)/gi,
-        '$1"****"'
-    );
-    return text;
-}
-
-function formatServeLogValue(value) {
-    if (value instanceof Error) {
-        return sanitizeServeLogText(value.stack || value.message || String(value));
-    }
-    if (typeof value === 'object' && value !== null) {
-        try {
-            return sanitizeServeLogText(JSON.stringify(sanitizeSensitiveData(value)));
-        } catch (e) {
-            return sanitizeServeLogText(String(value));
-        }
-    }
-    return sanitizeServeLogText(String(value));
-}
-
-function getServeProcessSnapshot() {
-    return {
-        pid: process.pid,
-        ppid: process.ppid,
-        cwd: process.cwd(),
-        argv: Array.isArray(process.argv) ? process.argv.slice() : []
-    };
 }
 
 function createServeLogger() {
@@ -1558,6 +1477,17 @@ function validateHostPath(runtime) {
     }
 }
 
+function validateHostPathOrThrow(hostPath) {
+    if (!fs.existsSync(hostPath)) {
+        throw new Error(`宿主机路径不存在: ${hostPath}`);
+    }
+    const realHostPath = fs.realpathSync(hostPath);
+    const homeDir = process.env.HOME || '/home';
+    if (realHostPath === '/' || realHostPath === '/home' || realHostPath === homeDir) {
+        throw new Error('不允许挂载根目录或home目录。');
+    }
+}
+
 /**
  * 等待容器就绪（使用指数退避算法）
  * @param {string} containerName - 容器名称
@@ -1850,7 +1780,7 @@ async function runWebServerMode(runtime) {
         containerEnvs: runtime.containerEnvs,
         containerVolumes: runtime.containerVolumes,
         containerPorts: runtime.containerPorts,
-        validateHostPath: () => validateHostPath(runtime),
+        validateHostPath: value => validateHostPathOrThrow(value),
         formatDate,
         isValidContainerName,
         containerExists,

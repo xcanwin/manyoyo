@@ -137,6 +137,35 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
+    test('should allow serve startup even when default cwd validator would reject root path', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-root-start-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                validateHostPath: hostPath => {
+                    if (!hostPath) {
+                        throw new Error('hostPath 不能为空');
+                    }
+                    if (hostPath === '/' || hostPath === '/root' || hostPath === '/home') {
+                        throw new Error('不允许挂载根目录或home目录。');
+                    }
+                },
+                hostPath: '/'
+            }));
+
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const unauth = await request(`${baseUrl}/api/sessions`);
+            expect(unauth.response.status).toBe(401);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should require auth for markdown assets and allow after login', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-vendor-marked-'));
         const port = await getFreePort();
@@ -351,6 +380,49 @@ describe('Web Server Auth Gateway', () => {
             expect(yoloHistory).toEqual(expect.objectContaining({
                 agentPromptCommand: 'claude -p {prompt}'
             }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should reject create session when hostPath resolves to root directory', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-root-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                validateHostPath: hostPath => {
+                    if (!hostPath) {
+                        throw new Error('hostPath 不能为空');
+                    }
+                    if (hostPath === '/' || hostPath === '/root' || hostPath === '/home') {
+                        throw new Error('不允许挂载根目录或home目录。');
+                    }
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const created = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    createOptions: {
+                        containerName: 'my-web-root',
+                        hostPath: '/'
+                    }
+                })
+            });
+
+            expect(created.response.status).toBe(400);
+            expect(created.json).toEqual(expect.objectContaining({ error: '不允许挂载根目录或home目录。' }));
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
