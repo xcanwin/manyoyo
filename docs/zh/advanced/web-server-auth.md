@@ -87,7 +87,7 @@ curl --noproxy '*' -b /tmp/manyoyo.cookie \
 排查顺序：
 
 1. 确认已完成 `/auth/login` 并带上 cookie
-2. 确认 `-u` / `-P` 与配置项一致
+2. 确认 `-U` / `-P` 与配置项一致
 3. 使用 `manyoyo config show` 检查 `serverUser`/`serverPass` 的最终来源
 
 ## 相关文档

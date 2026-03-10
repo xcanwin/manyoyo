@@ -87,7 +87,7 @@ curl --noproxy '*' -b /tmp/manyoyo.cookie \
 Check in this order:
 
 1. Ensure `/auth/login` succeeded and cookie is attached
-2. Ensure `-u` / `-P` matches effective config
+2. Ensure `-U` / `-P` matches effective config
 3. Run `manyoyo config show` and verify final source of `serverUser` / `serverPass`
 
 ## Related Docs
