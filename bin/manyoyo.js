@@ -15,6 +15,7 @@ const { initAgentConfigs } = require('../lib/init-config');
 const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
 const { runPluginCommand } = require('../lib/plugin');
+const { buildManyoyoLogPath } = require('../lib/log-path');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_DEFAULT } = require('../package.json');
 const IMAGE_VERSION_BASE = String(IMAGE_VERSION_DEFAULT || '1.0.0').split('-')[0];
 const IMAGE_VERSION_HELP_EXAMPLE = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
@@ -277,37 +278,26 @@ function getServeProcessSnapshot() {
 }
 
 function createServeLogger() {
-    function pad2(n) {
-        return String(n).padStart(2, '0');
-    }
-
-    function getLocalDateTag(date = new Date()) {
-        const y = date.getFullYear();
-        const m = pad2(date.getMonth() + 1);
-        const d = pad2(date.getDate());
-        return `${y}-${m}-${d}`;
-    }
-
     function formatLocalTimestamp(date = new Date()) {
         const y = date.getFullYear();
-        const m = pad2(date.getMonth() + 1);
-        const d = pad2(date.getDate());
-        const hh = pad2(date.getHours());
-        const mm = pad2(date.getMinutes());
-        const ss = pad2(date.getSeconds());
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const hh = String(date.getHours()).padStart(2, '0');
+        const mm = String(date.getMinutes()).padStart(2, '0');
+        const ss = String(date.getSeconds()).padStart(2, '0');
         const ms = String(date.getMilliseconds()).padStart(3, '0');
         const offsetMinutes = -date.getTimezoneOffset();
         const sign = offsetMinutes >= 0 ? '+' : '-';
         const abs = Math.abs(offsetMinutes);
-        const offH = pad2(Math.floor(abs / 60));
-        const offM = pad2(abs % 60);
+        const offH = String(Math.floor(abs / 60)).padStart(2, '0');
+        const offM = String(abs % 60).padStart(2, '0');
         return `${y}-${m}-${d}T${hh}:${mm}:${ss}.${ms}${sign}${offH}:${offM}`;
     }
 
-    const logDir = path.join(os.homedir(), '.manyoyo', 'logs');
+    const serveLog = buildManyoyoLogPath('serve');
+    const logDir = serveLog.dir;
     fs.mkdirSync(logDir, { recursive: true });
-    const dateTag = getLocalDateTag();
-    const logPath = path.join(logDir, `serve-${dateTag}.log`);
+    const logPath = serveLog.path;
 
     function write(level, message, extra) {
         const ts = formatLocalTimestamp();

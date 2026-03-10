@@ -103,6 +103,7 @@
 - `--yes` 仅用于 `build` 与 `init` 子命令。
 - CLI 仅支持子命令入口；传入未定义参数会报 `unknown option`。
 - 缓存目录：`docker/cache/`，覆盖率：`coverage/`。
+- 日志目录 `~/.manyoyo/logs/` 下新增文件时，必须按子命令、功能或业务场景分目录（如 `serve/`、`build/`、`run/`），不要直接堆在根目录。
 
 ## 环境与兼容性
 - 运行环境：`node` >= 22，容器运行时支持 `podman` 或 `docker`。
