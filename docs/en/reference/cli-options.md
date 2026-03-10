@@ -61,6 +61,7 @@ These commands share the same core runtime options:
 | `[listen]` | Listen address, supports `<port>` or `<host:port>` |
 | `-U, --user <username>` | Login username, default `admin` |
 | `-P, --pass <password>` | Login password; randomly generated at startup if omitted |
+| `-d, --detach` | Start the web server in background and return immediately; if no password is set, prints the generated password for this run |
 
 ### `build`
 

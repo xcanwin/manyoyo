@@ -24,6 +24,12 @@ manyoyo serve 127.0.0.1:3000
 
 # LAN access (requires strong password + firewall)
 manyoyo serve 0.0.0.0:3000 -U admin -P 'StrongPassword'
+
+# Run in background
+manyoyo serve 127.0.0.1:3000 -U admin -P 'StrongPassword' -d
+
+# Run in background with auto-generated password (prints the password for this run)
+manyoyo serve 127.0.0.1:3000 -d
 ```
 
 ## Auth Parameter Priority

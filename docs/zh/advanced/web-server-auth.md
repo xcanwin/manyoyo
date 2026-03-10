@@ -24,6 +24,12 @@ manyoyo serve 127.0.0.1:3000
 
 # 局域网访问（需配合强密码与防火墙）
 manyoyo serve 0.0.0.0:3000 -U admin -P 'StrongPassword'
+
+# 后台启动
+manyoyo serve 127.0.0.1:3000 -U admin -P 'StrongPassword' -d
+
+# 后台启动并自动生成密码（会直接打印本次随机密码）
+manyoyo serve 127.0.0.1:3000 -d
 ```
 
 ## 认证参数优先级

@@ -7,6 +7,7 @@ const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const net = require('net');
 const { imageVersion: PACKAGE_IMAGE_VERSION } = require('../package.json');
 
 const BIN_PATH = path.join(__dirname, '../bin/manyoyo.js');
@@ -22,6 +23,24 @@ function writeGlobalConfig(homeDir, configObj) {
 
 function writeExecutable(filePath, content) {
     fs.writeFileSync(filePath, content, { mode: 0o755 });
+}
+
+function getFreePort() {
+    return new Promise((resolve, reject) => {
+        const server = net.createServer();
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', () => {
+            const address = server.address();
+            const port = address && typeof address === 'object' ? address.port : 0;
+            server.close(err => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve(port);
+            });
+        });
+    });
 }
 
 describe('MANYOYO CLI', () => {
@@ -53,6 +72,48 @@ describe('MANYOYO CLI', () => {
             expect(output).toContain('MANYOYO');
             expect(output).toContain('--help');
             expect(output).toContain('--version');
+            expect(output).toContain('serve 127.0.0.1:3000 -d');
+        });
+
+        test('serve --help should include detach option', () => {
+            const output = execSync(`node ${BIN_PATH} serve --help`, { encoding: 'utf-8' });
+            expect(output).toContain('-d, --detach');
+        });
+
+        test('serve -d should print generated password when pass not provided', async () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-serve-detach-'));
+            const port = await getFreePort();
+            const output = execSync(`node ${BIN_PATH} serve 127.0.0.1:${port} -d`, {
+                encoding: 'utf-8',
+                env: { ...process.env, HOME: tempHome }
+            });
+
+            const pidMatch = output.match(/^PID:\s+(\d+)$/m);
+            const passMatch = output.match(/^登录密码\(本次随机\):\s+([A-Za-z0-9]+)$/m);
+            expect(pidMatch).toBeTruthy();
+            expect(passMatch).toBeTruthy();
+
+            const pid = pidMatch ? Number(pidMatch[1]) : 0;
+            const password = passMatch ? passMatch[1] : '';
+
+            try {
+                await new Promise(resolve => setTimeout(resolve, 1200));
+                const loginRes = await fetch(`http://127.0.0.1:${port}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'admin', password })
+                });
+                expect(loginRes.status).toBe(200);
+            } finally {
+                if (pid) {
+                    try {
+                        process.kill(pid, 'SIGTERM');
+                    } catch (e) {
+                        // ignore process cleanup failures in test teardown
+                    }
+                }
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
         });
 
         test('--version should display version', () => {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -1039,7 +1039,8 @@ async function setupCommander() {
   ${MANYOYO_NAME} run -n test -- -c                   恢复之前会话
   ${MANYOYO_NAME} run -x "echo 123"                   使用完整命令
   ${MANYOYO_NAME} serve 127.0.0.1:3000                启动本机网页服务
-  ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P 123 &>/dev/null &  后台启动并监听全部网卡
+  ${MANYOYO_NAME} serve 127.0.0.1:3000 -d             后台启动；未设密码时会打印本次随机密码
+  ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P 123 -d  后台启动并监听全部网卡
   ${MANYOYO_NAME} playwright up host-headless         启动 playwright 默认场景（推荐）
   ${MANYOYO_NAME} plugin playwright up host-headless  通过 plugin 命名空间启动
   ${MANYOYO_NAME} run -n test -q tip -q cmd           多次使用静默选项
@@ -1082,6 +1083,7 @@ Notes:
 
     const serveCommand = program.command('serve [listen]').description('启动网页交互服务 (默认 127.0.0.1:3000)');
     applyRunStyleOptions(serveCommand, { includeRmOnExit: false, includeWebAuthOptions: true });
+    serveCommand.option('-d, --detach', '后台启动网页服务并立即返回');
     serveCommand.action((listen, options) => {
         selectAction('serve', {
             ...options,
@@ -1417,6 +1419,7 @@ Notes:
         isRemoveMode,
         isShowCommandMode,
         isServerMode,
+        isServerDetach: Boolean(selectedAction === 'serve' && options.detach),
         isPluginMode: false
     };
 }
@@ -1443,6 +1446,7 @@ function createRuntimeContext(modeState = {}) {
         showCommand: Boolean(modeState.isShowCommandMode),
         rmOnExit: RM_ON_EXIT,
         serverMode: Boolean(modeState.isServerMode),
+        serverDetach: Boolean(modeState.isServerDetach),
         serverHost: SERVER_HOST,
         serverPort: SERVER_PORT,
         serverAuthUser: SERVER_AUTH_USER,
@@ -1485,6 +1489,51 @@ function validateHostPathOrThrow(hostPath) {
     const homeDir = process.env.HOME || '/home';
     if (realHostPath === '/' || realHostPath === '/home' || realHostPath === homeDir) {
         throw new Error('不允许挂载根目录或home目录。');
+    }
+}
+
+function buildDetachedServeArgv(argv) {
+    const result = [];
+    for (let i = 0; i < argv.length; i++) {
+        const arg = String(argv[i] || '');
+        if (arg === '-d' || arg === '--detach') {
+            continue;
+        }
+        result.push(arg);
+    }
+    return result;
+}
+
+function buildDetachedServeEnv(runtime) {
+    const env = { ...process.env };
+    if (runtime.serverAuthUser) {
+        env.MANYOYO_SERVER_USER = runtime.serverAuthUser;
+    }
+    if (runtime.serverAuthPass) {
+        env.MANYOYO_SERVER_PASS = runtime.serverAuthPass;
+    }
+    return env;
+}
+
+function relaunchServeDetached(runtime) {
+    const serveLog = buildManyoyoLogPath('serve');
+    fs.mkdirSync(serveLog.dir, { recursive: true });
+
+    const child = spawn(process.argv[0], buildDetachedServeArgv(process.argv.slice(1)), {
+        detached: true,
+        stdio: 'ignore',
+        env: buildDetachedServeEnv(runtime)
+    });
+    child.unref();
+
+    console.log(`${GREEN}✅ serve 已转入后台运行${NC}`);
+    console.log(`PID: ${child.pid}`);
+    console.log(`日志: ${serveLog.path}`);
+    console.log(`登录用户名: ${runtime.serverAuthUser}`);
+    if (runtime.serverAuthPassAuto) {
+        console.log(`登录密码(本次随机): ${runtime.serverAuthPass}`);
+    } else {
+        console.log('登录密码: 使用你配置的 serve -P / serverPass / MANYOYO_SERVER_PASS');
     }
 }
 
@@ -1822,6 +1871,10 @@ async function main() {
 
         // 2. Start web server mode
         if (runtime.serverMode) {
+            if (runtime.serverDetach) {
+                relaunchServeDetached(runtime);
+                return;
+            }
             const serveLogger = createServeLogger();
             runtime.logger = serveLogger;
             installServeProcessDiagnostics(serveLogger);
