@@ -64,7 +64,7 @@ FROM ubuntu:24.04
 
 ARG TARGETARCH
 ARG NODE_VERSION=24
-ARG TOOL="full"
+ARG TOOL="common"
 
 # 镜像源参数化（默认使用阿里云，可按需覆盖）
 ARG APT_MIRROR=https://mirrors.aliyun.com
@@ -74,9 +74,10 @@ ARG PIP_INDEX_URL=https://mirrors.tencent.com/pypi/simple
 ARG PY_TEXT_PIP_PACKAGES="PyYAML python-dotenv tomlkit pyjson5 jsonschema"
 ARG PY_TEXT_EXTRA_PIP_PACKAGES=""
 ENV LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8
+    LC_ALL=C.UTF-8 \
+    PIP_ROOT_USER_ACTION=ignore
 
-# 合并系统依赖安装为单层，减少镜像体积
+# 合并系统依赖与 Python 安装为单层，减少镜像体积
 RUN <<EOX
     # 配置 APT 镜像源
     sed -i "s|http://[^/]*\.ubuntu\.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
@@ -87,12 +88,14 @@ RUN <<EOX
     # 开发与构建
     # 系统管理
     # 通用工具
+    # Python
     apt-get -o Acquire::https::Verify-Peer=false update -y
     apt-get -o Acquire::https::Verify-Peer=false install -y --no-install-recommends \
         ca-certificates openssl curl wget net-tools iputils-ping dnsutils socat ncat ssh \
         git gh g++ make sqlite3 \
-        procps psmisc lsof supervisor man-db \
-        nano jq file tree ripgrep less bc xxd tar zip unzip gzip
+        procps psmisc lsof supervisor \
+        nano jq file tree ripgrep less bc xxd tar zip unzip gzip \
+        python3.12 python3.12-dev python3.12-venv python3-pip
 
     # 更新 CA 证书
     update-ca-certificates
@@ -107,15 +110,7 @@ RUN <<EOX
         apt-get install -y --no-install-recommends docker.io
     ;; esac
 
-    # 清理
-    apt-get clean
-    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
-EOX
-
-RUN <<EOX
-    # 安装 python
-    apt-get update -y
-    apt-get install -y --no-install-recommends python3.12 python3.12-dev python3.12-venv python3-pip
+    # 配置 python
     ln -sf /usr/bin/python3 /usr/bin/python
     ln -sf /usr/bin/pip3 /usr/bin/pip
     pip config set global.index-url "${PIP_INDEX_URL}"
@@ -236,7 +231,7 @@ RUN <<EOX
     # 安装 go
     case ",$TOOL," in *,full,*|*,go,*)
         apt-get update -y
-        apt-get install -y --no-install-recommends golang golang-src gcc
+        apt-get install -y --no-install-recommends golang gcc
         go env -w GOPROXY=https://mirrors.tencent.com/go
 
         # 安装 LSP服务（go）
