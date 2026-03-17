@@ -34,8 +34,8 @@ describe('manyoyo plugin commands', () => {
 
     test('plugin playwright mcp-add supports namespace form', () => {
         const output = execSync(`node ${BIN_PATH} plugin playwright mcp-add --host localhost`, { encoding: 'utf-8' });
-        expect(output).toContain('playwright-cont-headless');
-        expect(output).toContain('playwright-host-headed');
+        expect(output).toContain('playwright-mcp-cont-headless');
+        expect(output).toContain('playwright-mcp-host-headed');
     });
 
     test('playwright mcp-add respects run profile plugins.playwright.runtime', () => {
@@ -55,10 +55,10 @@ describe('manyoyo plugin commands', () => {
                 env: { ...process.env, HOME: tempHome }
             });
 
-            expect(output).toContain('playwright-cont-headless');
-            expect(output).toContain('playwright-cont-headed');
-            expect(output).not.toContain('playwright-host-headless');
-            expect(output).not.toContain('playwright-host-headed');
+            expect(output).toContain('playwright-mcp-cont-headless');
+            expect(output).toContain('playwright-mcp-cont-headed');
+            expect(output).not.toContain('playwright-mcp-host-headless');
+            expect(output).not.toContain('playwright-mcp-host-headed');
         });
     });
 
@@ -413,11 +413,11 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             expect(rc).toBe(0);
 
             const cfg = JSON.parse(fs.readFileSync(plugin.sceneConfigPath('cont-headless'), 'utf8'));
-            expect(cfg.browser.initScript).toEqual(['/app/config/container-headless.init.js']);
+            expect(cfg.browser.initScript).toEqual(['/app/config/mcp-cont-headless.init.js']);
 
             const overridePath = plugin.sceneComposeOverridePath('cont-headless');
             const overrideContent = fs.readFileSync(overridePath, 'utf8');
-            expect(overrideContent).toContain('/app/config/container-headless.init.js');
+            expect(overrideContent).toContain('/app/config/mcp-cont-headless.init.js');
         } finally {
             fs.rmSync(tempConfigDir, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });

@@ -6,7 +6,7 @@ services:
       args:
         PLAYWRIGHT_MCP_BASE_IMAGE: mcr.microsoft.com/playwright/mcp:${PLAYWRIGHT_MCP_DOCKER_TAG:-latest}
     image: ${PLAYWRIGHT_MCP_IMAGE:-localhost/xcanwin/manyoyo-playwright-headed}
-    container_name: ${PLAYWRIGHT_MCP_CONTAINER_NAME:-my-playwright-cont-headed}
+    container_name: ${PLAYWRIGHT_MCP_CONTAINER_NAME:-my-playwright-mcp-cont-headed}
     init: true
     stdin_open: true
     ports:

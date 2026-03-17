@@ -1,7 +1,7 @@
 services:
   playwright:
     image: mcr.microsoft.com/playwright/mcp:${PLAYWRIGHT_MCP_DOCKER_TAG:-latest}
-    container_name: ${PLAYWRIGHT_MCP_CONTAINER_NAME:-my-playwright-cont-headless}
+    container_name: ${PLAYWRIGHT_MCP_CONTAINER_NAME:-my-playwright-mcp-cont-headless}
     init: true
     stdin_open: true
     ports:
