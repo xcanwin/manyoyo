@@ -75,7 +75,8 @@ ARG PY_TEXT_PIP_PACKAGES="PyYAML python-dotenv tomlkit pyjson5 jsonschema"
 ARG PY_TEXT_EXTRA_PIP_PACKAGES=""
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
-    PIP_ROOT_USER_ACTION=ignore
+    PIP_ROOT_USER_ACTION=ignore \
+    PLAYWRIGHT_MCP_CONFIG=/app/config/cli-cont-headless.json
 
 # 合并系统依赖与 Python 安装为单层，减少镜像体积
 RUN <<EOX
@@ -197,6 +198,16 @@ RUN <<EOX
         mkdir -p ~/.config/opencode/
         cp /tmp/docker-res/opencode/opencode.json ~/.config/opencode/opencode.json
     ;; esac
+
+    # 安装 浏览器
+    cd ~/
+    npm install -g playwright@latest @playwright/cli@latest && \
+    playwright install --with-deps chromium && \
+    playwright-cli install --skills && \
+    mkdir -p ./skills && \
+    mv ./.claude/skills/playwright-cli ./skills/ && \
+    find ./.claude -type d -empty -delete
+    cd $OLDPWD
 
     # 清理
     npm cache clean --force
