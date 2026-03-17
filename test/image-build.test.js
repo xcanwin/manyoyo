@@ -294,4 +294,24 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(buildCall).toBeTruthy();
         expect(options.log).toHaveBeenCalledWith(expect.stringContaining('跳过 gopls 本地缓存预下载'));
     });
+
+    test('docker image should include built-in playwright cli headless config assets', () => {
+        const rootDir = path.resolve(__dirname, '..');
+        const dockerfile = fs.readFileSync(path.join(rootDir, 'docker', 'manyoyo.Dockerfile'), 'utf8');
+        const configPath = path.join(rootDir, 'docker', 'res', 'playwright', 'cli-cont-headless.json');
+        const initScriptPath = path.join(rootDir, 'docker', 'res', 'playwright', 'cli-cont-headless.init.js');
+
+        expect(dockerfile).toContain('COPY ./docker/res/playwright/ /app/config/');
+        expect(fs.existsSync(configPath)).toBe(true);
+        expect(fs.existsSync(initScriptPath)).toBe(true);
+
+        const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        expect(cfg.outputDir).toBe('/tmp/.playwright-cli');
+        expect(cfg.browser.initScript).toEqual(['/app/config/cli-cont-headless.init.js']);
+        expect(cfg.browser.contextOptions.timezoneId).toBe('Asia/Shanghai');
+
+        const initScript = fs.readFileSync(initScriptPath, 'utf8');
+        expect(initScript).toContain("Object.defineProperty(navProto, 'platform'");
+        expect(initScript).toContain('MacIntel');
+    });
 });

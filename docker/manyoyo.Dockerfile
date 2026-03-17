@@ -127,6 +127,8 @@ EOX
 
 # 从 cache-stage 复制 Node.js（缓存或下载）
 COPY --from=cache-stage /opt/node /usr/local
+COPY ./docker/res/playwright/cli-cont-headless.init.js /app/config/cli-cont-headless.init.js
+COPY ./docker/res/playwright/cli-cont-headless.json /app/config/cli-cont-headless.json
 COPY ./docker/res/ /tmp/docker-res/
 ARG GIT_SSL_NO_VERIFY=false
 
@@ -204,11 +206,13 @@ RUN <<EOX
     npm install -g playwright@latest @playwright/cli@latest && \
     playwright install --with-deps chromium && \
     playwright-cli install --skills && \
-    #mkdir -p ./skills && \
-    #mv ./.claude/skills/playwright-cli ./skills/ && \
-    #find ./.claude -type d -empty -delete
-    cp -R "$HOME/skills/playwright-cli" "$HOME/.claude/skills/playwright-cli"
-    cp -R "$HOME/skills/playwright-cli" "$HOME/.codex/skills/playwright-cli"
+    # mkdir -p ./skills && \
+    # mv ./.claude/skills/playwright-cli ./skills/ && \
+    # find ./.claude -type d -empty -delete
+    mkdir -p ~/.gemini/skills/
+    # cp -R "$HOME/.claude/skills/playwright-cli/." "$HOME/.claude/skills/playwright-cli/"
+    cp -R "$HOME/.claude/skills/playwright-cli/." "$HOME/.codex/skills/playwright-cli/"
+    cp -R "$HOME/.claude/skills/playwright-cli/." "$HOME/.gemini/skills/playwright-cli/"
     cd $OLDPWD
 
     # 清理

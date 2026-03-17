@@ -1,0 +1,37 @@
+{
+    "outputDir": "/tmp/.playwright-cli",
+    "browser": {
+        "chromiumSandbox": true,
+        "browserName": "chromium",
+        "initScript": [
+            "/app/config/cli-cont-headless.init.js"
+        ],
+        "launchOptions": {
+            "channel": "chromium",
+            "headless": true,
+            "args": [
+                "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+                "--lang=zh-CN",
+                "--window-size=1366,768",
+                "--disable-blink-features=AutomationControlled",
+                "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
+            ]
+        },
+        "contextOptions": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+            "locale": "zh-CN",
+            "timezoneId": "Asia/Shanghai",
+            "viewport": {
+                "width": 1366,
+                "height": 768
+            },
+            "screen": {
+                "width": 1366,
+                "height": 768
+            },
+            "extraHTTPHeaders": {
+                "Accept-Language": "zh-CN,zh;q=0.9"
+            }
+        }
+    }
+}
