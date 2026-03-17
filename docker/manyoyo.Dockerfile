@@ -204,14 +204,16 @@ RUN <<EOX
     npm install -g playwright@latest @playwright/cli@latest && \
     playwright install --with-deps chromium && \
     playwright-cli install --skills && \
-    mkdir -p ./skills && \
-    mv ./.claude/skills/playwright-cli ./skills/ && \
-    find ./.claude -type d -empty -delete
+    #mkdir -p ./skills && \
+    #mv ./.claude/skills/playwright-cli ./skills/ && \
+    #find ./.claude -type d -empty -delete
+    cp -R "$HOME/skills/playwright-cli" "$HOME/.claude/skills/playwright-cli"
+    cp -R "$HOME/skills/playwright-cli" "$HOME/.codex/skills/playwright-cli"
     cd $OLDPWD
 
     # 清理
     npm cache clean --force
-    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
+    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/go/pkg/mod/cache
 EOX
 
 # 从 cache-stage 复制 JDT LSP（缓存或下载）
@@ -230,7 +232,7 @@ RUN <<EOX
 
         # 清理
         apt-get clean
-        rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
+        rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/go/pkg/mod/cache
     ;; esac
     rm -rf /tmp/jdtls-cache
 EOX
@@ -258,7 +260,7 @@ RUN <<EOX
         # 清理
         apt-get clean
         go clean -modcache -cache
-        rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
+        rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/go/pkg/mod/cache
     ;; esac
     rm -rf /tmp/gopls-cache
 EOX
@@ -268,7 +270,7 @@ COPY ./docker/res/supervisor/s.conf /etc/supervisor/conf.d/s.conf
 
 RUN <<EOX
     # 清理
-    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.cache ~/.npm ~/go/pkg/mod/cache
+    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/go/pkg/mod/cache
 EOX
 
 WORKDIR /tmp
