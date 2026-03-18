@@ -201,19 +201,27 @@ RUN <<EOX
         cp /tmp/docker-res/opencode/opencode.json ~/.config/opencode/opencode.json
     ;; esac
 
-    # 安装 浏览器
-    cd ~/
-    npm install -g playwright@latest @playwright/cli@latest && \
-    playwright install --with-deps chromium && \
-    playwright-cli install --skills && \
-    # mkdir -p ./skills && \
-    # mv ./.claude/skills/playwright-cli ./skills/ && \
-    # find ./.claude -type d -empty -delete
-    mkdir -p ~/.gemini/skills/
-    # cp -R "$HOME/.claude/skills/playwright-cli/." "$HOME/.claude/skills/playwright-cli/"
-    cp -R "$HOME/.claude/skills/playwright-cli/." "$HOME/.codex/skills/playwright-cli/"
-    cp -R "$HOME/.claude/skills/playwright-cli/." "$HOME/.gemini/skills/playwright-cli/"
+    # 安装 Playwright CLI skills（不在镜像构建阶段下载浏览器）
+    npm install -g @playwright/cli@latest
+    PLAYWRIGHT_CLI_INSTALL_DIR=/tmp/playwright-cli-install
+    mkdir -p "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright"
+    cat > "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json" <<'EOF'
+{
+    "browser": {
+        "browserName": "chromium",
+        "launchOptions": {
+            "channel": "chrome"
+        }
+    }
+}
+EOF
+    cd "${PLAYWRIGHT_CLI_INSTALL_DIR}"
+    playwright-cli install --skills
+    mkdir -p "$HOME/.codex/skills/playwright-cli" ~/.gemini/skills/playwright-cli
+    cp -R "${PLAYWRIGHT_CLI_INSTALL_DIR}/.claude/skills/playwright-cli/." "$HOME/.codex/skills/playwright-cli/"
+    cp -R "${PLAYWRIGHT_CLI_INSTALL_DIR}/.claude/skills/playwright-cli/." "$HOME/.gemini/skills/playwright-cli/"
     cd $OLDPWD
+    rm -rf "${PLAYWRIGHT_CLI_INSTALL_DIR}"
 
     # 清理
     npm cache clean --force

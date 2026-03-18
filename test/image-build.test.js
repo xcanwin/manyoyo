@@ -301,9 +301,12 @@ describe('image-build with unified build and buildkit fallback', () => {
         const configPath = path.join(rootDir, 'docker', 'res', 'playwright', 'cli-cont-headless.json');
         const initScriptPath = path.join(rootDir, 'docker', 'res', 'playwright', 'cli-cont-headless.init.js');
 
-        expect(dockerfile).toContain('COPY ./docker/res/playwright/ /app/config/');
+        expect(dockerfile).toContain('COPY ./docker/res/playwright/cli-cont-headless.init.js /app/config/cli-cont-headless.init.js');
+        expect(dockerfile).toContain('COPY ./docker/res/playwright/cli-cont-headless.json /app/config/cli-cont-headless.json');
         expect(fs.existsSync(configPath)).toBe(true);
         expect(fs.existsSync(initScriptPath)).toBe(true);
+        expect(dockerfile).toContain('npm install -g @playwright/cli@latest');
+        expect(dockerfile).not.toContain('playwright install --with-deps chromium');
 
         const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         expect(cfg.outputDir).toBe('/tmp/.playwright-cli');

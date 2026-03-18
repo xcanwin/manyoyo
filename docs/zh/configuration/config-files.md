@@ -227,7 +227,8 @@ MANYOYO 支持两种配置文件：
     "plugins": {
         "playwright": {
             "runtime": "mixed",  // mixed | container | host
-            "enabledScenes": ["cont-headless", "cont-headed", "host-headless", "host-headed"],
+            "enabledScenes": ["mcp-cont-headless", "mcp-cont-headed", "mcp-host-headless", "mcp-host-headed", "cli-host-headless", "cli-host-headed"],
+            "cliSessionScene": "cli-host-headless",
             "mcpDefaultHost": "host.docker.internal",
             "vncPasswordEnvKey": "VNC_PASSWORD",
             "extensionProdversion": "132.0.0.0",
@@ -238,6 +239,8 @@ MANYOYO 支持两种配置文件：
                 "contHeaded": 8932,
                 "hostHeadless": 8933,
                 "hostHeaded": 8934,
+                "cliHostHeadless": 8935,
+                "cliHostHeaded": 8936,
                 "contHeadedNoVnc": 6080
             }
         }
@@ -249,6 +252,7 @@ MANYOYO 支持两种配置文件：
 
 - `manyoyo playwright ext-download` 会下载扩展到 `~/.manyoyo/plugin/playwright/extensions/`（临时目录会自动清理）。
 - `manyoyo playwright up <scene> --ext-path <path> --ext-name <name>` 可为任意场景追加扩展目录（两者均可多次使用，最终都会转为 Playwright 的扩展加载参数）。
+- `cliSessionScene` 用于指定 `my run` 默认注入的 `playwright-cli` 宿主场景；启动对应 `cli-host-*` 场景后，容器内的 `playwright-cli open` 会自动附着到宿主浏览器。
 - `navigatorPlatform` 用于注入 `navigator.platform`（默认 `MacIntel`，与内置 UA 保持一致）。
 - `disableWebRTC` 设为 `true` 时会附加禁用 WebRTC 的启动参数并注入脚本屏蔽相关 API。
 

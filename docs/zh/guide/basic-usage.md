@@ -123,11 +123,13 @@ manyoyo config show --serve 127.0.0.1:3000
 
 ```bash
 manyoyo playwright ls
-manyoyo playwright up host-headless
-manyoyo playwright up host-headless --ext-path /abs/path/extA --ext-name adguard
-manyoyo playwright status host-headless
-manyoyo playwright logs host-headless
+manyoyo playwright up mcp-host-headless
+manyoyo playwright up mcp-host-headless --ext-path /abs/path/extA --ext-name adguard
+manyoyo playwright status mcp-host-headless
+manyoyo playwright logs mcp-host-headless
 manyoyo playwright mcp-add --host localhost
+manyoyo playwright up cli-host-headless
+manyoyo run -r codex
 ```
 
 更多配置细节见[配置系统](../configuration/README.md)与[命令参考](../reference/cli-options.md)。

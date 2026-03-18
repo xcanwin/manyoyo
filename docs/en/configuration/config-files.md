@@ -227,7 +227,8 @@ Mode descriptions:
     "plugins": {
         "playwright": {
             "runtime": "mixed",  // mixed | container | host
-            "enabledScenes": ["cont-headless", "cont-headed", "host-headless", "host-headed"],
+            "enabledScenes": ["mcp-cont-headless", "mcp-cont-headed", "mcp-host-headless", "mcp-host-headed", "cli-host-headless", "cli-host-headed"],
+            "cliSessionScene": "cli-host-headless",
             "mcpDefaultHost": "host.docker.internal",
             "vncPasswordEnvKey": "VNC_PASSWORD",
             "extensionProdversion": "132.0.0.0",
@@ -238,6 +239,8 @@ Mode descriptions:
                 "contHeaded": 8932,
                 "hostHeadless": 8933,
                 "hostHeaded": 8934,
+                "cliHostHeadless": 8935,
+                "cliHostHeaded": 8936,
                 "contHeadedNoVnc": 6080
             }
         }
@@ -249,6 +252,7 @@ Mode descriptions:
 
 - `manyoyo playwright ext-download` downloads extensions into `~/.manyoyo/plugin/playwright/extensions/` (temp files are auto-cleaned).
 - `manyoyo playwright up <scene> --ext-path <path> --ext-name <name>` appends extension directories for any scene (both options can be repeated and are converted to Playwright extension launch args).
+- `cliSessionScene` selects the default host `playwright-cli` scene injected into `my run`; once the matching `cli-host-*` scene is started, `playwright-cli open` inside the container attaches to the host browser automatically.
 - `navigatorPlatform` injects `navigator.platform` (default `MacIntel` to match the built-in UA profile).
 - Set `disableWebRTC` to `true` to append WebRTC-disable launch args and inject a script that blocks WebRTC APIs.
 

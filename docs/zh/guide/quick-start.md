@@ -27,7 +27,7 @@ manyoyo -v
 ## 3. 构建沙箱镜像
 
 ```bash
-manyoyo build --iv 1.8.4-common
+manyoyo build --iv 1.8.8-common
 ```
 
 ## 4. 立即迁移配置

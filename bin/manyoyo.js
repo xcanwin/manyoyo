@@ -14,7 +14,7 @@ const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/cont
 const { initAgentConfigs } = require('../lib/init-config');
 const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
-const { runPluginCommand } = require('../lib/plugin');
+const { runPluginCommand, createPlugin } = require('../lib/plugin');
 const { buildManyoyoLogPath } = require('../lib/log-path');
 const {
     sanitizeSensitiveData,
@@ -71,6 +71,7 @@ let CONTAINER_ENVS = [];
 let FIRST_CONTAINER_ENVS = [];
 let CONTAINER_VOLUMES = [];
 let CONTAINER_PORTS = [];
+let CONTAINER_EXTRA_ARGS = [];
 const MANYOYO_NAME = detectCommandName();
 let CONT_MODE_ARGS = [];
 let QUIET = {};
@@ -559,6 +560,63 @@ function addEnvFile(envFile) {
     return addEnvFileTo(CONTAINER_ENVS, envFile);
 }
 
+function hasEnvKey(targetEnvs, key) {
+    for (let i = 0; i < targetEnvs.length; i += 2) {
+        if (targetEnvs[i] !== '--env') {
+            continue;
+        }
+        const text = String(targetEnvs[i + 1] || '');
+        const idx = text.indexOf('=');
+        if (idx > 0 && text.slice(0, idx) === key) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function appendUniqueArgs(targetArgs, extraArgs) {
+    const joinedExisting = new Set();
+    for (let i = 0; i < targetArgs.length; i += 2) {
+        const head = String(targetArgs[i] || '');
+        const value = String(targetArgs[i + 1] || '');
+        if (head.startsWith('--')) {
+            joinedExisting.add(`${head}\u0000${value}`);
+        }
+    }
+
+    for (let i = 0; i < extraArgs.length; i += 2) {
+        const head = String(extraArgs[i] || '');
+        const value = String(extraArgs[i + 1] || '');
+        const signature = `${head}\u0000${value}`;
+        if (!joinedExisting.has(signature)) {
+            joinedExisting.add(signature);
+            targetArgs.push(head, value);
+        }
+    }
+}
+
+function applyPlaywrightCliSessionIntegration(config, runConfig) {
+    try {
+        const plugin = createPlugin('playwright', {
+            globalConfig: config,
+            runConfig,
+            projectRoot: path.join(__dirname, '..')
+        });
+        const integration = plugin.buildCliSessionIntegration(DOCKER_CMD);
+        for (const entry of integration.envEntries) {
+            const parsed = parseEnvEntry(entry);
+            if (!hasEnvKey(CONTAINER_ENVS, parsed.key)) {
+                addEnv(`${parsed.key}=${parsed.value}`);
+            }
+        }
+        appendUniqueArgs(CONTAINER_EXTRA_ARGS, integration.extraArgs);
+        appendUniqueArgs(CONTAINER_VOLUMES, integration.volumeEntries || []);
+    } catch (error) {
+        console.error(`${RED}⚠️  错误: Playwright CLI 会话注入失败: ${error.message || String(error)}${NC}`);
+        process.exit(1);
+    }
+}
+
 function addVolume(volume) {
     CONTAINER_VOLUMES.push("--volume", volume);
 }
@@ -954,7 +1012,7 @@ async function setupCommander() {
             ...options,
             pluginAction: params.action || 'ls',
             pluginName: params.pluginName || 'playwright',
-            pluginScene: params.scene || 'host-headless',
+            pluginScene: params.scene || 'mcp-host-headless',
             pluginHost: params.host || '',
             pluginExtensionPaths: Array.isArray(params.extensionPaths) ? params.extensionPaths : [],
             pluginExtensionNames: Array.isArray(params.extensionNames) ? params.extensionNames : [],
@@ -975,7 +1033,7 @@ async function setupCommander() {
         const actions = ['up', 'down', 'status', 'health', 'logs'];
         actions.forEach(action => {
             const sceneCommand = command.command(`${action} [scene]`)
-                .description(`执行 playwright ${action} 场景（scene 默认 host-headless）`)
+                .description(`执行 playwright ${action} 场景（scene 默认 mcp-host-headless）`)
                 .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)');
 
             if (action === 'up') {
@@ -986,7 +1044,7 @@ async function setupCommander() {
             sceneCommand.action((scene, options) => selectPluginAction({
                 action,
                 pluginName: 'playwright',
-                scene: scene || 'host-headless',
+                scene: scene || 'mcp-host-headless',
                 extensionPaths: action === 'up' ? (options.extPath || []) : [],
                 extensionNames: action === 'up' ? (options.extName || []) : []
             }, options));
@@ -1041,8 +1099,8 @@ async function setupCommander() {
   ${MANYOYO_NAME} serve 127.0.0.1:3000                启动本机网页服务
   ${MANYOYO_NAME} serve 127.0.0.1:3000 -d             后台启动；未设密码时会打印本次随机密码
   ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P 123 -d  后台启动并监听全部网卡
-  ${MANYOYO_NAME} playwright up host-headless         启动 playwright 默认场景（推荐）
-  ${MANYOYO_NAME} plugin playwright up host-headless  通过 plugin 命名空间启动
+  ${MANYOYO_NAME} playwright up mcp-host-headless         启动 playwright 默认场景（推荐）
+  ${MANYOYO_NAME} plugin playwright up mcp-host-headless  通过 plugin 命名空间启动
   ${MANYOYO_NAME} run -n test -q tip -q cmd           多次使用静默选项
         `);
 
@@ -1208,7 +1266,7 @@ Notes:
             pluginRequest: {
                 action: options.pluginAction,
                 pluginName: options.pluginName,
-                scene: options.pluginScene || 'host-headless',
+                scene: options.pluginScene || 'mcp-host-headless',
                 host: options.pluginHost || '',
                 extensionPaths: Array.isArray(options.pluginExtensionPaths) ? options.pluginExtensionPaths : [],
                 extensionNames: Array.isArray(options.pluginExtensionNames) ? options.pluginExtensionNames : [],
@@ -1301,6 +1359,8 @@ Notes:
         ...normalizeCliEnvMap(options.firstEnv)
     };
     Object.entries(firstEnvMap).forEach(([key, value]) => addEnvTo(FIRST_CONTAINER_ENVS, `${key}=${value}`));
+
+    applyPlaywrightCliSessionIntegration(config, runConfig);
 
     const volumeList = mergeArrayConfig(config.volumes, runConfig.volumes, options.volume);
     volumeList.forEach(v => addVolume(v));
@@ -1438,6 +1498,7 @@ function createRuntimeContext(modeState = {}) {
         firstExecCommandPrefix: FIRST_EXEC_COMMAND_PREFIX,
         firstExecCommandSuffix: FIRST_EXEC_COMMAND_SUFFIX,
         contModeArgs: CONT_MODE_ARGS,
+        containerExtraArgs: CONTAINER_EXTRA_ARGS,
         containerEnvs: CONTAINER_ENVS,
         firstContainerEnvs: FIRST_CONTAINER_ENVS,
         containerVolumes: CONTAINER_VOLUMES,
@@ -1662,6 +1723,7 @@ function buildDockerRunArgs(runtime) {
         imageName: runtime.imageName,
         imageVersion: runtime.imageVersion,
         contModeArgs: runtime.contModeArgs,
+        containerExtraArgs: runtime.containerExtraArgs,
         containerEnvs: runtime.containerEnvs,
         containerVolumes: runtime.containerVolumes,
         containerPorts: runtime.containerPorts,
@@ -1826,6 +1888,7 @@ async function runWebServerMode(runtime) {
         execCommand: runtime.execCommand,
         execCommandSuffix: runtime.execCommandSuffix,
         contModeArgs: runtime.contModeArgs,
+        containerExtraArgs: runtime.containerExtraArgs,
         containerEnvs: runtime.containerEnvs,
         containerVolumes: runtime.containerVolumes,
         containerPorts: runtime.containerPorts,

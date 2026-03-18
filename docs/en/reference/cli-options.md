@@ -40,7 +40,7 @@ These commands share the same core runtime options:
 | `--cp, --cont-path <path>` | Container working directory |
 | `-m, --cont-mode <mode>` | Container mode: `common`, `dind`, `sock` |
 | `--in, --image-name <name>` | Image name |
-| `--iv, --image-ver <version>` | Image version; must be `x.y.z-suffix`, for example `1.8.4-common` |
+| `--iv, --image-ver <version>` | Image version; must be `x.y.z-suffix`, for example `1.8.8-common` |
 | `-e, --env <env>` | Append environment variables, repeatable |
 | `--ef, --env-file <file>` | Append env files, absolute paths only |
 | `-v, --volume <volume>` | Append bind mounts, repeatable |
@@ -78,7 +78,7 @@ These commands share the same core runtime options:
 | Command | Purpose |
 | --- | --- |
 | `manyoyo playwright ls` | List available scenes |
-| `manyoyo playwright up [scene]` | Start a scene, default `host-headless` |
+| `manyoyo playwright up [scene]` | Start a scene, default `mcp-host-headless` |
 | `manyoyo playwright down [scene]` | Stop a scene |
 | `manyoyo playwright status [scene]` | Show status |
 | `manyoyo playwright health [scene]` | Run health check |
@@ -120,8 +120,9 @@ manyoyo serve 0.0.0.0:3000 -U admin -P strong-password
 
 # Playwright
 manyoyo playwright ls
-manyoyo playwright up host-headless
-manyoyo plugin playwright up host-headless
+manyoyo playwright up mcp-host-headless
+manyoyo plugin playwright up mcp-host-headless
+manyoyo playwright up cli-host-headless
 manyoyo playwright mcp-add --host localhost
 ```
 

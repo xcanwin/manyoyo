@@ -30,6 +30,7 @@ describe('manyoyo plugin commands', () => {
         expect(output).toContain('http://localhost:8932/mcp');
         expect(output).toContain('http://localhost:8933/mcp');
         expect(output).toContain('http://localhost:8934/mcp');
+        expect(output).not.toContain('cli-host-headless');
     });
 
     test('plugin playwright mcp-add supports namespace form', () => {
@@ -91,6 +92,12 @@ describe('manyoyo plugin commands', () => {
         expect(output).toContain('--ext-name');
         expect(output).not.toContain('--ext <path>');
     });
+
+    test('playwright help examples use prefixed mcp scenes', () => {
+        const output = execSync(`node ${BIN_PATH} --help`, { encoding: 'utf-8' });
+        expect(output).toContain('playwright up mcp-host-headless');
+        expect(output).not.toContain('playwright up host-headless');
+    });
 });
 
 describe('PlaywrightPlugin runtime filtering', () => {
@@ -141,18 +148,18 @@ describe('PlaywrightPlugin runtime filtering', () => {
             }
         });
 
-        expect(plugin.resolveTargets('all')).toEqual(['host-headless', 'host-headed']);
+        expect(plugin.resolveTargets('all')).toEqual(['mcp-host-headless', 'mcp-host-headed', 'cli-host-headless', 'cli-host-headed']);
     });
 
     test('enabled scenes works with runtime mixed', () => {
         const plugin = new PlaywrightPlugin({
             globalConfig: {
                 runtime: 'mixed',
-                enabledScenes: ['cont-headless', 'host-headed']
+                enabledScenes: ['mcp-cont-headless', 'cli-host-headed']
             }
         });
 
-        expect(plugin.resolveTargets('all')).toEqual(['cont-headless', 'host-headed']);
+        expect(plugin.resolveTargets('all')).toEqual(['mcp-cont-headless', 'cli-host-headed']);
     });
 
     test('cont-headed non-up env should not require vnc password', () => {
@@ -161,7 +168,7 @@ describe('PlaywrightPlugin runtime filtering', () => {
                 runtime: 'container'
             }
         });
-        const env = plugin.containerEnv('cont-headed', '/tmp/playwright.json');
+        const env = plugin.containerEnv('mcp-cont-headed', '/tmp/playwright.json');
         expect(typeof env.VNC_PASSWORD).toBe('string');
         expect(env.VNC_PASSWORD.length).toBeGreaterThan(0);
     });
@@ -172,15 +179,15 @@ describe('PlaywrightPlugin runtime filtering', () => {
                 runtime: 'container'
             }
         });
-        const env = plugin.containerEnv('cont-headed', '/tmp/playwright.json', { requireVncPassword: true });
+        const env = plugin.containerEnv('mcp-cont-headed', '/tmp/playwright.json', { requireVncPassword: true });
 
         expect(typeof env.VNC_PASSWORD).toBe('string');
         expect(env.VNC_PASSWORD).toMatch(/^[A-Za-z0-9]{16}$/);
     });
 
-    test('host-headless scene config should include anti-detection baseline', () => {
+    test('mcp-host-headless scene config should include anti-detection baseline', () => {
         const plugin = new PlaywrightPlugin();
-        const cfg = plugin.buildSceneConfig('host-headless');
+        const cfg = plugin.buildSceneConfig('mcp-host-headless');
         const launchArgs = (((cfg || {}).browser || {}).launchOptions || {}).args || [];
         const contextOptions = (((cfg || {}).browser || {}).contextOptions || {});
 
@@ -209,7 +216,7 @@ describe('PlaywrightPlugin runtime filtering', () => {
                     runDir: tempRunDir
                 }
             });
-            const cfgPath = plugin.ensureSceneConfig('host-headless');
+            const cfgPath = plugin.ensureSceneConfig('mcp-host-headless');
             const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
             const initScripts = cfg.browser && cfg.browser.initScript;
             const initScriptPath = Array.isArray(initScripts) ? initScripts[0] : '';
@@ -236,7 +243,7 @@ describe('PlaywrightPlugin runtime filtering', () => {
                     disableWebRTC: true
                 }
             });
-            const cfgPath = plugin.ensureSceneConfig('host-headless');
+            const cfgPath = plugin.ensureSceneConfig('mcp-host-headless');
             const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
             const launchArgs = (((cfg || {}).browser || {}).launchOptions || {}).args || [];
             const initScripts = cfg.browser && cfg.browser.initScript;
@@ -261,7 +268,7 @@ describe('PlaywrightPlugin runtime filtering', () => {
         try {
             const plugin = new PlaywrightPlugin();
             const extensionPaths = EXTENSIONS.map(([name]) => path.join(extRoot, name));
-            const cfg = plugin.buildSceneConfig('cont-headless', { extensionPaths });
+            const cfg = plugin.buildSceneConfig('mcp-cont-headless', { extensionPaths });
             const launchArgs = cfg.browser && cfg.browser.launchOptions && cfg.browser.launchOptions.args;
 
             expect(Array.isArray(launchArgs)).toBe(true);
@@ -293,7 +300,7 @@ describe('PlaywrightPlugin runtime filtering', () => {
                 extensionPaths: [extPath],
                 extensionNames: [extName]
             });
-            const cfg = plugin.buildSceneConfig('host-headless', { extensionPaths });
+            const cfg = plugin.buildSceneConfig('mcp-host-headless', { extensionPaths });
             const launchArgs = cfg.browser && cfg.browser.launchOptions && cfg.browser.launchOptions.args;
 
             expect(Array.isArray(launchArgs)).toBe(true);
@@ -344,18 +351,54 @@ describe('PlaywrightPlugin runtime filtering', () => {
                 }
             });
             const mounts = ['/tmp/ext-a:/app/extensions/ext-1-a:ro'];
-            const overridePath = plugin.ensureContainerComposeOverride('cont-headless', mounts);
+            const overridePath = plugin.ensureContainerComposeOverride('mcp-cont-headless', mounts);
             const content = fs.readFileSync(overridePath, 'utf8');
 
             expect(content).toContain('services:');
             expect(content).toContain('playwright:');
             expect(content).toContain('/tmp/ext-a:/app/extensions/ext-1-a:ro');
 
-            plugin.ensureContainerComposeOverride('cont-headless', []);
+            plugin.ensureContainerComposeOverride('mcp-cont-headless', []);
             expect(fs.existsSync(overridePath)).toBe(false);
         } finally {
             fs.rmSync(tempRunDir, { recursive: true, force: true });
         }
+    });
+
+    test('cli session integration should build docker attach config from cli host endpoint', () => {
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-cli-endpoint-'));
+        try {
+            const plugin = new PlaywrightPlugin({
+                globalConfig: {
+                    runDir: tempRunDir
+                }
+            });
+            fs.writeFileSync(plugin.sceneEndpointPath('cli-host-headless'), `${JSON.stringify({
+                port: 8935,
+                wsPath: '/manyoyo-test'
+            }, null, 4)}\n`, 'utf8');
+
+            const integration = plugin.buildCliSessionIntegration('docker');
+            expect(integration.envEntries).toContain('PLAYWRIGHT_MCP_CONFIG=/tmp/manyoyo-playwright/cli-host-headless.cli-attach.json');
+            expect(integration.extraArgs).toEqual(['--add-host', 'host.docker.internal:host-gateway']);
+            expect(integration.volumeEntries).toEqual([
+                '--volume',
+                `${plugin.sceneCliAttachConfigPath('cli-host-headless')}:/tmp/manyoyo-playwright/cli-host-headless.cli-attach.json:ro`
+            ]);
+            const attachConfig = JSON.parse(fs.readFileSync(plugin.sceneCliAttachConfigPath('cli-host-headless'), 'utf8'));
+            expect(attachConfig).toEqual({
+                browser: {
+                    remoteEndpoint: 'ws://host.docker.internal:8935/manyoyo-test'
+                }
+            });
+        } finally {
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('cli scene should prefer playwright binary bundled with @playwright/mcp', () => {
+        const plugin = new PlaywrightPlugin();
+        expect(plugin.playwrightBinPath('cli-host-headless')).toContain(path.join('@playwright', 'mcp', 'node_modules', '.bin', 'playwright'));
     });
 });
 
@@ -382,7 +425,7 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         plugin.waitForPort = jest.fn(async () => true);
 
         try {
-            const rc = await plugin.startContainer('cont-headless');
+            const rc = await plugin.startContainer('mcp-cont-headless');
             expect(rc).toBe(0);
             expect(commands[0]).toEqual(['docker', 'pull', 'mcr.microsoft.com/playwright/mcp:1.2.3']);
         } finally {
@@ -409,13 +452,13 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         plugin.waitForPort = jest.fn(async () => true);
 
         try {
-            const rc = await plugin.startContainer('cont-headless');
+            const rc = await plugin.startContainer('mcp-cont-headless');
             expect(rc).toBe(0);
 
-            const cfg = JSON.parse(fs.readFileSync(plugin.sceneConfigPath('cont-headless'), 'utf8'));
+            const cfg = JSON.parse(fs.readFileSync(plugin.sceneConfigPath('mcp-cont-headless'), 'utf8'));
             expect(cfg.browser.initScript).toEqual(['/app/config/mcp-cont-headless.init.js']);
 
-            const overridePath = plugin.sceneComposeOverridePath('cont-headless');
+            const overridePath = plugin.sceneComposeOverridePath('mcp-cont-headless');
             const overrideContent = fs.readFileSync(overridePath, 'utf8');
             expect(overrideContent).toContain('/app/config/mcp-cont-headless.init.js');
         } finally {
@@ -437,7 +480,7 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             }
         });
 
-        const cfgPath = plugin.sceneConfigPath('cont-headless');
+        const cfgPath = plugin.sceneConfigPath('mcp-cont-headless');
         fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
         fs.writeFileSync(cfgPath, '{"server":{}}\n', 'utf8');
 
@@ -450,7 +493,7 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         plugin.waitForPort = jest.fn(async () => true);
 
         try {
-            const rc = await plugin.startContainer('cont-headless');
+            const rc = await plugin.startContainer('mcp-cont-headless');
             expect(rc).toBe(0);
             expect(commands.find(args => args[0] === 'docker' && args[1] === 'pull')).toBeUndefined();
         } finally {
@@ -484,7 +527,7 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
 
         try {
-            const rc = await plugin.startHost('host-headless');
+            const rc = await plugin.startHost('mcp-host-headless');
             expect(rc).toBe(0);
             expect(commands[0]).toEqual(['/mock/bin/playwright', 'install', '--with-deps', 'chromium']);
         } finally {
@@ -504,7 +547,7 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             }
         });
 
-        const cfgPath = plugin.sceneConfigPath('host-headless');
+        const cfgPath = plugin.sceneConfigPath('mcp-host-headless');
         fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
         fs.writeFileSync(cfgPath, '{"server":{}}\n', 'utf8');
 
@@ -522,10 +565,86 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
 
         try {
-            const rc = await plugin.startHost('host-headless');
+            const rc = await plugin.startHost('mcp-host-headless');
             expect(rc).toBe(0);
             const installCmd = commands.find(args => args[0] === '/mock/bin/playwright' && args[1] === 'install');
             expect(installCmd).toBeUndefined();
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('cli host scene still installs browser when scene config exists', async () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const plugin = new PlaywrightPlugin({
+            globalConfig: {
+                configDir: tempConfigDir,
+                runDir: tempRunDir,
+                runtime: 'host'
+            }
+        });
+
+        const cfgPath = plugin.sceneConfigPath('cli-host-headless');
+        fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
+        fs.writeFileSync(cfgPath, '{"host":"0.0.0.0"}\n', 'utf8');
+
+        const commands = [];
+        plugin.ensureCommandAvailable = jest.fn(() => true);
+        plugin.runCmd = jest.fn((args) => {
+            commands.push(args);
+            return { returncode: 0, stdout: '', stderr: '' };
+        });
+        plugin.hostScenePids = jest.fn(() => []);
+        plugin.portReady = jest.fn(async () => false);
+        plugin.waitForPort = jest.fn(async () => true);
+        plugin.waitForHostPids = jest.fn(async () => [12345]);
+        plugin.playwrightBinPath = jest.fn(() => '/mock/bin/playwright-cli-host');
+        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
+
+        try {
+            const rc = await plugin.startHost('cli-host-headless');
+            expect(rc).toBe(0);
+            expect(commands[0]).toEqual(['/mock/bin/playwright-cli-host', 'install', '--with-deps', 'chromium']);
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('cli host scene should write endpoint metadata after start', async () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const plugin = new PlaywrightPlugin({
+            globalConfig: {
+                configDir: tempConfigDir,
+                runDir: tempRunDir,
+                runtime: 'host'
+            }
+        });
+
+        const commands = [];
+        plugin.runCmd = jest.fn((args) => {
+            commands.push(args);
+            return { returncode: 0, stdout: '', stderr: '' };
+        });
+        plugin.hostScenePids = jest.fn(() => []);
+        plugin.portReady = jest.fn(async () => false);
+        plugin.waitForPort = jest.fn(async () => true);
+        plugin.waitForHostPids = jest.fn(async () => [12345]);
+        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
+        plugin.playwrightBinPath = jest.fn(() => '/mock/bin/playwright-cli-host');
+        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
+
+        try {
+            const rc = await plugin.startHost('cli-host-headless');
+            expect(rc).toBe(0);
+            expect(commands[0]).toEqual(['/mock/bin/playwright-cli-host', 'install', '--with-deps', 'chromium']);
+
+            const endpoint = JSON.parse(fs.readFileSync(plugin.sceneEndpointPath('cli-host-headless'), 'utf8'));
+            expect(endpoint.port).toBe(8935);
+            expect(endpoint.wsPath.startsWith('/')).toBe(true);
         } finally {
             fs.rmSync(tempConfigDir, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });

@@ -123,11 +123,13 @@ Prefer the top-level `manyoyo playwright` command. `manyoyo plugin playwright` i
 
 ```bash
 manyoyo playwright ls
-manyoyo playwright up host-headless
-manyoyo playwright up host-headless --ext-path /abs/path/extA --ext-name adguard
-manyoyo playwright status host-headless
-manyoyo playwright logs host-headless
+manyoyo playwright up mcp-host-headless
+manyoyo playwright up mcp-host-headless --ext-path /abs/path/extA --ext-name adguard
+manyoyo playwright status mcp-host-headless
+manyoyo playwright logs mcp-host-headless
 manyoyo playwright mcp-add --host localhost
+manyoyo playwright up cli-host-headless
+manyoyo run -r codex
 ```
 
 For deeper details, see [Configuration](../configuration/README.md) and [CLI Reference](../reference/cli-options.md).
