@@ -8,9 +8,9 @@ const crypto = require('crypto');
 const net = require('net');
 const readline = require('readline');
 const { Command } = require('commander');
-const JSON5 = require('json5');
 const { startWebServer } = require('../lib/web/server');
 const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/container-run');
+const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = require('../lib/global-config');
 const { initAgentConfigs } = require('../lib/init-config');
 const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
@@ -309,17 +309,27 @@ function installServeProcessDiagnostics(logger) {
  * @returns {Config} 配置对象
  */
 function loadConfig() {
-    const configPath = path.join(os.homedir(), '.manyoyo', 'manyoyo.json');
-    if (fs.existsSync(configPath)) {
-        try {
-            const config = JSON5.parse(fs.readFileSync(configPath, 'utf-8'));
-            return config;
-        } catch (e) {
-            console.error(`${YELLOW}⚠️  配置文件格式错误: ${configPath}${NC}`);
+    const result = readManyoyoConfig();
+    if (result.exists) {
+        if (result.parseError) {
+            console.error(`${YELLOW}⚠️  配置文件格式错误: ${result.path}${NC}`);
             return {};
         }
+        return result.config;
     }
     return {};
+}
+
+function syncBuiltImageVersionToGlobalConfig(imageVersion) {
+    const syncResult = syncGlobalImageVersion(imageVersion);
+    if (syncResult.updated) {
+        console.log(`${GREEN}✅ 已同步 ${path.basename(getManyoyoConfigPath())} 的 imageVersion: ${imageVersion}${NC}`);
+        return;
+    }
+    if (syncResult.reason === 'unchanged') {
+        return;
+    }
+    console.log(`${YELLOW}⚠️  镜像构建成功，但未更新 imageVersion: ${syncResult.path}${NC}`);
 }
 
 function loadRunConfig(name, config) {
@@ -1971,6 +1981,7 @@ async function main() {
                 pruneDanglingImages,
                 colors: { RED, GREEN, YELLOW, BLUE, CYAN, NC }
             });
+            syncBuiltImageVersionToGlobalConfig(runtime.imageVersion);
             process.exit(0);
         }
 

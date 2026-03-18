@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "5.4.5",
+    "version": "5.4.6",
     "imageVersion": "1.8.8-common",
     "description": "AI Agent CLI Security Sandbox for Docker and Podman",
     "keywords": [
