@@ -207,16 +207,7 @@ RUN <<EOX
     npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"
     PLAYWRIGHT_CLI_INSTALL_DIR=/tmp/playwright-cli-install
     mkdir -p "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright"
-    cat > "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json" <<'EOF'
-{
-    "browser": {
-        "browserName": "chromium",
-        "launchOptions": {
-            "channel": "chromium"
-        }
-    }
-}
-EOF
+    echo '{"browser":{"browserName":"chromium","launchOptions":{"channel":"chromium"}}}' > "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json"
     cd "${PLAYWRIGHT_CLI_INSTALL_DIR}"
     playwright-cli --config="${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json" install --skills
     mkdir -p "$HOME/.codex/skills/playwright-cli" ~/.gemini/skills/playwright-cli

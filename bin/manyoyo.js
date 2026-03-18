@@ -1117,8 +1117,8 @@ async function setupCommander() {
   ${MANYOYO_NAME} serve 127.0.0.1:3000                启动本机网页服务
   ${MANYOYO_NAME} serve 127.0.0.1:3000 -d             后台启动；未设密码时会打印本次随机密码
   ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P 123 -d  后台启动并监听全部网卡
-  ${MANYOYO_NAME} playwright up mcp-host-headless         启动 playwright 默认场景（推荐）
-  ${MANYOYO_NAME} plugin playwright up mcp-host-headless  通过 plugin 命名空间启动
+  ${MANYOYO_NAME} playwright up mcp-host-headless     启动 playwright MCP 宿主场景（默认/推荐）
+  ${MANYOYO_NAME} playwright up cli-host-headless     启动 playwright CLI 宿主场景（供容器内 playwright-cli 附着）
   ${MANYOYO_NAME} run -n test -q tip -q cmd           多次使用静默选项
         `);
 

@@ -42,9 +42,10 @@ describe('manyoyo plugin commands', () => {
 
     test('playwright cli-add prints playwright-cli skill install commands', () => {
         const output = execSync(`node ${BIN_PATH} playwright cli-add`, { encoding: 'utf-8' });
+        expect(output).toContain('echo \'{"browser":{"browserName":"chromium","launchOptions":{"channel":"chromium"}}}\' > "$PLAYWRIGHT_CLI_INSTALL_DIR/.playwright/cli.config.json"');
         expect(output).toContain(`npm install -g @playwright/cli@${PACKAGE_PLAYWRIGHT_CLI_VERSION}`);
         expect(output).toContain('playwright-cli install --skills');
-        expect(output).toContain('"channel": "chromium"');
+        expect(output).toContain('"channel":"chromium"');
         expect(output).toContain('~/.codex/skills/playwright-cli');
         expect(output).toContain('~/.gemini/skills/playwright-cli');
     });
@@ -113,6 +114,8 @@ describe('manyoyo plugin commands', () => {
     test('playwright help examples use prefixed mcp scenes', () => {
         const output = execSync(`node ${BIN_PATH} --help`, { encoding: 'utf-8' });
         expect(output).toContain('playwright up mcp-host-headless');
+        expect(output).toContain('playwright up cli-host-headless');
+        expect(output).not.toContain('plugin playwright up mcp-host-headless');
         expect(output).not.toContain('playwright up host-headless');
     });
 });
@@ -662,6 +665,75 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             const endpoint = JSON.parse(fs.readFileSync(plugin.sceneEndpointPath('cli-host-headless'), 'utf8'));
             expect(endpoint.port).toBe(8935);
             expect(endpoint.wsPath.startsWith('/')).toBe(true);
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('cli-host-headed should remind cliSessionScene when config is not aligned', async () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const stdout = { write: jest.fn() };
+        const plugin = new PlaywrightPlugin({
+            stdout,
+            globalConfig: {
+                configDir: tempConfigDir,
+                runDir: tempRunDir,
+                runtime: 'host',
+                cliSessionScene: 'cli-host-headless'
+            }
+        });
+
+        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
+        plugin.hostScenePids = jest.fn(() => []);
+        plugin.portReady = jest.fn(async () => false);
+        plugin.waitForPort = jest.fn(async () => true);
+        plugin.waitForHostPids = jest.fn(async () => [12345]);
+        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
+        plugin.playwrightBinPath = jest.fn(() => '/mock/bin/playwright-cli-host');
+        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
+
+        try {
+            const rc = await plugin.startHost('cli-host-headed');
+            expect(rc).toBe(0);
+            const output = stdout.write.mock.calls.map(args => args[0]).join('');
+            expect(output).toContain('[tip] 如果希望容器内 manyoyo run 自动附着到当前 CLI 宿主场景');
+            expect(output).toContain('"cliSessionScene": "cli-host-headed"');
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('cli-host-headed should not remind cliSessionScene when config already aligned', async () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const stdout = { write: jest.fn() };
+        const plugin = new PlaywrightPlugin({
+            stdout,
+            globalConfig: {
+                configDir: tempConfigDir,
+                runDir: tempRunDir,
+                runtime: 'host',
+                cliSessionScene: 'cli-host-headed'
+            }
+        });
+
+        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
+        plugin.hostScenePids = jest.fn(() => []);
+        plugin.portReady = jest.fn(async () => false);
+        plugin.waitForPort = jest.fn(async () => true);
+        plugin.waitForHostPids = jest.fn(async () => [12345]);
+        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
+        plugin.playwrightBinPath = jest.fn(() => '/mock/bin/playwright-cli-host');
+        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
+
+        try {
+            const rc = await plugin.startHost('cli-host-headed');
+            expect(rc).toBe(0);
+            const output = stdout.write.mock.calls.map(args => args[0]).join('');
+            expect(output).not.toContain('[tip] 如果希望容器内 manyoyo run 自动附着到当前 CLI 宿主场景');
         } finally {
             fs.rmSync(tempConfigDir, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });

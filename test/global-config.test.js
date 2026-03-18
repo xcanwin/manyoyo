@@ -78,4 +78,40 @@ describe('global-config', () => {
             fs.rmSync(homeDir, { recursive: true, force: true });
         }
     });
+
+    test('should preserve json5 comments when updating imageVersion', () => {
+        const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-global-config-'));
+        const configPath = getManyoyoConfigPath(homeDir);
+
+        try {
+            fs.mkdirSync(path.dirname(configPath), { recursive: true });
+            fs.writeFileSync(configPath, [
+                '{',
+                '    // global image version',
+                '    imageVersion: "1.8.9-common",',
+                '    runs: {',
+                '        // keep this run comment',
+                '        claude: {',
+                '            containerName: "my-claude"',
+                '        }',
+                '    }',
+                '}'
+            ].join('\n'), 'utf8');
+
+            const result = syncGlobalImageVersion('1.8.10-common', { homeDir });
+
+            expect(result).toEqual(expect.objectContaining({
+                updated: true,
+                reason: 'updated',
+                path: configPath
+            }));
+
+            const savedText = fs.readFileSync(configPath, 'utf8');
+            expect(savedText).toContain('// global image version');
+            expect(savedText).toContain('// keep this run comment');
+            expect(savedText).toContain('imageVersion: "1.8.10-common"');
+        } finally {
+            fs.rmSync(homeDir, { recursive: true, force: true });
+        }
+    });
 });

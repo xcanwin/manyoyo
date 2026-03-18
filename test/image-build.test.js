@@ -311,6 +311,7 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(dockerfile).toContain('COPY ./package.json /tmp/manyoyo-package.json');
         expect(dockerfile).toContain('playwrightCliVersion');
         expect(dockerfile).toContain('npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"');
+        expect(dockerfile).toContain(`echo '{"browser":{"browserName":"chromium","launchOptions":{"channel":"chromium"}}}' > "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json"`);
         expect(dockerfile).toContain('playwright-cli --config="${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json" install --skills');
         expect(dockerfile).toContain('"channel": "chromium"');
         expect(dockerfile).not.toContain('playwright install --with-deps chromium');
