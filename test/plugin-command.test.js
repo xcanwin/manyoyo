@@ -650,4 +650,28 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             fs.rmSync(tempRunDir, { recursive: true, force: true });
         }
     });
+
+    test('stopHost should remove cli attach config artifact', async () => {
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const plugin = new PlaywrightPlugin({
+            globalConfig: {
+                runDir: tempRunDir,
+                runtime: 'host'
+            }
+        });
+
+        fs.writeFileSync(plugin.sceneEndpointPath('cli-host-headless'), '{"port":8935,"wsPath":"/x"}\n', 'utf8');
+        fs.writeFileSync(plugin.sceneCliAttachConfigPath('cli-host-headless'), '{"browser":{"remoteEndpoint":"ws://host.docker.internal:8935/x"}}\n', 'utf8');
+        plugin.hostScenePids = jest.fn(() => []);
+        plugin.portReady = jest.fn(async () => false);
+
+        try {
+            const rc = await plugin.stopHost('cli-host-headless');
+            expect(rc).toBe(0);
+            expect(fs.existsSync(plugin.sceneEndpointPath('cli-host-headless'))).toBe(false);
+            expect(fs.existsSync(plugin.sceneCliAttachConfigPath('cli-host-headless'))).toBe(false);
+        } finally {
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
 });

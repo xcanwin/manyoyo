@@ -235,13 +235,13 @@ Mode descriptions:
             "navigatorPlatform": "MacIntel",
             "disableWebRTC": false,
             "ports": {
-                "contHeadless": 8931,
-                "contHeaded": 8932,
-                "hostHeadless": 8933,
-                "hostHeaded": 8934,
+                "mcpContHeadless": 8931,
+                "mcpContHeaded": 8932,
+                "mcpHostHeadless": 8933,
+                "mcpHostHeaded": 8934,
                 "cliHostHeadless": 8935,
                 "cliHostHeaded": 8936,
-                "contHeadedNoVnc": 6080
+                "mcpContHeadedNoVnc": 6080
             }
         }
     }
