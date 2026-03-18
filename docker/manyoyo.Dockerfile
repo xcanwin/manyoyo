@@ -210,7 +210,7 @@ RUN <<EOX
     "browser": {
         "browserName": "chromium",
         "launchOptions": {
-            "channel": "chrome"
+            "channel": "chromium"
         }
     }
 }

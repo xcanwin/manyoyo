@@ -306,6 +306,7 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(fs.existsSync(configPath)).toBe(true);
         expect(fs.existsSync(initScriptPath)).toBe(true);
         expect(dockerfile).toContain('npm install -g @playwright/cli@latest');
+        expect(dockerfile).toContain('"channel": "chromium"');
         expect(dockerfile).not.toContain('playwright install --with-deps chromium');
 
         const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
