@@ -211,6 +211,7 @@ RUN <<EOX
     cd "${PLAYWRIGHT_CLI_INSTALL_DIR}"
     playwright-cli --config="${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json" install --skills
     mkdir -p "$HOME/.codex/skills/playwright-cli" ~/.gemini/skills/playwright-cli
+    cp -R "${PLAYWRIGHT_CLI_INSTALL_DIR}/.claude/skills/playwright-cli/." "$HOME/.claude/skills/playwright-cli/"
     cp -R "${PLAYWRIGHT_CLI_INSTALL_DIR}/.claude/skills/playwright-cli/." "$HOME/.codex/skills/playwright-cli/"
     cp -R "${PLAYWRIGHT_CLI_INSTALL_DIR}/.claude/skills/playwright-cli/." "$HOME/.gemini/skills/playwright-cli/"
     cd $OLDPWD
