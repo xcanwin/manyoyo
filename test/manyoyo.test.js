@@ -819,6 +819,86 @@ exit 0
             }
         });
 
+        test('init codex should read openai_base_url from config.toml', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
+            const codexDir = path.join(tempHome, '.codex');
+            const configPath = path.join(codexDir, 'config.toml');
+
+            fs.mkdirSync(codexDir, { recursive: true });
+            fs.writeFileSync(configPath, [
+                'openai_base_url = "https://chatgpt.com/backend-api/codex"',
+                'model = "gpt-5.4"'
+            ].join('\n'));
+
+            try {
+                execSync(`node "${BIN_PATH}" init codex`, {
+                    encoding: 'utf-8',
+                    env: {
+                        ...process.env,
+                        HOME: tempHome,
+                        OPENAI_API_KEY: '',
+                        OPENAI_BASE_URL: '',
+                        OPENAI_MODEL: ''
+                    }
+                });
+
+                const manyoyoConfigPath = path.join(tempHome, '.manyoyo', 'manyoyo.json');
+                const manyoyoConfig = JSON.parse(fs.readFileSync(manyoyoConfigPath, 'utf-8'));
+                const runConfig = manyoyoConfig.runs && manyoyoConfig.runs.codex;
+
+                expect(runConfig.env).toEqual(expect.objectContaining({
+                    OPENAI_API_KEY: '',
+                    OPENAI_BASE_URL: 'https://chatgpt.com/backend-api/codex',
+                    OPENAI_MODEL: 'gpt-5.4'
+                }));
+                expect(runConfig.volumes).toContain(`${codexDir}:/root/.codex`);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('init codex should ignore legacy model_providers base_url in config.toml', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
+            const codexDir = path.join(tempHome, '.codex');
+            const configPath = path.join(codexDir, 'config.toml');
+
+            fs.mkdirSync(codexDir, { recursive: true });
+            fs.writeFileSync(configPath, [
+                'model_provider = "openai_api"',
+                'model = "gpt-5.4"',
+                '[model_providers.openai_api]',
+                'name = "OpenAI_API"',
+                'base_url = "https://legacy.example.com/codex"',
+                'wire_api = "responses"',
+                'requires_openai_auth = true'
+            ].join('\n'));
+
+            try {
+                execSync(`node "${BIN_PATH}" init codex`, {
+                    encoding: 'utf-8',
+                    env: {
+                        ...process.env,
+                        HOME: tempHome,
+                        OPENAI_API_KEY: '',
+                        OPENAI_BASE_URL: '',
+                        OPENAI_MODEL: ''
+                    }
+                });
+
+                const manyoyoConfigPath = path.join(tempHome, '.manyoyo', 'manyoyo.json');
+                const manyoyoConfig = JSON.parse(fs.readFileSync(manyoyoConfigPath, 'utf-8'));
+                const runConfig = manyoyoConfig.runs && manyoyoConfig.runs.codex;
+
+                expect(runConfig.env).toEqual(expect.objectContaining({
+                    OPENAI_API_KEY: '',
+                    OPENAI_BASE_URL: '',
+                    OPENAI_MODEL: 'gpt-5.4'
+                }));
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
         test('init opencode should map local auth.json when it exists', () => {
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-init-'));
             const opencodeConfigDir = path.join(tempHome, '.config', 'opencode');
