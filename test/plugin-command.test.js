@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { PlaywrightPlugin, EXTENSIONS } = require('../lib/plugin/playwright');
+const { playwrightCliVersion: PACKAGE_PLAYWRIGHT_CLI_VERSION } = require('../package.json');
 
 const BIN_PATH = path.join(__dirname, '../bin/manyoyo.js');
 
@@ -41,7 +42,7 @@ describe('manyoyo plugin commands', () => {
 
     test('playwright cli-add prints playwright-cli skill install commands', () => {
         const output = execSync(`node ${BIN_PATH} playwright cli-add`, { encoding: 'utf-8' });
-        expect(output).toContain('npm install -g @playwright/cli@latest');
+        expect(output).toContain(`npm install -g @playwright/cli@${PACKAGE_PLAYWRIGHT_CLI_VERSION}`);
         expect(output).toContain('playwright-cli install --skills');
         expect(output).toContain('"channel": "chromium"');
         expect(output).toContain('~/.codex/skills/playwright-cli');

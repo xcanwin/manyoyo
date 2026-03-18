@@ -27,6 +27,7 @@
 - `lib/log-path.js` + `lib/serve-log.js`: 日志路径分目录规则、`serve` 日志脱敏与进程快照工具。
 - `lib/plugin/index.js` + `lib/plugin/playwright.js`: 插件命令分发与 Playwright 插件主逻辑（场景配置、容器/宿主启动链路）。
 - `lib/plugin/playwright-assets/`: Playwright 容器场景 compose 与镜像资源模板。
+- `docker/res/playwright/playwright-cli-wrapper.sh`: 容器内 `playwright-cli install-browser` 兜底包装脚本，确保浏览器安装到全局 `@playwright/cli` 自带的 Playwright。
 - `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
 - `lib/web/frontend/`: 网页前端资源（`app/login` 的 `html/css/js`）。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
@@ -113,6 +114,7 @@
 - 运行环境：`node` >= 22，容器运行时支持 `podman` 或 `docker`。
 - CLI 入口：`manyoyo` 与 `my` 指向同一可执行文件。
 - 发布检查：核对 `package.json` 的 `version` 与 `imageVersion` 是否匹配文档。
+- Playwright CLI 版本单一来源为 `package.json.playwrightCliVersion`；镜像内安装 `@playwright/cli` 时禁止改回 `@latest`，也不要误用 `dependencies.playwright` 作为其版本来源。
 - 包含文件：`README.md` `LICENSE` `docker/manyoyo.Dockerfile` `manyoyo.example.json` 需与发布一致。
 - 入口脚本：`bin/manyoyo.js` 变更时同步检查 `package.json` 的 `bin` 字段。
 - 版本对齐：`IMAGE_VERSION` `IMAGE_VERSION_BASE` `imageVersion` 与文档示例保持一致。
@@ -133,6 +135,7 @@
 - 配置模板见 `manyoyo.example.json`；用户配置默认在 `~/.manyoyo/`。
 - 新增配置项或 CLI 选项时，同步更新 `manyoyo.example.json`、`docs/zh/` 与 `docs/en/`；必要时同步 `README.md` 示例。
 - 新增网页接口/页面时，默认走全局认证网关；仅登录相关路由允许匿名访问。
+- 调整容器内 Playwright CLI 浏览器安装链路时，必须保证 `playwright-cli install-browser` 安装到全局 `@playwright/cli` 自带的 Playwright，而不是仓库本地 `node_modules/playwright`。
 - 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`）；其余路由默认要求认证。
 - 禁止在业务路由里零散补认证，优先在统一入口做认证兜底，避免后续漏校验。
 - 网页前端默认避免常驻高开销视觉效果：不要在常驻元素使用 `animation: ... infinite`，避免大面积叠加 `backdrop-filter` / `filter` 模糊；确需使用时仅限短时场景，并提供 `prefers-reduced-motion` 降级。

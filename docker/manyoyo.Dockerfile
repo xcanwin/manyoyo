@@ -127,6 +127,7 @@ EOX
 
 # 从 cache-stage 复制 Node.js（缓存或下载）
 COPY --from=cache-stage /opt/node /usr/local
+COPY ./package.json /tmp/manyoyo-package.json
 COPY ./docker/res/playwright/cli-cont-headless.init.js /app/config/cli-cont-headless.init.js
 COPY ./docker/res/playwright/cli-cont-headless.json /app/config/cli-cont-headless.json
 COPY ./docker/res/ /tmp/docker-res/
@@ -202,7 +203,8 @@ RUN <<EOX
     ;; esac
 
     # 安装 Playwright CLI skills（不在镜像构建阶段下载浏览器）
-    npm install -g @playwright/cli@latest
+    PLAYWRIGHT_CLI_VERSION=$(node -p "const pkg = require('/tmp/manyoyo-package.json'); const value = String(pkg.playwrightCliVersion || '').trim(); if (!value) { throw new Error('package.json.playwrightCliVersion is required'); } value")
+    npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"
     PLAYWRIGHT_CLI_INSTALL_DIR=/tmp/playwright-cli-install
     mkdir -p "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright"
     cat > "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json" <<'EOF'
@@ -216,7 +218,7 @@ RUN <<EOX
 }
 EOF
     cd "${PLAYWRIGHT_CLI_INSTALL_DIR}"
-    playwright-cli install --skills
+    playwright-cli --config="${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json" install --skills
     mkdir -p "$HOME/.codex/skills/playwright-cli" ~/.gemini/skills/playwright-cli
     cp -R "${PLAYWRIGHT_CLI_INSTALL_DIR}/.claude/skills/playwright-cli/." "$HOME/.codex/skills/playwright-cli/"
     cp -R "${PLAYWRIGHT_CLI_INSTALL_DIR}/.claude/skills/playwright-cli/." "$HOME/.gemini/skills/playwright-cli/"
@@ -225,8 +227,12 @@ EOF
 
     # 清理
     npm cache clean --force
+    rm -f /tmp/manyoyo-package.json
     rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/go/pkg/mod/cache
 EOX
+
+COPY ./docker/res/playwright/playwright-cli-wrapper.sh /usr/local/bin/playwright-cli
+RUN chmod +x /usr/local/bin/playwright-cli
 
 # 从 cache-stage 复制 JDT LSP（缓存或下载）
 COPY --from=cache-stage /opt/jdtls /tmp/jdtls-cache
