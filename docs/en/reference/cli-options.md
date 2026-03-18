@@ -40,7 +40,7 @@ These commands share the same core runtime options:
 | `--cp, --cont-path <path>` | Container working directory |
 | `-m, --cont-mode <mode>` | Container mode: `common`, `dind`, `sock` |
 | `--in, --image-name <name>` | Image name |
-| `--iv, --image-ver <version>` | Image version; must be `x.y.z-suffix`, for example `1.8.8-common` |
+| `--iv, --image-ver <version>` | Image version; must be `x.y.z-suffix`, for example `1.8.12-common` |
 | `-e, --env <env>` | Append environment variables, repeatable |
 | `--ef, --env-file <file>` | Append env files, absolute paths only |
 | `-v, --volume <volume>` | Append bind mounts, repeatable |

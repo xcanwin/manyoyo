@@ -27,7 +27,7 @@ Container runtime install/switch references:
 ## 3. Build sandbox image
 
 ```bash
-manyoyo build --iv 1.8.8-common
+manyoyo build --iv 1.8.12-common
 ```
 
 ## 4. Migrate existing configs now

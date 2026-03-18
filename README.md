@@ -53,7 +53,7 @@ AI Agent CLI 往往需要：
 ```bash
 npm install -g @xcanwin/manyoyo
 podman pull ubuntu:24.04           # 仅 Podman 需要
-manyoyo build --iv 1.8.8-common
+manyoyo build --iv 1.8.12-common
 manyoyo init all
 manyoyo run -r claude
 ```
@@ -137,10 +137,10 @@ manyoyo config command
 
 ```bash
 # common 版本
-manyoyo build --iv 1.8.8-common
+manyoyo build --iv 1.8.12-common
 
 # full 版本
-manyoyo build --iv 1.8.8-full
+manyoyo build --iv 1.8.12-full
 
 # 自定义工具集
 manyoyo build --iba TOOL=go,codex,java,gemini
