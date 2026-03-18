@@ -128,6 +128,7 @@ manyoyo playwright up mcp-host-headless --ext-path /abs/path/extA --ext-name adg
 manyoyo playwright status mcp-host-headless
 manyoyo playwright logs mcp-host-headless
 manyoyo playwright mcp-add --host localhost
+manyoyo playwright cli-add
 manyoyo playwright up cli-host-headless
 manyoyo run -r codex
 ```

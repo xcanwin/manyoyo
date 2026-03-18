@@ -1071,6 +1071,14 @@ async function setupCommander() {
                 host: options.host || ''
             }, options));
 
+        command.command('cli-add')
+            .description('输出 playwright-cli skill 安装命令')
+            .action(() => selectPluginAction({
+                action: 'cli-add',
+                pluginName: 'playwright',
+                scene: 'all'
+            }));
+
         command.command('ext-download')
             .description('下载并解压 Playwright 扩展到 ~/.manyoyo/plugin/playwright/extensions/')
             .option('--prodversion <ver>', 'CRX 下载使用的 Chrome 版本号 (默认 132.0.0.0)')

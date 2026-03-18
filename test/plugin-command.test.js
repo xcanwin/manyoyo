@@ -39,6 +39,20 @@ describe('manyoyo plugin commands', () => {
         expect(output).toContain('playwright-mcp-host-headed');
     });
 
+    test('playwright cli-add prints playwright-cli skill install commands', () => {
+        const output = execSync(`node ${BIN_PATH} playwright cli-add`, { encoding: 'utf-8' });
+        expect(output).toContain('npm install -g @playwright/cli@latest');
+        expect(output).toContain('playwright-cli install --skills');
+        expect(output).toContain('~/.codex/skills/playwright-cli');
+        expect(output).toContain('~/.gemini/skills/playwright-cli');
+    });
+
+    test('plugin playwright cli-add supports namespace form', () => {
+        const output = execSync(`node ${BIN_PATH} plugin playwright cli-add`, { encoding: 'utf-8' });
+        expect(output).toContain('playwright-cli install --skills');
+        expect(output).toContain('~/.codex/skills/playwright-cli');
+    });
+
     test('playwright mcp-add respects run profile plugins.playwright.runtime', () => {
         withTempHome({
             runs: {
@@ -82,6 +96,7 @@ describe('manyoyo plugin commands', () => {
 
     test('playwright help no longer lists ext-sync', () => {
         const output = execSync(`node ${BIN_PATH} playwright --help`, { encoding: 'utf-8' });
+        expect(output).toContain('cli-add');
         expect(output).toContain('ext-download');
         expect(output).not.toContain('ext-sync');
     });

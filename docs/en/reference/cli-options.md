@@ -84,6 +84,7 @@ These commands share the same core runtime options:
 | `manyoyo playwright health [scene]` | Run health check |
 | `manyoyo playwright logs [scene]` | Show logs |
 | `manyoyo playwright mcp-add` | Print MCP integration commands |
+| `manyoyo playwright cli-add` | Print host commands that install the playwright-cli skill |
 | `manyoyo playwright ext-download` | Download built-in extensions locally |
 
 Extra options for `playwright up`:
