@@ -203,19 +203,20 @@ RUN <<EOX
     ;; esac
 
     # 安装 Playwright CLI skills（不在镜像构建阶段下载浏览器）
+    PLAYWRIGHT_CLI_INSTALL_DIR=/tmp/playwright-cli-install
+    mkdir -p "$PLAYWRIGHT_CLI_INSTALL_DIR/.playwright"
+    echo '{"browser":{"browserName":"chromium","launchOptions":{"channel":"chromium"}}}' > "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json"
+    cd "$PLAYWRIGHT_CLI_INSTALL_DIR"
     PLAYWRIGHT_CLI_VERSION=$(node -p "const pkg = require('/tmp/manyoyo-package.json'); const value = String(pkg.playwrightCliVersion || '').trim(); if (!value) { throw new Error('package.json.playwrightCliVersion is required'); } value")
     npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"
-    PLAYWRIGHT_CLI_INSTALL_DIR=/tmp/playwright-cli-install
-    mkdir -p "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright"
-    echo '{"browser":{"browserName":"chromium","launchOptions":{"channel":"chromium"}}}' > "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json"
-    cd "${PLAYWRIGHT_CLI_INSTALL_DIR}"
     playwright-cli --config="${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json" install --skills
-    mkdir -p "$HOME/.codex/skills/playwright-cli" ~/.gemini/skills/playwright-cli
-    cp -R "${PLAYWRIGHT_CLI_INSTALL_DIR}/.claude/skills/playwright-cli/." "$HOME/.claude/skills/playwright-cli/"
-    cp -R "${PLAYWRIGHT_CLI_INSTALL_DIR}/.claude/skills/playwright-cli/." "$HOME/.codex/skills/playwright-cli/"
-    cp -R "${PLAYWRIGHT_CLI_INSTALL_DIR}/.claude/skills/playwright-cli/." "$HOME/.gemini/skills/playwright-cli/"
-    cd $OLDPWD
-    rm -rf "${PLAYWRIGHT_CLI_INSTALL_DIR}"
+    PLAYWRIGHT_CLI_SKILL_SOURCE="$PLAYWRIGHT_CLI_INSTALL_DIR/.claude/skills/playwright-cli"
+    for target in ~/.claude/skills/playwright-cli ~/.codex/skills/playwright-cli ~/.gemini/skills/playwright-cli; do
+        mkdir -p "$target"
+        cp -R "$PLAYWRIGHT_CLI_SKILL_SOURCE/." "$target/"
+    done
+    cd "$OLDPWD"
+    rm -rf "$PLAYWRIGHT_CLI_INSTALL_DIR"
 
     # 清理
     npm cache clean --force
