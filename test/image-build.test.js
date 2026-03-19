@@ -329,4 +329,16 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(wrapper).toContain('install-browser');
         expect(wrapper).toContain('/cli.js');
     });
+
+    test('docker image should clean known build caches and avoid tmp relay layers for language servers', () => {
+        const rootDir = path.resolve(__dirname, '..');
+        const dockerfile = fs.readFileSync(path.join(rootDir, 'docker', 'manyoyo.Dockerfile'), 'utf8');
+
+        expect(dockerfile).toContain('~/.cache/node-gyp');
+        expect(dockerfile).toContain('~/.claude/plugins/cache');
+        expect(dockerfile).toContain('COPY --from=cache-stage /opt/jdtls /root/.local/share/jdtls');
+        expect(dockerfile).not.toContain('COPY --from=cache-stage /opt/jdtls /tmp/jdtls-cache');
+        expect(dockerfile).toContain('COPY --from=cache-stage /opt/gopls /usr/local/share/manyoyo-gopls');
+        expect(dockerfile).not.toContain('COPY --from=cache-stage /opt/gopls /tmp/gopls-cache');
+    });
 });

@@ -221,14 +221,15 @@ RUN <<EOX
     # 清理
     npm cache clean --force
     rm -f /tmp/manyoyo-package.json
-    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/go/pkg/mod/cache
+    rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/.cache/node-gyp ~/.claude/plugins/cache ~/go/pkg/mod/cache
+    rm -f /var/log/dpkg.log /var/log/bootstrap.log /var/lib/dpkg/status-old /var/cache/debconf/templates.dat-old
 EOX
 
 COPY ./docker/res/playwright/playwright-cli-wrapper.sh /usr/local/bin/playwright-cli
 RUN chmod +x /usr/local/bin/playwright-cli
 
-# 从 cache-stage 复制 JDT LSP（缓存或下载）
-COPY --from=cache-stage /opt/jdtls /tmp/jdtls-cache
+# 从 cache-stage 复制 JDT LSP 到最终位置，避免中转层残留
+COPY --from=cache-stage /opt/jdtls /root/.local/share/jdtls
 
 RUN <<EOX
     # 安装 java
@@ -237,19 +238,16 @@ RUN <<EOX
         apt-get install -y --no-install-recommends openjdk-21-jdk maven
 
         # 配置 LSP服务（java）
-        mkdir -p ~/.local/share/
-        cp -a /tmp/jdtls-cache ~/.local/share/jdtls
         ln -sf ~/.local/share/jdtls/bin/jdtls /usr/local/bin/jdtls
 
         # 清理
         apt-get clean
         rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/go/pkg/mod/cache
     ;; esac
-    rm -rf /tmp/jdtls-cache
 EOX
 
-# 从 cache-stage 复制 gopls（缓存或下载）
-COPY --from=cache-stage /opt/gopls /tmp/gopls-cache
+# 从 cache-stage 复制 gopls 到最终位置，避免中转层残留
+COPY --from=cache-stage /opt/gopls /usr/local/share/manyoyo-gopls
 
 RUN <<EOX
     # 安装 go
@@ -259,21 +257,21 @@ RUN <<EOX
         go env -w GOPROXY=https://mirrors.tencent.com/go
 
         # 安装 LSP服务（go）
-        if [ -f /tmp/gopls-cache/gopls ] && [ ! -f /tmp/gopls-cache/.no-cache ]; then
+        if [ -f /usr/local/share/manyoyo-gopls/gopls ] && [ ! -f /usr/local/share/manyoyo-gopls/.no-cache ]; then
             # 使用缓存
-            cp /tmp/gopls-cache/gopls /usr/local/bin/gopls
-            chmod +x /usr/local/bin/gopls
+            chmod +x /usr/local/share/manyoyo-gopls/gopls
+            ln -sf /usr/local/share/manyoyo-gopls/gopls /usr/local/bin/gopls
         else
             # 下载编译
             go install golang.org/x/tools/gopls@latest
             ln -sf ~/go/bin/gopls /usr/local/bin/gopls
+            rm -rf /usr/local/share/manyoyo-gopls
         fi
         # 清理
         apt-get clean
         go clean -modcache -cache
         rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/go/pkg/mod/cache
     ;; esac
-    rm -rf /tmp/gopls-cache
 EOX
 
 # 配置 supervisor
