@@ -191,11 +191,13 @@ Mode descriptions:
 - **Merge Method**: Accumulation merge
 - **Description**: Additional mount volumes
 - **Format**: `host_path:container_path[:options]`
+- **Path rule**: Host paths support absolute paths and `~` / `$HOME` prefixes (expanded to absolute paths before running)
 - **Example**:
 ```json5
 {
     "volumes": [
         "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json",
+        "~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright",
         "/tmp/cache:/workspace/cache:ro"  // Read-only mount
     ]
 }
@@ -253,6 +255,7 @@ Mode descriptions:
 - `manyoyo playwright ext-download` downloads extensions into `~/.manyoyo/plugin/playwright/extensions/` (temp files are auto-cleaned).
 - `manyoyo playwright up <scene> --ext-path <path> --ext-name <name>` appends extension directories for any scene (both options can be repeated and are converted to Playwright extension launch args).
 - `cliSessionScene` selects the default host `playwright-cli` scene injected into `my run`; once the matching `cli-host-*` scene is started, `playwright-cli open` inside the container attaches to the host browser automatically.
+- Starting `cli-host-headed` now auto-creates `~/.manyoyo/.cache/ms-playwright`; if you want container-side `playwright-cli` to reuse the host cache, mount `~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright` in `volumes`.
 - `navigatorPlatform` injects `navigator.platform` (default `MacIntel` to match the built-in UA profile).
 - Set `disableWebRTC` to `true` to append WebRTC-disable launch args and inject a script that blocks WebRTC APIs.
 

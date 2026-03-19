@@ -570,6 +570,42 @@ function addEnvFile(envFile) {
     return addEnvFileTo(CONTAINER_ENVS, envFile);
 }
 
+function expandHomeAliasPath(filePath) {
+    const text = String(filePath || '').trim();
+    const homeDir = process.env.HOME || os.homedir();
+
+    if (text === '~') {
+        return homeDir;
+    }
+    if (text.startsWith('~/')) {
+        return path.join(homeDir, text.slice(2));
+    }
+    if (text === '$HOME') {
+        return homeDir;
+    }
+    if (text.startsWith('$HOME/')) {
+        return path.join(homeDir, text.slice('$HOME/'.length));
+    }
+
+    return text;
+}
+
+function normalizeVolume(volume) {
+    const text = String(volume || '').trim();
+    if (!text.startsWith('~') && !text.startsWith('$HOME')) {
+        return text;
+    }
+
+    const separatorIndex = text.indexOf(':');
+    if (separatorIndex === -1) {
+        return expandHomeAliasPath(text);
+    }
+
+    const hostPath = text.slice(0, separatorIndex);
+    const rest = text.slice(separatorIndex);
+    return `${expandHomeAliasPath(hostPath)}${rest}`;
+}
+
 function hasEnvKey(targetEnvs, key) {
     for (let i = 0; i < targetEnvs.length; i += 2) {
         if (targetEnvs[i] !== '--env') {
@@ -1380,7 +1416,8 @@ Notes:
 
     applyPlaywrightCliSessionIntegration(config, runConfig);
 
-    const volumeList = mergeArrayConfig(config.volumes, runConfig.volumes, options.volume);
+    const volumeList = mergeArrayConfig(config.volumes, runConfig.volumes, options.volume)
+        .map(normalizeVolume);
     volumeList.forEach(v => addVolume(v));
 
     const portList = mergeArrayConfig(config.ports, runConfig.ports, options.port);

@@ -133,4 +133,6 @@ manyoyo playwright up cli-host-headless
 manyoyo run -r codex
 ```
 
+启动 `cli-host-headed` 时会自动创建 `~/.manyoyo/.cache/ms-playwright`；如需让容器内 `playwright-cli` 复用宿主缓存，可在配置里挂载 `~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright`。
+
 更多配置细节见[配置系统](../configuration/README.md)与[命令参考](../reference/cli-options.md)。

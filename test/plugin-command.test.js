@@ -48,6 +48,9 @@ describe('manyoyo plugin commands', () => {
         expect(output).toContain('"channel":"chromium"');
         expect(output).toContain('~/.codex/skills/playwright-cli');
         expect(output).toContain('~/.gemini/skills/playwright-cli');
+        expect(output).toContain('for target in ~/.claude/skills/playwright-cli ~/.codex/skills/playwright-cli ~/.gemini/skills/playwright-cli; do');
+        expect(output).toContain('mkdir -p "$target"');
+        expect(output).not.toContain('cp -R "$PLAYWRIGHT_CLI_INSTALL_DIR/.claude/skills/playwright-cli/." ~/.codex/skills/playwright-cli/');
     });
 
     test('plugin playwright cli-add supports namespace form', () => {
@@ -671,13 +674,15 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         }
     });
 
-    test('cli-host-headed should remind cliSessionScene when config is not aligned', async () => {
+    test('cli-host-headed should create ms-playwright cache dir and remind cliSessionScene when config is not aligned', async () => {
+        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-home-'));
         const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
         const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
         const stdout = { write: jest.fn() };
         const plugin = new PlaywrightPlugin({
             stdout,
             globalConfig: {
+                homeDir: tempHome,
                 configDir: tempConfigDir,
                 runDir: tempRunDir,
                 runtime: 'host',
@@ -697,10 +702,14 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         try {
             const rc = await plugin.startHost('cli-host-headed');
             expect(rc).toBe(0);
+            expect(fs.existsSync(path.join(tempHome, '.manyoyo', '.cache', 'ms-playwright'))).toBe(true);
             const output = stdout.write.mock.calls.map(args => args[0]).join('');
             expect(output).toContain('[tip] 如果希望容器内 manyoyo run 自动附着到当前 CLI 宿主场景');
+            expect(output).toContain('"volumes": [');
+            expect(output).toContain('~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright');
             expect(output).toContain('"cliSessionScene": "cli-host-headed"');
         } finally {
+            fs.rmSync(tempHome, { recursive: true, force: true });
             fs.rmSync(tempConfigDir, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });
         }

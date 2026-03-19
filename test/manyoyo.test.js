@@ -547,6 +547,25 @@ describe('MANYOYO CLI', () => {
             expect(config.volumes).toContain('/var:/var');
         });
 
+        test('volumes should expand tilde and $HOME on host side', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-volumes-home-'));
+
+            try {
+                const output = execSync(
+                    `node ${BIN_PATH} config show -v "~/demo:/workspace/demo" -v '$HOME/cache:/workspace/cache'`,
+                    {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome }
+                    }
+                );
+                const config = JSON.parse(output);
+                expect(config.volumes).toContain(`${path.join(tempHome, 'demo')}:/workspace/demo`);
+                expect(config.volumes).toContain(`${path.join(tempHome, 'cache')}:/workspace/cache`);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
         test('multiple ports should be merged', () => {
             const output = execSync(
                 `node ${BIN_PATH} config show -p "8080:80" -p "53:53/udp"`,

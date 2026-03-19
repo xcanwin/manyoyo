@@ -133,4 +133,6 @@ manyoyo playwright up cli-host-headless
 manyoyo run -r codex
 ```
 
+Starting `cli-host-headed` auto-creates `~/.manyoyo/.cache/ms-playwright`; if you want container-side `playwright-cli` to reuse the host cache, mount `~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright` in the config.
+
 For deeper details, see [Configuration](../configuration/README.md) and [CLI Reference](../reference/cli-options.md).
