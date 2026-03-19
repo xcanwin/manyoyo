@@ -41,6 +41,12 @@ describe('Documentation example image versions', () => {
             }
         }
 
-        expect(mismatches).toEqual([]);
+        if (mismatches.length > 0) {
+            throw new Error(
+                `Entry docs contain imageVersion examples outside package base version ${PACKAGE_BASE_VERSION}. ` +
+                'Update the listed files when bumping package.json imageVersion:\n' +
+                JSON.stringify(mismatches, null, 2)
+            );
+        }
     });
 });
