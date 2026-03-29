@@ -904,10 +904,55 @@ process.exit(0);
                 expect.objectContaining({ type: 'trace', text: '[会话] Codex 已开始处理' }),
                 expect.objectContaining({ type: 'trace', text: '[回合] 开始生成响应' }),
                 expect.objectContaining({ type: 'trace', text: '[说明] 我先看看当前目录。' }),
-                expect.objectContaining({ type: 'trace', text: '[命令开始] /bin/bash -lc ls -la' }),
-                expect.objectContaining({ type: 'trace', text: '[命令完成] /bin/bash -lc ls -la (completed)' }),
-                expect.objectContaining({ type: 'trace', text: '[MCP开始] jina-mcp-server.search_web (query=OpenAI latest news, num=5)' }),
-                expect.objectContaining({ type: 'trace', text: '[MCP完成] jina-mcp-server.search_web (query=OpenAI latest news, num=5)' }),
+                expect.objectContaining({
+                    type: 'trace',
+                    text: '[命令开始] /bin/bash -lc ls -la',
+                    traceEvent: expect.objectContaining({
+                        provider: 'codex',
+                        kind: 'command',
+                        itemType: 'command_execution',
+                        phase: 'started',
+                        command: '/bin/bash -lc ls -la'
+                    })
+                }),
+                expect.objectContaining({
+                    type: 'trace',
+                    text: '[命令完成] /bin/bash -lc ls -la (completed)',
+                    traceEvent: expect.objectContaining({
+                        provider: 'codex',
+                        kind: 'command',
+                        itemType: 'command_execution',
+                        phase: 'completed',
+                        command: '/bin/bash -lc ls -la',
+                        exitCode: 0
+                    })
+                }),
+                expect.objectContaining({
+                    type: 'trace',
+                    text: '[MCP开始] jina-mcp-server.search_web (query=OpenAI latest news, num=5)',
+                    traceEvent: expect.objectContaining({
+                        provider: 'codex',
+                        kind: 'mcp',
+                        itemType: 'mcp_tool_call',
+                        phase: 'started',
+                        server: 'jina-mcp-server',
+                        tool: 'search_web',
+                        argumentSummary: 'query=OpenAI latest news, num=5'
+                    })
+                }),
+                expect.objectContaining({
+                    type: 'trace',
+                    text: '[MCP完成] jina-mcp-server.search_web (query=OpenAI latest news, num=5)',
+                    traceEvent: expect.objectContaining({
+                        provider: 'codex',
+                        kind: 'mcp',
+                        itemType: 'mcp_tool_call',
+                        phase: 'completed',
+                        server: 'jina-mcp-server',
+                        tool: 'search_web',
+                        argumentSummary: 'query=OpenAI latest news, num=5'
+                    })
+                }),
                 expect.objectContaining({ type: 'result', output: '这是最终答案。' })
             ]));
 
@@ -919,6 +964,20 @@ process.exit(0);
                 streamTrace: true
             }));
             expect(String(traceMessage.content || '')).toContain('[MCP开始] jina-mcp-server.search_web');
+            expect(Array.isArray(traceMessage.traceEvents)).toBe(true);
+            expect(traceMessage.traceEvents).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    provider: 'codex',
+                    kind: 'command',
+                    command: '/bin/bash -lc ls -la'
+                }),
+                expect.objectContaining({
+                    provider: 'codex',
+                    kind: 'mcp',
+                    server: 'jina-mcp-server',
+                    tool: 'search_web'
+                })
+            ]));
             const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
             expect(assistantMessage).toEqual(expect.objectContaining({
                 content: '这是最终答案。'

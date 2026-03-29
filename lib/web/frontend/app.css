@@ -1047,6 +1047,154 @@ body.command-mode .msg.origin-agent .bubble {
     line-height: 1.55;
 }
 
+.trace-bubble {
+    padding: 12px;
+}
+
+.trace-structured {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.trace-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.trace-summary-line {
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px dashed rgba(181, 146, 99, 0.45);
+    background: rgba(255, 250, 242, 0.82);
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.trace-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.trace-card {
+    border: 1px solid rgba(181, 146, 99, 0.32);
+    border-left-width: 3px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.88);
+    overflow: hidden;
+}
+
+.trace-card.trace-tone-command {
+    border-left-color: var(--subaccent);
+}
+
+.trace-card.trace-tone-mcp {
+    border-left-color: var(--accent);
+}
+
+.trace-card.trace-tone-note {
+    border-left-color: #6f62b5;
+}
+
+.trace-card.trace-tone-status {
+    border-left-color: #7d8aa1;
+}
+
+.trace-card.trace-tone-error {
+    border-left-color: var(--danger);
+    background: rgba(255, 239, 236, 0.92);
+}
+
+.trace-card.trace-tone-neutral {
+    border-left-color: var(--line-strong);
+}
+
+.trace-card-summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px;
+    cursor: default;
+}
+
+details.trace-card > .trace-card-summary {
+    cursor: pointer;
+}
+
+.trace-card-summary::-webkit-details-marker {
+    display: none;
+}
+
+.trace-card-badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 42px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(31, 26, 20, 0.08);
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+.trace-card-title {
+    min-width: 0;
+    flex: 1;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.trace-card-phase {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.trace-card-body {
+    padding: 0 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.trace-card-body-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.trace-card-body-label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    text-transform: uppercase;
+}
+
+.trace-card-body-pre {
+    margin: 0;
+    padding: 8px 9px;
+    border-radius: 8px;
+    background: rgba(31, 26, 20, 0.05);
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 .composer {
     border-top: 1px solid rgba(181, 146, 99, 0.45);
     margin-top: 12px;
