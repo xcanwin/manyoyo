@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const readline = require('readline');
@@ -9,10 +10,36 @@ const {
     compareReleaseVersions,
     buildVersionSuggestions,
     pickLatestVersionTag,
-    normalizeCommitMessage
+    normalizeCommitMessage,
+    extractAgentMessageFromCodexJsonl
 } = require('../lib/dev-release');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
+const COMMIT_DIFF_MANYOYO_TIMEOUT_MS = 90000;
+const RELEASE_DEBUG = process.env.MANYOYO_RELEASE_DEBUG === '1';
+
+function printSection(title) {
+    console.log(`\n=== ${title} ===`);
+}
+
+function shortenLine(text, maxLength = 88) {
+    const value = String(text || '').replace(/\s+/g, ' ').trim();
+    if (value.length <= maxLength) {
+        return value;
+    }
+    return `${value.slice(0, maxLength - 3)}...`;
+}
+
+function shortenBlock(text, maxLength = 2000) {
+    const value = String(text || '');
+    if (!value) {
+        return '';
+    }
+    if (value.length <= maxLength) {
+        return value;
+    }
+    return `${value.slice(0, maxLength - 3)}...`;
+}
 
 function printHelp() {
     console.log(`manyoyo dev release
@@ -27,8 +54,12 @@ function printHelp() {
 流程:
   1. 选择目标版本并更新 package.json/package-lock.json
   2. 执行 npm install
-  3. 提示在 Codex 中执行 $commit-diff 生成提交文案
-  4. 粘贴文案后继续提交、推送当前分支、打 tag、推送 tag
+  3. 默认通过 manyoyo run 在容器内自动执行 commit-diff，失败时回退到手动粘贴
+  4. 确认文案后继续提交、推送当前分支、打 tag、推送 tag
+
+手动回退:
+  在当前 Codex 会话中执行 $commit-diff
+  再把生成的代码块粘贴回向导
 
 选项:
   --version <x.y.z>  直接指定目标版本
@@ -179,13 +210,14 @@ function checkExistingTag(version) {
 }
 
 function printState(currentVersion, latestTagInfo) {
+    printSection('当前状态');
     const branch = runRepoCommand('git', ['branch', '--show-current']).trim() || '(detached HEAD)';
     const latestCommit = runRepoCommand('git', ['show', '-s', '--format=%h %s', 'HEAD']).trim();
     const status = runRepoCommand('git', ['status', '--short']).trim();
     console.log(`当前版本: ${currentVersion}`);
     console.log(`最新标签: ${latestTagInfo ? latestTagInfo.tag : '(无语义化标签)'}`);
     console.log(`当前分支: ${branch}`);
-    console.log(`最近提交: ${latestCommit || '(无提交)'}`);
+    console.log(`最近提交: ${shortenLine(latestCommit || '(无提交)')}`);
     console.log(`工作区状态: ${status ? '有未提交改动' : '干净'}`);
     if (status) {
         console.log(status);
@@ -193,6 +225,7 @@ function printState(currentVersion, latestTagInfo) {
 }
 
 async function maybeRunChecks(rl) {
+    printSection('发布前检查');
     const choice = await askChoice('选择发布前检查', [
         { label: '只跑 npm audit', value: 'audit', recommended: true },
         { label: '跑 npm audit + npm test + npm run docs:build', value: 'full', recommended: false },
@@ -212,22 +245,22 @@ async function maybeRunChecks(rl) {
 }
 
 function updateVersion(targetVersion) {
+    printSection('更新版本');
     runRepoCommand(getNpmCommand(), ['version', targetVersion, '--no-git-tag-version'], { stdio: 'inherit' });
 }
 
 function installDependencies() {
+    printSection('安装依赖');
     runRepoCommand(getNpmCommand(), ['install'], { stdio: 'inherit' });
 }
 
 function printCommitDiffHint() {
+    printSection('提交文案');
     console.log(`
 下一步请生成提交文案。
 
 可直接在当前 Codex 会话中执行:
   $commit-diff
-
-如果你是在命令行里单独跑，也可以执行:
-  codex exec '$commit-diff'
 
 拿到文案后，把完整代码块粘贴到下面，最后单独输入 EOF 结束。
 `);
@@ -280,7 +313,96 @@ async function readCommitMessage() {
     return normalized;
 }
 
+function getCommitDiffManyoyoArgs(authPath) {
+    return [
+        path.join(REPO_ROOT, 'bin', 'manyoyo.js'),
+        'run',
+        '--rm-on-exit',
+        '-q',
+        'full',
+        '-y',
+        'cx',
+        '-v',
+        `${authPath}:/root/.codex/auth.json`,
+        '--ss',
+        "exec --skip-git-repo-check --json '$commit-diff'"
+    ];
+}
+
+function tryGenerateCommitMessageWithManyoyo() {
+    const authPath = path.join(os.homedir(), '.codex', 'auth.json');
+    if (!fs.existsSync(authPath)) {
+        return { message: null, reason: `未检测到 Codex 认证文件: ${authPath}` };
+    }
+    try {
+        const args = getCommitDiffManyoyoArgs(authPath);
+        const result = spawnSync(process.execPath, args, {
+            cwd: REPO_ROOT,
+            encoding: 'utf-8',
+            stdio: 'pipe',
+            timeout: COMMIT_DIFF_MANYOYO_TIMEOUT_MS,
+            maxBuffer: 10 * 1024 * 1024
+        });
+        if (RELEASE_DEBUG) {
+            console.log('\n[release-debug] manyoyo args:');
+            console.log(`${process.execPath} ${args.join(' ')}`);
+            console.log('\n[release-debug] manyoyo stdout:');
+            console.log(result.stdout || '(empty)');
+            console.log('\n[release-debug] manyoyo stderr:');
+            console.log(result.stderr || '(empty)');
+        }
+        if (result.error && result.error.code === 'ETIMEDOUT') {
+            const detail = shortenBlock([result.stdout, result.stderr].filter(Boolean).join('\n\n'));
+            return { message: null, reason: `调用 manyoyo 容器超时（>${Math.floor(COMMIT_DIFF_MANYOYO_TIMEOUT_MS / 1000)} 秒）${detail ? `\n${detail}` : ''}` };
+        }
+        if (result.error) {
+            const detail = shortenBlock([result.stdout, result.stderr].filter(Boolean).join('\n\n'));
+            return { message: null, reason: `${result.error.message || '调用 manyoyo 容器失败'}${detail ? `\n${detail}` : ''}` };
+        }
+        if (result.status !== 0) {
+            const detail = shortenBlock([result.stdout, result.stderr].filter(Boolean).join('\n\n'));
+            return { message: null, reason: `manyoyo 退出码 ${result.status}${detail ? `\n${detail}` : ''}` };
+        }
+        const message = normalizeCommitMessage(extractAgentMessageFromCodexJsonl(result.stdout || ''));
+        if (!message) {
+            const detail = shortenBlock([result.stdout, result.stderr].filter(Boolean).join('\n\n'));
+            return { message: null, reason: `未提取到最终提交文案${detail ? `\n${detail}` : ''}` };
+        }
+        return { message, reason: '' };
+    } catch (error) {
+        return { message: null, reason: error.message || '调用 manyoyo 容器失败' };
+    }
+}
+
+async function chooseCommitMessageSource(rl) {
+    printSection('提交文案生成方式');
+    return askChoice('选择提交文案生成方式', [
+        { label: '自动通过 manyoyo run 在容器内执行 commit-diff skill (若失败则执行选项2)', value: 'auto', recommended: true },
+        { label: '手动在codex里执行 $commit-diff 并手动粘贴', value: 'manual', recommended: false }
+    ], rl, 0);
+}
+
+async function acquireCommitMessage(rl) {
+    const method = await chooseCommitMessageSource(rl);
+    if (method.value === 'auto') {
+        console.log('\n正在通过 manyoyo 容器自动生成提交文案...');
+        console.log(`将使用容器内 Codex 与当前仓库上下文，最长等待 ${Math.floor(COMMIT_DIFF_MANYOYO_TIMEOUT_MS / 1000)} 秒。`);
+        const result = tryGenerateCommitMessageWithManyoyo();
+        if (result.message) {
+            console.log('已生成提交文案。');
+            return result.message;
+        }
+        console.log(`自动生成失败：${result.reason || '未知原因'}`);
+        console.log('已回退到手动粘贴。');
+    }
+
+    rl.close();
+    const message = await readCommitMessage();
+    return message;
+}
+
 function commitAllChanges(message) {
+    printSection('提交代码');
     runRepoCommand('git', ['add', '-A'], { stdio: 'inherit' });
     runRepoCommand('git', ['commit', '-F', '-'], { stdio: 'inherit', input: `${message}\n` });
 }
@@ -294,6 +416,7 @@ function getCurrentBranch() {
 }
 
 async function handleTagAndPush(targetVersion, rl) {
+    printSection('推送与标签');
     if (!hasOriginRemote()) {
         console.log('未检测到 origin 远端，已跳过推送分支与 tag。');
     } else {
@@ -353,6 +476,7 @@ async function main() {
             return;
         }
 
+        printSection('选择版本');
         const targetVersion = await chooseTargetVersion(currentVersion, latestTagInfo, rl, directVersion);
         checkExistingTag(targetVersion);
         console.log(`目标版本: ${targetVersion}`);
@@ -367,8 +491,7 @@ async function main() {
         }
 
         await maybeRunChecks(rl);
-        rl.close();
-        const commitMessage = await readCommitMessage();
+        const commitMessage = await acquireCommitMessage(rl);
         rl = createInterface();
         console.log('\n将使用以下 commit 文案:\n');
         console.log(commitMessage);

@@ -4,7 +4,8 @@ const {
     parseReleaseVersion,
     buildVersionSuggestions,
     pickLatestVersionTag,
-    normalizeCommitMessage
+    normalizeCommitMessage,
+    extractAgentMessageFromCodexJsonl
 } = require('../lib/dev-release');
 
 const DEV_RELEASE_SCRIPT = path.join(__dirname, '..', 'scripts', 'dev-release.js');
@@ -16,6 +17,7 @@ describe('Dev Release Helpers', () => {
         expect(output).toContain('维护者发布向导');
         expect(output).toContain('--version');
         expect(output).toContain('$commit-diff');
+        expect(output).toContain('默认通过 manyoyo run 在容器内自动执行 commit-diff');
         expect(output).toContain('推送当前分支');
     });
 
@@ -62,5 +64,14 @@ describe('Dev Release Helpers', () => {
             '```',
             ''
         ].join('\n'))).toBe('- 第一行\n- 第二行');
+    });
+
+    test('extractAgentMessageFromCodexJsonl should return last agent_message text', () => {
+        expect(extractAgentMessageFromCodexJsonl([
+            '{"type":"thread.started"}',
+            '{"type":"item.completed","item":{"type":"agent_message","text":"first"}}',
+            '{"type":"item.completed","item":{"type":"agent_message","text":"second"}}',
+            '{"type":"turn.completed"}'
+        ].join('\n'))).toBe('second');
     });
 });
