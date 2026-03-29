@@ -43,6 +43,58 @@ async function request(url, options = {}) {
     return { response, text, json };
 }
 
+async function requestNdjsonStream(url, options = {}, onEvent) {
+    const method = (options.method || 'GET').toUpperCase();
+    const mergedOptions = Object.assign({}, options);
+    if (method !== 'GET' && method !== 'HEAD') {
+        mergedOptions.headers = Object.assign(
+            { 'X-Requested-With': 'XMLHttpRequest' },
+            options.headers || {}
+        );
+    }
+    const response = await fetch(url, mergedOptions);
+    const reader = response.body && typeof response.body.getReader === 'function'
+        ? response.body.getReader()
+        : null;
+    let pending = '';
+    if (!reader) {
+        return { response, events: [] };
+    }
+    const decoder = new TextDecoder();
+    const events = [];
+    while (true) {
+        const result = await reader.read();
+        if (result.done) {
+            break;
+        }
+        pending += decoder.decode(result.value, { stream: true });
+        const lines = pending.split('\n');
+        pending = lines.pop() || '';
+        for (const line of lines) {
+            const text = String(line || '').trim();
+            if (!text) continue;
+            const payload = JSON.parse(text);
+            events.push(payload);
+            if (typeof onEvent === 'function') {
+                await onEvent(payload, events);
+            }
+        }
+    }
+    const rest = decoder.decode();
+    if (rest) {
+        pending += rest;
+    }
+    const finalText = String(pending || '').trim();
+    if (finalText) {
+        const payload = JSON.parse(finalText);
+        events.push(payload);
+        if (typeof onEvent === 'function') {
+            await onEvent(payload, events);
+        }
+    }
+    return { response, events };
+}
+
 function buildServerOptions(tempHost, port, overrides = {}) {
     return {
         serverHost: '127.0.0.1',
@@ -341,7 +393,7 @@ describe('Web Server Auth Gateway', () => {
             const historyPath = path.join(tempHost, 'web-history', 'my-web-create.json');
             const historyJson = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
             expect(historyJson).toEqual(expect.objectContaining({
-                agentPromptCommand: 'codex exec --skip-git-repo-check {prompt}',
+                agentPromptCommand: 'codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check {prompt}',
                 applied: expect.objectContaining({
                     containerName: 'my-web-create',
                     hostPath: tempHost,
@@ -358,7 +410,7 @@ describe('Web Server Auth Gateway', () => {
                 name: 'my-web-create',
                 detail: expect.objectContaining({
                     name: 'my-web-create',
-                    agentPromptCommand: 'codex exec --skip-git-repo-check {prompt}',
+                    agentPromptCommand: 'codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check {prompt}',
                     applied: expect.objectContaining({
                         containerName: 'my-web-create',
                         hostPath: tempHost,
@@ -779,6 +831,198 @@ process.exit(0);
             expect(assistantMessage).toEqual(expect.objectContaining({
                 content: '当前这个会话里，我是基于 gpt-5.4 的 Codex。'
             }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should stream codex agent trace events before final result', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-codex-stream-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  process.stdout.write('{"type":"thread.started"}\\n');
+  process.stdout.write('{"type":"turn.started"}\\n');
+  process.stdout.write('{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"我先看看当前目录。"}}\\n');
+  process.stdout.write('{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc ls -la","status":"in_progress"}}\\n');
+  process.stdout.write('{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc ls -la","status":"completed","exit_code":0}}\\n');
+  process.stdout.write('{"type":"item.started","item":{"id":"item_2","type":"mcp_tool_call","server":"jina-mcp-server","tool":"search_web","arguments":{"query":"OpenAI latest news","num":5},"status":"in_progress"}}\\n');
+  process.stdout.write('{"type":"item.completed","item":{"id":"item_2","type":"mcp_tool_call","server":"jina-mcp-server","tool":"search_web","arguments":{"query":"OpenAI latest news","num":5},"status":"completed"}}\\n');
+  process.stdout.write('{"type":"item.completed","item":{"type":"agent_message","text":"这是最终答案。"}}\\n');
+  process.stdout.write('{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'codex exec --skip-git-repo-check {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: '帮我看看当前目录' })
+            });
+            expect(streamRes.response.status).toBe(200);
+            expect(streamRes.events).toEqual(expect.arrayContaining([
+                expect.objectContaining({ type: 'meta', agentProgram: 'codex' }),
+                expect.objectContaining({ type: 'trace', text: '[会话] Codex 已开始处理' }),
+                expect.objectContaining({ type: 'trace', text: '[回合] 开始生成响应' }),
+                expect.objectContaining({ type: 'trace', text: '[说明] 我先看看当前目录。' }),
+                expect.objectContaining({ type: 'trace', text: '[命令开始] /bin/bash -lc ls -la' }),
+                expect.objectContaining({ type: 'trace', text: '[命令完成] /bin/bash -lc ls -la (completed)' }),
+                expect.objectContaining({ type: 'trace', text: '[MCP开始] jina-mcp-server.search_web (query=OpenAI latest news, num=5)' }),
+                expect.objectContaining({ type: 'trace', text: '[MCP完成] jina-mcp-server.search_web (query=OpenAI latest news, num=5)' }),
+                expect.objectContaining({ type: 'result', output: '这是最终答案。' })
+            ]));
+
+            const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            const traceMessage = (persisted.messages || []).find(message => message && message.streamTrace === true);
+            expect(traceMessage).toEqual(expect.objectContaining({
+                role: 'assistant',
+                mode: 'agent',
+                streamTrace: true
+            }));
+            expect(String(traceMessage.content || '')).toContain('[MCP开始] jina-mcp-server.search_web');
+            const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
+            expect(assistantMessage).toEqual(expect.objectContaining({
+                content: '这是最终答案。'
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should stop running agent stream on demand', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-stop-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  process.stdout.write('{"type":"thread.started"}\\n');
+  process.stdout.write('{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc long-task","status":"in_progress"}}\\n');
+  const timer = setTimeout(() => {
+    process.stdout.write('{"type":"item.completed","item":{"type":"agent_message","text":"正常结束"}}\\n');
+    process.exit(0);
+  }, 5000);
+  process.on('SIGTERM', () => {
+    clearTimeout(timer);
+    process.stderr.write('stopped by test\\n');
+    process.exit(143);
+  });
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'codex exec --skip-git-repo-check {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            let stopSent = false;
+
+            const streamPromise = requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: '运行一个很长的任务' })
+            }, async payload => {
+                if (!stopSent && payload && payload.type === 'meta') {
+                    stopSent = true;
+                    const stopRes = await request(`${baseUrl}/api/sessions/demo/agent/stop`, {
+                        method: 'POST',
+                        headers: {
+                            Cookie: authCookie,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({})
+                    });
+                    expect(stopRes.response.status).toBe(200);
+                    expect(stopRes.json).toEqual(expect.objectContaining({ ok: true, stopping: true }));
+                }
+            });
+
+            const streamRes = await streamPromise;
+            expect(streamRes.response.status).toBe(200);
+            expect(stopSent).toBe(true);
+            expect(streamRes.events).toEqual(expect.arrayContaining([
+                expect.objectContaining({ type: 'result', interrupted: true })
+            ]));
+
+            const stopAgain = await request(`${baseUrl}/api/sessions/demo/agent/stop`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+            expect(stopAgain.response.status).toBe(404);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();

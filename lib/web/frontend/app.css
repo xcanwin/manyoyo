@@ -1079,6 +1079,12 @@ body.command-mode .msg.origin-agent .bubble {
     gap: 10px;
 }
 
+.composer-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 #commandInput {
     width: 100%;
     min-height: 116px;
@@ -1095,6 +1101,10 @@ body.command-mode .msg.origin-agent .bubble {
 }
 
 #sendBtn {
+    min-width: 92px;
+}
+
+#stopBtn {
     min-width: 92px;
 }
 

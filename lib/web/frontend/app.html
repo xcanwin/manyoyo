@@ -108,7 +108,10 @@
                         </div>
                         <div class="composer-inner">
                             <textarea id="commandInput" placeholder="输入容器命令，例如: ls -la"></textarea>
-                            <button type="submit" id="sendBtn">发送</button>
+                            <div class="composer-actions">
+                                <button type="submit" id="sendBtn">发送</button>
+                                <button type="button" id="stopBtn" class="danger-outline">停止</button>
+                            </div>
                         </div>
                         <div class="composer-foot">
                             <span id="composerHint">Enter 发送 · Shift/Alt + Enter 换行</span>
