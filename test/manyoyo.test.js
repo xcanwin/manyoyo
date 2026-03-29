@@ -680,6 +680,15 @@ exit 0
             expect(config.shellSuffix).toBe(' resume --last');
         });
 
+        test('config show should reject extra positional args without --', () => {
+            expect(() => {
+                execSync(
+                    `node ${BIN_PATH} config show -s codex resume last`,
+                    { encoding: 'utf-8', stdio: 'pipe' }
+                );
+            }).toThrow(/存在多余位置参数/);
+        });
+
         test('containerName should resolve {now} template from run config', () => {
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-contname-'));
             writeGlobalConfig(tempHome, {

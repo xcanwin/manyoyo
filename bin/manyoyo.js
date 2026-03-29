@@ -988,6 +988,22 @@ function appendArrayOption(command, flags, description) {
     );
 }
 
+function enableShellSuffixPassThrough(command) {
+    return command.allowExcessArguments(true);
+}
+
+function validateShellSuffixPassThroughArgs(command) {
+    const extraArgs = Array.isArray(command && command.args) ? command.args : [];
+    if (!extraArgs.length) {
+        return;
+    }
+
+    if (!process.argv.includes('--')) {
+        console.error(`${RED}⚠️  错误: 存在多余位置参数: ${extraArgs.join(' ')}。如需透传命令后缀，请使用 -- <args...>${NC}`);
+        process.exit(1);
+    }
+}
+
 function applyRunStyleOptions(command, options = {}) {
     const includeRmOnExit = options.includeRmOnExit !== false;
     const includeServePreview = options.includeServePreview === true;
@@ -1169,7 +1185,11 @@ Notes:
   参数优先级与合并规则（标量覆盖、数组追加、env 按 key 合并）请用 ${MANYOYO_NAME} config show --help 或查看文档。
 `);
     applyRunStyleOptions(runCommand);
-    runCommand.action(options => selectAction('run', options));
+    enableShellSuffixPassThrough(runCommand);
+    runCommand.action((options, command) => {
+        validateShellSuffixPassThroughArgs(command);
+        selectAction('run', options);
+    });
 
     const buildCommand = program.command('build').description('构建 manyoyo 沙箱镜像');
     buildCommand
@@ -1223,7 +1243,9 @@ Notes:
     const configCommand = program.command('config').description('查看解析后的配置或命令');
     const configShowCommand = configCommand.command('show').description('显示最终生效配置并退出');
     applyRunStyleOptions(configShowCommand, { includeRmOnExit: false, includeServePreview: true });
-    configShowCommand.action(options => {
+    enableShellSuffixPassThrough(configShowCommand);
+    configShowCommand.action((options, command) => {
+        validateShellSuffixPassThroughArgs(command);
         const finalOptions = {
             ...options,
             showConfig: true
@@ -1238,7 +1260,11 @@ Notes:
 
     const configRunCommand = configCommand.command('command').description('显示将执行的 docker run 命令并退出');
     applyRunStyleOptions(configRunCommand, { includeRmOnExit: false });
-    configRunCommand.action(options => selectAction('config-command', options));
+    enableShellSuffixPassThrough(configRunCommand);
+    configRunCommand.action((options, command) => {
+        validateShellSuffixPassThroughArgs(command);
+        selectAction('config-command', options);
+    });
 
     const initCommand = program.command('init [agents]').description('初始化 Agent 配置到 ~/.manyoyo');
     initCommand
