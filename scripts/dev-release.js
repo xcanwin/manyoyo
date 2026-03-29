@@ -28,7 +28,7 @@ function printHelp() {
   1. 选择目标版本并更新 package.json/package-lock.json
   2. 执行 npm install
   3. 提示在 Codex 中执行 $commit-diff 生成提交文案
-  4. 粘贴文案后继续提交、打 tag、推送 tag
+  4. 粘贴文案后继续提交、推送当前分支、打 tag、推送 tag
 
 选项:
   --version <x.y.z>  直接指定目标版本
@@ -289,7 +289,20 @@ function hasOriginRemote() {
     return Boolean(runRepoCommand('git', ['remote']).split(/\r?\n/).map(item => item.trim()).find(item => item === 'origin'));
 }
 
+function getCurrentBranch() {
+    return runRepoCommand('git', ['branch', '--show-current']).trim();
+}
+
 async function handleTagAndPush(targetVersion, rl) {
+    if (!hasOriginRemote()) {
+        console.log('未检测到 origin 远端，已跳过推送分支与 tag。');
+    } else {
+        const branch = getCurrentBranch();
+        if (branch && await askYesNo(`推送当前分支 ${branch} 到 origin ?`, rl, true)) {
+            runRepoCommand('git', ['push', 'origin', branch], { stdio: 'inherit' });
+        }
+    }
+
     if (!await askYesNo(`创建 lightweight tag v${targetVersion} ?`, rl, true)) {
         return;
     }

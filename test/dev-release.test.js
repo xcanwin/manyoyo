@@ -16,6 +16,7 @@ describe('Dev Release Helpers', () => {
         expect(output).toContain('维护者发布向导');
         expect(output).toContain('--version');
         expect(output).toContain('$commit-diff');
+        expect(output).toContain('推送当前分支');
     });
 
     test('parseReleaseVersion should parse x.y.z', () => {
