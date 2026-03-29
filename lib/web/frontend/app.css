@@ -651,21 +651,24 @@ body.mobile-actions-open .header-actions {
 
 .workspace-shell {
     min-height: 0;
-    margin-top: 10px;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
-    gap: 14px;
+    height: 100%;
+    padding-top: 10px;
+    display: block;
+    overflow: hidden;
 }
 
 .workspace-main {
+    height: 100%;
     min-height: 0;
     display: grid;
     grid-template-rows: minmax(0, 1fr) auto;
     gap: 0;
+    overflow: hidden;
 }
 
 .workspace-pane {
     min-height: 0;
+    height: 100%;
 }
 
 .workspace-pane[hidden],
@@ -705,16 +708,6 @@ body.mobile-actions-open .header-actions {
     border-radius: 14px;
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(252, 246, 236, 0.88) 100%);
-}
-
-.context-panel {
-    min-height: 0;
-    overflow-y: auto;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(251, 244, 232, 0.96) 100%);
-    box-shadow: 0 10px 24px rgba(46, 31, 13, 0.08);
 }
 
 .inspector-stack {
@@ -1219,15 +1212,6 @@ body.command-mode .msg.origin-agent .bubble {
         grid-template-columns: minmax(0, 1fr);
     }
 
-    .workspace-shell {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 10px;
-    }
-
-    .context-panel {
-        display: none;
-    }
-
     #messages,
     #terminalPanel,
     .inspector-pane {
@@ -1284,7 +1268,7 @@ body.command-mode .msg.origin-agent .bubble {
 
     .workbench-tabs {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 6px;
     }
 

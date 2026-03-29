@@ -67,6 +67,7 @@
                     <div class="workbench-tabs" id="workbenchTabs" aria-label="工作台视图">
                         <button type="button" id="viewActivityBtn" class="secondary is-active">活动</button>
                         <button type="button" id="viewTerminalBtn" class="secondary">终端</button>
+                        <button type="button" id="viewDetailBtn" class="secondary">详情</button>
                         <button type="button" id="viewConfigBtn" class="secondary">配置</button>
                         <button type="button" id="viewCheckBtn" class="secondary">检查</button>
                     </div>
@@ -87,6 +88,9 @@
                             <button type="button" class="term-key-btn" data-key="right">&nbsp;▶&nbsp;</button>
                         </div>
                         <div id="terminalScreen" aria-label="终端输出区域"></div>
+                    </section>
+                    <section id="detailPanel" class="workspace-pane inspector-pane" hidden>
+                        <div id="detailSummary" class="inspector-stack"></div>
                     </section>
                     <section id="configPanel" class="workspace-pane inspector-pane" hidden>
                         <div id="configSummary" class="inspector-stack"></div>
@@ -112,9 +116,6 @@
                         </div>
                     </form>
                 </div>
-                <aside class="context-panel" id="contextPanel">
-                    <div id="contextSummary" class="inspector-stack"></div>
-                </aside>
             </section>
         </main>
         <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>

@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "5.6.1",
+    "version": "5.6.2",
     "imageVersion": "1.9.0-common",
     "playwrightCliVersion": "0.1.1",
     "description": "AI Agent CLI Security Sandbox for Docker and Podman",
@@ -30,6 +30,7 @@
         "my": "bin/manyoyo.js"
     },
     "scripts": {
+        "dev:release": "node scripts/dev-release.js",
         "install-link": "npm link",
         "test": "jest --coverage",
         "test:unit": "jest test/",
