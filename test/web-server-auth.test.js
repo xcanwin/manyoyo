@@ -695,7 +695,8 @@ process.exit(0);
                 body: JSON.stringify({ prompt: 'hello' })
             });
             expect(runRes.response.status).toBe(200);
-            expect(String(runRes.json.output || '')).toContain('codex exec --output-last-message');
+            expect(String(runRes.json.output || '')).toContain('codex exec --json');
+            expect(String(runRes.json.output || '')).not.toContain('--output-last-message');
             expect(String(runRes.json.output || '')).toContain("--skip-git-repo-check 'hello'");
 
             const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
@@ -710,29 +711,20 @@ process.exit(0);
         }
     });
 
-    test('should keep codex agent reply clean by using the last message output', async () => {
+    test('should keep codex agent reply clean by using the json agent message', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-codex-clean-'));
         const port = await getFreePort();
         const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
         fs.writeFileSync(
             fakeDockerPath,
             `#!/usr/bin/env node
-const fs = require('fs');
 const args = process.argv.slice(2);
 if (args[0] === 'exec') {
-  const command = String(args[4] || '');
-  const outputFileMatch = command.match(/--output-last-message\\s+'([^']+)'/);
-  if (outputFileMatch) {
-    fs.writeFileSync(outputFileMatch[1], '当前这个会话里，我是基于 gpt-5.4 的 Codex。\\n', 'utf-8');
-    process.stdout.write('OpenAI Codex v0.115.0 (research preview)\\n');
-    process.stdout.write('tokens used\\n9,215\\n');
-    process.stderr.write('mcp: playwright-mcp-host-headless failed\\n');
-    process.stdout.write('\\n__MANYOYO_LAST_MESSAGE_BEGIN__\\n');
-    process.stdout.write(fs.readFileSync(outputFileMatch[1], 'utf-8'));
-    process.stdout.write('__MANYOYO_LAST_MESSAGE_END__\\n');
-    process.exit(0);
-    return;
-  }
+  process.stdout.write('{"type":"thread.started"}\\n');
+  process.stdout.write('OpenAI Codex v0.115.0 (research preview)\\n');
+  process.stdout.write('{"type":"item.completed","item":{"type":"agent_message","text":"当前这个会话里，我是基于 gpt-5.4 的 Codex。"}}\\n');
+  process.stdout.write('tokens used\\n9,215\\n');
+  process.stderr.write('mcp: playwright-mcp-host-headless failed\\n');
   process.exit(0);
   return;
 }
