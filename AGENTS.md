@@ -15,7 +15,7 @@
 - 项目：`manyoyo`（AI Agent CLI 安全沙箱）。
 - 文档栈：VitePress（`npm run docs:dev|build|preview`）。
 - 文档语言策略：中文主维护 `docs/zh/`，英文 `docs/en/`。
-- 根目录历史中文页按需保留为兼容跳转页。
+- 根目录兼容页与历史页按需保留，兼顾旧链接跳转与当前文档导航。
 - 配置合并规则：标量配置按“命令行参数 > runs.<name> > 全局配置 > 默认值”覆盖；数组配置（`envFile`/`volumes`/`imageBuildArgs`）按“全局配置 → runs.<name> → 命令行参数”追加合并；`env` 使用 map，按 key 合并覆盖（命令行参数 > runs.<name> > 全局配置）。
 - `serve` 网页模式采用全局认证网关；除登录路由外默认所有页面与接口都需认证。
 
@@ -40,6 +40,7 @@
 ## 目录速查
 - `docs/zh/guide/` `docs/zh/configuration/` `docs/zh/reference/` `docs/zh/advanced/` `docs/zh/troubleshooting/`
 - `docs/en/guide/` `docs/en/configuration/` `docs/en/reference/` `docs/en/advanced/` `docs/en/troubleshooting/`
+- `docs/guide/` `docs/configuration/` `docs/reference/` `docs/advanced/` `docs/troubleshooting/`
 - `lib/web/` `lib/web/frontend/`
 - `docker/` `bin/` `test/` `assets/` `coverage/`
 
@@ -47,6 +48,7 @@
 - `npm install`: 开发阶段安装/更新依赖（会更新 `package-lock.json`）。
 - `npm ci --include=optional`: 提交前与 CI 的可复现安装（CI 不再执行 `npm install`）。
 - `npm test`: 运行全部测试并生成覆盖率（输出到 `coverage/`）。
+- Jest 已忽略 `temp/` 工作目录，避免本地研究目录或临时副本干扰测试扫描。
 - `npm test` 也会执行入口文档示例版本检查（当前覆盖 `README.md`、`quick-start`、`basic-usage`、`cli-options`），要求其示例版本与 `package.json.imageVersion` 保持同一主版本号。
 - `npm run test:unit`: 仅跑 `test/` 下的单元测试。
 - `npm run lint`: 占位的 lint 检查（不做风格约束）。
@@ -129,7 +131,7 @@
 
 ## 文档与安全提示
 - 侧边栏在 `/zh/` 与 `/en/` 统一展示全章节导航；首页卡片需可点击跳转。
-- 文档目录首页统一使用 `README.md`（不再使用 `index.md`），并保持 `zh/en` 目录结构对齐。
+- 当前 `docs/`、`docs/configuration/`、`docs/troubleshooting/` 及 `docs/zh|en` 下对应目录首页使用 `README.md`；新增目录首页优先使用 `README.md`，不再新增 `index.md`。
 - 文档内部链接优先使用仓库相对 `.md`/`README.md` 路径，保证 GitHub 网页浏览可直接跳转；站点路由由 VitePress 兼容。
 - 文档修改后运行 `npm run docs:build`，检查 dead links 与导航行为。
 - 配置模板见 `manyoyo.example.json`；用户配置默认在 `~/.manyoyo/`。

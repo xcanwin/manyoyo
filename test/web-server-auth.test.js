@@ -341,7 +341,35 @@ describe('Web Server Auth Gateway', () => {
             const historyPath = path.join(tempHost, 'web-history', 'my-web-create.json');
             const historyJson = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
             expect(historyJson).toEqual(expect.objectContaining({
-                agentPromptCommand: 'codex exec {prompt}'
+                agentPromptCommand: 'codex exec --skip-git-repo-check {prompt}',
+                applied: expect.objectContaining({
+                    containerName: 'my-web-create',
+                    hostPath: tempHost,
+                    containerPath: '/workspace/custom',
+                    defaultCommand: 'codex --dangerously-bypass-approvals-and-sandbox'
+                })
+            }));
+
+            const detailRes = await request(`${baseUrl}/api/sessions/my-web-create/detail`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(detailRes.response.status).toBe(200);
+            expect(detailRes.json).toEqual(expect.objectContaining({
+                name: 'my-web-create',
+                detail: expect.objectContaining({
+                    name: 'my-web-create',
+                    agentPromptCommand: 'codex exec --skip-git-repo-check {prompt}',
+                    applied: expect.objectContaining({
+                        containerName: 'my-web-create',
+                        hostPath: tempHost,
+                        containerPath: '/workspace/custom',
+                        imageVersion: '1.7.4-common',
+                        agentEnabled: true,
+                        envCount: 1,
+                        volumeCount: 1,
+                        portCount: 2
+                    })
+                })
             }));
 
             const legacy = await request(`${baseUrl}/api/sessions`, {
@@ -423,6 +451,52 @@ describe('Web Server Auth Gateway', () => {
 
             expect(created.response.status).toBe(400);
             expect(created.json).toEqual(expect.objectContaining({ error: '不允许挂载根目录或home目录。' }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should expand home alias in web create volumes before docker run', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-home-volume-'));
+        const port = await getFreePort();
+        const dockerExecArgs = jest.fn(() => '');
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerExecArgs,
+                waitForContainerReady: async () => {}
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const created = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    createOptions: {
+                        containerName: 'my-web-home-volume',
+                        hostPath: tempHost,
+                        imageName: 'localhost/xcanwin/manyoyo',
+                        imageVersion: '1.7.4-common',
+                        volumes: ['~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright']
+                    }
+                })
+            });
+
+            expect(created.response.status).toBe(200);
+            expect(dockerExecArgs).toHaveBeenCalled();
+            const runArgs = dockerExecArgs.mock.calls[0][0];
+            expect(runArgs).toEqual(expect.arrayContaining([
+                '--volume',
+                `${path.join(os.homedir(), '.manyoyo/.cache/ms-playwright')}:/root/.cache/ms-playwright`
+            ]));
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -560,6 +634,159 @@ process.exit(0);
             expect(runRes.response.status).toBe(200);
             expect(String(runRes.json.output || '')).toContain("echo AGENT:'hello ");
             expect(String(runRes.json.output || '')).toContain("'\"'\"'world'\"'\"''");
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should rewrite codex agent template to skip git repo check before execution', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-codex-template-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  process.stdout.write(command + '\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'codex exec {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const runRes = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'hello' })
+            });
+            expect(runRes.response.status).toBe(200);
+            expect(String(runRes.json.output || '')).toContain('codex exec --output-last-message');
+            expect(String(runRes.json.output || '')).toContain("--skip-git-repo-check 'hello'");
+
+            const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            expect(persisted).toEqual(expect.objectContaining({
+                agentPromptCommand: 'codex exec --skip-git-repo-check {prompt}'
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should keep codex agent reply clean by using the last message output', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-codex-clean-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const fs = require('fs');
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  const outputFileMatch = command.match(/--output-last-message\\s+'([^']+)'/);
+  if (outputFileMatch) {
+    fs.writeFileSync(outputFileMatch[1], '当前这个会话里，我是基于 gpt-5.4 的 Codex。\\n', 'utf-8');
+    process.stdout.write('OpenAI Codex v0.115.0 (research preview)\\n');
+    process.stdout.write('tokens used\\n9,215\\n');
+    process.stderr.write('mcp: playwright-mcp-host-headless failed\\n');
+    process.stdout.write('\\n__MANYOYO_LAST_MESSAGE_BEGIN__\\n');
+    process.stdout.write(fs.readFileSync(outputFileMatch[1], 'utf-8'));
+    process.stdout.write('__MANYOYO_LAST_MESSAGE_END__\\n');
+    process.exit(0);
+    return;
+  }
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'codex exec --skip-git-repo-check {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const runRes = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: '你是哪个大模型' })
+            });
+            expect(runRes.response.status).toBe(200);
+            expect(runRes.json).toEqual(expect.objectContaining({
+                output: '当前这个会话里，我是基于 gpt-5.4 的 Codex。'
+            }));
+            expect(String(runRes.json.output || '')).not.toContain('OpenAI Codex v0.115.0');
+            expect(String(runRes.json.output || '')).not.toContain('tokens used');
+            expect(String(runRes.json.output || '')).not.toContain('playwright-mcp-host-headless');
+
+            const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant');
+            expect(assistantMessage).toEqual(expect.objectContaining({
+                content: '当前这个会话里，我是基于 gpt-5.4 的 Codex。'
+            }));
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();

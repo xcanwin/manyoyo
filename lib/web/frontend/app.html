@@ -48,59 +48,74 @@
                             aria-controls="sessionList"
                         >会话</button>
                         <h1 id="activeTitle">未选择会话</h1>
-                        <button
-                            type="button"
-                            id="modeToggle"
-                            class="secondary"
-                            aria-expanded="false"
-                            aria-controls="modeMenu"
-                        >AGENT 模式</button>
-                        <button
-                            type="button"
-                            id="mobileActionsToggle"
-                            class="secondary mobile-actions-toggle"
-                            aria-expanded="false"
-                            aria-controls="headerActions"
-                        >更多</button>
+                        <div class="header-menu">
+                            <button
+                                type="button"
+                                id="mobileActionsToggle"
+                                class="secondary mobile-actions-toggle"
+                                aria-expanded="false"
+                                aria-controls="headerActions"
+                            >更多</button>
+                            <div class="header-actions" id="headerActions">
+                                <button type="button" id="refreshBtn" class="secondary">刷新</button>
+                                <button type="button" id="removeBtn" class="danger-outline">删除容器</button>
+                                <button type="button" id="removeAllBtn" class="danger">删除对话</button>
+                            </div>
+                        </div>
                     </div>
                     <div id="activeMeta">请选择左侧会话</div>
-                </div>
-                <div class="mode-menu" id="modeMenu">
-                    <button type="button" id="modeAgentBtn" class="secondary is-active" aria-pressed="true">AGENT 模式</button>
-                    <button type="button" id="modeCommandBtn" class="secondary" aria-pressed="false">命令模式</button>
-                    <button type="button" id="modeTerminalBtn" class="secondary" aria-pressed="false">终端模式</button>
-                </div>
-                <div class="header-actions" id="headerActions">
-                    <button type="button" id="refreshBtn" class="secondary">刷新</button>
-                    <button type="button" id="removeBtn" class="danger-outline">删除容器</button>
-                    <button type="button" id="removeAllBtn" class="danger">删除对话</button>
+                    <div class="workbench-tabs" id="workbenchTabs" aria-label="工作台视图">
+                        <button type="button" id="viewActivityBtn" class="secondary is-active">活动</button>
+                        <button type="button" id="viewTerminalBtn" class="secondary">终端</button>
+                        <button type="button" id="viewConfigBtn" class="secondary">配置</button>
+                        <button type="button" id="viewCheckBtn" class="secondary">检查</button>
+                    </div>
                 </div>
             </header>
-            <section id="messages"></section>
-            <section id="terminalPanel" hidden>
-                <div id="terminalKeybar" class="term-keybar" aria-label="终端快捷键">
-                    <button type="button" class="term-key-btn" data-key="esc">esc</button>
-                    <button type="button" class="term-key-btn" data-key="tab">tab</button>
-                    <button type="button" class="term-key-btn term-ctrl-btn" data-key="ctrl">ctrl</button>
-                    <button type="button" class="term-key-btn term-alt-btn" data-key="alt">alt</button>&nbsp;&nbsp;
-                    <button type="button" class="term-key-btn" data-key="left">&nbsp;◀&nbsp;</button>
-                    <button type="button" class="term-key-btn" data-key="up">&nbsp;▲&nbsp;</button>
-                    <button type="button" class="term-key-btn" data-key="down">&nbsp;▼&nbsp;</button>
-                    <button type="button" class="term-key-btn" data-key="right">&nbsp;▶&nbsp;</button>
+            <section class="workspace-shell">
+                <div class="workspace-main">
+                    <section id="messages" class="workspace-pane"></section>
+                    <section id="terminalPanel" class="workspace-pane" hidden>
+                        <div id="terminalKeybar" class="term-keybar" aria-label="终端快捷键">
+                            <button type="button" class="term-key-btn" data-key="esc">esc</button>
+                            <button type="button" class="term-key-btn" data-key="tab">tab</button>
+                            <button type="button" class="term-key-btn term-ctrl-btn" data-key="ctrl">ctrl</button>
+                            <button type="button" class="term-key-btn term-alt-btn" data-key="alt">alt</button>&nbsp;&nbsp;
+                            <button type="button" class="term-key-btn" data-key="left">&nbsp;◀&nbsp;</button>
+                            <button type="button" class="term-key-btn" data-key="up">&nbsp;▲&nbsp;</button>
+                            <button type="button" class="term-key-btn" data-key="down">&nbsp;▼&nbsp;</button>
+                            <button type="button" class="term-key-btn" data-key="right">&nbsp;▶&nbsp;</button>
+                        </div>
+                        <div id="terminalScreen" aria-label="终端输出区域"></div>
+                    </section>
+                    <section id="configPanel" class="workspace-pane inspector-pane" hidden>
+                        <div id="configSummary" class="inspector-stack"></div>
+                    </section>
+                    <section id="checkPanel" class="workspace-pane inspector-pane" hidden>
+                        <div id="checkSummary" class="inspector-stack"></div>
+                    </section>
+                    <form class="composer" id="composer">
+                        <div class="composer-toolbar">
+                            <div class="composer-mode-switch" aria-label="活动输入模式">
+                                <button type="button" id="activityAgentBtn" class="secondary is-active">Agent</button>
+                                <button type="button" id="activityCommandBtn" class="secondary">命令</button>
+                            </div>
+                            <div class="composer-toolbar-tip">活动页支持 Agent 提示词和容器命令两种输入。</div>
+                        </div>
+                        <div class="composer-inner">
+                            <textarea id="commandInput" placeholder="输入容器命令，例如: ls -la"></textarea>
+                            <button type="submit" id="sendBtn">发送</button>
+                        </div>
+                        <div class="composer-foot">
+                            <span id="composerHint">Enter 发送 · Shift/Alt + Enter 换行</span>
+                            <span id="sendState" class="send-state">未选择会话</span>
+                        </div>
+                    </form>
                 </div>
-                <div id="terminalScreen" aria-label="终端输出区域"></div>
-
+                <aside class="context-panel" id="contextPanel">
+                    <div id="contextSummary" class="inspector-stack"></div>
+                </aside>
             </section>
-            <form class="composer" id="composer">
-                <div class="composer-inner">
-                    <textarea id="commandInput" placeholder="输入容器命令，例如: ls -la"></textarea>
-                    <button type="submit" id="sendBtn">发送</button>
-                </div>
-                <div class="composer-foot">
-                    <span id="composerHint">Enter 发送 · Shift/Alt + Enter 换行</span>
-                    <span id="sendState" class="send-state">未选择会话</span>
-                </div>
-            </form>
         </main>
         <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
 

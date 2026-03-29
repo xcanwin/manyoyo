@@ -73,7 +73,7 @@ describe('Agent Prompt Template Resolver', () => {
     });
 
     test('should map codex command to prompt template', () => {
-        expect(resolveAgentPromptCommandTemplate('codex --dangerously-bypass-approvals-and-sandbox')).toBe('codex exec {prompt}');
+        expect(resolveAgentPromptCommandTemplate('codex --dangerously-bypass-approvals-and-sandbox')).toBe('codex exec --skip-git-repo-check {prompt}');
     });
 
     test('non-agent command should return empty template', () => {
