@@ -139,7 +139,9 @@ async function askYesNo(question, rl, defaultValue = false) {
 }
 
 async function askChoice(title, options, rl, defaultIndex = 0) {
-    console.log(`\n${title}`);
+    if (title) {
+        console.log(`\n${title}`);
+    }
     options.forEach((option, index) => {
         const recommended = option.recommended ? ' (推荐)' : '';
         console.log(`  ${index + 1}. ${option.label}${recommended}`);
@@ -181,7 +183,7 @@ async function chooseTargetVersion(currentVersion, latestTagInfo, rl, directVers
         return directVersion;
     }
 
-    const selection = await askChoice('选择目标版本', [
+    const selection = await askChoice('', [
         ...choices,
         { label: '手动输入版本号', value: 'custom', recommended: false }
     ], rl, 0);
@@ -209,11 +211,10 @@ function checkExistingTag(version) {
     }
 }
 
-function printState(currentVersion, latestTagInfo) {
+function printState(currentVersion, latestTagInfo, status) {
     printSection('当前状态');
     const branch = runRepoCommand('git', ['branch', '--show-current']).trim() || '(detached HEAD)';
     const latestCommit = runRepoCommand('git', ['show', '-s', '--format=%h %s', 'HEAD']).trim();
-    const status = runRepoCommand('git', ['status', '--short']).trim();
     console.log(`当前版本: ${currentVersion}`);
     console.log(`最新标签: ${latestTagInfo ? latestTagInfo.tag : '(无语义化标签)'}`);
     console.log(`当前分支: ${branch}`);
@@ -226,7 +227,7 @@ function printState(currentVersion, latestTagInfo) {
 
 async function maybeRunChecks(rl) {
     printSection('发布前检查');
-    const choice = await askChoice('选择发布前检查', [
+    const choice = await askChoice('', [
         { label: '只跑 npm audit', value: 'audit', recommended: true },
         { label: '跑 npm audit + npm test + npm run docs:build', value: 'full', recommended: false },
         { label: '跳过检查', value: 'skip', recommended: false }
@@ -376,7 +377,7 @@ function tryGenerateCommitMessageWithManyoyo() {
 
 async function chooseCommitMessageSource(rl) {
     printSection('提交文案生成方式');
-    return askChoice('选择提交文案生成方式', [
+    return askChoice('', [
         { label: '自动通过 manyoyo run 在容器内执行 commit-diff skill (若失败则执行选项2)', value: 'auto', recommended: true },
         { label: '手动在codex里执行 $commit-diff 并手动粘贴', value: 'manual', recommended: false }
     ], rl, 0);
@@ -417,7 +418,8 @@ function getCurrentBranch() {
 
 async function handleTagAndPush(targetVersion, rl) {
     printSection('推送与标签');
-    if (!hasOriginRemote()) {
+    const hasOrigin = hasOriginRemote();
+    if (!hasOrigin) {
         console.log('未检测到 origin 远端，已跳过推送分支与 tag。');
     } else {
         const branch = getCurrentBranch();
@@ -432,7 +434,7 @@ async function handleTagAndPush(targetVersion, rl) {
 
     runRepoCommand('git', ['tag', `v${targetVersion}`], { stdio: 'inherit' });
 
-    if (!hasOriginRemote()) {
+    if (!hasOrigin) {
         console.log('未检测到 origin 远端，已跳过推送 tag。');
         return;
     }
@@ -466,9 +468,8 @@ async function main() {
 
     const currentVersion = readPackageJson().version;
     const latestTagInfo = getLatestTagInfo();
-    printState(currentVersion, latestTagInfo);
-
     const status = runRepoCommand('git', ['status', '--short']).trim();
+    printState(currentVersion, latestTagInfo, status);
     let rl = createInterface();
 
     try {
