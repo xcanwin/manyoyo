@@ -9,6 +9,7 @@ const {
     parseReleaseVersion,
     compareReleaseVersions,
     buildVersionSuggestions,
+    findRecommendedChoiceIndex,
     pickLatestVersionTag,
     normalizeCommitMessage,
     extractAgentMessageFromCodexJsonl
@@ -183,10 +184,11 @@ async function chooseTargetVersion(currentVersion, latestTagInfo, rl, directVers
         return directVersion;
     }
 
-    const selection = await askChoice('', [
+    const versionOptions = [
         ...choices,
         { label: '手动输入版本号', value: 'custom', recommended: false }
-    ], rl, 0);
+    ];
+    const selection = await askChoice('', versionOptions, rl, findRecommendedChoiceIndex(versionOptions, 0));
 
     if (selection.value !== 'custom') {
         ensureVersionSelectable(selection.value, currentVersion, latestTagInfo);

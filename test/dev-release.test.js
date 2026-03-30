@@ -3,6 +3,7 @@ const { execSync } = require('child_process');
 const {
     parseReleaseVersion,
     buildVersionSuggestions,
+    findRecommendedChoiceIndex,
     pickLatestVersionTag,
     normalizeCommitMessage,
     extractAgentMessageFromCodexJsonl
@@ -35,12 +36,17 @@ describe('Dev Release Helpers', () => {
         expect(parseReleaseVersion('5.6.1-beta')).toBeNull();
     });
 
-    test('buildVersionSuggestions should return patch minor major suggestions', () => {
+    test('buildVersionSuggestions should return major minor patch suggestions with patch recommended', () => {
         expect(buildVersionSuggestions('5.6.1')).toEqual([
-            { key: 'patch', label: '第3段 +1 (patch)', version: '5.6.2', recommended: true },
+            { key: 'major', label: '第1段 +1 (major)', version: '6.0.0', recommended: false },
             { key: 'minor', label: '第2段 +1 (minor)', version: '5.7.0', recommended: false },
-            { key: 'major', label: '第1段 +1 (major)', version: '6.0.0', recommended: false }
+            { key: 'patch', label: '第3段 +1 (patch)', version: '5.6.2', recommended: true }
         ]);
+    });
+
+    test('findRecommendedChoiceIndex should return recommended option index', () => {
+        expect(findRecommendedChoiceIndex(buildVersionSuggestions('5.6.1'), 0)).toBe(2);
+        expect(findRecommendedChoiceIndex([{ recommended: false }, { recommended: false }], 1)).toBe(1);
     });
 
     test('pickLatestVersionTag should pick highest semver tag', () => {
