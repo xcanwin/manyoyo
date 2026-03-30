@@ -24,12 +24,15 @@
 - `lib/container-run.js`: CLI/Web 共享的容器运行参数构造与命令展示。
 - `lib/image-build.js`: 镜像构建、构建缓存准备与 build args 解析。
 - `lib/agent-resume.js`: Agent 程序识别、resume 参数推断与提示词命令模板生成。
+- `lib/codex-output.js`: Codex JSONL 输出解析与最终消息提取，供 Web 与发布脚本复用。
+- `lib/global-config.js` + `lib/init-config.js`: 全局配置读写、imageVersion 同步与 `init` 初始化配置逻辑。
 - `lib/log-path.js` + `lib/serve-log.js`: 日志路径分目录规则、`serve` 日志脱敏与进程快照工具。
+- `lib/dev-release.js` + `scripts/dev-release.js`: 维护者发布向导与版本建议、提交文案清洗、标签选择等辅助逻辑。
 - `lib/plugin/index.js` + `lib/plugin/playwright.js`: 插件命令分发与 Playwright 插件主逻辑（场景配置、容器/宿主启动链路）。
 - `lib/plugin/playwright-assets/`: Playwright 容器场景 compose 与镜像资源模板。
 - `docker/res/playwright/playwright-cli-wrapper.sh`: 容器内 `playwright-cli install-browser` 兜底包装脚本，确保浏览器安装到全局 `@playwright/cli` 自带的 Playwright。
 - `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
-- `lib/web/frontend/`: 网页前端资源（`app/login` 的 `html/css/js`）。
+- `lib/web/frontend/`: 网页前端静态资源（`app/login/markdown` 的 `html/css/js`）。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docker/res/`: 各 Agent 默认配置、Playwright 资源与 supervisor 模板。
@@ -42,7 +45,7 @@
 - `docs/en/guide/` `docs/en/configuration/` `docs/en/reference/` `docs/en/advanced/` `docs/en/troubleshooting/`
 - `docs/guide/` `docs/configuration/` `docs/reference/` `docs/advanced/` `docs/troubleshooting/`
 - `lib/web/` `lib/web/frontend/`
-- `docker/` `bin/` `test/` `assets/` `coverage/`
+- `docker/` `bin/` `scripts/` `test/` `assets/` `coverage/`
 
 ## 构建、测试与开发命令
 - `npm install`: 开发阶段安装/更新依赖（会更新 `package-lock.json`）。
@@ -90,6 +93,7 @@
 - 环境文件解析：`manyoyo config show --ef /abs/path/myenv.env`。
 - 容器调试：`manyoyo run -n <name> -x /bin/bash`。
 - 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.4-common`），可加 `--iba TOOL=common`。
+- 维护者发布：`npm run dev:release`；自动确认可用 `npm run dev:release -- --yes`，指定版本可用 `npm run dev:release -- --version <x.y.z>`。
 - 局域网监听网页服务：`manyoyo serve 0.0.0.0:3000 -U <user> -P <pass>`。
 - 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`（需与启动参数/配置一致）。
 - 若未显式设置 `-P/--pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。

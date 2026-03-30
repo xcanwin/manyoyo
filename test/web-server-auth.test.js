@@ -314,6 +314,34 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
+    test('should toggle sidebar tree locally without rerendering the whole session list', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-tree-script-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.response.headers.get('content-type')).toContain('application/javascript');
+            expect(appScript.text).toContain("const nextExpanded = containerStack.hidden;");
+            expect(appScript.text).toContain("groupHead.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');");
+            expect(appScript.text).toContain("const nextExpanded = agentList.hidden;");
+            expect(appScript.text).toContain("containerToggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');");
+            expect(appScript.text).toContain('agentList.hidden = !nextExpanded;');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should expose multi-agent sessions under one container and create new agent sessions', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-multi-agent-'));
         const port = await getFreePort();
