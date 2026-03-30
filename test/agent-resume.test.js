@@ -68,12 +68,24 @@ describe('Agent Resume Command Builder', () => {
 });
 
 describe('Agent Prompt Template Resolver', () => {
-    test('should map claude command to prompt template', () => {
-        expect(resolveAgentPromptCommandTemplate('IS_SANDBOX=1 claude --dangerously-skip-permissions')).toBe('claude -p {prompt}');
+    test('should preserve claude dangerous flags in prompt template', () => {
+        expect(resolveAgentPromptCommandTemplate('IS_SANDBOX=1 claude --dangerously-skip-permissions')).toBe(
+            'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+        );
+    });
+
+    test('should preserve gemini yolo flag in prompt template', () => {
+        expect(resolveAgentPromptCommandTemplate('gemini --yolo')).toBe('gemini --yolo -p {prompt}');
     });
 
     test('should map codex command to prompt template', () => {
         expect(resolveAgentPromptCommandTemplate('codex --dangerously-bypass-approvals-and-sandbox')).toBe('codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check {prompt}');
+    });
+
+    test('should preserve opencode permission wrapper in prompt template', () => {
+        expect(resolveAgentPromptCommandTemplate('OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode')).toBe(
+            'OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode run {prompt}'
+        );
     });
 
     test('non-agent command should return empty template', () => {

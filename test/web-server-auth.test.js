@@ -458,7 +458,7 @@ describe('Web Server Auth Gateway', () => {
             const yoloHistoryPath = path.join(tempHost, 'web-history', 'my-web-create-yolo.json');
             const yoloHistory = JSON.parse(fs.readFileSync(yoloHistoryPath, 'utf-8'));
             expect(yoloHistory).toEqual(expect.objectContaining({
-                agentPromptCommand: 'claude -p {prompt}'
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
             }));
         } finally {
             if (handle && typeof handle.close === 'function') {
