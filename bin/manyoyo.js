@@ -857,7 +857,7 @@ function updateManyoyo() {
 
     console.log(`${CYAN}🔄 当前版本: ${currentVersion}${NC}`);
     console.log(`${CYAN}🔄 正在更新 ${MANYOYO_NAME} 到最新版本...${NC}`);
-    runCmd('npm', ['update', '-g', '@xcanwin/manyoyo'], { stdio: 'inherit' });
+    runCmd('npm', ['update', '-g', '@xcanwin/manyoyo', '--prefer-online'], { stdio: 'inherit' });
 
     // 升级后获取新版本
     let newVersion = 'unknown';

@@ -1483,7 +1483,7 @@ exit 0
 
                 const npmArgs = fs.readFileSync(npmLogPath, 'utf-8').trim().split('\n');
                 expect(npmArgs.some(line => line.startsWith('ls -g @xcanwin/manyoyo'))).toBe(true);
-                expect(npmArgs).toContain('update -g @xcanwin/manyoyo');
+                expect(npmArgs).toContain('update -g @xcanwin/manyoyo --prefer-online');
             } finally {
                 fs.rmSync(tempDir, { recursive: true, force: true });
             }
@@ -1521,7 +1521,7 @@ exit 0
 
                 const npmArgs = fs.readFileSync(npmLogPath, 'utf-8').trim().split('\n');
                 expect(npmArgs.some(line => line.startsWith('ls -g @xcanwin/manyoyo'))).toBe(true);
-                expect(npmArgs.some(line => line.startsWith('update -g @xcanwin/manyoyo'))).toBe(false);
+                expect(npmArgs.some(line => line.startsWith('update -g @xcanwin/manyoyo --prefer-online'))).toBe(false);
             } finally {
                 fs.rmSync(tempDir, { recursive: true, force: true });
             }
