@@ -511,6 +511,85 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
+    test('should infer gemini and opencode yolo agent prompts when creating web sessions', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-other-yolo-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const geminiCreated = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    createOptions: {
+                        containerName: 'my-web-create-gemini-yolo',
+                        hostPath: tempHost,
+                        imageName: 'localhost/xcanwin/manyoyo',
+                        imageVersion: '1.7.4-common',
+                        yolo: 'gm'
+                    }
+                })
+            });
+            expect(geminiCreated.response.status).toBe(200);
+            expect(geminiCreated.json).toEqual(expect.objectContaining({
+                applied: expect.objectContaining({
+                    agentEnabled: true,
+                    defaultCommand: 'gemini --yolo'
+                })
+            }));
+            const geminiHistory = JSON.parse(
+                fs.readFileSync(path.join(tempHost, 'web-history', 'my-web-create-gemini-yolo.json'), 'utf-8')
+            );
+            expect(geminiHistory).toEqual(expect.objectContaining({
+                agentProgram: 'gemini',
+                agentPromptCommand: 'gemini --yolo -p {prompt}'
+            }));
+
+            const opencodeCreated = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    createOptions: {
+                        containerName: 'my-web-create-opencode-yolo',
+                        hostPath: tempHost,
+                        imageName: 'localhost/xcanwin/manyoyo',
+                        imageVersion: '1.7.4-common',
+                        yolo: 'oc'
+                    }
+                })
+            });
+            expect(opencodeCreated.response.status).toBe(200);
+            expect(opencodeCreated.json).toEqual(expect.objectContaining({
+                applied: expect.objectContaining({
+                    agentEnabled: true,
+                    defaultCommand: 'OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode'
+                })
+            }));
+            const opencodeHistory = JSON.parse(
+                fs.readFileSync(path.join(tempHost, 'web-history', 'my-web-create-opencode-yolo.json'), 'utf-8')
+            );
+            expect(opencodeHistory).toEqual(expect.objectContaining({
+                agentProgram: 'opencode',
+                agentPromptCommand: 'OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode run {prompt}'
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should expand home alias in web create volumes before docker run', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-home-volume-'));
         const port = await getFreePort();
@@ -763,6 +842,113 @@ process.exit(0);
         }
     });
 
+    test('should rewrite claude gemini and opencode agent templates to structured json execution', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-structured-template-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  process.stdout.write(command + '\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'claude-demo.json'),
+            JSON.stringify({
+                containerName: 'claude-demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'gemini-demo.json'),
+            JSON.stringify({
+                containerName: 'gemini-demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'gemini --yolo -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'opencode-demo.json'),
+            JSON.stringify({
+                containerName: 'opencode-demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode run {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const claudeRes = await request(`${baseUrl}/api/sessions/claude-demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'hello' })
+            });
+            expect(claudeRes.response.status).toBe(200);
+            expect(String(claudeRes.json.output || '')).toContain('claude --verbose --output-format stream-json --dangerously-skip-permissions -p');
+            expect(String(claudeRes.json.output || '')).toContain("'hello'");
+
+            const geminiRes = await request(`${baseUrl}/api/sessions/gemini-demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'hello' })
+            });
+            expect(geminiRes.response.status).toBe(200);
+            expect(String(geminiRes.json.output || '')).toContain('gemini --output-format stream-json --yolo -p');
+            expect(String(geminiRes.json.output || '')).toContain("'hello'");
+
+            const opencodeRes = await request(`${baseUrl}/api/sessions/opencode-demo/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'hello' })
+            });
+            expect(opencodeRes.response.status).toBe(200);
+            expect(String(opencodeRes.json.output || '')).toContain('OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode run --format json');
+            expect(String(opencodeRes.json.output || '')).toContain("'hello'");
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should keep codex agent reply clean by using the json agent message', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-codex-clean-'));
         const port = await getFreePort();
@@ -831,6 +1017,144 @@ process.exit(0);
             expect(assistantMessage).toEqual(expect.objectContaining({
                 content: '当前这个会话里，我是基于 gpt-5.4 的 Codex。'
             }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should stream structured trace events for claude gemini and opencode agents', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-structured-stream-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  if (command.includes('claude ')) {
+    process.stdout.write('{"type":"system","subtype":"init","session_id":"claude-session"}\\n');
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"我先看看目录。"}]}}\\n');
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"ls -la"}}]}}\\n');
+    process.stdout.write('{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"ok"}]}}\\n');
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"这是 Claude 最终答案。"}]}}\\n');
+    process.stdout.write('{"type":"result","subtype":"success","session_id":"claude-session"}\\n');
+    process.exit(0);
+    return;
+  }
+  if (command.includes('gemini ')) {
+    process.stdout.write('{"type":"init","timestamp":"2026-03-30T12:00:00.000Z","session_id":"gemini-session","model":"gemini-2.5-pro"}\\n');
+    process.stdout.write('{"type":"message","timestamp":"2026-03-30T12:00:01.000Z","role":"assistant","content":"我先看看目录。"}\\n');
+    process.stdout.write('{"type":"tool_use","timestamp":"2026-03-30T12:00:02.000Z","tool_name":"run_shell_command","tool_id":"tool_1","parameters":{"command":"ls -la"}}\\n');
+    process.stdout.write('{"type":"tool_result","timestamp":"2026-03-30T12:00:03.000Z","tool_id":"tool_1","status":"success","output":"ok"}\\n');
+    process.stdout.write('{"type":"message","timestamp":"2026-03-30T12:00:04.000Z","role":"assistant","content":"这是 Gemini 最终答案。"}\\n');
+    process.stdout.write('{"type":"result","timestamp":"2026-03-30T12:00:05.000Z","status":"success"}\\n');
+    process.exit(0);
+    return;
+  }
+  if (command.includes('opencode ')) {
+    process.stdout.write('{"type":"session.start","session_id":"opencode-session"}\\n');
+    process.stdout.write('{"type":"message","role":"assistant","content":"我先看看目录。"}\\n');
+    process.stdout.write('{"type":"tool_use","tool_name":"bash","tool_id":"tool_1","parameters":{"command":"ls -la"}}\\n');
+    process.stdout.write('{"type":"tool_result","tool_id":"tool_1","status":"success","output":"ok"}\\n');
+    process.stdout.write('{"type":"message","role":"assistant","content":"这是 OpenCode 最终答案。"}\\n');
+    process.stdout.write('{"type":"result","status":"success"}\\n');
+    process.exit(0);
+    return;
+  }
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        const cases = [
+            {
+                sessionName: 'claude-demo',
+                template: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}',
+                provider: 'claude',
+                expectedResult: '这是 Claude 最终答案。',
+                expectedToolStartTrace: '[工具开始] Bash (command=ls -la)',
+                expectedToolCompleteTrace: '[工具完成] Bash (success)'
+            },
+            {
+                sessionName: 'gemini-demo',
+                template: 'gemini --yolo -p {prompt}',
+                provider: 'gemini',
+                expectedResult: '这是 Gemini 最终答案。',
+                expectedToolStartTrace: '[工具开始] run_shell_command (command=ls -la)',
+                expectedToolCompleteTrace: '[工具完成] run_shell_command (success)'
+            },
+            {
+                sessionName: 'opencode-demo',
+                template: 'OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode run {prompt}',
+                provider: 'opencode',
+                expectedResult: '这是 OpenCode 最终答案。',
+                expectedToolStartTrace: '[工具开始] bash (command=ls -la)',
+                expectedToolCompleteTrace: '[工具完成] bash (success)'
+            }
+        ];
+        for (const item of cases) {
+            fs.writeFileSync(
+                path.join(webHistoryDir, `${item.sessionName}.json`),
+                JSON.stringify({
+                    containerName: item.sessionName,
+                    updatedAt: null,
+                    messages: [],
+                    agentPromptCommand: item.template
+                }, null, 4),
+                'utf-8'
+            );
+        }
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            for (const item of cases) {
+                const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/${item.sessionName}/agent/stream`, {
+                    method: 'POST',
+                    headers: {
+                        Cookie: authCookie,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ prompt: '帮我看看当前目录' })
+                });
+                expect(streamRes.response.status).toBe(200);
+                expect(streamRes.events).toEqual(expect.arrayContaining([
+                    expect.objectContaining({ type: 'meta', agentProgram: item.provider }),
+                    expect.objectContaining({ type: 'trace', text: '[说明] 我先看看目录。' }),
+                    expect.objectContaining({ type: 'trace', text: item.expectedToolStartTrace }),
+                    expect.objectContaining({ type: 'trace', text: item.expectedToolCompleteTrace }),
+                    expect.objectContaining({ type: 'result', output: item.expectedResult })
+                ]));
+
+                const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, `${item.sessionName}.json`), 'utf-8'));
+                const traceMessage = (persisted.messages || []).find(message => message && message.streamTrace === true);
+                expect(traceMessage).toEqual(expect.objectContaining({
+                    role: 'assistant',
+                    mode: 'agent',
+                    streamTrace: true
+                }));
+                expect(String(traceMessage.content || '')).toContain(item.expectedToolStartTrace);
+                const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
+                expect(assistantMessage).toEqual(expect.objectContaining({
+                    content: item.expectedResult
+                }));
+            }
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -1156,6 +1480,118 @@ process.exit(0);
         }
     });
 
+    test('should stop running claude structured agent stream on demand', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-claude-stop-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  process.stdout.write('{"type":"system","subtype":"init","session_id":"claude-session"}\\n');
+  process.stdout.write('{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"sleep 10"}}]}}\\n');
+  const timer = setTimeout(() => {
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"正常结束"}}]}\\n');
+    process.stdout.write('{"type":"result","subtype":"success","session_id":"claude-session"}\\n');
+    process.exit(0);
+  }, 10000);
+  process.on('SIGTERM', () => {
+    clearTimeout(timer);
+    process.stderr.write('claude stopped by test\\n');
+    process.exit(143);
+  });
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            let stopSent = false;
+            const streamPromise = requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: '执行一个长任务' })
+            }, async payload => {
+                if (!stopSent && payload && payload.type === 'trace' && payload.text === '[工具开始] Bash (command=sleep 10)') {
+                    stopSent = true;
+                    const stopRes = await request(`${baseUrl}/api/sessions/demo/agent/stop`, {
+                        method: 'POST',
+                        headers: {
+                            Cookie: authCookie,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    expect(stopRes.response.status).toBe(200);
+                    expect(stopRes.json).toEqual(expect.objectContaining({ ok: true, stopping: true }));
+                }
+            });
+
+            const streamRes = await streamPromise;
+            expect(streamRes.response.status).toBe(200);
+            expect(stopSent).toBe(true);
+            expect(streamRes.events).toEqual(expect.arrayContaining([
+                expect.objectContaining({ type: 'meta', agentProgram: 'claude' }),
+                expect.objectContaining({ type: 'trace', text: '[工具开始] Bash (command=sleep 10)' }),
+                expect.objectContaining({ type: 'result', interrupted: true })
+            ]));
+
+            const stopAgain = await request(`${baseUrl}/api/sessions/demo/agent/stop`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                }
+            });
+            expect(stopAgain.response.status).toBe(404);
+
+            const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            const traceMessage = (persisted.messages || []).find(message => message && message.streamTrace === true);
+            expect(traceMessage).toEqual(expect.objectContaining({
+                streamTrace: true
+            }));
+            expect(String(traceMessage.content || '')).toContain('[任务] 已停止');
+            const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
+            expect(assistantMessage).toEqual(expect.objectContaining({
+                interrupted: true
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should inject recent agent history for subsequent turns when resume is unavailable', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-context-'));
         const port = await getFreePort();
@@ -1402,7 +1838,7 @@ process.exit(0);
                 resumeAttempted: true,
                 resumeSucceeded: true
             }));
-            expect(String(turn2.json.output || '')).toContain("claude -p 'who am i'");
+            expect(String(turn2.json.output || '')).toContain("claude --verbose --output-format stream-json -p 'who am i'");
             expect(String(turn2.json.output || '')).not.toContain('以下是当前会话最近对话历史');
 
             const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
