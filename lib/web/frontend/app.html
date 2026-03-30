@@ -31,7 +31,7 @@
                 >关闭</button>
             </div>
             <div class="session-head">
-                <span>会话</span>
+                <span>工作台</span>
                 <span id="sessionCount">0 个</span>
             </div>
             <div id="sessionList"></div>
@@ -154,9 +154,19 @@
                                 <option value="">(不使用 run)</option>
                             </select>
                         </label>
-                        <label>hostPath<input id="createHostPath" placeholder="/abs/path/project" /></label>
+                        <label>hostPath
+                            <div class="field-inline">
+                                <input id="createHostPath" placeholder="/abs/path/project" />
+                                <button type="button" id="pickHostPathBtn" class="secondary field-picker-btn">选择</button>
+                            </div>
+                        </label>
                         <label>containerName<input id="createContainerName" placeholder="my-dev 或 my-{now}" /></label>
-                        <label>containerPath<input id="createContainerPath" placeholder="/workspace" /></label>
+                        <label>containerPath
+                            <div class="field-inline">
+                                <input id="createContainerPath" placeholder="/workspace" />
+                                <button type="button" id="pickContainerPathBtn" class="secondary field-picker-btn">选择</button>
+                            </div>
+                        </label>
                         <label>imageName<input id="createImageName" placeholder="localhost/xcanwin/manyoyo" /></label>
                         <label>imageVersion<input id="createImageVersion" placeholder="1.7.4-common" /></label>
                         <label>containerMode
@@ -188,6 +198,25 @@
                         <button type="submit" id="createSubmitBtn">创建并进入</button>
                     </footer>
                 </form>
+            </section>
+        </div>
+
+        <div id="directoryPickerModal" class="modal-backdrop" hidden>
+            <section class="modal dir-picker-modal" role="dialog" aria-modal="true" aria-labelledby="directoryPickerTitle">
+                <header class="modal-header">
+                    <h2 id="directoryPickerTitle">选择目录</h2>
+                    <button type="button" id="directoryPickerCancelBtn" class="secondary">关闭</button>
+                </header>
+                <div class="modal-body">
+                    <div id="directoryPickerTip" class="modal-tip"></div>
+                    <div class="dir-picker-toolbar">
+                        <button type="button" id="directoryPickerUpBtn" class="secondary">上一级</button>
+                        <button type="button" id="directoryPickerSelectBtn">使用当前目录</button>
+                    </div>
+                    <div id="directoryPickerCurrent" class="dir-picker-current"></div>
+                    <div id="directoryPickerError" class="modal-error" hidden></div>
+                    <div id="directoryPickerList" class="dir-picker-list"></div>
+                </div>
             </section>
         </div>
     </div>

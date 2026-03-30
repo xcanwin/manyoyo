@@ -287,6 +287,181 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
+    test('should expose multi-agent sessions under one container and create new agent sessions', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-multi-agent-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        const historyPath = path.join(webHistoryDir, 'demo.json');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(historyPath, JSON.stringify({
+            containerName: 'demo',
+            agentPromptCommand: 'codex exec --skip-git-repo-check {prompt}',
+            applied: {
+                containerName: 'demo',
+                hostPath: tempHost,
+                containerPath: '/workspace/demo'
+            },
+            agents: {
+                default: {
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    updatedAt: '2026-03-30T00:00:00.000Z',
+                    messages: [
+                        {
+                            id: 'msg-1',
+                            role: 'user',
+                            content: 'hello',
+                            timestamp: '2026-03-30T00:00:00.000Z',
+                            mode: 'agent'
+                        }
+                    ],
+                    lastResumeAt: null,
+                    lastResumeOk: null,
+                    lastResumeError: ''
+                },
+                'agent-2': {
+                    agentId: 'agent-2',
+                    agentName: 'AGENT 2',
+                    updatedAt: '2026-03-30T00:10:00.000Z',
+                    messages: [
+                        {
+                            id: 'msg-2',
+                            role: 'assistant',
+                            content: 'done',
+                            timestamp: '2026-03-30T00:10:00.000Z',
+                            mode: 'agent'
+                        }
+                    ],
+                    lastResumeAt: null,
+                    lastResumeOk: null,
+                    lastResumeError: ''
+                }
+            }
+        }, null, 2), 'utf-8');
+
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: name => name === 'demo',
+                dockerExecArgs: args => {
+                    if (Array.isArray(args) && args[0] === 'ps') {
+                        return 'demo\tUp 2 minutes\tlocalhost/xcanwin/manyoyo:1.0.0-common\n';
+                    }
+                    return '';
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const sessionsRes = await request(`${baseUrl}/api/sessions`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(sessionsRes.response.status).toBe(200);
+            expect(sessionsRes.json.sessions).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    name: 'demo',
+                    containerName: 'demo',
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    hostPath: tempHost,
+                    containerPath: '/workspace/demo'
+                }),
+                expect.objectContaining({
+                    name: 'demo~agent-2',
+                    containerName: 'demo',
+                    agentId: 'agent-2',
+                    agentName: 'AGENT 2',
+                    hostPath: tempHost,
+                    containerPath: '/workspace/demo'
+                })
+            ]));
+
+            const createdAgent = await request(`${baseUrl}/api/sessions/demo/agents`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+            expect(createdAgent.response.status).toBe(200);
+            expect(createdAgent.json).toEqual(expect.objectContaining({
+                name: 'demo~agent-3',
+                containerName: 'demo',
+                agentId: 'agent-3',
+                agentName: 'AGENT 3'
+            }));
+
+            const afterCreate = await request(`${baseUrl}/api/sessions`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(afterCreate.response.status).toBe(200);
+            expect(afterCreate.json.sessions).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    name: 'demo~agent-3',
+                    containerName: 'demo',
+                    agentId: 'agent-3',
+                    agentName: 'AGENT 3',
+                    messageCount: 0
+                })
+            ]));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should list host directories for web directory picker', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-dir-picker-'));
+        const port = await getFreePort();
+        const alphaDir = path.join(tempHost, 'alpha');
+        const betaDir = path.join(tempHost, 'beta');
+        const nestedDir = path.join(alphaDir, 'nested');
+        fs.mkdirSync(nestedDir, { recursive: true });
+        fs.mkdirSync(betaDir, { recursive: true });
+        fs.writeFileSync(path.join(tempHost, 'note.txt'), 'ignore me', 'utf-8');
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const rootList = await request(
+                `${baseUrl}/api/fs/directories?path=${encodeURIComponent(tempHost)}`,
+                { headers: { Cookie: authCookie } }
+            );
+            expect(rootList.response.status).toBe(200);
+            expect(rootList.json).toEqual(expect.objectContaining({
+                currentPath: tempHost,
+                entries: expect.arrayContaining([
+                    expect.objectContaining({ name: 'alpha', path: alphaDir }),
+                    expect.objectContaining({ name: 'beta', path: betaDir })
+                ])
+            }));
+            expect(rootList.json.entries.some(item => item.name === 'note.txt')).toBe(false);
+
+            const nestedList = await request(
+                `${baseUrl}/api/fs/directories?path=${encodeURIComponent(nestedDir)}&basePath=${encodeURIComponent(alphaDir)}`,
+                { headers: { Cookie: authCookie } }
+            );
+            expect(nestedList.response.status).toBe(200);
+            expect(nestedList.json).toEqual(expect.objectContaining({
+                currentPath: nestedDir,
+                basePath: alphaDir,
+                parentPath: alphaDir
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should return redacted config summary and still support saving JSON5 config in web api', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-config-'));
         const port = await getFreePort();
