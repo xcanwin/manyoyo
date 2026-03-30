@@ -1477,6 +1477,28 @@ details.trace-card > .trace-card-summary {
     }
 }
 
+.streaming-reply {
+    border-color: var(--subaccent);
+    box-shadow: 0 8px 16px rgba(15, 124, 114, 0.10);
+}
+
+.streaming-cursor {
+    display: inline-block;
+    width: 7px;
+    height: 16px;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    background: var(--subaccent);
+    border-radius: 2px;
+    animation: blink-cursor 640ms steps(2, start) infinite;
+}
+
+@keyframes blink-cursor {
+    to {
+        visibility: hidden;
+    }
+}
+
 @keyframes shimmer {
     100% {
         transform: translateX(100%);

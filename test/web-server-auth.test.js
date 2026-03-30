@@ -2193,4 +2193,116 @@ process.exit(0);
             fs.rmSync(tempHost, { recursive: true, force: true });
         }
     });
+
+    test('should emit content_delta events during agent streaming for claude gemini and opencode', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-content-delta-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  if (command.includes('claude ')) {
+    process.stdout.write('{"type":"system","subtype":"init","session_id":"claude-session"}\\n');
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"第一段回复。"}]}}\\n');
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"ls"}}]}}\\n');
+    process.stdout.write('{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"ok"}]}}\\n');
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"第二段回复。"}]}}\\n');
+    process.stdout.write('{"type":"result","subtype":"success"}\\n');
+    process.exit(0);
+    return;
+  }
+  if (command.includes('gemini ')) {
+    process.stdout.write('{"type":"init","session_id":"gemini-session","model":"gemini-2.5-pro"}\\n');
+    process.stdout.write('{"type":"message","role":"assistant","content":"Gemini 第一段。","delta":true}\\n');
+    process.stdout.write('{"type":"message","role":"assistant","content":"Gemini 第二段。","delta":true}\\n');
+    process.stdout.write('{"type":"result","status":"success"}\\n');
+    process.exit(0);
+    return;
+  }
+  if (command.includes('opencode ')) {
+    process.stdout.write('{"type":"session.start","session_id":"opencode-session"}\\n');
+    process.stdout.write('{"type":"message","role":"assistant","content":"OC 第一段。","delta":true}\\n');
+    process.stdout.write('{"type":"message","role":"assistant","content":"OC 第二段。","delta":true}\\n');
+    process.stdout.write('{"type":"result","status":"success"}\\n');
+    process.exit(0);
+    return;
+  }
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        const cases = [
+            {
+                sessionName: 'claude-delta',
+                template: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}',
+                expectedDeltas: ['第一段回复。', '第二段回复。']
+            },
+            {
+                sessionName: 'gemini-delta',
+                template: 'gemini --yolo -p {prompt}',
+                expectedDeltas: ['Gemini 第一段。', 'Gemini 第一段。Gemini 第二段。']
+            },
+            {
+                sessionName: 'opencode-delta',
+                template: 'OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode run {prompt}',
+                expectedDeltas: ['OC 第一段。', 'OC 第一段。OC 第二段。']
+            }
+        ];
+        for (const item of cases) {
+            fs.writeFileSync(
+                path.join(webHistoryDir, `${item.sessionName}.json`),
+                JSON.stringify({
+                    containerName: item.sessionName,
+                    updatedAt: null,
+                    messages: [],
+                    agentPromptCommand: item.template
+                }, null, 4),
+                'utf-8'
+            );
+        }
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            for (const item of cases) {
+                const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/${item.sessionName}/agent/stream`, {
+                    method: 'POST',
+                    headers: {
+                        Cookie: authCookie,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ prompt: '测试' })
+                });
+                expect(streamRes.response.status).toBe(200);
+                const contentDeltas = streamRes.events.filter(e => e.type === 'content_delta');
+                expect(contentDeltas.length).toBeGreaterThanOrEqual(item.expectedDeltas.length);
+                for (let i = 0; i < item.expectedDeltas.length; i++) {
+                    const matchingDelta = contentDeltas.find(d => d.content === item.expectedDeltas[i]);
+                    expect(matchingDelta).toBeTruthy();
+                    expect(matchingDelta.content).toBe(item.expectedDeltas[i]);
+                }
+            }
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
 });
