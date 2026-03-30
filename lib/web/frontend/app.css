@@ -783,8 +783,8 @@ body.mobile-actions-open .header-actions {
     color: var(--muted);
     font-size: 12px;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
+    text-transform: none;
+    letter-spacing: 0.1px;
     line-height: 1.45;
     overflow-wrap: anywhere;
 }

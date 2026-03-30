@@ -17,6 +17,7 @@ describe('Dev Release Helpers', () => {
         expect(output).toContain('manyoyo dev release');
         expect(output).toContain('维护者发布向导');
         expect(output).toContain('--version');
+        expect(output).toContain('--yes');
         expect(output).toContain('$commit-diff');
         expect(output).toContain('默认通过 manyoyo run 在容器内自动执行 commit-diff');
         expect(output).toContain('推送当前分支');

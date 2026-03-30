@@ -189,6 +189,30 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
+    test('should redirect unauthenticated page requests to login and answer favicon quietly', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-page-auth-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+
+            const pageRes = await request(`${baseUrl}/`, { redirect: 'manual' });
+            expect(pageRes.response.status).toBe(302);
+            expect(pageRes.response.headers.get('location')).toBe('/auth/login');
+
+            const faviconRes = await request(`${baseUrl}/favicon.ico`, { redirect: 'manual' });
+            expect(faviconRes.response.status).toBe(204);
+            expect(faviconRes.text).toBe('');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should allow serve startup even when default cwd validator would reject root path', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-root-start-'));
         const port = await getFreePort();
@@ -263,11 +287,30 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
-    test('should support get and save JSON5 config in web api', async () => {
+    test('should return redacted config summary and still support saving JSON5 config in web api', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-config-'));
         const port = await getFreePort();
         const configPath = path.join(tempHost, 'manyoyo.json');
-        fs.writeFileSync(configPath, '{\n// test\n"hostPath": "/tmp"\n}\n', 'utf-8');
+        fs.writeFileSync(configPath, [
+            '{',
+            '// test',
+            '"hostPath": "/tmp",',
+            '"env": {',
+            '  "OPENAI_API_KEY": "secret-key",',
+            '  "OPENAI_MODEL": "gpt-5.4"',
+            '},',
+            '"runs": {',
+            '  "codex": {',
+            '    "shell": "codex --dangerously-bypass-approvals-and-sandbox",',
+            '    "env": {',
+            '      "JINA_TOKEN": "secret-jina",',
+            '      "OPENAI_MODEL": "gpt-5.4-mini"',
+            '    }',
+            '  }',
+            '}',
+            '}',
+            ''
+        ].join('\n'), 'utf-8');
         let handle = null;
 
         try {
@@ -283,10 +326,20 @@ describe('Web Server Auth Gateway', () => {
                 path: configPath,
                 parseError: null
             }));
-            expect(configRes.json.raw).toContain('"hostPath": "/tmp"');
+            expect(configRes.json).not.toHaveProperty('raw');
             expect(configRes.json.defaults).toEqual(expect.objectContaining({
-                hostPath: '/tmp',
-                ports: []
+                hostPath: '/tmp'
+            }));
+            expect(configRes.json.defaults.env).toEqual(expect.objectContaining({
+                OPENAI_API_KEY: '***',
+                OPENAI_MODEL: 'gpt-5.4'
+            }));
+            expect(configRes.json.parsed.runs.codex.env).toEqual(expect.objectContaining({
+                JINA_TOKEN: '***',
+                OPENAI_MODEL: 'gpt-5.4-mini'
+            }));
+            expect(configRes.json).toEqual(expect.objectContaining({
+                editable: false
             }));
 
             const invalidSave = await request(`${baseUrl}/api/config`, {
@@ -324,6 +377,117 @@ describe('Web Server Auth Gateway', () => {
 
             const savedText = fs.readFileSync(configPath, 'utf-8');
             expect(savedText).toContain('"containerName": "my-web"');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should build web session from server-side run config without exposing secret env values to client', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-run-config-'));
+        const port = await getFreePort();
+        const configPath = path.join(tempHost, 'manyoyo.json');
+        const dockerExecArgs = jest.fn(() => '');
+        const waitForContainerReady = jest.fn(async () => {});
+        fs.writeFileSync(configPath, [
+            '{',
+            '  "imageName": "localhost/xcanwin/manyoyo",',
+            '  "imageVersion": "1.8.8-common",',
+            '  "env": {',
+            '    "OPENAI_API_KEY": "secret-key",',
+            '    "OPENAI_MODEL": "gpt-5.4"',
+            '  },',
+            '  "volumes": [',
+            `    "${tempHost}:/workspace/base"`,
+            '  ],',
+            '  "ports": [',
+            '    "8080:80"',
+            '  ],',
+            '  "runs": {',
+            '    "codex": {',
+            '      "containerName": "my-run-{now}",',
+            '      "shell": "codex --dangerously-bypass-approvals-and-sandbox",',
+            '      "containerPath": "/workspace/run",',
+            '      "env": {',
+            '        "JINA_TOKEN": "secret-jina"',
+            '      },',
+            '      "volumes": [',
+            `        "${tempHost}:/workspace/run"`,
+            '      ]',
+            '    }',
+            '  }',
+            '}',
+            ''
+        ].join('\n'), 'utf-8');
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                webConfigPath: configPath,
+                dockerExecArgs,
+                waitForContainerReady,
+                formatDate: () => '0330-1234'
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const created = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    run: 'codex',
+                    createOptions: {
+                        hostPath: tempHost
+                    }
+                })
+            });
+
+            expect(created.response.status).toBe(200);
+            expect(created.json).toEqual(expect.objectContaining({
+                name: 'my-run-0330-1234',
+                applied: expect.objectContaining({
+                    containerName: 'my-run-0330-1234',
+                    containerPath: '/workspace/run',
+                    imageVersion: '1.8.8-common',
+                    envCount: 3,
+                    volumeCount: 2,
+                    portCount: 1,
+                    agentEnabled: true
+                })
+            }));
+
+            expect(waitForContainerReady).toHaveBeenCalledWith('my-run-0330-1234');
+            const runArgs = dockerExecArgs.mock.calls[0][0];
+            expect(runArgs).toEqual(expect.arrayContaining([
+                '--name',
+                'my-run-0330-1234',
+                '--workdir',
+                '/workspace/run',
+                '--env',
+                'OPENAI_API_KEY=secret-key',
+                '--env',
+                'OPENAI_MODEL=gpt-5.4',
+                '--env',
+                'JINA_TOKEN=secret-jina',
+                '--publish',
+                '8080:80',
+                '--volume',
+                `${tempHost}:/workspace/base`,
+                '--volume',
+                `${tempHost}:/workspace/run`
+            ]));
+
+            const configRes = await request(`${baseUrl}/api/config`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(configRes.response.status).toBe(200);
+            expect(configRes.json.parsed.runs.codex.env.JINA_TOKEN).toBe('***');
+            expect(configRes.json.defaults.env.OPENAI_API_KEY).toBe('***');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();

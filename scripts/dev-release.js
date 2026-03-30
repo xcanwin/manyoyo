@@ -49,8 +49,9 @@ function printHelp() {
 
 用法:
   npm run dev:release
+  npm run dev:release -- --yes
   npm run dev:release -- --version 5.6.2
-  node scripts/dev-release.js --version 5.6.2
+  node scripts/dev-release.js --yes --version 5.6.2
 
 流程:
   1. 选择目标版本并更新 package.json/package-lock.json
@@ -64,6 +65,7 @@ function printHelp() {
 
 选项:
   --version <x.y.z>  直接指定目标版本
+  --yes              自动确认 yes，并采用默认/推荐选项
   --help             显示帮助
 `);
 }
@@ -139,7 +141,7 @@ async function askYesNo(question, rl, defaultValue = false) {
     return answer === 'y' || answer === 'yes';
 }
 
-async function askChoice(title, options, rl, defaultIndex = 0) {
+async function askChoice(title, options, rl, defaultIndex = 0, autoYes = false) {
     if (title) {
         console.log(`\n${title}`);
     }
@@ -147,6 +149,9 @@ async function askChoice(title, options, rl, defaultIndex = 0) {
         const recommended = option.recommended ? ' (推荐)' : '';
         console.log(`  ${index + 1}. ${option.label}${recommended}`);
     });
+    if (autoYes) {
+        return options[defaultIndex];
+    }
     while (true) {
         const answer = await ask(`请选择 [默认 ${defaultIndex + 1}]: `, rl);
         const selectedIndex = answer ? Number(answer) - 1 : defaultIndex;
@@ -171,7 +176,7 @@ function getBaseVersion(currentVersion, latestTagInfo) {
         : currentVersion;
 }
 
-async function chooseTargetVersion(currentVersion, latestTagInfo, rl, directVersion) {
+async function chooseTargetVersion(currentVersion, latestTagInfo, rl, directVersion, autoYes = false) {
     const baseVersion = getBaseVersion(currentVersion, latestTagInfo);
     const choices = buildVersionSuggestions(baseVersion).map(item => ({
         label: `${item.label}: ${item.version}`,
@@ -188,7 +193,7 @@ async function chooseTargetVersion(currentVersion, latestTagInfo, rl, directVers
         ...choices,
         { label: '手动输入版本号', value: 'custom', recommended: false }
     ];
-    const selection = await askChoice('', versionOptions, rl, findRecommendedChoiceIndex(versionOptions, 0));
+    const selection = await askChoice('', versionOptions, rl, findRecommendedChoiceIndex(versionOptions, 0), autoYes);
 
     if (selection.value !== 'custom') {
         ensureVersionSelectable(selection.value, currentVersion, latestTagInfo);
@@ -227,13 +232,13 @@ function printState(currentVersion, latestTagInfo, status) {
     }
 }
 
-async function maybeRunChecks(rl) {
+async function maybeRunChecks(rl, autoYes = false) {
     printSection('发布前检查');
     const choice = await askChoice('', [
         { label: '只跑 npm audit', value: 'audit', recommended: true },
         { label: '跑 npm audit + npm test + npm run docs:build', value: 'full', recommended: false },
         { label: '跳过检查', value: 'skip', recommended: false }
-    ], rl, 0);
+    ], rl, 0, autoYes);
 
     if (choice.value === 'skip') {
         return;
@@ -377,16 +382,16 @@ function tryGenerateCommitMessageWithManyoyo() {
     }
 }
 
-async function chooseCommitMessageSource(rl) {
+async function chooseCommitMessageSource(rl, autoYes = false) {
     printSection('提交文案生成方式');
     return askChoice('', [
         { label: '自动通过 manyoyo run 在容器内执行 commit-diff skill (若失败则执行选项2)', value: 'auto', recommended: true },
         { label: '手动在codex里执行 $commit-diff 并手动粘贴', value: 'manual', recommended: false }
-    ], rl, 0);
+    ], rl, 0, autoYes);
 }
 
-async function acquireCommitMessage(rl) {
-    const method = await chooseCommitMessageSource(rl);
+async function acquireCommitMessage(rl, autoYes = false) {
+    const method = await chooseCommitMessageSource(rl, autoYes);
     if (method.value === 'auto') {
         console.log('\n正在通过 manyoyo 容器自动生成提交文案...');
         console.log(`将使用容器内 Codex 与当前仓库上下文，最长等待 ${Math.floor(COMMIT_DIFF_MANYOYO_TIMEOUT_MS / 1000)} 秒。`);
@@ -394,6 +399,9 @@ async function acquireCommitMessage(rl) {
         if (result.message) {
             console.log('已生成提交文案。');
             return result.message;
+        }
+        if (autoYes) {
+            throw new Error(`自动生成提交文案失败，且 --yes 模式无法回退到手动粘贴：${result.reason || '未知原因'}`);
         }
         console.log(`自动生成失败：${result.reason || '未知原因'}`);
         console.log('已回退到手动粘贴。');
@@ -418,19 +426,19 @@ function getCurrentBranch() {
     return runRepoCommand('git', ['branch', '--show-current']).trim();
 }
 
-async function handleTagAndPush(targetVersion, rl) {
+async function handleTagAndPush(targetVersion, rl, autoYes = false) {
     printSection('推送与标签');
     const hasOrigin = hasOriginRemote();
     if (!hasOrigin) {
         console.log('未检测到 origin 远端，已跳过推送分支与 tag。');
     } else {
         const branch = getCurrentBranch();
-        if (branch && await askYesNo(`推送当前分支 ${branch} 到 origin ?`, rl, true)) {
+        if (branch && (autoYes || await askYesNo(`推送当前分支 ${branch} 到 origin ?`, rl, true))) {
             runRepoCommand('git', ['push', 'origin', branch], { stdio: 'inherit' });
         }
     }
 
-    if (!await askYesNo(`创建 lightweight tag v${targetVersion} ?`, rl, true)) {
+    if (!(autoYes || await askYesNo(`创建 lightweight tag v${targetVersion} ?`, rl, true))) {
         return;
     }
 
@@ -441,7 +449,7 @@ async function handleTagAndPush(targetVersion, rl) {
         return;
     }
 
-    if (await askYesNo(`推送 tag v${targetVersion} 到 origin ?`, rl, true)) {
+    if (autoYes || await askYesNo(`推送 tag v${targetVersion} 到 origin ?`, rl, true)) {
         runRepoCommand('git', ['push', 'origin', `v${targetVersion}`], { stdio: 'inherit' });
     }
 }
@@ -454,6 +462,7 @@ async function main() {
     }
 
     let directVersion = null;
+    const autoYes = args.includes('--yes') || args.includes('-y');
     for (let index = 0; index < args.length; index += 1) {
         if (args[index] === '--version') {
             directVersion = args[index + 1] || null;
@@ -472,20 +481,23 @@ async function main() {
     const latestTagInfo = getLatestTagInfo();
     const status = runRepoCommand('git', ['status', '--short']).trim();
     printState(currentVersion, latestTagInfo, status);
+    if (autoYes) {
+        console.log('\n已启用 --yes：自动确认 yes，并采用默认/推荐选项。');
+    }
     let rl = createInterface();
 
     try {
-        if (status && !await askYesNo('工作区有未提交改动，继续吗？', rl, false)) {
+        if (status && !(autoYes || await askYesNo('工作区有未提交改动，继续吗？', rl, false))) {
             return;
         }
 
         printSection('选择版本');
-        const targetVersion = await chooseTargetVersion(currentVersion, latestTagInfo, rl, directVersion);
+        const targetVersion = await chooseTargetVersion(currentVersion, latestTagInfo, rl, directVersion, autoYes);
         checkExistingTag(targetVersion);
         console.log(`目标版本: ${targetVersion}`);
 
         if (targetVersion !== currentVersion) {
-            if (!await askYesNo(`更新 package.json/package-lock.json 到 ${targetVersion} ?`, rl, true)) {
+            if (!(autoYes || await askYesNo(`更新 package.json/package-lock.json 到 ${targetVersion} ?`, rl, true))) {
                 console.log('已取消版本更新。');
                 return;
             }
@@ -493,18 +505,18 @@ async function main() {
             installDependencies();
         }
 
-        await maybeRunChecks(rl);
-        const commitMessage = await acquireCommitMessage(rl);
+        await maybeRunChecks(rl, autoYes);
+        const commitMessage = await acquireCommitMessage(rl, autoYes);
         rl = createInterface();
         console.log('\n将使用以下 commit 文案:\n');
         console.log(commitMessage);
-        if (!await askYesNo('\n继续提交当前改动吗？', rl, true)) {
+        if (!(autoYes || await askYesNo('\n继续提交当前改动吗？', rl, true))) {
             console.log('已取消提交。');
             return;
         }
 
         commitAllChanges(commitMessage);
-        await handleTagAndPush(targetVersion, rl);
+        await handleTagAndPush(targetVersion, rl, autoYes);
     } finally {
         rl.close();
     }
