@@ -287,6 +287,33 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
+    test('should keep sidebar tree bodies hidden when hidden attribute is set', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-tree-style-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            expect(appStyle.response.headers.get('content-type')).toContain('text/css');
+            expect(appStyle.text).toContain('.workbench-group-body[hidden]');
+            expect(appStyle.text).toContain('.agent-list[hidden]');
+            expect(appStyle.text).toMatch(/\.workbench-group-body\[hidden\][\s\S]*display:\s*none/);
+            expect(appStyle.text).toMatch(/\.agent-list\[hidden\][\s\S]*display:\s*none/);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should expose multi-agent sessions under one container and create new agent sessions', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-multi-agent-'));
         const port = await getFreePort();

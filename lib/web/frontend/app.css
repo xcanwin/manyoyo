@@ -536,11 +536,81 @@ textarea:focus-visible {
     gap: 8px;
 }
 
+button.tree-toggle {
+    width: 100%;
+    text-align: left;
+    color: var(--text);
+    background: rgba(255, 250, 242, 0.92);
+    border-color: rgba(181, 146, 99, 0.38);
+    padding: 10px 12px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+button.tree-toggle:hover {
+    transform: none;
+    background: #fff6eb;
+    border-color: #d1aa7f;
+}
+
+button.tree-toggle:active {
+    transform: none;
+}
+
+button.tree-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(196, 85, 31, 0.14);
+}
+
+.tree-toggle-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tree-toggle-meta {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.tree-toggle-caret {
+    color: #8c7257;
+    font-size: 18px;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: transform 140ms ease;
+}
+
+.tree-toggle[aria-expanded="true"] .tree-toggle-caret {
+    transform: rotate(90deg);
+}
+
 .workbench-group-head {
     padding: 10px 12px;
     border: 1px solid rgba(181, 146, 99, 0.38);
     border-radius: 12px;
     background: rgba(255, 250, 242, 0.92);
+}
+
+.workbench-group.has-active .workbench-group-head,
+.container-card.has-active {
+    border-color: #c68d5a;
+    box-shadow: 0 0 0 2px rgba(196, 85, 31, 0.08);
+}
+
+.workbench-group-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.workbench-group-body[hidden] {
+    display: none;
 }
 
 .workbench-group-kicker,
@@ -584,11 +654,8 @@ textarea:focus-visible {
     gap: 10px;
 }
 
-.container-card-info {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+.container-toggle {
+    flex: 1;
 }
 
 .container-card-meta {
@@ -609,6 +676,10 @@ textarea:focus-visible {
     display: flex;
     flex-direction: column;
     gap: 6px;
+}
+
+.agent-list[hidden] {
+    display: none;
 }
 
 .agent-item {
