@@ -52,10 +52,11 @@ AI Agent CLI 往往需要：
 
 ```bash
 npm install -g @xcanwin/manyoyo
-podman pull ubuntu:24.04           # 仅 Podman 需要
+podman pull ubuntu:24.04                        # 仅 Podman 需要
 manyoyo build --iv 1.9.0-common
 manyoyo init all
 manyoyo run -r claude
+manyoyo serve 127.0.0.1:3000 -U admin -P 123456 # Web UI 模式
 ```
 
 系统要求：
@@ -122,7 +123,7 @@ manyoyo images
 manyoyo run -n my-dev -x /bin/bash
 manyoyo rm my-dev
 
-# Web 模式
+# Web UI 模式
 manyoyo serve 127.0.0.1:3000
 manyoyo serve 127.0.0.1:3000 -U admin -P 123456
 manyoyo serve 127.0.0.1:3000 -U admin -P 123456 -d
