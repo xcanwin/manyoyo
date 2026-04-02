@@ -229,6 +229,19 @@ describe('PlaywrightPlugin runtime filtering', () => {
         expect(contextOptions.extraHTTPHeaders).toEqual({ 'Accept-Language': 'zh-CN,zh;q=0.9' });
     });
 
+    test('mcp-host-headed scene config should not force viewport and screen size', () => {
+        const plugin = new PlaywrightPlugin();
+        const cfg = plugin.buildSceneConfig('mcp-host-headed');
+        const contextOptions = (((cfg || {}).browser || {}).contextOptions || {});
+
+        expect(contextOptions.userAgent).toContain('Chrome/');
+        expect(contextOptions.locale).toBe('zh-CN');
+        expect(contextOptions.timezoneId).toBe('Asia/Shanghai');
+        expect(contextOptions.viewport).toBeUndefined();
+        expect(contextOptions.screen).toBeUndefined();
+        expect(contextOptions.extraHTTPHeaders).toEqual({ 'Accept-Language': 'zh-CN,zh;q=0.9' });
+    });
+
     test('ensureSceneConfig should inject init script for navigator.platform alignment', () => {
         const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-init-script-'));
         const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-init-script-run-'));
