@@ -255,6 +255,8 @@ describe('Web Server Auth Gateway', () => {
             expect(unauthVendor.response.status).toBe(401);
             const unauthRenderer = await request(`${baseUrl}/app/frontend/markdown-renderer.js`);
             expect(unauthRenderer.response.status).toBe(401);
+            const unauthPathPickerUtils = await request(`${baseUrl}/app/frontend/path-picker-utils.js`);
+            expect(unauthPathPickerUtils.response.status).toBe(401);
             const unauthStyle = await request(`${baseUrl}/app/frontend/markdown.css`);
             expect(unauthStyle.response.status).toBe(401);
 
@@ -272,6 +274,13 @@ describe('Web Server Auth Gateway', () => {
             expect(authedRenderer.response.status).toBe(200);
             expect(authedRenderer.response.headers.get('content-type')).toContain('application/javascript');
             expect(authedRenderer.text).toContain('window.ManyoyoMarkdown');
+
+            const authedPathPickerUtils = await request(`${baseUrl}/app/frontend/path-picker-utils.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(authedPathPickerUtils.response.status).toBe(200);
+            expect(authedPathPickerUtils.response.headers.get('content-type')).toContain('application/javascript');
+            expect(authedPathPickerUtils.text).toContain('ManyoyoPathPickerUtils');
 
             const authedStyle = await request(`${baseUrl}/app/frontend/markdown.css`, {
                 headers: { Cookie: authCookie }
