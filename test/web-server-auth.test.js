@@ -2258,6 +2258,93 @@ process.exit(0);
         }
     });
 
+    test('should expand generic claude agent template from applied default command for new agents', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-claude-default-command-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  process.stdout.write(command + '\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'claude -p {prompt}',
+                applied: {
+                    defaultCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions'
+                }
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const createdAgent = await request(`${baseUrl}/api/sessions/demo/agents`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+            expect(createdAgent.response.status).toBe(200);
+            expect(createdAgent.json).toEqual(expect.objectContaining({
+                name: 'demo~agent-2',
+                agentId: 'agent-2'
+            }));
+
+            const runRes = await request(`${baseUrl}/api/sessions/demo~agent-2/agent`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: 'hello' })
+            });
+            expect(runRes.response.status).toBe(200);
+            expect(String(runRes.json.output || '')).toContain('IS_SANDBOX=1 claude');
+            expect(String(runRes.json.output || '')).toContain('--dangerously-skip-permissions');
+            expect(String(runRes.json.output || '')).toContain("--verbose --output-format stream-json");
+            expect(String(runRes.json.output || '')).toContain("-p 'hello'");
+
+            const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            expect(persisted).toEqual(expect.objectContaining({
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should emit content_delta events during agent streaming for claude gemini and opencode', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-content-delta-'));
         const port = await getFreePort();
