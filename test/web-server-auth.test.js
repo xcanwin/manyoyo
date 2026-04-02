@@ -351,6 +351,40 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
+    test('should ship compact trace rendering for completed toolchain events', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-compact-assets-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).toContain('function shouldCompactTraceEvent(traceEvent)');
+            expect(appScript.text).toContain("return kind === 'command' || kind === 'mcp' || kind === 'tool';");
+            expect(appScript.text).toContain("trace-tone-' + resolveTraceTone(event) + (compact ? ' trace-card-compact' : '')");
+            expect(appScript.text).toContain('title.textContent = compact ? buildCompactTraceText(event)');
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            expect(appStyle.text).toContain('.trace-card.trace-card-compact');
+            expect(appStyle.text).toContain('.trace-card.trace-card-compact .trace-card-summary');
+            expect(appStyle.text).toContain('.trace-card.trace-card-compact .trace-card-title');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should expose multi-agent sessions under one container and create new agent sessions', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-multi-agent-'));
         const port = await getFreePort();
