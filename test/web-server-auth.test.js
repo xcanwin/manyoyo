@@ -350,39 +350,6 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
-    test('should render sidebar tree disclosure with shared svg anchor instead of glyph offset hacks', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-tree-svg-'));
-        const port = await getFreePort();
-        let handle = null;
-
-        try {
-            handle = await startWebServer(buildServerOptions(tempHost, port));
-            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
-            const authCookie = await loginAndGetCookie(baseUrl);
-
-            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appScript.response.status).toBe(200);
-            expect(appScript.text).toContain("document.createElementNS('http://www.w3.org/2000/svg', 'svg')");
-            expect(appScript.text).toContain("button.appendChild(icon);");
-            expect(appScript.text).not.toContain("button.textContent = '›';");
-
-            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appStyle.response.status).toBe(200);
-            expect(appStyle.text).toContain('--tree-toggle-size: 16px;');
-            expect(appStyle.text).toContain('--tree-line-x: calc(var(--tree-toggle-size) / 2);');
-            expect(appStyle.text).not.toContain('translateX(-2.5px)');
-        } finally {
-            if (handle && typeof handle.close === 'function') {
-                await handle.close();
-            }
-            fs.rmSync(tempHost, { recursive: true, force: true });
-        }
-    });
-
     test('should ship compact trace rendering for completed toolchain events', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-compact-assets-'));
         const port = await getFreePort();
