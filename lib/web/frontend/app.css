@@ -569,7 +569,7 @@ button.tree-toggle:focus-visible {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
 }
 
 .tree-toggle-meta {
@@ -592,49 +592,30 @@ button.tree-toggle:focus-visible {
 }
 
 .workbench-group-head {
-    padding: 10px 14px;
+    padding: 12px 14px;
     border: 1px solid rgba(181, 146, 99, 0.34);
-    border-radius: 999px;
+    border-radius: 16px;
     background: linear-gradient(180deg, rgba(255, 250, 242, 0.98) 0%, rgba(252, 242, 230, 0.96) 100%);
 }
 
 .workbench-path-bar .tree-toggle-main {
     flex: 1;
     min-width: 0;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    column-gap: 10px;
-    row-gap: 3px;
-}
-
-.workbench-path-bar .workbench-group-kicker {
-    grid-column: 1;
-    grid-row: 1;
-    display: inline-flex;
-    align-items: center;
-    padding: 3px 8px;
-    border-radius: 999px;
-    border: 1px solid rgba(181, 146, 99, 0.34);
-    background: rgba(255, 255, 255, 0.56);
 }
 
 .workbench-path-bar .workbench-group-title {
-    grid-column: 2;
-    grid-row: 1;
     margin-top: 0;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font-family: var(--font-mono);
     font-size: 12px;
     font-weight: 600;
+    line-height: 1.55;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .workbench-path-bar .tree-toggle-meta {
-    grid-column: 2;
-    grid-row: 2;
+    overflow-wrap: anywhere;
 }
 
 .workbench-group.has-active .workbench-group-head,
@@ -667,11 +648,11 @@ button.tree-toggle:focus-visible {
 
 .workbench-group-title,
 .container-card-title {
-    margin-top: 3px;
+    margin-top: 0;
     font-weight: 700;
     font-size: 13px;
     line-height: 1.45;
-    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .container-stack {
@@ -693,10 +674,9 @@ button.tree-toggle:focus-visible {
 
 .container-card-head {
     display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
 }
 
 .container-toggle {
@@ -728,7 +708,36 @@ button.container-toggle:focus-visible {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
+}
+
+.container-card-title {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.55;
+}
+
+.container-card-status {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.5;
+}
+
+.container-card-status.running {
+    color: var(--status-running-text);
+}
+
+.container-card-status.stopped {
+    color: var(--status-stopped-text);
+}
+
+.container-card-status.history {
+    color: var(--status-history-text);
+}
+
+.container-card-status.unknown {
+    color: var(--status-unknown-text);
 }
 
 .container-title-row {
@@ -810,23 +819,23 @@ button.container-toggle:focus-visible {
     font-size: 12px;
     border-radius: 999px;
     white-space: nowrap;
-    margin-bottom: 2px;
+    margin-bottom: 0;
 }
 
 .agent-list {
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 8px;
 }
 
 .container-card-body {
-    margin-top: 2px;
-    padding: 10px;
-    border: 1px solid rgba(181, 146, 99, 0.28);
-    border-top-color: rgba(181, 146, 99, 0.4);
-    border-radius: 13px;
-    background: linear-gradient(180deg, rgba(244, 238, 228, 0.88) 0%, rgba(255, 255, 255, 0.98) 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+    margin-top: 0;
+    padding: 10px 0 0;
+    border: none;
+    border-top: 1px dashed rgba(181, 146, 99, 0.5);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .agent-list[hidden] {
@@ -860,20 +869,13 @@ button.container-toggle:focus-visible {
     font-size: 13px;
     font-weight: 700;
     margin-bottom: 6px;
-    word-break: break-word;
-}
-
-.agent-meta {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 12px;
+    overflow-wrap: anywhere;
 }
 
 .agent-time {
-    margin-top: 6px;
     font-size: 11px;
     color: #7b6d5d;
+    line-height: 1.45;
 }
 
 .dir-picker-modal {
