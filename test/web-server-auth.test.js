@@ -375,6 +375,8 @@ describe('Web Server Auth Gateway', () => {
             expect(appScript.text).toContain("childrenNode.setAttribute('role', 'group');");
             expect(appScript.text).toContain("hoverMenu.className = 'tree-node-hover-menu';");
             expect(appScript.text).toContain("addAgentBtn.className = 'secondary tree-node-menu-item';");
+            expect(appScript.text).toContain('function updateSidebarActiveSelection() {');
+            expect(appScript.text).toContain('updateSidebarActiveSelection();');
 
             const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
                 headers: { Cookie: authCookie }
@@ -385,6 +387,7 @@ describe('Web Server Auth Gateway', () => {
             expect(appStyle.text).toContain('.tree-node-hover-menu');
             expect(appStyle.text).toContain('.tree-node-row-container:hover .tree-node-hover-menu');
             expect(appStyle.text).not.toContain('.tree-node-action');
+            expect(appStyle.text).not.toContain('animation-delay: calc(var(--item-index, 0) * 24ms);');
             expect(appStyle.text).not.toContain('.tree-prefix-toggle.is-expanded::after');
             expect(appStyle.text).not.toContain('translateX(-2.5px)');
         } finally {

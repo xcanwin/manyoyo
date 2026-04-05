@@ -702,8 +702,6 @@ button.tree-toggle:active {
     color: var(--text);
     border-radius: 12px;
     padding: 10px 11px;
-    animation: itemIn 220ms ease both;
-    animation-delay: calc(var(--item-index, 0) * 24ms);
 }
 
 .tree-node-button:hover {
