@@ -403,6 +403,10 @@ textarea:focus-visible {
     resize: vertical;
 }
 
+.agent-template-modal {
+    width: min(760px, calc(100vw - 24px));
+}
+
 .session-head {
     display: flex;
     justify-content: space-between;
@@ -1581,14 +1585,36 @@ details.trace-card > .trace-card-summary {
     margin-bottom: 10px;
 }
 
+.composer-toolbar-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+}
+
 .composer-mode-switch {
     display: inline-flex;
     gap: 8px;
 }
 
-.composer-toolbar-tip {
+.toolbar-mini-btn {
+    padding: 7px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.toolbar-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 7px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel-soft);
     color: var(--muted);
     font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 .composer-inner {
@@ -1833,8 +1859,10 @@ details.trace-card > .trace-card-summary {
         align-items: flex-start;
     }
 
-    .composer-toolbar-tip {
-        display: none;
+    .composer-toolbar-meta {
+        width: 100%;
+        justify-content: space-between;
+        margin-left: 0;
     }
 
     .composer-mode-switch {

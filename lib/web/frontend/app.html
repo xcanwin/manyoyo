@@ -105,7 +105,10 @@
                                 <button type="button" id="activityAgentBtn" class="secondary is-active">Agent</button>
                                 <button type="button" id="activityCommandBtn" class="secondary">命令</button>
                             </div>
-                            <div class="composer-toolbar-tip">活动页支持 Agent 提示词和容器命令两种输入。</div>
+                            <div class="composer-toolbar-meta">
+                                <button type="button" id="agentTemplateBtn" class="secondary toolbar-mini-btn">CLI · —</button>
+                                <span id="activityModelChip" class="toolbar-chip" aria-live="polite">模型 · —</span>
+                            </div>
                         </div>
                         <div class="composer-inner">
                             <textarea id="commandInput" placeholder="输入容器命令，例如: ls -la"></textarea>
@@ -218,6 +221,31 @@
                     <div id="directoryPickerError" class="modal-error" hidden></div>
                     <div id="directoryPickerList" class="dir-picker-list"></div>
                 </div>
+            </section>
+        </div>
+
+        <div id="agentTemplateModal" class="modal-backdrop" hidden>
+            <section class="modal agent-template-modal" role="dialog" aria-modal="true" aria-labelledby="agentTemplateTitle">
+                <header class="modal-header">
+                    <h2 id="agentTemplateTitle">设置 CLI / Agent 模板</h2>
+                    <button type="button" id="agentTemplateCancelBtn" class="secondary">关闭</button>
+                </header>
+                <div class="modal-body">
+                    <div id="agentTemplateTip" class="modal-tip"></div>
+                    <label class="text-block">容器默认 agentPromptCommand
+                        <textarea id="containerAgentPromptEditor" placeholder="例如 codex exec --skip-git-repo-check {prompt}"></textarea>
+                    </label>
+                    <div id="agentTemplateOverrideGroup">
+                        <label class="text-block">当前 AGENT 覆盖模板
+                            <textarea id="agentPromptOverrideEditor" placeholder="留空则继承容器默认模板"></textarea>
+                        </label>
+                    </div>
+                    <div id="agentTemplateError" class="modal-error" hidden></div>
+                </div>
+                <footer class="modal-footer">
+                    <button type="button" id="agentTemplateResetBtn" class="secondary">恢复当前值</button>
+                    <button type="button" id="agentTemplateSaveBtn">保存</button>
+                </footer>
             </section>
         </div>
     </div>

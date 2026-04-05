@@ -559,6 +559,91 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
+    test('should infer agent template for existing multi-agent container from container default label', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-infer-agent-template-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        const historyPath = path.join(webHistoryDir, 'demo.json');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(historyPath, JSON.stringify({
+            containerName: 'demo',
+            agents: {
+                default: {
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    updatedAt: '2026-03-30T00:00:00.000Z',
+                    messages: [],
+                    lastResumeAt: null,
+                    lastResumeOk: null,
+                    lastResumeError: ''
+                },
+                'agent-2': {
+                    agentId: 'agent-2',
+                    agentName: 'AGENT 2',
+                    updatedAt: '2026-03-30T00:10:00.000Z',
+                    messages: [],
+                    lastResumeAt: null,
+                    lastResumeOk: null,
+                    lastResumeError: ''
+                }
+            }
+        }, null, 2), 'utf-8');
+
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: name => name === 'demo',
+                dockerExecArgs: args => {
+                    if (Array.isArray(args) && args[0] === 'ps') {
+                        return 'demo\tUp 2 minutes\tlocalhost/xcanwin/manyoyo:1.0.0-full\n';
+                    }
+                    if (Array.isArray(args) && args[0] === 'inspect') {
+                        return 'codex --dangerously-bypass-approvals-and-sandbox\n';
+                    }
+                    return '';
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const sessionsRes = await request(`${baseUrl}/api/sessions`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(sessionsRes.response.status).toBe(200);
+            expect(sessionsRes.json.sessions).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    name: 'demo',
+                    agentEnabled: true,
+                    agentProgram: 'codex',
+                    resumeSupported: true
+                }),
+                expect.objectContaining({
+                    name: 'demo~agent-2',
+                    agentEnabled: true,
+                    agentProgram: 'codex',
+                    resumeSupported: true
+                })
+            ]));
+
+            const detailRes = await request(`${baseUrl}/api/sessions/demo~agent-2/detail`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(detailRes.response.status).toBe(200);
+            expect(detailRes.json.detail).toEqual(expect.objectContaining({
+                agentEnabled: true,
+                agentProgram: 'codex',
+                resumeSupported: true,
+                agentPromptCommand: 'codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check {prompt}'
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should list host directories for web directory picker', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-dir-picker-'));
         const port = await getFreePort();
@@ -1956,6 +2041,134 @@ process.exit(0);
             });
             expect(emptyPromptRes.response.status).toBe(400);
             expect(emptyPromptRes.json).toEqual(expect.objectContaining({ error: 'prompt 不能为空' }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should save container and agent-specific prompt templates and execute with agent override', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-template-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        const execLogPath = path.join(tempHost, 'exec-log.json');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const fs = require('fs');
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  fs.writeFileSync(${JSON.stringify(execLogPath)}, JSON.stringify(args), 'utf-8');
+  process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"覆盖模板生效"}]}}\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'codex exec --skip-git-repo-check {prompt}',
+                agents: {
+                    'agent-2': {
+                        agentId: 'agent-2',
+                        agentName: 'AGENT 2',
+                        messages: []
+                    }
+                }
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const saveRes = await request(`${baseUrl}/api/sessions/demo~agent-2/agent-template`, {
+                method: 'PUT',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    containerAgentPromptCommand: 'codex exec --skip-git-repo-check {prompt}',
+                    agentPromptCommandOverride: 'claude -p {prompt}'
+                })
+            });
+            expect(saveRes.response.status).toBe(200);
+            expect(saveRes.json).toEqual(expect.objectContaining({
+                saved: true,
+                name: 'demo~agent-2',
+                detail: expect.objectContaining({
+                    agentPromptCommand: 'claude -p {prompt}',
+                    containerAgentPromptCommand: 'codex exec --skip-git-repo-check {prompt}',
+                    agentPromptCommandOverride: 'claude -p {prompt}',
+                    agentPromptSource: 'agent',
+                    agentProgram: 'claude',
+                    resumeSupported: true
+                })
+            }));
+
+            const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/demo~agent-2/agent/stream`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: '你好' })
+            });
+            expect(streamRes.response.status).toBe(200);
+            expect(streamRes.events).toEqual(expect.arrayContaining([
+                expect.objectContaining({ type: 'meta', agentProgram: 'claude' }),
+                expect.objectContaining({ type: 'result', output: '覆盖模板生效' })
+            ]));
+
+            const execArgs = JSON.parse(fs.readFileSync(execLogPath, 'utf-8'));
+            const execCommand = execArgs[execArgs.length - 1];
+            expect(execCommand).toContain('claude');
+            expect(execCommand).toContain('--verbose');
+            expect(execCommand).toContain('--output-format stream-json');
+            expect(execCommand).not.toContain('codex exec');
+
+            const clearRes = await request(`${baseUrl}/api/sessions/demo~agent-2/agent-template`, {
+                method: 'PUT',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    agentPromptCommandOverride: ''
+                })
+            });
+            expect(clearRes.response.status).toBe(200);
+            expect(clearRes.json).toEqual(expect.objectContaining({
+                detail: expect.objectContaining({
+                    agentPromptCommand: 'codex exec --skip-git-repo-check {prompt}',
+                    containerAgentPromptCommand: 'codex exec --skip-git-repo-check {prompt}',
+                    agentPromptCommandOverride: '',
+                    agentPromptSource: 'container',
+                    agentProgram: 'codex',
+                    resumeSupported: true
+                })
+            }));
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
