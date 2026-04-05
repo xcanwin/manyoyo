@@ -311,10 +311,8 @@ describe('Web Server Auth Gateway', () => {
             });
             expect(appStyle.response.status).toBe(200);
             expect(appStyle.response.headers.get('content-type')).toContain('text/css');
-            expect(appStyle.text).toContain('.workbench-group-body[hidden]');
-            expect(appStyle.text).toContain('.agent-list[hidden]');
-            expect(appStyle.text).toMatch(/\.workbench-group-body\[hidden\][\s\S]*display:\s*none/);
-            expect(appStyle.text).toMatch(/\.agent-list\[hidden\][\s\S]*display:\s*none/);
+            expect(appStyle.text).toContain('.tree-node-children[hidden]');
+            expect(appStyle.text).toMatch(/\.tree-node-children\[hidden\][\s\S]*display:\s*none/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -338,11 +336,12 @@ describe('Web Server Auth Gateway', () => {
             });
             expect(appScript.response.status).toBe(200);
             expect(appScript.response.headers.get('content-type')).toContain('application/javascript');
-            expect(appScript.text).toContain("const nextExpanded = containerStack.hidden;");
-            expect(appScript.text).toContain("groupHead.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');");
-            expect(appScript.text).toContain("const nextExpanded = agentList.hidden;");
-            expect(appScript.text).toContain("containerToggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');");
-            expect(appScript.text).toContain('agentList.hidden = !nextExpanded;');
+            expect(appScript.text).toContain('function createTreePrefixSegment(hasLine) {');
+            expect(appScript.text).toContain('function setDisclosureExpanded(control, expanded) {');
+            expect(appScript.text).toContain('function renderSessionTreeNodes(nodes, parentNode, ancestorHasNext, itemCounter) {');
+            expect(appScript.text).toContain('const nextExpanded = childrenNode.hidden;');
+            expect(appScript.text).toContain('setDisclosureExpanded(item, nextExpanded);');
+            expect(appScript.text).toContain('childrenNode.hidden = !nextExpanded;');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
