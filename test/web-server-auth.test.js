@@ -255,8 +255,6 @@ describe('Web Server Auth Gateway', () => {
             expect(unauthVendor.response.status).toBe(401);
             const unauthRenderer = await request(`${baseUrl}/app/frontend/markdown-renderer.js`);
             expect(unauthRenderer.response.status).toBe(401);
-            const unauthPathPickerUtils = await request(`${baseUrl}/app/frontend/path-picker-utils.js`);
-            expect(unauthPathPickerUtils.response.status).toBe(401);
             const unauthStyle = await request(`${baseUrl}/app/frontend/markdown.css`);
             expect(unauthStyle.response.status).toBe(401);
 
@@ -274,13 +272,6 @@ describe('Web Server Auth Gateway', () => {
             expect(authedRenderer.response.status).toBe(200);
             expect(authedRenderer.response.headers.get('content-type')).toContain('application/javascript');
             expect(authedRenderer.text).toContain('window.ManyoyoMarkdown');
-
-            const authedPathPickerUtils = await request(`${baseUrl}/app/frontend/path-picker-utils.js`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(authedPathPickerUtils.response.status).toBe(200);
-            expect(authedPathPickerUtils.response.headers.get('content-type')).toContain('application/javascript');
-            expect(authedPathPickerUtils.text).toContain('ManyoyoPathPickerUtils');
 
             const authedStyle = await request(`${baseUrl}/app/frontend/markdown.css`, {
                 headers: { Cookie: authCookie }
@@ -342,6 +333,39 @@ describe('Web Server Auth Gateway', () => {
             expect(appScript.text).toContain('const nextExpanded = childrenNode.hidden;');
             expect(appScript.text).toContain('setDisclosureExpanded(item, nextExpanded);');
             expect(appScript.text).toContain('childrenNode.hidden = !nextExpanded;');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should sync containerPath to selected hostPath and remove container picker button', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-path-sync-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appHtml = await request(`${baseUrl}/`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appHtml.response.status).toBe(200);
+            expect(appHtml.text).not.toContain('id="pickContainerPathBtn"');
+            expect(appHtml.text).not.toContain('/app/frontend/path-picker-utils.js');
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).toContain('createHostPath.value = picker.currentPath;');
+            expect(appScript.text).toContain('createContainerPath.value = picker.currentPath;');
+            expect(appScript.text).not.toContain("openDirectoryPicker('container')");
+            expect(appScript.text).not.toContain('pickContainerPathBtn');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
