@@ -184,7 +184,15 @@
                         <label>shellPrefix<input id="createShellPrefix" placeholder="例如 IS_SANDBOX=1" /></label>
                         <label>shell<input id="createShell" placeholder="例如 claude / codex" /></label>
                         <label>shellSuffix<input id="createShellSuffix" placeholder="例如 --dangerously-skip-permissions" /></label>
-                        <label>yolo<input id="createYolo" placeholder="例如 c / cx / gm / oc" /></label>
+                        <label>CLI
+                            <select id="createYolo">
+                                <option value="">(不使用)</option>
+                                <option value="claude">claude</option>
+                                <option value="codex">codex</option>
+                                <option value="gemini">gemini</option>
+                                <option value="opencode">opencode</option>
+                            </select>
+                        </label>
                         <label>agentPromptCommand<input id="createAgentPromptCommand" placeholder="例如 codex exec --plain-text {prompt}" /></label>
                     </div>
                     <label class="text-block">env (KEY=VALUE，每行一项)
@@ -231,14 +239,37 @@
                     <button type="button" id="agentTemplateCancelBtn" class="secondary">关闭</button>
                 </header>
                 <div class="modal-body">
-                    <div id="agentTemplateTip" class="modal-tip"></div>
-                    <label class="text-block">容器默认 agentPromptCommand
-                        <textarea id="containerAgentPromptEditor" placeholder="例如 codex exec --skip-git-repo-check {prompt}"></textarea>
-                    </label>
-                    <div id="agentTemplateOverrideGroup">
-                        <label class="text-block">当前 AGENT 覆盖模板
-                            <textarea id="agentPromptOverrideEditor" placeholder="留空则继承容器默认模板"></textarea>
+                    <div id="agentTemplatePrimary" class="agent-template-primary">
+                        <label class="text-block">CLI
+                            <select id="containerCliSelect">
+                                <option value="custom">自定义</option>
+                                <option value="claude">claude</option>
+                                <option value="codex">codex</option>
+                                <option value="gemini">gemini</option>
+                                <option value="opencode">opencode</option>
+                            </select>
                         </label>
+                        <label class="text-block">高级编辑 agentPromptCommand
+                            <textarea id="containerAgentPromptEditor" placeholder="例如 codex exec --skip-git-repo-check {prompt}"></textarea>
+                        </label>
+                    </div>
+                    <div id="agentTemplateOverrideGroup">
+                        <section class="agent-template-section">
+                            <div class="agent-template-section-title">当前 AGENT 覆盖</div>
+                            <label class="text-block">CLI
+                                <select id="agentCliSelect">
+                                    <option value="">继承容器默认</option>
+                                    <option value="custom">自定义</option>
+                                    <option value="claude">claude</option>
+                                    <option value="codex">codex</option>
+                                    <option value="gemini">gemini</option>
+                                    <option value="opencode">opencode</option>
+                                </select>
+                            </label>
+                            <label class="text-block">高级编辑 agentPromptCommand
+                                <textarea id="agentPromptOverrideEditor" placeholder="留空则继承容器默认模板"></textarea>
+                            </label>
+                        </section>
                     </div>
                     <div id="agentTemplateError" class="modal-error" hidden></div>
                 </div>

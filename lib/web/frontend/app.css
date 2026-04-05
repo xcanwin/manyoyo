@@ -407,6 +407,75 @@ textarea:focus-visible {
     width: min(760px, calc(100vw - 24px));
 }
 
+.agent-template-primary .text-block {
+    margin-top: 0;
+}
+
+.agent-template-primary .text-block + .text-block,
+#agentTemplateOverrideGroup {
+    margin-top: 12px;
+}
+
+.agent-template-primary select,
+.agent-template-primary textarea {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 11px;
+    background: var(--panel-strong);
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--font-ui);
+}
+
+.agent-template-primary textarea {
+    min-height: 92px;
+    font-family: var(--font-mono);
+    resize: vertical;
+}
+
+.agent-template-section {
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(255, 253, 250, 0.92);
+}
+
+.agent-template-section + .agent-template-section {
+    margin-top: 12px;
+}
+
+.agent-template-section-title {
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.agent-template-section .text-block {
+    margin-top: 0;
+}
+
+.agent-template-section .text-block + .text-block {
+    margin-top: 10px;
+}
+
+.agent-template-section select,
+.agent-template-section textarea {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 11px;
+    background: var(--panel-strong);
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--font-ui);
+}
+
+.agent-template-section textarea {
+    min-height: 92px;
+    font-family: var(--font-mono);
+    resize: vertical;
+}
+
 .session-head {
     display: flex;
     justify-content: space-between;
