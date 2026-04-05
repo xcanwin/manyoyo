@@ -336,12 +336,57 @@ describe('Web Server Auth Gateway', () => {
             });
             expect(appScript.response.status).toBe(200);
             expect(appScript.response.headers.get('content-type')).toContain('application/javascript');
-            expect(appScript.text).toContain('function createTreePrefixSegment(hasLine) {');
+            expect(appScript.text).toContain('function createTreePrefixSegment() {');
             expect(appScript.text).toContain('function setDisclosureExpanded(control, expanded) {');
             expect(appScript.text).toContain('function renderSessionTreeNodes(nodes, parentNode, ancestorHasNext, itemCounter) {');
             expect(appScript.text).toContain('const nextExpanded = childrenNode.hidden;');
             expect(appScript.text).toContain('setDisclosureExpanded(item, nextExpanded);');
             expect(appScript.text).toContain('childrenNode.hidden = !nextExpanded;');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should ship simplified sidebar tree guides with tree semantics', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-tree-a11y-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appHtml = await request(`${baseUrl}/`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appHtml.response.status).toBe(200);
+            expect(appHtml.text).toContain('id="sessionList" role="tree" aria-label="会话树"');
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).toContain("button.innerHTML = '<svg viewBox=\"0 0 12 12\"");
+            expect(appScript.text).toContain("button.setAttribute('role', 'treeitem');");
+            expect(appScript.text).toContain("childrenNode.setAttribute('role', 'group');");
+            expect(appScript.text).toContain("hoverMenu.className = 'tree-node-hover-menu';");
+            expect(appScript.text).toContain("addAgentBtn.className = 'secondary tree-node-menu-item';");
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            expect(appStyle.text).toContain('--tree-guide:');
+            expect(appStyle.text).toContain('.disclosure-toggle svg');
+            expect(appStyle.text).toContain('.tree-node-hover-menu');
+            expect(appStyle.text).toContain('.tree-node-row-container:hover .tree-node-hover-menu');
+            expect(appStyle.text).not.toContain('.tree-node-action');
+            expect(appStyle.text).not.toContain('.tree-prefix-toggle.is-expanded::after');
+            expect(appStyle.text).not.toContain('translateX(-2.5px)');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
