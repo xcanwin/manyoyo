@@ -17,6 +17,11 @@ const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent
 const { runPluginCommand, createPlugin } = require('../lib/plugin');
 const { buildManyoyoLogPath } = require('../lib/log-path');
 const {
+    parseEnvEntry: parseEnvEntryOrThrow,
+    expandHomeAliasPath,
+    normalizeVolume
+} = require('../lib/runtime-normalizers');
+const {
     sanitizeSensitiveData,
     sanitizeServeLogText,
     formatServeLogValue,
@@ -454,23 +459,13 @@ async function askQuestion(prompt) {
  * @param {string} env - 环境变量字符串 (KEY=VALUE)
  */
 function parseEnvEntry(env) {
-    const envText = String(env);
-    const idx = envText.indexOf('=');
-    if (idx <= 0) {
-        console.error(`${RED}⚠️  错误: env 格式应为 KEY=VALUE: ${envText}${NC}`);
+    try {
+        return parseEnvEntryOrThrow(env);
+    } catch (e) {
+        const message = e && e.message ? e.message : String(e);
+        console.error(`${RED}⚠️  错误: ${message}${NC}`);
         process.exit(1);
     }
-    const key = envText.slice(0, idx);
-    const value = envText.slice(idx + 1);
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-        console.error(`${RED}⚠️  错误: env key 非法: ${key}${NC}`);
-        process.exit(1);
-    }
-    if (/[\r\n\0]/.test(value) || /[;&|`$<>]/.test(value)) {
-        console.error(`${RED}⚠️  错误: env value 含非法字符: ${key}${NC}`);
-        process.exit(1);
-    }
-    return { key, value };
 }
 
 function normalizeJsonEnvMap(envConfig, sourceLabel) {
@@ -568,42 +563,6 @@ function addEnvFileTo(targetEnvs, envFile) {
 
 function addEnvFile(envFile) {
     return addEnvFileTo(CONTAINER_ENVS, envFile);
-}
-
-function expandHomeAliasPath(filePath) {
-    const text = String(filePath || '').trim();
-    const homeDir = process.env.HOME || os.homedir();
-
-    if (text === '~') {
-        return homeDir;
-    }
-    if (text.startsWith('~/')) {
-        return path.join(homeDir, text.slice(2));
-    }
-    if (text === '$HOME') {
-        return homeDir;
-    }
-    if (text.startsWith('$HOME/')) {
-        return path.join(homeDir, text.slice('$HOME/'.length));
-    }
-
-    return text;
-}
-
-function normalizeVolume(volume) {
-    const text = String(volume || '').trim();
-    if (!text.startsWith('~') && !text.startsWith('$HOME')) {
-        return text;
-    }
-
-    const separatorIndex = text.indexOf(':');
-    if (separatorIndex === -1) {
-        return expandHomeAliasPath(text);
-    }
-
-    const hostPath = text.slice(0, separatorIndex);
-    const rest = text.slice(separatorIndex);
-    return `${expandHomeAliasPath(hostPath)}${rest}`;
 }
 
 function hasEnvKey(targetEnvs, key) {
