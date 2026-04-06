@@ -15,7 +15,7 @@
     --line-strong: #b59263;
     --line-soft: rgba(181, 146, 99, 0.26);
     --tree-guide: rgba(181, 146, 99, 0.44);
-    --tree-guide-soft: rgba(181, 146, 99, 0.2);
+    --tree-guide-soft: rgba(181, 146, 99, 0.44);
 
     --text: #1f1a14;
     --muted: #6a5f52;
@@ -719,7 +719,7 @@ button.tree-toggle:active {
     width: 10px;
     height: 1px;
     background: var(--tree-guide-soft);
-    transform: translateY(-0.5px);
+    transform: translateY(0);
 }
 
 .disclosure-toggle {
