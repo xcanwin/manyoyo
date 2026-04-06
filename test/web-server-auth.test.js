@@ -716,7 +716,7 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
-    test('should return redacted config summary and still support saving JSON5 config in web api', async () => {
+    test('should return masked raw JSON5 config and keep secret placeholders on web save', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-config-'));
         const port = await getFreePort();
         const configPath = path.join(tempHost, 'manyoyo.json');
@@ -755,7 +755,11 @@ describe('Web Server Auth Gateway', () => {
                 path: configPath,
                 parseError: null
             }));
-            expect(configRes.json).not.toHaveProperty('raw');
+            expect(configRes.json.raw).toContain('// test');
+            expect(configRes.json.raw).toContain('"OPENAI_API_KEY": "***HIDDEN_SECRET***"');
+            expect(configRes.json.raw).toContain('"JINA_TOKEN": "***HIDDEN_SECRET***"');
+            expect(configRes.json.raw).not.toContain('secret-key');
+            expect(configRes.json.raw).not.toContain('secret-jina');
             expect(configRes.json.defaults).toEqual(expect.objectContaining({
                 hostPath: '/tmp'
             }));
@@ -768,7 +772,7 @@ describe('Web Server Auth Gateway', () => {
                 OPENAI_MODEL: 'gpt-5.4-mini'
             }));
             expect(configRes.json).toEqual(expect.objectContaining({
-                editable: false
+                editable: true
             }));
 
             const invalidSave = await request(`${baseUrl}/api/config`, {
@@ -799,13 +803,38 @@ describe('Web Server Auth Gateway', () => {
                     Cookie: authCookie,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ raw: '{\n"containerName": "my-web",\n"imageVersion": "1.2.3-common"\n}\n' })
+                body: JSON.stringify({
+                    raw: [
+                        '{',
+                        '// test',
+                        '"hostPath": "/workspace/demo",',
+                        '"env": {',
+                        '  "OPENAI_API_KEY": "***HIDDEN_SECRET***",',
+                        '  "OPENAI_MODEL": "gpt-5.4"',
+                        '},',
+                        '"runs": {',
+                        '  "codex": {',
+                        '    "shell": "codex --dangerously-bypass-approvals-and-sandbox",',
+                        '    "env": {',
+                        '      "JINA_TOKEN": "***HIDDEN_SECRET***",',
+                        '      "OPENAI_MODEL": "gpt-5.4-mini"',
+                        '    }',
+                        '  }',
+                        '}',
+                        '}',
+                        ''
+                    ].join('\n')
+                })
             });
             expect(validSave.response.status).toBe(200);
             expect(validSave.json).toEqual(expect.objectContaining({ saved: true, path: configPath }));
 
             const savedText = fs.readFileSync(configPath, 'utf-8');
-            expect(savedText).toContain('"containerName": "my-web"');
+            expect(savedText).toContain('// test');
+            expect(savedText).toContain('"hostPath": "/workspace/demo"');
+            expect(savedText).toContain('"OPENAI_API_KEY": "secret-key"');
+            expect(savedText).toContain('"JINA_TOKEN": "secret-jina"');
+            expect(savedText).not.toContain('"OPENAI_API_KEY": "***HIDDEN_SECRET***"');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();

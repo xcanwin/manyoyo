@@ -341,6 +341,17 @@ textarea:focus-visible {
     white-space: pre-wrap;
 }
 
+.modal-success {
+    margin-top: 10px;
+    color: #196c43;
+    font-size: 13px;
+    padding: 8px 10px;
+    border: 1px solid #9fd1b4;
+    border-radius: 8px;
+    background: #eef9f1;
+    white-space: pre-wrap;
+}
+
 .config-editor {
     width: 100%;
     min-height: 340px;
