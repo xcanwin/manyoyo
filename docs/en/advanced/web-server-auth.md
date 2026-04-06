@@ -30,6 +30,9 @@ manyoyo serve 127.0.0.1:3000 -U admin -P 'StrongPassword' -d
 
 # Run in background with auto-generated password (prints the password for this run)
 manyoyo serve 127.0.0.1:3000 -d
+
+# Stop a specific background server
+manyoyo serve 127.0.0.1:3000 --stop
 ```
 
 ## Auth Parameter Priority

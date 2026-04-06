@@ -30,6 +30,9 @@ manyoyo serve 127.0.0.1:3000 -U admin -P 'StrongPassword' -d
 
 # 后台启动并自动生成密码（会直接打印本次随机密码）
 manyoyo serve 127.0.0.1:3000 -d
+
+# 停止指定后台服务
+manyoyo serve 127.0.0.1:3000 --stop
 ```
 
 ## 认证参数优先级

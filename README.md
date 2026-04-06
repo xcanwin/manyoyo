@@ -128,6 +128,7 @@ manyoyo serve 127.0.0.1:3000
 manyoyo serve 127.0.0.1:3000 -U admin -P 123456
 manyoyo serve 127.0.0.1:3000 -U admin -P 123456 -d
 manyoyo serve 127.0.0.1:3000 -d   # 未设置密码时会打印本次随机密码
+manyoyo serve 127.0.0.1:3000 --stop   # 停止指定后台服务
 
 # 查看配置与命令拼装
 manyoyo config show

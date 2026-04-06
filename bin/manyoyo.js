@@ -1216,6 +1216,7 @@ Notes:
     const serveCommand = program.command('serve [listen]').description('启动网页交互服务 (默认 127.0.0.1:3000)');
     applyRunStyleOptions(serveCommand, { includeRmOnExit: false, includeWebAuthOptions: true });
     serveCommand.option('-d, --detach', '后台启动网页服务并立即返回');
+    serveCommand.option('--stop', '停止后台网页服务；必须显式传入 listen');
     serveCommand.action((listen, options) => {
         selectAction('serve', {
             ...options,
@@ -1317,8 +1318,12 @@ Notes:
     const isShowConfigMode = selectedAction === 'config-show';
     const isShowCommandMode = selectedAction === 'config-command';
     const isServerMode = options.server !== undefined;
+    const isServerStopMode = Boolean(selectedAction === 'serve' && options.stop);
 
     const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin']);
+    if (isServerStopMode) {
+        noDockerActions.add('serve');
+    }
     if (!noDockerActions.has(selectedAction)) {
         ensureDocker();
     }
@@ -1498,7 +1503,7 @@ Notes:
         SERVER_AUTH_PASS_AUTO = false;
     }
 
-    if (isServerMode) {
+    if (isServerMode && !isServerStopMode) {
         ensureWebServerAuthCredentials();
     }
 
@@ -1560,7 +1565,9 @@ Notes:
         isRemoveMode,
         isShowCommandMode,
         isServerMode,
+        isServerStop: isServerStopMode,
         isServerDetach: Boolean(selectedAction === 'serve' && options.detach),
+        isServerListenSpecified: Boolean(isServerMode && options.server !== true),
         isPluginMode: false
     };
 }
@@ -1588,7 +1595,9 @@ function createRuntimeContext(modeState = {}) {
         showCommand: Boolean(modeState.isShowCommandMode),
         rmOnExit: RM_ON_EXIT,
         serverMode: Boolean(modeState.isServerMode),
+        serverStop: Boolean(modeState.isServerStop),
         serverDetach: Boolean(modeState.isServerDetach),
+        serverListenSpecified: Boolean(modeState.isServerListenSpecified),
         serverHost: SERVER_HOST,
         serverPort: SERVER_PORT,
         serverAuthUser: SERVER_AUTH_USER,
@@ -1657,9 +1666,137 @@ function buildDetachedServeEnv(runtime) {
     return env;
 }
 
+function formatServeListenHost(host) {
+    const text = String(host || '').trim() || '127.0.0.1';
+    if (text.includes(':') && !text.startsWith('[')) {
+        return `[${text}]`;
+    }
+    return text;
+}
+
+function buildServeListenLabel(host, port) {
+    return `${formatServeListenHost(host)}:${port}`;
+}
+
+function buildServePidFile(host, port, homeDir = os.homedir()) {
+    const dir = path.join(homeDir, '.manyoyo', 'run', 'serve');
+    const listen = buildServeListenLabel(host, port);
+    const safeName = listen.replace(/[^A-Za-z0-9_.-]+/g, '_');
+    return {
+        dir,
+        listen,
+        path: path.join(dir, `${safeName}.pid`)
+    };
+}
+
+function removeServePidFile(filePath) {
+    if (!filePath) return;
+    try {
+        fs.rmSync(filePath, { force: true });
+    } catch (e) {
+        // ignore cleanup failures
+    }
+}
+
+function isProcessRunning(pid) {
+    if (!Number.isInteger(pid) || pid <= 0) {
+        return false;
+    }
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (e) {
+        return e && e.code !== 'ESRCH';
+    }
+}
+
+function readServePidFile(filePath) {
+    try {
+        const text = fs.readFileSync(filePath, 'utf-8').trim();
+        if (!/^\d+$/.test(text)) {
+            return 0;
+        }
+        return Number(text);
+    } catch (e) {
+        return 0;
+    }
+}
+
+function getServePidTarget(host, port, homeDir = os.homedir()) {
+    const pidFile = buildServePidFile(host, port, homeDir);
+    const pid = readServePidFile(pidFile.path);
+    if (!Number.isInteger(pid) || pid <= 0 || !isProcessRunning(pid)) {
+        removeServePidFile(pidFile.path);
+        return null;
+    }
+    return {
+        pid,
+        listen: pidFile.listen,
+        path: pidFile.path
+    };
+}
+
+function installServePidCleanup(pidFilePath, logger) {
+    if (!pidFilePath || global.__manyoyoServePidCleanupInstalled) {
+        return;
+    }
+    global.__manyoyoServePidCleanupInstalled = true;
+    process.on('exit', () => {
+        removeServePidFile(pidFilePath);
+        if (logger && typeof logger.info === 'function') {
+            logger.info('serve pid file removed', { pidFilePath });
+        }
+    });
+}
+
+function writeServePidFile(runtime, serverHandle) {
+    const pidFile = buildServePidFile(serverHandle.host, serverHandle.port);
+    fs.mkdirSync(pidFile.dir, { recursive: true });
+    fs.writeFileSync(pidFile.path, `${process.pid}\n`);
+    installServePidCleanup(pidFile.path, runtime && runtime.logger);
+    return pidFile.path;
+}
+
+async function stopServeProcess(runtime) {
+    if (!runtime || !runtime.serverListenSpecified) {
+        throw new Error('serve --stop 必须显式传入 listen，例如 manyoyo serve 127.0.0.1:3000 --stop');
+    }
+    const target = getServePidTarget(runtime.serverHost, runtime.serverPort);
+    if (!target) {
+        const label = buildServeListenLabel(runtime.serverHost, runtime.serverPort);
+        console.log(`${YELLOW}⚠️  未发现运行中的 serve 实例: ${label}${NC}`);
+        return;
+    }
+    try {
+        process.kill(target.pid, 'SIGTERM');
+    } catch (e) {
+        if (!e || e.code !== 'ESRCH') {
+            throw e;
+        }
+    }
+    await sleep(200);
+    if (isProcessRunning(target.pid)) {
+        try {
+            process.kill(target.pid, 'SIGKILL');
+        } catch (e) {
+            if (!e || e.code !== 'ESRCH') {
+                throw e;
+            }
+        }
+    }
+    removeServePidFile(target.path);
+    console.log(`${GREEN}✅ 已停止 serve: ${target.listen} (pid: ${target.pid})${NC}`);
+}
+
 function relaunchServeDetached(runtime) {
     const serveLog = buildManyoyoLogPath('serve');
     fs.mkdirSync(serveLog.dir, { recursive: true });
+
+    const existing = getServePidTarget(runtime.serverHost, runtime.serverPort);
+    if (existing) {
+        console.log(`${YELLOW}⚠️  serve 已在后台运行: ${existing.listen} (pid: ${existing.pid})${NC}`);
+        return;
+    }
 
     const child = spawn(process.argv[0], buildDetachedServeArgv(process.argv.slice(1)), {
         detached: true,
@@ -1954,7 +2091,7 @@ async function runWebServerMode(runtime) {
         runtime.serverAuthPassAuto = SERVER_AUTH_PASS_AUTO;
     }
 
-    await startWebServer({
+    const serverHandle = await startWebServer({
         serverHost: runtime.serverHost,
         serverPort: runtime.serverPort,
         authUser: runtime.serverAuthUser,
@@ -1993,6 +2130,8 @@ async function runWebServerMode(runtime) {
         },
         logger: runtime.logger
     });
+    writeServePidFile(runtime, serverHandle);
+    return serverHandle;
 }
 
 async function main() {
@@ -2015,6 +2154,10 @@ async function main() {
 
         // 2. Start web server mode
         if (runtime.serverMode) {
+            if (runtime.serverStop) {
+                await stopServeProcess(runtime);
+                return;
+            }
             if (runtime.serverDetach) {
                 relaunchServeDetached(runtime);
                 return;

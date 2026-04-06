@@ -43,6 +43,33 @@ function getFreePort() {
     });
 }
 
+async function waitForHttpReady(port, attempts = 30, delayMs = 200) {
+    for (let i = 0; i < attempts; i += 1) {
+        try {
+            const response = await fetch(`http://127.0.0.1:${port}/auth/login`);
+            if (response.status === 200 || response.status === 404 || response.status === 405) {
+                return;
+            }
+        } catch (e) {
+            // keep polling
+        }
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    throw new Error(`HTTP 服务未在预期时间内启动: ${port}`);
+}
+
+async function waitForHttpClosed(port, attempts = 30, delayMs = 200) {
+    for (let i = 0; i < attempts; i += 1) {
+        try {
+            await fetch(`http://127.0.0.1:${port}/auth/login`);
+        } catch (e) {
+            return;
+        }
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    throw new Error(`HTTP 服务未在预期时间内关闭: ${port}`);
+}
+
 describe('MANYOYO CLI', () => {
     // ==============================================================================
     // 基础命令测试
@@ -75,9 +102,10 @@ describe('MANYOYO CLI', () => {
             expect(output).toContain('serve 127.0.0.1:3000 -d');
         });
 
-        test('serve --help should include detach option', () => {
+        test('serve --help should include detach and stop option', () => {
             const output = execSync(`node ${BIN_PATH} serve --help`, { encoding: 'utf-8' });
             expect(output).toContain('-d, --detach');
+            expect(output).toContain('--stop');
         });
 
         test('serve -d should print generated password when pass not provided', async () => {
@@ -115,6 +143,143 @@ describe('MANYOYO CLI', () => {
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }
         });
+
+        test('serve --stop should stop detached instance by listen', async () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-serve-stop-'));
+            const port = await getFreePort();
+            const output = execSync(`node ${BIN_PATH} serve 127.0.0.1:${port} -d`, {
+                encoding: 'utf-8',
+                env: { ...process.env, HOME: tempHome }
+            });
+            const pidMatch = output.match(/^PID:\s+(\d+)$/m);
+            const pid = pidMatch ? Number(pidMatch[1]) : 0;
+
+            try {
+                await waitForHttpReady(port);
+                const stopOutput = execSync(`node ${BIN_PATH} serve 127.0.0.1:${port} --stop`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome }
+                });
+                expect(stopOutput).toContain('已停止');
+                expect(stopOutput).toContain(`127.0.0.1:${port}`);
+                await waitForHttpClosed(port);
+            } finally {
+                if (pid) {
+                    try {
+                        process.kill(pid, 'SIGTERM');
+                    } catch (e) {
+                        // ignore process cleanup failures in test teardown
+                    }
+                }
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        }, 20000);
+
+        test('serve --stop without listen should require explicit listen', async () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-serve-stop-many-'));
+            const portA = await getFreePort();
+            const portB = await getFreePort();
+            const outputA = execSync(`node ${BIN_PATH} serve 127.0.0.1:${portA} -d`, {
+                encoding: 'utf-8',
+                env: { ...process.env, HOME: tempHome }
+            });
+            const outputB = execSync(`node ${BIN_PATH} serve 127.0.0.1:${portB} -d`, {
+                encoding: 'utf-8',
+                env: { ...process.env, HOME: tempHome }
+            });
+            const pidA = Number((outputA.match(/^PID:\s+(\d+)$/m) || [])[1] || 0);
+            const pidB = Number((outputB.match(/^PID:\s+(\d+)$/m) || [])[1] || 0);
+
+            try {
+                await waitForHttpReady(portA);
+                await waitForHttpReady(portB);
+                expect(() => {
+                    execSync(`node ${BIN_PATH} serve --stop`, {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome },
+                        stdio: 'pipe'
+                    });
+                }).toThrow(/必须显式传入 listen/);
+            } finally {
+                try {
+                    execSync(`node ${BIN_PATH} serve 127.0.0.1:${portA} --stop`, {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome },
+                        stdio: 'pipe'
+                    });
+                } catch (e) {}
+                try {
+                    execSync(`node ${BIN_PATH} serve 127.0.0.1:${portB} --stop`, {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome },
+                        stdio: 'pipe'
+                    });
+                } catch (e) {}
+                if (pidA) {
+                    try { process.kill(pidA, 'SIGTERM'); } catch (e) {}
+                }
+                if (pidB) {
+                    try { process.kill(pidB, 'SIGTERM'); } catch (e) {}
+                }
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        }, 20000);
+
+        test('serve --stop should only stop the specified detached instance', async () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-serve-stop-specific-'));
+            const portA = await getFreePort();
+            const portB = await getFreePort();
+            const outputA = execSync(`node ${BIN_PATH} serve 127.0.0.1:${portA} -U admin -P 123 -d`, {
+                encoding: 'utf-8',
+                env: { ...process.env, HOME: tempHome }
+            });
+            const outputB = execSync(`node ${BIN_PATH} serve 127.0.0.1:${portB} -U admin -P 123 -d`, {
+                encoding: 'utf-8',
+                env: { ...process.env, HOME: tempHome }
+            });
+            const pidA = Number((outputA.match(/^PID:\s+(\d+)$/m) || [])[1] || 0);
+            const pidB = Number((outputB.match(/^PID:\s+(\d+)$/m) || [])[1] || 0);
+
+            try {
+                await waitForHttpReady(portA);
+                await waitForHttpReady(portB);
+                const stopOutput = execSync(`node ${BIN_PATH} serve 127.0.0.1:${portA} --stop`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome }
+                });
+                expect(stopOutput).toContain(`127.0.0.1:${portA}`);
+                await waitForHttpClosed(portA);
+                await waitForHttpReady(portB);
+                const loginRes = await fetch(`http://127.0.0.1:${portB}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'admin', password: '123' })
+                });
+                expect(loginRes.status).toBe(200);
+            } finally {
+                try {
+                    execSync(`node ${BIN_PATH} serve 127.0.0.1:${portA} --stop`, {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome },
+                        stdio: 'pipe'
+                    });
+                } catch (e) {}
+                try {
+                    execSync(`node ${BIN_PATH} serve 127.0.0.1:${portB} --stop`, {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome },
+                        stdio: 'pipe'
+                    });
+                } catch (e) {}
+                if (pidA) {
+                    try { process.kill(pidA, 'SIGTERM'); } catch (e) {}
+                }
+                if (pidB) {
+                    try { process.kill(pidB, 'SIGTERM'); } catch (e) {}
+                }
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        }, 20000);
 
         test('--version should display version', () => {
             const output = execSync(`node ${BIN_PATH} --version`, { encoding: 'utf-8' });
