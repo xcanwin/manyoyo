@@ -25,7 +25,7 @@ describe('json5 text edit helpers', () => {
         const text = '{ foo: "a", bar: "b" }';
         const result = applyTextReplacements(text, [
             { start: 7, end: 10, text: '"x"' },
-            { start: 18, end: 21, text: '"y"' }
+            { start: 17, end: 20, text: '"y"' }
         ]);
         expect(result).toBe('{ foo: "x", bar: "y" }');
     });
