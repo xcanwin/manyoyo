@@ -16,6 +16,7 @@ const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
 const { runPluginCommand, createPlugin } = require('../lib/plugin');
 const { buildManyoyoLogPath } = require('../lib/log-path');
+const { resolveRuntimeConfig } = require('../lib/runtime-resolver');
 const {
     parseEnvEntry: parseEnvEntryOrThrow,
     expandHomeAliasPath,
@@ -1326,145 +1327,96 @@ Notes:
     const globalFirstConfig = normalizeFirstConfig(config.first, '全局配置');
     const runFirstConfig = normalizeFirstConfig(runConfig.first, '运行配置');
 
-    // Merge configs: command line > run config > global config > defaults
-    // Override mode (scalar values): use first defined value
-    HOST_PATH = pickConfigValue(options.hostPath, runConfig.hostPath, config.hostPath, HOST_PATH) || HOST_PATH;
-    const mergedContainerName = pickConfigValue(options.contName, runConfig.containerName, config.containerName);
-    if (mergedContainerName) {
-        CONTAINER_NAME = mergedContainerName;
-    }
-    CONTAINER_NAME = resolveContainerNameTemplate(CONTAINER_NAME);
-    const mergedContainerPath = pickConfigValue(options.contPath, runConfig.containerPath, config.containerPath);
-    if (mergedContainerPath) {
-        CONTAINER_PATH = mergedContainerPath;
-    }
-    IMAGE_NAME = pickConfigValue(options.imageName, runConfig.imageName, config.imageName, IMAGE_NAME) || IMAGE_NAME;
-    const mergedImageVersion = pickConfigValue(options.imageVer, runConfig.imageVersion, config.imageVersion);
-    if (mergedImageVersion) {
-        IMAGE_VERSION = mergedImageVersion;
-    }
-    const mergedShellPrefix = pickConfigValue(options.shellPrefix, runConfig.shellPrefix, config.shellPrefix);
-    if (mergedShellPrefix) {
-        EXEC_COMMAND_PREFIX = `${mergedShellPrefix} `;
-    }
-    const mergedShell = pickConfigValue(options.shell, runConfig.shell, config.shell);
-    if (mergedShell) {
-        EXEC_COMMAND = mergedShell;
-    }
-    const mergedShellSuffix = pickConfigValue(options.shellSuffix, runConfig.shellSuffix, config.shellSuffix);
-    if (mergedShellSuffix) {
-        EXEC_COMMAND_SUFFIX = normalizeCommandSuffix(mergedShellSuffix);
-    }
-    const mergedFirstShellPrefix = pickConfigValue(options.firstShellPrefix, runFirstConfig.shellPrefix, globalFirstConfig.shellPrefix);
-    if (mergedFirstShellPrefix) {
-        FIRST_EXEC_COMMAND_PREFIX = `${mergedFirstShellPrefix} `;
-    }
-    const mergedFirstShell = pickConfigValue(options.firstShell, runFirstConfig.shell, globalFirstConfig.shell);
-    if (mergedFirstShell) {
-        FIRST_EXEC_COMMAND = mergedFirstShell;
-    }
-    const mergedFirstShellSuffix = pickConfigValue(options.firstShellSuffix, runFirstConfig.shellSuffix, globalFirstConfig.shellSuffix);
-    if (mergedFirstShellSuffix) {
-        FIRST_EXEC_COMMAND_SUFFIX = normalizeCommandSuffix(mergedFirstShellSuffix);
-    }
+    const resolvedRuntime = resolveRuntimeConfig({
+        cliOptions: options,
+        globalConfig: config,
+        runConfig,
+        globalFirstConfig,
+        runFirstConfig,
+        defaults: {
+            hostPath: HOST_PATH,
+            containerName: CONTAINER_NAME,
+            containerPath: CONTAINER_PATH,
+            imageName: IMAGE_NAME,
+            imageVersion: IMAGE_VERSION
+        },
+        envVars: process.env,
+        argv: process.argv,
+        isServerMode,
+        isServerStopMode,
+        pickConfigValue,
+        resolveContainerNameTemplate,
+        normalizeCommandSuffix,
+        normalizeJsonEnvMap,
+        normalizeCliEnvMap,
+        mergeArrayConfig,
+        normalizeVolume,
+        parseServerListen
+    });
+
+    HOST_PATH = resolvedRuntime.hostPath;
+    CONTAINER_NAME = resolvedRuntime.containerName;
+    CONTAINER_PATH = resolvedRuntime.containerPath;
+    IMAGE_NAME = resolvedRuntime.imageName;
+    IMAGE_VERSION = resolvedRuntime.imageVersion;
+    EXEC_COMMAND_PREFIX = resolvedRuntime.exec.prefix;
+    EXEC_COMMAND = resolvedRuntime.exec.shell;
+    EXEC_COMMAND_SUFFIX = resolvedRuntime.exec.suffix;
+    FIRST_EXEC_COMMAND_PREFIX = resolvedRuntime.first.exec.prefix;
+    FIRST_EXEC_COMMAND = resolvedRuntime.first.exec.shell;
+    FIRST_EXEC_COMMAND_SUFFIX = resolvedRuntime.first.exec.suffix;
 
     // Basic name validation to reduce injection risk
     validateName('containerName', CONTAINER_NAME, SAFE_CONTAINER_NAME_PATTERN);
     validateName('imageName', IMAGE_NAME, /^[A-Za-z0-9][A-Za-z0-9._/:-]*$/);
     validateImageVersion(IMAGE_VERSION);
 
-    // Merge mode (array values): concatenate all sources
-    const toArray = (val) => Array.isArray(val) ? val : (val ? [val] : []);
-    const envFileList = [
-        ...toArray(config.envFile),
-        ...toArray(runConfig.envFile),
-        ...(options.envFile || [])
-    ].filter(Boolean);
+    const envFileList = resolvedRuntime.envFile;
     envFileList.forEach(ef => addEnvFile(ef));
 
     // env in JSON config uses map type, and is merged by key with CLI priority.
-    const envMap = {
-        ...normalizeJsonEnvMap(config.env, '全局配置'),
-        ...normalizeJsonEnvMap(runConfig.env, '运行配置'),
-        ...normalizeCliEnvMap(options.env)
-    };
+    const envMap = resolvedRuntime.env;
     Object.entries(envMap).forEach(([key, value]) => addEnv(`${key}=${value}`));
 
-    const firstEnvFileList = [
-        ...toArray(globalFirstConfig.envFile),
-        ...toArray(runFirstConfig.envFile),
-        ...(options.firstEnvFile || [])
-    ].filter(Boolean);
+    const firstEnvFileList = resolvedRuntime.first.envFile;
     firstEnvFileList.forEach(ef => addEnvFileTo(FIRST_CONTAINER_ENVS, ef));
 
-    const firstEnvMap = {
-        ...normalizeJsonEnvMap(globalFirstConfig.env, '全局配置 first'),
-        ...normalizeJsonEnvMap(runFirstConfig.env, '运行配置 first'),
-        ...normalizeCliEnvMap(options.firstEnv)
-    };
+    const firstEnvMap = resolvedRuntime.first.env;
     Object.entries(firstEnvMap).forEach(([key, value]) => addEnvTo(FIRST_CONTAINER_ENVS, `${key}=${value}`));
 
     applyPlaywrightCliSessionIntegration(config, runConfig);
 
-    const volumeList = mergeArrayConfig(config.volumes, runConfig.volumes, options.volume)
-        .map(normalizeVolume);
+    const volumeList = resolvedRuntime.volumes;
     volumeList.forEach(v => addVolume(v));
 
-    const portList = mergeArrayConfig(config.ports, runConfig.ports, options.port);
+    const portList = resolvedRuntime.ports;
     portList.forEach(p => addPort(p));
 
-    const buildArgList = mergeArrayConfig(config.imageBuildArgs, runConfig.imageBuildArgs, options.imageBuildArg);
+    const buildArgList = resolvedRuntime.imageBuildArgs;
     buildArgList.forEach(arg => addImageBuildArg(arg));
 
     // Override mode for special options
-    const yoloValue = pickConfigValue(options.yolo, runConfig.yolo, config.yolo);
+    const yoloValue = resolvedRuntime.yolo;
     if (yoloValue) setYolo(yoloValue);
 
-    const contModeValue = pickConfigValue(options.contMode, runConfig.containerMode, config.containerMode);
+    const contModeValue = resolvedRuntime.containerMode;
     if (contModeValue) setContMode(contModeValue);
 
-    const quietValue = pickConfigValue(options.quiet, runConfig.quiet, config.quiet);
+    const quietValue = resolvedRuntime.quiet;
     if (quietValue) setQuiet(quietValue);
-
-    // Handle shell-full (variadic arguments)
-    if (options.shellFull) {
-        EXEC_COMMAND = options.shellFull.join(' ');
-        EXEC_COMMAND_PREFIX = "";
-        EXEC_COMMAND_SUFFIX = "";
-    }
-
-    // Handle -- suffix arguments
-    if (!options.shellFull) {
-        const doubleDashIndex = process.argv.indexOf('--');
-        if (doubleDashIndex !== -1 && doubleDashIndex < process.argv.length - 1) {
-            EXEC_COMMAND_SUFFIX = normalizeCommandSuffix(process.argv.slice(doubleDashIndex + 1).join(' '));
-        }
-    }
 
     if (options.rmOnExit) {
         RM_ON_EXIT = true;
     }
 
     if (isServerMode) {
-        const serverListen = parseServerListen(options.server);
-        SERVER_HOST = serverListen.host;
-        SERVER_PORT = serverListen.port;
+        SERVER_HOST = resolvedRuntime.serverHost;
+        SERVER_PORT = resolvedRuntime.serverPort;
     }
 
-    const serverUserValue = pickConfigValue(options.serverUser, runConfig.serverUser, config.serverUser, process.env.MANYOYO_SERVER_USER);
-    if (serverUserValue) {
-        SERVER_AUTH_USER = String(serverUserValue);
-    }
-
-    const serverPassValue = pickConfigValue(options.serverPass, runConfig.serverPass, config.serverPass, process.env.MANYOYO_SERVER_PASS);
-    if (serverPassValue) {
-        SERVER_AUTH_PASS = String(serverPassValue);
-        SERVER_AUTH_PASS_AUTO = false;
-    }
-
-    if (isServerMode && !isServerStopMode) {
-        ensureWebServerAuthCredentials();
-    }
+    SERVER_AUTH_USER = resolvedRuntime.serverUser || '';
+    SERVER_AUTH_PASS = resolvedRuntime.serverPass || '';
+    SERVER_AUTH_PASS_AUTO = resolvedRuntime.serverPassAuto === true;
 
     if (isShowConfigMode) {
         const finalConfig = {
@@ -1484,9 +1436,9 @@ Notes:
             shellSuffix: EXEC_COMMAND_SUFFIX || "",
             yolo: yoloValue || "",
             quiet: quietValue || [],
-            server: isServerMode,
-            serverHost: isServerMode ? SERVER_HOST : null,
-            serverPort: isServerMode ? SERVER_PORT : null,
+            server: resolvedRuntime.server,
+            serverHost: resolvedRuntime.server ? SERVER_HOST : null,
+            serverPort: resolvedRuntime.server ? SERVER_PORT : null,
             serverUser: SERVER_AUTH_USER || "",
             serverPass: SERVER_AUTH_PASS || "",
             exec: {
