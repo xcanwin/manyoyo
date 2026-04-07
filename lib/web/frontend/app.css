@@ -352,6 +352,20 @@ textarea:focus-visible {
     white-space: pre-wrap;
 }
 
+.link-confirm-url {
+    margin-top: 2px;
+    padding: 12px 14px;
+    border: 1px solid rgba(146, 100, 42, 0.18);
+    border-radius: 10px;
+    background: #fff8ef;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    word-break: break-all;
+    user-select: text;
+}
+
 .config-editor {
     width: 100%;
     min-height: 340px;

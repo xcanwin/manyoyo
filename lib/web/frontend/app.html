@@ -275,6 +275,22 @@
                 </footer>
             </section>
         </div>
+
+        <div id="externalLinkModal" class="modal-backdrop" hidden>
+            <section class="modal" role="dialog" aria-modal="true" aria-labelledby="externalLinkTitle">
+                <header class="modal-header">
+                    <h2 id="externalLinkTitle">打开外部链接</h2>
+                    <button type="button" id="externalLinkCancelBtn" class="secondary">取消</button>
+                </header>
+                <div class="modal-body">
+                    <div class="modal-tip">即将新标签页打开外部页面。请确认完整链接可信后再继续。</div>
+                    <div id="externalLinkUrl" class="link-confirm-url"></div>
+                </div>
+                <footer class="modal-footer">
+                    <button type="button" id="externalLinkOpenBtn">确认并新标签打开</button>
+                </footer>
+            </section>
+        </div>
     </div>
 
     <script src="/app/vendor/xterm.js"></script>
