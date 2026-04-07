@@ -19,7 +19,6 @@ const { buildManyoyoLogPath } = require('../lib/log-path');
 const { resolveRuntimeConfig } = require('../lib/runtime-resolver');
 const {
     parseEnvEntry: parseEnvEntryOrThrow,
-    expandHomeAliasPath,
     normalizeVolume
 } = require('../lib/runtime-normalizers');
 const {
@@ -964,7 +963,11 @@ function validateShellSuffixPassThroughArgs(command) {
     }
 }
 
-function applyContainerBaseOptions(command) {
+function applyRunStyleOptions(command, options = {}) {
+    const includeRmOnExit = options.includeRmOnExit !== false;
+    const includeServePreview = options.includeServePreview === true;
+    const includeWebAuthOptions = options.includeWebAuthOptions === true;
+
     command
         .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
         .option('--hp, --host-path <path>', '设置宿主机工作目录 (默认: 当前路径)')
@@ -979,69 +982,35 @@ function applyContainerBaseOptions(command) {
     appendArrayOption(command, '-v, --volume <volume>', '绑定挂载卷 XXX:YYY (可多次使用)');
     appendArrayOption(command, '-p, --port <port>', '设置端口映射 XXX:YYY (可多次使用)');
 
-    return command;
-}
-
-function applyExecOptions(command) {
     command
         .option('--sp, --shell-prefix <command>', '主命令前缀 (常用于临时环境变量)')
         .option('-s, --shell <command>', '主命令')
         .option('--ss, --shell-suffix <command>', '主命令后缀 (追加到 -s 之后，等价于 -- <args>)')
-        .option('-x, --shell-full <command...>', '完整命令 (与 --sp/-s/--ss/-- 互斥)')
-        .option('-y, --yolo <cli>', '使 AGENT 无需确认 (claude(c), gemini(gm), codex(cx), opencode(oc))');
-
-    return command;
-}
-
-function applyFirstExecOptions(command) {
-    command
         .option('--first-shell-prefix <command>', '首次预执行命令前缀 (仅新建容器生效; 容器已存在时忽略)')
         .option('--first-shell <command>', '首次预执行命令 (仅新建容器生效; 容器已存在时忽略)')
-        .option('--first-shell-suffix <command>', '首次预执行命令后缀 (仅新建容器生效; 容器已存在时忽略)');
+        .option('--first-shell-suffix <command>', '首次预执行命令后缀 (仅新建容器生效; 容器已存在时忽略)')
+        .option('-x, --shell-full <command...>', '完整命令 (与 --sp/-s/--ss/-- 互斥)')
+        .option('-y, --yolo <cli>', '使 AGENT 无需确认 (claude(c), gemini(gm), codex(cx), opencode(oc))');
     appendArrayOption(command, '--first-env <env>', '首次预执行环境变量 XXX=YYY (可多次使用)');
     appendArrayOption(command, '--first-env-file <file>', '首次预执行环境变量文件 (仅支持绝对路径，如 /abs/path.env)');
-
-    return command;
-}
-
-function applyQuietOptions(command) {
-    appendArrayOption(command, '-q, --quiet <item>', '静默输出 (可多次使用: cnew, crm, tip, cmd, full)');
-    return command;
-}
-
-function applyServeAuthOptions(command) {
-    command
-        .option('-U, --user <username>', '网页服务登录用户名 (默认 admin)')
-        .option('-P, --pass <password>', '网页服务登录密码 (默认自动生成随机密码)');
-    return command;
-}
-
-function applyRunStyleOptions(command, options = {}) {
-    const includeRmOnExit = options.includeRmOnExit !== false;
-    const includeServePreview = options.includeServePreview === true;
-    const includeWebAuthOptions = options.includeWebAuthOptions === true;
-    const includeFirstExecOptions = options.includeFirstExecOptions !== false;
-
-    applyContainerBaseOptions(command);
-    applyExecOptions(command);
-    if (includeFirstExecOptions) {
-        applyFirstExecOptions(command);
-    }
 
     if (includeRmOnExit) {
         command.option('--rm-on-exit', '退出后自动删除容器 (一次性模式)');
     }
 
-    applyQuietOptions(command);
+    appendArrayOption(command, '-q, --quiet <item>', '静默输出 (可多次使用: cnew, crm, tip, cmd, full)');
 
     if (includeServePreview) {
         command
-            .option('--serve [listen]', '按 serve 模式解析配置 (仅支持 <ip:port>)');
-        applyServeAuthOptions(command);
+            .option('--serve [listen]', '按 serve 模式解析配置 (仅支持 <ip:port>)')
+            .option('-U, --user <username>', '网页服务登录用户名 (默认 admin)')
+            .option('-P, --pass <password>', '网页服务登录密码 (默认自动生成随机密码)');
     }
 
     if (includeWebAuthOptions) {
-        applyServeAuthOptions(command);
+        command
+            .option('-U, --user <username>', '网页服务登录用户名 (默认 admin)')
+            .option('-P, --pass <password>', '网页服务登录密码 (默认自动生成随机密码)');
     }
 
     return command;
@@ -1204,11 +1173,7 @@ Notes:
         .action(() => selectAction('images', { imageList: true }));
 
     const serveCommand = program.command('serve [listen]').description('启动网页交互服务 (默认 127.0.0.1:3000)');
-    applyRunStyleOptions(serveCommand, {
-        includeRmOnExit: false,
-        includeWebAuthOptions: true,
-        includeFirstExecOptions: false
-    });
+    applyRunStyleOptions(serveCommand, { includeRmOnExit: false, includeWebAuthOptions: true });
     serveCommand.option('-d, --detach', '后台启动网页服务并立即返回');
     serveCommand.option('--stop', '停止后台网页服务；必须显式传入 listen');
     serveCommand.action((listen, options) => {
@@ -1254,10 +1219,7 @@ Notes:
     });
 
     const configRunCommand = configCommand.command('command').description('显示将执行的 docker run 命令并退出');
-    applyRunStyleOptions(configRunCommand, {
-        includeRmOnExit: false,
-        includeFirstExecOptions: false
-    });
+    applyRunStyleOptions(configRunCommand, { includeRmOnExit: false });
     enableShellSuffixPassThrough(configRunCommand);
     configRunCommand.action((options, command) => {
         validateShellSuffixPassThroughArgs(command);
@@ -1408,10 +1370,10 @@ Notes:
     validateName('imageName', IMAGE_NAME, /^[A-Za-z0-9][A-Za-z0-9._/:-]*$/);
     validateImageVersion(IMAGE_VERSION);
 
+    // Merge mode (array values): concatenate all sources
     const envFileList = resolvedRuntime.envFile;
     envFileList.forEach(ef => addEnvFile(ef));
 
-    // env in JSON config uses map type, and is merged by key with CLI priority.
     const envMap = resolvedRuntime.env;
     Object.entries(envMap).forEach(([key, value]) => addEnv(`${key}=${value}`));
 
@@ -1432,7 +1394,6 @@ Notes:
     const buildArgList = resolvedRuntime.imageBuildArgs;
     buildArgList.forEach(arg => addImageBuildArg(arg));
 
-    // Override mode for special options
     const yoloValue = resolvedRuntime.yolo;
     if (yoloValue) setYolo(yoloValue);
 
@@ -1446,14 +1407,11 @@ Notes:
         RM_ON_EXIT = true;
     }
 
-    if (isServerMode) {
-        SERVER_HOST = resolvedRuntime.serverHost;
-        SERVER_PORT = resolvedRuntime.serverPort;
-    }
-
+    SERVER_HOST = resolvedRuntime.serverHost || SERVER_HOST;
+    SERVER_PORT = resolvedRuntime.serverPort || SERVER_PORT;
     SERVER_AUTH_USER = resolvedRuntime.serverUser || '';
     SERVER_AUTH_PASS = resolvedRuntime.serverPass || '';
-    SERVER_AUTH_PASS_AUTO = resolvedRuntime.serverPassAuto === true;
+    SERVER_AUTH_PASS_AUTO = Boolean(resolvedRuntime.serverPassAuto);
 
     if (isShowConfigMode) {
         const finalConfig = {
@@ -1473,9 +1431,9 @@ Notes:
             shellSuffix: EXEC_COMMAND_SUFFIX || "",
             yolo: yoloValue || "",
             quiet: quietValue || [],
-            server: resolvedRuntime.server,
-            serverHost: resolvedRuntime.server ? SERVER_HOST : null,
-            serverPort: resolvedRuntime.server ? SERVER_PORT : null,
+            server: isServerMode,
+            serverHost: isServerMode ? SERVER_HOST : null,
+            serverPort: isServerMode ? SERVER_PORT : null,
             serverUser: SERVER_AUTH_USER || "",
             serverPass: SERVER_AUTH_PASS || "",
             exec: {

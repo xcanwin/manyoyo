@@ -1601,24 +1601,6 @@ exit 0
             expect(output).toContain('-P');
         });
 
-        test('serve help should not expose first-shell options', () => {
-            const output = execSync(
-                `node ${BIN_PATH} serve --help`,
-                { encoding: 'utf-8' }
-            );
-            expect(output).not.toContain('--first-shell');
-            expect(output).not.toContain('--first-env');
-        });
-
-        test('config command help should not expose first-shell options', () => {
-            const output = execSync(
-                `node ${BIN_PATH} config command --help`,
-                { encoding: 'utf-8' }
-            );
-            expect(output).not.toContain('--first-shell');
-            expect(output).not.toContain('--first-env');
-        });
-
         test('init option should be accepted', () => {
             const output = execSync(
                 `node ${BIN_PATH} --help`,
