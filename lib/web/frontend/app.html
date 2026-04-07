@@ -68,6 +68,7 @@
                     <div class="workbench-tabs" id="workbenchTabs" aria-label="工作台视图">
                         <button type="button" id="viewActivityBtn" class="secondary is-active">活动</button>
                         <button type="button" id="viewTerminalBtn" class="secondary">终端</button>
+                        <button type="button" id="viewFilesBtn" class="secondary">文件</button>
                         <button type="button" id="viewDetailBtn" class="secondary">详情</button>
                         <button type="button" id="viewConfigBtn" class="secondary">配置</button>
                         <button type="button" id="viewCheckBtn" class="secondary">检查</button>
@@ -90,6 +91,7 @@
                         </div>
                         <div id="terminalScreen" aria-label="终端输出区域"></div>
                     </section>
+                    <section id="filesPanel" class="workspace-pane files-pane" hidden></section>
                     <section id="detailPanel" class="workspace-pane inspector-pane" hidden>
                         <div id="detailSummary" class="inspector-stack"></div>
                     </section>
@@ -297,6 +299,8 @@
     <script src="/app/vendor/xterm-addon-fit.js"></script>
     <script src="/app/vendor/marked.min.js"></script>
     <script src="/app/frontend/markdown-renderer.js"></script>
+    <script src="/app/frontend/codemirror.bundle.js"></script>
+    <script src="/app/frontend/file-browser.js"></script>
     <script src="/app/frontend/app.js"></script>
 </body>
 </html>

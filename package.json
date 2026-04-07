@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "5.8.11",
+    "version": "5.9.0",
     "imageVersion": "1.9.0-common",
     "playwrightCliVersion": "0.1.1",
     "description": "AI Agent CLI Security Sandbox for Docker and Podman",
@@ -31,6 +31,7 @@
     },
     "scripts": {
         "dev:release": "node scripts/dev-release.js",
+        "build:web-editor": "node scripts/build-web-code-editor.js",
         "install-link": "npm link",
         "test": "jest --coverage",
         "test:unit": "jest test/",
@@ -66,6 +67,19 @@
         "ws": "^8.20.0"
     },
     "devDependencies": {
+        "@codemirror/commands": "^6.10.3",
+        "@codemirror/lang-css": "^6.3.1",
+        "@codemirror/lang-html": "^6.4.11",
+        "@codemirror/lang-javascript": "^6.2.5",
+        "@codemirror/lang-json": "^6.0.2",
+        "@codemirror/lang-markdown": "^6.5.0",
+        "@codemirror/lang-python": "^6.2.1",
+        "@codemirror/lang-yaml": "^6.1.3",
+        "@codemirror/language": "^6.12.3",
+        "@codemirror/search": "^6.6.0",
+        "@codemirror/state": "^6.6.0",
+        "@codemirror/view": "^6.41.0",
+        "codemirror": "^6.0.2",
         "jest": "^30.3.0",
         "vitepress": "^1.6.4"
     },

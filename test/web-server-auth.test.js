@@ -257,6 +257,10 @@ describe('Web Server Auth Gateway', () => {
             expect(unauthRenderer.response.status).toBe(401);
             const unauthStyle = await request(`${baseUrl}/app/frontend/markdown.css`);
             expect(unauthStyle.response.status).toBe(401);
+            const unauthFileBrowser = await request(`${baseUrl}/app/frontend/file-browser.js`);
+            expect(unauthFileBrowser.response.status).toBe(401);
+            const unauthEditorBundle = await request(`${baseUrl}/app/frontend/codemirror.bundle.js`);
+            expect(unauthEditorBundle.response.status).toBe(401);
 
             const authCookie = await loginAndGetCookie(baseUrl);
             const authedVendor = await request(`${baseUrl}/app/vendor/marked.min.js`, {
@@ -273,12 +277,106 @@ describe('Web Server Auth Gateway', () => {
             expect(authedRenderer.response.headers.get('content-type')).toContain('application/javascript');
             expect(authedRenderer.text).toContain('window.ManyoyoMarkdown');
 
+            const authedFileBrowser = await request(`${baseUrl}/app/frontend/file-browser.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(authedFileBrowser.response.status).toBe(200);
+            expect(authedFileBrowser.response.headers.get('content-type')).toContain('application/javascript');
+            expect(authedFileBrowser.text).toContain('window.ManyoyoFileBrowser');
+
+            const authedEditorBundle = await request(`${baseUrl}/app/frontend/codemirror.bundle.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(authedEditorBundle.response.status).toBe(200);
+            expect(authedEditorBundle.response.headers.get('content-type')).toContain('application/javascript');
+            expect(authedEditorBundle.text).toContain('window.ManyoyoCodeEditor');
+
             const authedStyle = await request(`${baseUrl}/app/frontend/markdown.css`, {
                 headers: { Cookie: authCookie }
             });
             expect(authedStyle.response.status).toBe(200);
             expect(authedStyle.response.headers.get('content-type')).toContain('text/css');
             expect(authedStyle.text).toContain('.md-content');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should list and read container files via web api', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-container-fs-'));
+        const port = await getFreePort();
+        const fakeDocker = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(fakeDocker, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+const command = args[4] || '';
+if (args[0] !== 'exec') {
+    process.stderr.write('unexpected docker args');
+    process.exit(1);
+}
+if (command.includes('__MANYOYO_FS_LIST__')) {
+    process.stdout.write(JSON.stringify({
+        path: '/workspace',
+        parentPath: '/',
+        entries: [
+            { name: 'docs', path: '/workspace/docs', kind: 'directory', size: 0, mtimeMs: 1710000000000 },
+            { name: 'README.md', path: '/workspace/README.md', kind: 'file', size: 128, mtimeMs: 1710000001000 }
+        ]
+    }));
+    process.exit(0);
+}
+if (command.includes('__MANYOYO_FS_READ__')) {
+    process.stdout.write(JSON.stringify({
+        path: '/workspace/README.md',
+        kind: 'text',
+        size: 23,
+        language: 'markdown',
+        content: '# hello\\nthis is readme\\n',
+        truncated: false
+    }));
+    process.exit(0);
+}
+process.stderr.write('unknown command');
+process.exit(2);
+`, 'utf-8');
+        fs.chmodSync(fakeDocker, 0o755);
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDocker,
+                containerExists: () => true,
+                getContainerStatus: () => 'running'
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const listRes = await request(`${baseUrl}/api/sessions/test/fs/list?path=${encodeURIComponent('/workspace')}`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(listRes.response.status).toBe(200);
+            expect(listRes.json).toEqual(expect.objectContaining({
+                path: '/workspace',
+                parentPath: '/',
+                entries: expect.arrayContaining([
+                    expect.objectContaining({ name: 'docs', kind: 'directory', path: '/workspace/docs' }),
+                    expect.objectContaining({ name: 'README.md', kind: 'file', path: '/workspace/README.md' })
+                ])
+            }));
+
+            const readRes = await request(`${baseUrl}/api/sessions/test/fs/read?path=${encodeURIComponent('/workspace/README.md')}`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(readRes.response.status).toBe(200);
+            expect(readRes.json).toEqual(expect.objectContaining({
+                path: '/workspace/README.md',
+                kind: 'text',
+                language: 'markdown',
+                content: '# hello\nthis is readme\n',
+                truncated: false
+            }));
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
