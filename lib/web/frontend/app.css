@@ -1160,12 +1160,21 @@ body.mobile-actions-open .header-actions {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
     padding: 12px 14px;
     border-bottom: 1px solid var(--line);
     background: rgba(255, 251, 244, 0.96);
 }
 
-.files-toolbar-path {
+.files-toolbar-path-group {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.files-toolbar-path-input {
     flex: 1;
     min-width: 0;
     padding: 8px 10px;
@@ -1176,7 +1185,12 @@ body.mobile-actions-open .header-actions {
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.5;
-    word-break: break-all;
+}
+
+.files-toolbar-path-input:focus {
+    outline: none;
+    border-color: rgba(120, 78, 27, 0.45);
+    box-shadow: 0 0 0 3px rgba(181, 146, 99, 0.12);
 }
 
 .files-toolbar-status {
@@ -1187,60 +1201,77 @@ body.mobile-actions-open .header-actions {
 .files-layout {
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
 }
 
 .files-sidebar {
     min-height: 0;
     border-right: 1px solid var(--line);
-    background: rgba(255, 251, 244, 0.84);
+    background: rgba(255, 255, 255, 0.86);
     overflow: auto;
 }
 
 .files-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 12px;
+    gap: 0;
+    padding: 4px 0;
 }
 
 .files-entry {
     width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
     gap: 10px;
-    padding: 10px 12px;
-    border: 1px solid rgba(181, 146, 99, 0.28);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.92);
+    padding: 7px 12px;
+    border: 0;
+    border-bottom: 1px solid rgba(181, 146, 99, 0.18);
+    border-radius: 0;
+    background: transparent;
     color: var(--text);
     text-align: left;
     cursor: pointer;
 }
 
+.files-entry:hover {
+    background: rgba(255, 247, 233, 0.72);
+}
+
 .files-entry.is-active {
-    border-color: rgba(120, 78, 27, 0.45);
-    background: rgba(255, 244, 224, 0.9);
+    background: rgba(255, 244, 224, 0.95);
+    box-shadow: inset 3px 0 0 rgba(120, 78, 27, 0.58);
 }
 
 .files-entry-name {
+    flex: 1;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
 }
 
 .files-entry-title {
     font-size: 13px;
     font-weight: 600;
-    word-break: break-word;
+    white-space: normal;
+    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 .files-entry-meta {
+    flex-shrink: 0;
     color: var(--muted);
     font-size: 11px;
     white-space: nowrap;
+    text-align: right;
+}
+
+.files-list > .files-empty {
+    padding: 8px 12px;
+    border: 0;
+    border-bottom: 1px solid rgba(181, 146, 99, 0.18);
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+    line-height: 1.5;
 }
 
 .files-preview {
@@ -1254,12 +1285,14 @@ body.mobile-actions-open .header-actions {
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    padding: 12px 14px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--line);
     background: rgba(255, 251, 244, 0.96);
 }
 
 .files-preview-head-main {
+    flex: 1 1 280px;
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -1271,29 +1304,32 @@ body.mobile-actions-open .header-actions {
     display: flex;
     align-items: center;
     gap: 8px;
+    margin-left: auto;
 }
 
 .files-preview-title {
     font-family: var(--font-display);
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
+    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 .files-preview-meta {
     color: var(--muted);
-    font-size: 12px;
+    font-size: 11px;
     word-break: break-all;
 }
 
 .files-preview-body {
     min-height: 0;
     overflow: auto;
-    padding: 14px;
+    padding: 8px;
 }
 
 .files-empty,
 .files-note {
-    padding: 18px;
+    padding: 14px;
     border: 1px dashed rgba(181, 146, 99, 0.45);
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.7);
@@ -1316,14 +1352,24 @@ body.mobile-actions-open .header-actions {
 
 .files-editor-host .cm-editor {
     height: 100%;
-    border: 1px solid rgba(181, 146, 99, 0.32);
-    border-radius: 12px;
+    border: 1px solid rgba(181, 146, 99, 0.2);
+    border-radius: 8px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.94);
+    background: rgba(255, 255, 255, 0.98);
 }
 
 .files-editor-host .cm-scroller {
     font-family: var(--font-mono);
+    line-height: 1.45;
+}
+
+.files-editor-host .cm-gutters {
+    border-right: 1px solid rgba(181, 146, 99, 0.14);
+    background: rgba(252, 248, 241, 0.92);
+}
+
+.files-editor-host .cm-lineNumbers .cm-gutterElement {
+    font-size: 11px;
 }
 
 .inspector-pane {
