@@ -1198,6 +1198,13 @@ body.mobile-actions-open .header-actions {
     font-size: 12px;
 }
 
+.files-toolbar-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
 .files-layout {
     min-height: 0;
     display: grid;
@@ -1241,6 +1248,10 @@ body.mobile-actions-open .header-actions {
 .files-entry.is-active {
     background: rgba(255, 244, 224, 0.95);
     box-shadow: inset 3px 0 0 rgba(120, 78, 27, 0.58);
+}
+
+.files-entry-parent {
+    font-style: italic;
 }
 
 .files-entry-name {

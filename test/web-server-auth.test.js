@@ -359,6 +359,25 @@ if (command.includes('__MANYOYO_FS_WRITE__')) {
     }));
     process.exit(0);
 }
+if (command.includes('__MANYOYO_FS_MKDIR__')) {
+    const matched = command.match(/const requestedPath = ([\\s\\S]+?);\\n\\ntry \\{/);
+    if (!matched) {
+        process.stderr.write('missing path');
+        process.exit(4);
+    }
+    const targetPath = JSON.parse(matched[1]);
+    fs.mkdirSync(targetPath, { recursive: true });
+    const stat = fs.statSync(targetPath);
+    process.stdout.write(JSON.stringify({
+        path: targetPath,
+        name: require('path').basename(targetPath),
+        kind: 'directory',
+        size: 0,
+        mtimeMs: stat.mtimeMs,
+        created: true
+    }));
+    process.exit(0);
+}
 process.stderr.write('unknown command');
 process.exit(2);
 `, 'utf-8');
@@ -428,6 +447,24 @@ process.exit(2);
                 content: '# changed\nsaved\n',
                 truncated: false,
                 editable: true
+            }));
+
+            const mkdirRes = await request(`${baseUrl}/api/sessions/test/fs/mkdir`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    path: '/workspace/new-dir'
+                })
+            });
+            expect(mkdirRes.response.status).toBe(200);
+            expect(mkdirRes.json).toEqual(expect.objectContaining({
+                path: '/workspace/new-dir',
+                name: 'new-dir',
+                kind: 'directory',
+                created: true
             }));
         } finally {
             if (handle && typeof handle.close === 'function') {
@@ -519,17 +556,24 @@ process.exit(2);
         expect(fileBrowserSource).toContain('data-action="save" disabled>保存</button>');
         expect(fileBrowserSource).toContain('data-role="path" value="/"');
         expect(fileBrowserSource).toContain('data-action="visit">访问</button>');
+        expect(fileBrowserSource).toContain('data-action="mkdir">新建目录</button>');
+        expect(fileBrowserSource).not.toContain('data-action="up"');
         expect(fileBrowserSource).not.toContain('data-action="refresh"');
         expect(fileBrowserSource).toContain("window.confirm(`文件较大（${formatBytes(fileSize)}），继续后将以只读方式全量预览，无法保存。是否继续？`)");
         expect(fileBrowserSource).toContain("'&full=1'");
         expect(fileBrowserSource).toContain("/fs/write");
+        expect(fileBrowserSource).toContain("/fs/mkdir");
+        expect(fileBrowserSource).toContain('files-entry-parent');
+        expect(fileBrowserSource).toContain('请输入新目录名称');
         expect(fileBrowserSource).toContain('saveBtn.disabled = !isEditablePreview();');
         expect(fileBrowserSource).toContain("if (event.key === 'Enter')");
+        expect(fileBrowserSource).not.toContain("listNode.innerHTML = '<div class=\"files-empty\">当前目录为空。</div>';");
         expect(fileBrowserSource).not.toContain("renderPreviewEmpty(state.currentPath, '请选择左侧文件进行预览。');");
         expect(editorSource).toContain('getValue() {');
         expect(editorBundleSource).toContain('getValue()');
         expect(appStyleSource).toContain('.files-toolbar-path-group');
         expect(appStyleSource).toContain('.files-toolbar-path-input');
+        expect(appStyleSource).toContain('.files-toolbar-meta');
         expect(appStyleSource).toContain('flex-wrap: wrap;');
         expect(appStyleSource).toContain('overflow-wrap: anywhere;');
         expect(appStyleSource).toContain('.files-entry:hover');
@@ -538,6 +582,7 @@ process.exit(2);
         expect(appStyleSource).toContain('grid-template-columns: minmax(0, 1fr) auto;');
         expect(appStyleSource).toContain('.files-editor-host .cm-gutters');
         expect(appStyleSource).toContain('.files-list > .files-empty');
+        expect(appStyleSource).toContain('.files-entry-parent');
         expect(appStyleSource).toContain('overflow-wrap: anywhere;');
         expect(appStyleSource).toContain('text-align: right;');
     });
