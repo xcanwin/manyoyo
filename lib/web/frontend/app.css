@@ -929,33 +929,23 @@ button.tree-toggle:active {
 }
 
 .dir-picker-toolbar {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
     margin-bottom: 10px;
+    padding-left: 0;
+    padding-right: 0;
+    border-bottom: 0;
+    background: transparent;
 }
 
-.dir-picker-current {
-    margin-bottom: 10px;
-    padding: 10px 12px;
-    border: 1px solid rgba(181, 146, 99, 0.38);
-    border-radius: 10px;
-    background: rgba(255, 251, 244, 0.92);
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 12px;
-    word-break: break-all;
+.dir-picker-toolbar-meta {
+    flex-wrap: wrap;
 }
 
 .dir-picker-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.dir-picker-item {
-    width: 100%;
-    text-align: left;
+    max-height: min(52vh, 420px);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: auto;
+    background: rgba(255, 255, 255, 0.86);
 }
 
 .empty {

@@ -33,6 +33,9 @@ manyoyo serve 127.0.0.1:3000 -d
 
 # Stop a specific background server
 manyoyo serve 127.0.0.1:3000 --stop
+
+# Restart a specific background server
+manyoyo serve 127.0.0.1:3000 -U admin -P 'StrongPassword' -d --restart
 ```
 
 ## Auth Parameter Priority

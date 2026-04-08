@@ -657,6 +657,12 @@ process.exit(2);
             expect(appHtml.response.status).toBe(200);
             expect(appHtml.text).not.toContain('id="pickContainerPathBtn"');
             expect(appHtml.text).not.toContain('/app/frontend/path-picker-utils.js');
+            expect(appHtml.text).toContain('id="directoryPickerPathInput"');
+            expect(appHtml.text).toContain('id="directoryPickerVisitBtn"');
+            expect(appHtml.text).toContain('id="directoryPickerMkdirBtn"');
+            expect(appHtml.text).toContain('id="directoryPickerStatus"');
+            expect(appHtml.text).not.toContain('id="directoryPickerUpBtn"');
+            expect(appHtml.text).not.toContain('id="directoryPickerCurrent"');
 
             const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
                 headers: { Cookie: authCookie }
@@ -664,6 +670,10 @@ process.exit(2);
             expect(appScript.response.status).toBe(200);
             expect(appScript.text).toContain('createHostPath.value = picker.currentPath;');
             expect(appScript.text).toContain('createContainerPath.value = picker.currentPath;');
+            expect(appScript.text).toContain("directoryPickerPathInput.value = picker.pathDraft || picker.currentPath || '/'");
+            expect(appScript.text).toContain("setDirectoryPickerStatus('共 ' + picker.entries.length + ' 项');");
+            expect(appScript.text).toContain('<span class="files-entry-title">..</span>');
+            expect(appScript.text).toContain("await api('/api/fs/directories/mkdir', {");
             expect(appScript.text).not.toContain("openDirectoryPicker('container')");
             expect(appScript.text).not.toContain('pickContainerPathBtn');
         } finally {
@@ -1128,6 +1138,50 @@ process.exit(2);
                 currentPath: nestedDir,
                 basePath: alphaDir,
                 parentPath: alphaDir
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should create host directories for web directory picker', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-dir-picker-mkdir-'));
+        const port = await getFreePort();
+        const targetDir = path.join(tempHost, 'created-from-web');
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const mkdirRes = await request(`${baseUrl}/api/fs/directories/mkdir`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ path: targetDir })
+            });
+            expect(mkdirRes.response.status).toBe(200);
+            expect(mkdirRes.json).toEqual(expect.objectContaining({
+                path: targetDir,
+                created: true
+            }));
+            expect(fs.existsSync(targetDir)).toBe(true);
+
+            const listRes = await request(
+                `${baseUrl}/api/fs/directories?path=${encodeURIComponent(tempHost)}`,
+                { headers: { Cookie: authCookie } }
+            );
+            expect(listRes.response.status).toBe(200);
+            expect(listRes.json).toEqual(expect.objectContaining({
+                entries: expect.arrayContaining([
+                    expect.objectContaining({ name: 'created-from-web', path: targetDir })
+                ])
             }));
         } finally {
             if (handle && typeof handle.close === 'function') {

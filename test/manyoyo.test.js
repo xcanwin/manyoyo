@@ -102,10 +102,11 @@ describe('MANYOYO CLI', () => {
             expect(output).toContain('serve 127.0.0.1:3000 -d');
         });
 
-        test('serve --help should include detach and stop option', () => {
+        test('serve --help should include detach stop and restart option', () => {
             const output = execSync(`node ${BIN_PATH} serve --help`, { encoding: 'utf-8' });
             expect(output).toContain('-d, --detach');
             expect(output).toContain('--stop');
+            expect(output).toContain('--restart');
         });
 
         test('serve -d should print generated password when pass not provided', async () => {
@@ -276,6 +277,56 @@ describe('MANYOYO CLI', () => {
                 }
                 if (pidB) {
                     try { process.kill(pidB, 'SIGTERM'); } catch (e) {}
+                }
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        }, 20000);
+
+        test('serve --restart should restart detached instance by listen', async () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-serve-restart-'));
+            const port = await getFreePort();
+            const outputA = execSync(`node ${BIN_PATH} serve 127.0.0.1:${port} -U admin -P 123 -d`, {
+                encoding: 'utf-8',
+                env: { ...process.env, HOME: tempHome }
+            });
+            const pidA = Number((outputA.match(/^PID:\s+(\d+)$/m) || [])[1] || 0);
+
+            try {
+                await waitForHttpReady(port);
+                const restartOutput = execSync(`node ${BIN_PATH} serve 127.0.0.1:${port} -U admin -P 123 -d --restart`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome }
+                });
+                const pidB = Number((restartOutput.match(/^PID:\s+(\d+)$/m) || [])[1] || 0);
+
+                expect(restartOutput).toContain('已停止');
+                expect(restartOutput).toContain(`MANYOYO Web 服务已在后台启动: http://127.0.0.1:${port}`);
+                expect(pidB).toBeGreaterThan(0);
+                expect(pidB).not.toBe(pidA);
+
+                await waitForHttpReady(port);
+                const loginRes = await fetch(`http://127.0.0.1:${port}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'admin', password: '123' })
+                });
+                expect(loginRes.status).toBe(200);
+
+                execSync(`node ${BIN_PATH} serve 127.0.0.1:${port} --stop`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome },
+                    stdio: 'pipe'
+                });
+            } finally {
+                try {
+                    execSync(`node ${BIN_PATH} serve 127.0.0.1:${port} --stop`, {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome },
+                        stdio: 'pipe'
+                    });
+                } catch (e) {}
+                if (pidA) {
+                    try { process.kill(pidA, 'SIGTERM'); } catch (e) {}
                 }
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }

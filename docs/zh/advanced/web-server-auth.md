@@ -33,6 +33,9 @@ manyoyo serve 127.0.0.1:3000 -d
 
 # 停止指定后台服务
 manyoyo serve 127.0.0.1:3000 --stop
+
+# 重启指定后台服务
+manyoyo serve 127.0.0.1:3000 -U admin -P 'StrongPassword' -d --restart
 ```
 
 ## 认证参数优先级

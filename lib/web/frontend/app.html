@@ -220,13 +220,19 @@
                 </header>
                 <div class="modal-body">
                     <div id="directoryPickerTip" class="modal-tip"></div>
-                    <div class="dir-picker-toolbar">
-                        <button type="button" id="directoryPickerUpBtn" class="secondary">上一级</button>
-                        <button type="button" id="directoryPickerSelectBtn">使用当前目录</button>
+                    <div class="files-toolbar dir-picker-toolbar">
+                        <div class="files-toolbar-path-group">
+                            <input type="text" id="directoryPickerPathInput" class="files-toolbar-path-input" value="/" spellcheck="false" />
+                            <button type="button" id="directoryPickerVisitBtn" class="secondary">访问</button>
+                        </div>
+                        <div class="files-toolbar-meta dir-picker-toolbar-meta">
+                            <div id="directoryPickerStatus" class="files-toolbar-status">未加载</div>
+                            <button type="button" id="directoryPickerMkdirBtn" class="secondary">新建目录</button>
+                            <button type="button" id="directoryPickerSelectBtn">使用当前目录</button>
+                        </div>
                     </div>
-                    <div id="directoryPickerCurrent" class="dir-picker-current"></div>
                     <div id="directoryPickerError" class="modal-error" hidden></div>
-                    <div id="directoryPickerList" class="dir-picker-list"></div>
+                    <div id="directoryPickerList" class="dir-picker-list files-list"></div>
                 </div>
             </section>
         </div>

@@ -1128,6 +1128,7 @@ async function setupCommander() {
   ${MANYOYO_NAME} serve 127.0.0.1:3000                启动本机网页服务
   ${MANYOYO_NAME} serve 127.0.0.1:3000 -d             后台启动；未设密码时会打印本次随机密码
   ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P 123 -d  后台启动并监听全部网卡
+  ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P 123 -d --restart  重启指定后台网页服务
   ${MANYOYO_NAME} playwright up mcp-host-headless     启动 playwright MCP 宿主场景（默认/推荐）
   ${MANYOYO_NAME} playwright up cli-host-headless     启动 playwright CLI 宿主场景（供容器内 playwright-cli 附着）
   ${MANYOYO_NAME} run -n test -q tip -q cmd           多次使用静默选项
@@ -1176,6 +1177,7 @@ Notes:
     applyRunStyleOptions(serveCommand, { includeRmOnExit: false, includeWebAuthOptions: true });
     serveCommand.option('-d, --detach', '后台启动网页服务并立即返回');
     serveCommand.option('--stop', '停止后台网页服务；必须显式传入 listen');
+    serveCommand.option('--restart', '重启后台网页服务；必须显式传入 listen');
     serveCommand.action((listen, options) => {
         selectAction('serve', {
             ...options,
@@ -1278,6 +1280,11 @@ Notes:
     const isShowCommandMode = selectedAction === 'config-command';
     const isServerMode = options.server !== undefined;
     const isServerStopMode = Boolean(selectedAction === 'serve' && options.stop);
+    const isServerRestartMode = Boolean(selectedAction === 'serve' && options.restart);
+
+    if (isServerStopMode && isServerRestartMode) {
+        throw new Error('serve --stop 与 --restart 不能同时使用');
+    }
 
     const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin']);
     if (isServerStopMode) {
@@ -1472,6 +1479,7 @@ Notes:
         isShowCommandMode,
         isServerMode,
         isServerStop: isServerStopMode,
+        isServerRestart: isServerRestartMode,
         isServerDetach: Boolean(selectedAction === 'serve' && options.detach),
         isServerListenSpecified: Boolean(isServerMode && options.server !== true),
         isPluginMode: false
@@ -1502,6 +1510,7 @@ function createRuntimeContext(modeState = {}) {
         rmOnExit: RM_ON_EXIT,
         serverMode: Boolean(modeState.isServerMode),
         serverStop: Boolean(modeState.isServerStop),
+        serverRestart: Boolean(modeState.isServerRestart),
         serverDetach: Boolean(modeState.isServerDetach),
         serverListenSpecified: Boolean(modeState.isServerListenSpecified),
         serverHost: SERVER_HOST,
@@ -1553,7 +1562,7 @@ function buildDetachedServeArgv(argv) {
     const result = [];
     for (let i = 0; i < argv.length; i++) {
         const arg = String(argv[i] || '');
-        if (arg === '-d' || arg === '--detach') {
+        if (arg === '-d' || arg === '--detach' || arg === '--restart') {
             continue;
         }
         result.push(arg);
@@ -1663,15 +1672,16 @@ function writeServePidFile(runtime, serverHandle) {
     return pidFile.path;
 }
 
-async function stopServeProcess(runtime) {
+async function stopServeProcess(runtime, options = {}) {
+    const commandName = options.commandName || '--stop';
     if (!runtime || !runtime.serverListenSpecified) {
-        throw new Error('serve --stop 必须显式传入 listen，例如 manyoyo serve 127.0.0.1:3000 --stop');
+        throw new Error(`serve ${commandName} 必须显式传入 listen，例如 manyoyo serve 127.0.0.1:3000 ${commandName}`);
     }
     const target = getServePidTarget(runtime.serverHost, runtime.serverPort);
     if (!target) {
         const label = buildServeListenLabel(runtime.serverHost, runtime.serverPort);
         console.log(`${YELLOW}⚠️  未发现运行中的 serve 实例: ${label}${NC}`);
-        return;
+        return false;
     }
     try {
         process.kill(target.pid, 'SIGTERM');
@@ -1692,6 +1702,7 @@ async function stopServeProcess(runtime) {
     }
     removeServePidFile(target.path);
     console.log(`${GREEN}✅ 已停止 serve: ${target.listen} (pid: ${target.pid})${NC}`);
+    return true;
 }
 
 function relaunchServeDetached(runtime) {
@@ -1711,7 +1722,7 @@ function relaunchServeDetached(runtime) {
     });
     child.unref();
 
-    console.log(`${GREEN}✅ serve 已转入后台运行${NC}`);
+    console.log(`${GREEN}✅ MANYOYO Web 服务已在后台启动: http://${buildServeListenLabel(runtime.serverHost, runtime.serverPort)}${NC}`);
     console.log(`PID: ${child.pid}`);
     console.log(`日志: ${serveLog.path}`);
     console.log(`登录用户名: ${runtime.serverAuthUser}`);
@@ -2063,6 +2074,9 @@ async function main() {
             if (runtime.serverStop) {
                 await stopServeProcess(runtime);
                 return;
+            }
+            if (runtime.serverRestart) {
+                await stopServeProcess(runtime, { commandName: '--restart' });
             }
             if (runtime.serverDetach) {
                 relaunchServeDetached(runtime);

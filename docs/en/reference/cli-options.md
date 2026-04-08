@@ -63,6 +63,7 @@ These commands share the same core runtime options:
 | `-P, --pass <password>` | Login password; randomly generated at startup if omitted |
 | `-d, --detach` | Start the web server in background and return immediately; if no password is set, prints the generated password for this run |
 | `--stop` | Stop a background web server; `[listen]` is required and targets that instance exactly |
+| `--restart` | Restart a background web server; `[listen]` is required, and it stops the matched instance before starting with current arguments |
 
 ### `build`
 
