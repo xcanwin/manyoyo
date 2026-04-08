@@ -311,12 +311,24 @@ describe('Web Server Auth Gateway', () => {
         const port = await getFreePort();
         const fakeDocker = path.join(tempHost, 'fake-docker.js');
         const readmeStore = path.join(tempHost, 'README.md');
+        const workspaceStore = path.join(tempHost, 'workspace');
         fs.writeFileSync(readmeStore, '# hello\nthis is readme\n', 'utf-8');
+        fs.mkdirSync(workspaceStore, { recursive: true });
         fs.writeFileSync(fakeDocker, `#!/usr/bin/env node
 const fs = require('fs');
+const path = require('path');
 const args = process.argv.slice(2);
 const command = args[4] || '';
 const readmeStore = ${JSON.stringify(readmeStore)};
+const workspaceStore = ${JSON.stringify(workspaceStore)};
+function toHostWorkspacePath(targetPath) {
+    const requested = String(targetPath || '').trim();
+    if (!requested.startsWith('/workspace')) {
+        throw new Error('unexpected workspace path: ' + requested);
+    }
+    const relative = requested.slice('/workspace'.length).replace(/^[/]+/, '');
+    return relative ? path.join(workspaceStore, relative) : workspaceStore;
+}
 if (args[0] !== 'exec') {
     process.stderr.write('unexpected docker args');
     process.exit(1);
@@ -366,11 +378,12 @@ if (command.includes('__MANYOYO_FS_MKDIR__')) {
         process.exit(4);
     }
     const targetPath = JSON.parse(matched[1]);
-    fs.mkdirSync(targetPath, { recursive: true });
-    const stat = fs.statSync(targetPath);
+    const hostTargetPath = toHostWorkspacePath(targetPath);
+    fs.mkdirSync(hostTargetPath, { recursive: true });
+    const stat = fs.statSync(hostTargetPath);
     process.stdout.write(JSON.stringify({
         path: targetPath,
-        name: require('path').basename(targetPath),
+        name: path.basename(targetPath),
         kind: 'directory',
         size: 0,
         mtimeMs: stat.mtimeMs,
