@@ -1667,22 +1667,6 @@ body.command-mode .msg.origin-agent .bubble {
     gap: 10px;
 }
 
-.trace-summary {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.trace-summary-line {
-    padding: 7px 10px;
-    border-radius: 8px;
-    border: 1px dashed rgba(181, 146, 99, 0.45);
-    background: rgba(255, 250, 242, 0.82);
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.45;
-}
-
 .trace-flow {
     display: flex;
     flex-direction: column;
@@ -1722,6 +1706,11 @@ body.command-mode .msg.origin-agent .bubble {
     border-left-color: var(--line-strong);
 }
 
+.trace-card.trace-card-residual {
+    background: rgba(255, 250, 242, 0.86);
+    box-shadow: none;
+}
+
 .trace-card-summary {
     list-style: none;
     display: flex;
@@ -1733,36 +1722,6 @@ body.command-mode .msg.origin-agent .bubble {
 
 details.trace-card > .trace-card-summary {
     cursor: pointer;
-}
-
-.trace-card.trace-card-compact {
-    border-left-width: 2px;
-    border-radius: 999px;
-    background: rgba(255, 251, 245, 0.78);
-    box-shadow: none;
-}
-
-.trace-card.trace-card-compact .trace-card-summary {
-    padding: 5px 10px;
-    gap: 7px;
-}
-
-.trace-card.trace-card-compact .trace-card-badge {
-    min-width: 0;
-    padding: 2px 6px;
-    background: rgba(31, 26, 20, 0.06);
-    font-size: 10px;
-}
-
-.trace-card.trace-card-compact .trace-card-title {
-    font-size: 11px;
-    font-weight: 500;
-    color: #6e6256;
-}
-
-.trace-card.trace-card-compact .trace-card-phase {
-    font-size: 10px;
-    color: #8a7d70;
 }
 
 .trace-card-summary::-webkit-details-marker {

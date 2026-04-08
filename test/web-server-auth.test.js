@@ -520,8 +520,8 @@ process.exit(2);
         }
     });
 
-    test('should ship compact trace rendering for completed toolchain events', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-compact-assets-'));
+    test('should ship unified trace card rendering for toolchain events', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-card-assets-'));
         const port = await getFreePort();
         let handle = null;
 
@@ -534,18 +534,21 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(appScript.response.status).toBe(200);
-            expect(appScript.text).toContain('function shouldCompactTraceEvent(traceEvent)');
-            expect(appScript.text).toContain("return kind === 'command' || kind === 'mcp' || kind === 'tool';");
-            expect(appScript.text).toContain("trace-tone-' + resolveTraceTone(event) + (compact ? ' trace-card-compact' : '')");
-            expect(appScript.text).toContain('title.textContent = compact ? buildCompactTraceText(event)');
+            expect(appScript.text).toContain("card.className = 'trace-card trace-tone-' + resolveTraceTone(event);");
+            expect(appScript.text).toContain("card.className = 'trace-card trace-tone-' + resolveResidualTraceTone(line) + ' trace-card-residual';");
+            expect(appScript.text).toContain("bodyParts.push({ label: '命令', value: event.command });");
+            expect(appScript.text).toContain("bodyParts.push({ label: '退出码', value: String(event.exitCode) });");
+            expect(appScript.text).toContain("bodyParts.push({ label: '工具', value: [event.server, event.tool].filter(Boolean).join('.') });");
+            expect(appScript.text).not.toContain('function shouldCompactTraceEvent(traceEvent)');
+            expect(appScript.text).not.toContain('trace-card-compact');
 
             const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
                 headers: { Cookie: authCookie }
             });
             expect(appStyle.response.status).toBe(200);
-            expect(appStyle.text).toContain('.trace-card.trace-card-compact');
-            expect(appStyle.text).toContain('.trace-card.trace-card-compact .trace-card-summary');
-            expect(appStyle.text).toContain('.trace-card.trace-card-compact .trace-card-title');
+            expect(appStyle.text).toContain('details.trace-card > .trace-card-summary');
+            expect(appStyle.text).toContain('.trace-card.trace-card-residual');
+            expect(appStyle.text).not.toContain('.trace-card.trace-card-compact');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
