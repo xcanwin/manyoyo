@@ -575,6 +575,7 @@ process.exit(2);
                 default: {
                     agentId: 'default',
                     agentName: 'AGENT 1',
+                    createdAt: '2026-03-30T00:00:00.000Z',
                     updatedAt: '2026-03-30T00:00:00.000Z',
                     messages: [
                         {
@@ -592,6 +593,7 @@ process.exit(2);
                 'agent-2': {
                     agentId: 'agent-2',
                     agentName: 'AGENT 2',
+                    createdAt: '2026-03-30T00:10:00.000Z',
                     updatedAt: '2026-03-30T00:10:00.000Z',
                     messages: [
                         {
@@ -667,6 +669,11 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(afterCreate.response.status).toBe(200);
+            expect(afterCreate.json.sessions[0]).toEqual(expect.objectContaining({
+                name: 'demo~agent-3',
+                agentId: 'agent-3',
+                agentName: 'AGENT 3'
+            }));
             expect(afterCreate.json.sessions).toEqual(expect.arrayContaining([
                 expect.objectContaining({
                     name: 'demo~agent-3',
@@ -676,6 +683,117 @@ process.exit(2);
                     messageCount: 0
                 })
             ]));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should sort latest agent by creation time instead of last updated time', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-created-order-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        const historyPath = path.join(webHistoryDir, 'demo.json');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(historyPath, JSON.stringify({
+            containerName: 'demo',
+            applied: {
+                containerName: 'demo',
+                hostPath: tempHost,
+                containerPath: '/workspace/demo'
+            },
+            agents: {
+                default: {
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    createdAt: '2026-03-30T00:00:00.000Z',
+                    updatedAt: '2026-03-30T00:30:00.000Z',
+                    messages: []
+                },
+                'agent-2': {
+                    agentId: 'agent-2',
+                    agentName: 'AGENT 2',
+                    createdAt: '2026-03-30T00:10:00.000Z',
+                    updatedAt: '2026-03-30T01:00:00.000Z',
+                    messages: []
+                },
+                'agent-3': {
+                    agentId: 'agent-3',
+                    agentName: 'AGENT 3',
+                    createdAt: '2026-03-30T00:20:00.000Z',
+                    updatedAt: '2026-03-30T00:40:00.000Z',
+                    messages: []
+                }
+            }
+        }, null, 2), 'utf-8');
+
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: name => name === 'demo',
+                dockerExecArgs: args => {
+                    if (Array.isArray(args) && args[0] === 'ps') {
+                        return 'demo\tUp 2 minutes\tlocalhost/xcanwin/manyoyo:1.0.0-common\n';
+                    }
+                    return '';
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const sessionsRes = await request(`${baseUrl}/api/sessions`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(sessionsRes.response.status).toBe(200);
+            expect(sessionsRes.json.sessions.slice(0, 3).map(function (session) {
+                return session.name;
+            })).toEqual(['demo~agent-3', 'demo~agent-2', 'demo']);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should expose AGENT-focused labels, created-order fallback, and create entry in web shell assets', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-label-assets-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appHtml = await request(`${baseUrl}/`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appHtml.response.status).toBe(200);
+            expect(appHtml.text).toContain('id="openCreateMenuBtn" class="secondary">新建容器</button>');
+            expect(appHtml.text.indexOf('id="openCreateMenuBtn"')).toBeLessThan(appHtml.text.indexOf('id="removeBtn"'));
+            expect(appHtml.text.indexOf('id="removeBtn"')).toBeLessThan(appHtml.text.indexOf('id="addAgentBtn"'));
+            expect(appHtml.text).toContain('id="removeBtn" class="danger">删除容器</button>');
+            expect(appHtml.text).toContain('id="addAgentBtn" class="secondary">新建 AGENT</button>');
+            expect(appHtml.text).toContain('id="removeAllBtn" class="danger">删除 AGENT</button>');
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).toContain('creatingAgent: false');
+            expect(appScript.text).toContain("addAgentBtn.textContent = state.creatingAgent ? '新建中...' : '新建 AGENT';");
+            expect(appScript.text).toContain("const openCreateMenuBtn = document.getElementById('openCreateMenuBtn');");
+            expect(appScript.text).toContain('openCreateMenuBtn.disabled = state.createLoading || state.createSubmitting;');
+            expect(appScript.text).toContain("openCreateMenuBtn.addEventListener('click', function () {");
+            expect(appScript.text).toContain('function findLatestCreatedSessionName(sessions, preferredContainerName) {');
+            expect(appScript.text).toContain('state.active = findLatestCreatedSessionName(state.sessions, preferredContainerName) || state.sessions[0].name;');
+            expect(appScript.text).toContain('preferredContainerName: targetContainerName,');
+            expect(appScript.text).toContain("sendState.textContent = '正在新建 AGENT…';");
+            expect(appScript.text).toContain("const yes = confirm('确认删除 AGENT ' + targetAgent + ' ?');");
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
