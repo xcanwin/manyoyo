@@ -1251,11 +1251,26 @@ body.mobile-actions-open .header-actions {
 
 .files-preview-head {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
     padding: 12px 14px;
     border-bottom: 1px solid var(--line);
     background: rgba(255, 251, 244, 0.96);
+}
+
+.files-preview-head-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.files-preview-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .files-preview-title {

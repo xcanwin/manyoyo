@@ -290,6 +290,7 @@ describe('Web Server Auth Gateway', () => {
             expect(authedEditorBundle.response.status).toBe(200);
             expect(authedEditorBundle.response.headers.get('content-type')).toContain('application/javascript');
             expect(authedEditorBundle.text).toContain('window.ManyoyoCodeEditor');
+            expect(authedEditorBundle.text).toContain('getValue()');
 
             const authedStyle = await request(`${baseUrl}/app/frontend/markdown.css`, {
                 headers: { Cookie: authCookie }
@@ -309,9 +310,13 @@ describe('Web Server Auth Gateway', () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-container-fs-'));
         const port = await getFreePort();
         const fakeDocker = path.join(tempHost, 'fake-docker.js');
+        const readmeStore = path.join(tempHost, 'README.md');
+        fs.writeFileSync(readmeStore, '# hello\nthis is readme\n', 'utf-8');
         fs.writeFileSync(fakeDocker, `#!/usr/bin/env node
+const fs = require('fs');
 const args = process.argv.slice(2);
 const command = args[4] || '';
+const readmeStore = ${JSON.stringify(readmeStore)};
 if (args[0] !== 'exec') {
     process.stderr.write('unexpected docker args');
     process.exit(1);
@@ -328,13 +333,29 @@ if (command.includes('__MANYOYO_FS_LIST__')) {
     process.exit(0);
 }
 if (command.includes('__MANYOYO_FS_READ__')) {
+    const readmeContent = fs.readFileSync(readmeStore, 'utf-8');
     process.stdout.write(JSON.stringify({
         path: '/workspace/README.md',
         kind: 'text',
-        size: 23,
+        size: Buffer.byteLength(readmeContent, 'utf8'),
         language: 'markdown',
-        content: '# hello\\nthis is readme\\n',
+        content: readmeContent,
         truncated: false
+    }));
+    process.exit(0);
+}
+if (command.includes('__MANYOYO_FS_WRITE__')) {
+    const matched = command.match(/const nextContent = ([\\s\\S]+?);\\n\\ntry \\{/);
+    if (!matched) {
+        process.stderr.write('missing content');
+        process.exit(3);
+    }
+    const readmeContent = JSON.parse(matched[1]);
+    fs.writeFileSync(readmeStore, readmeContent, 'utf-8');
+    process.stdout.write(JSON.stringify({
+        path: '/workspace/README.md',
+        saved: true,
+        size: Buffer.byteLength(readmeContent, 'utf8')
     }));
     process.exit(0);
 }
@@ -375,7 +396,38 @@ process.exit(2);
                 kind: 'text',
                 language: 'markdown',
                 content: '# hello\nthis is readme\n',
-                truncated: false
+                truncated: false,
+                editable: true
+            }));
+
+            const writeRes = await request(`${baseUrl}/api/sessions/test/fs/write`, {
+                method: 'PUT',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    path: '/workspace/README.md',
+                    content: '# changed\nsaved\n'
+                })
+            });
+            expect(writeRes.response.status).toBe(200);
+            expect(writeRes.json).toEqual(expect.objectContaining({
+                path: '/workspace/README.md',
+                saved: true
+            }));
+
+            const readAfterWriteRes = await request(`${baseUrl}/api/sessions/test/fs/read?path=${encodeURIComponent('/workspace/README.md')}&full=1`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(readAfterWriteRes.response.status).toBe(200);
+            expect(readAfterWriteRes.json).toEqual(expect.objectContaining({
+                path: '/workspace/README.md',
+                kind: 'text',
+                language: 'markdown',
+                content: '# changed\nsaved\n',
+                truncated: false,
+                editable: true
             }));
         } finally {
             if (handle && typeof handle.close === 'function') {
@@ -383,6 +435,93 @@ process.exit(2);
             }
             fs.rmSync(tempHost, { recursive: true, force: true });
         }
+    });
+
+    test('should read large json files via web api without truncating container json payload', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-container-fs-large-json-'));
+        const port = await getFreePort();
+        const fakeDocker = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(fakeDocker, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+const command = args[4] || '';
+const largeJsonText = JSON.stringify({
+    lockfileVersion: 3,
+    packages: {
+        '': {
+            name: 'manyoyo',
+            version: '1.0.0'
+        }
+    },
+    filler: 'x'.repeat(24000)
+}, null, 2);
+if (args[0] !== 'exec') {
+    process.stderr.write('unexpected docker args');
+    process.exit(1);
+}
+if (command.includes('__MANYOYO_FS_READ__')) {
+    process.stdout.write(JSON.stringify({
+        path: '/workspace/package-lock.json',
+        kind: 'text',
+        size: largeJsonText.length,
+        language: 'json',
+        content: largeJsonText,
+        truncated: false
+    }));
+    process.exit(0);
+}
+process.stderr.write('unknown command');
+process.exit(2);
+`, 'utf-8');
+        fs.chmodSync(fakeDocker, 0o755);
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDocker,
+                containerExists: () => true,
+                getContainerStatus: () => 'running'
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const readRes = await request(`${baseUrl}/api/sessions/test/fs/read?path=${encodeURIComponent('/workspace/package-lock.json')}`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(readRes.response.status).toBe(200);
+            expect(readRes.json).toEqual(expect.objectContaining({
+                path: '/workspace/package-lock.json',
+                kind: 'text',
+                language: 'json',
+                truncated: false
+            }));
+            expect(String(readRes.json.content || '')).toContain('"lockfileVersion": 3');
+            expect(String(readRes.json.content || '').length).toBeGreaterThan(20000);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should keep web file preview limit large enough for package-lock style text files', () => {
+        const serverSource = fs.readFileSync(path.join(__dirname, '../lib/web/server.js'), 'utf-8');
+        expect(serverSource).toContain('const WEB_FILE_PREVIEW_MAX_BYTES = 512 * 1024;');
+        expect(serverSource).toContain('const WEB_FILE_EDIT_MAX_BYTES = 2 * 1024 * 1024;');
+    });
+
+    test('should expose editable-small-file and readonly-large-file behavior in file browser assets', () => {
+        const fileBrowserSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/file-browser.js'), 'utf-8');
+        const editorSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/codemirror-entry.js'), 'utf-8');
+        const editorBundleSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/codemirror.bundle.js'), 'utf-8');
+        expect(fileBrowserSource).toContain("const FILE_EDIT_MAX_BYTES = 2 * 1024 * 1024;");
+        expect(fileBrowserSource).toContain('data-action="save" disabled>保存</button>');
+        expect(fileBrowserSource).toContain("window.confirm(`文件较大（${formatBytes(fileSize)}），继续后将以只读方式全量预览，无法保存。是否继续？`)");
+        expect(fileBrowserSource).toContain("'&full=1'");
+        expect(fileBrowserSource).toContain("/fs/write");
+        expect(fileBrowserSource).toContain('saveBtn.disabled = !isEditablePreview();');
+        expect(editorSource).toContain('getValue() {');
+        expect(editorBundleSource).toContain('getValue()');
     });
 
     test('should keep sidebar tree bodies hidden when hidden attribute is set', async () => {
