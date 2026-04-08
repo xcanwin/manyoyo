@@ -971,6 +971,115 @@ process.exit(2);
         }
     });
 
+    test('should not fallback non-default agent updatedAt to container history when creating a new agent', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-updated-fallback-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        const historyPath = path.join(webHistoryDir, 'demo.json');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(historyPath, JSON.stringify({
+            containerName: 'demo',
+            updatedAt: '2026-03-30T00:20:00.000Z',
+            applied: {
+                containerName: 'demo',
+                hostPath: tempHost,
+                containerPath: '/workspace/demo'
+            },
+            agents: {
+                default: {
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    createdAt: '2026-03-30T00:00:00.000Z',
+                    updatedAt: '2026-03-30T00:10:00.000Z',
+                    messages: []
+                },
+                'agent-2': {
+                    agentId: 'agent-2',
+                    agentName: 'AGENT 2',
+                    createdAt: '2026-03-30T00:10:00.000Z',
+                    updatedAt: '2026-03-30T00:15:00.000Z',
+                    messages: []
+                },
+                'agent-3': {
+                    agentId: 'agent-3',
+                    agentName: 'AGENT 3',
+                    createdAt: '2026-03-30T00:20:00.000Z',
+                    updatedAt: null,
+                    messages: []
+                },
+                'agent-4': {
+                    agentId: 'agent-4',
+                    agentName: 'AGENT 4',
+                    createdAt: '2026-03-30T00:30:00.000Z',
+                    updatedAt: '2026-03-30T00:35:00.000Z',
+                    messages: []
+                }
+            }
+        }, null, 2), 'utf-8');
+
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: name => name === 'demo',
+                dockerExecArgs: args => {
+                    if (Array.isArray(args) && args[0] === 'ps') {
+                        return 'demo\tUp 2 minutes\tlocalhost/xcanwin/manyoyo:1.0.0-common\n';
+                    }
+                    return '';
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const createdAgent = await request(`${baseUrl}/api/sessions/demo/agents`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+            expect(createdAgent.response.status).toBe(200);
+            expect(createdAgent.json).toEqual(expect.objectContaining({
+                name: 'demo~agent-5',
+                agentId: 'agent-5',
+                agentName: 'AGENT 5'
+            }));
+
+            const sessionsRes = await request(`${baseUrl}/api/sessions`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(sessionsRes.response.status).toBe(200);
+
+            const sessions = Array.isArray(sessionsRes.json && sessionsRes.json.sessions)
+                ? sessionsRes.json.sessions
+                : [];
+            const agent3 = sessions.find(item => item && item.name === 'demo~agent-3');
+            const agent4 = sessions.find(item => item && item.name === 'demo~agent-4');
+            const agent5 = sessions.find(item => item && item.name === 'demo~agent-5');
+
+            expect(agent3).toEqual(expect.objectContaining({
+                name: 'demo~agent-3',
+                updatedAt: null
+            }));
+            expect(agent4).toEqual(expect.objectContaining({
+                name: 'demo~agent-4',
+                updatedAt: '2026-03-30T00:35:00.000Z'
+            }));
+            expect(agent5).toEqual(expect.objectContaining({
+                name: 'demo~agent-5',
+                agentName: 'AGENT 5'
+            }));
+            expect(typeof agent5.updatedAt).toBe('string');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should expose AGENT-focused labels, created-order fallback, and create entry in web shell assets', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-label-assets-'));
         const port = await getFreePort();
