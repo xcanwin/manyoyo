@@ -2034,6 +2034,126 @@ process.exit(0);
         }
     });
 
+    test('should persist pending prompt and trace during agent streaming for refresh recovery', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-refresh-recovery-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  process.stdout.write('{"type":"system","subtype":"init","session_id":"claude-session"}\\n');
+  setTimeout(() => {
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"第一段回复。"}]}}\\n');
+  }, 40);
+  setTimeout(() => {
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"第二段回复。"}]}}\\n');
+  }, 120);
+  setTimeout(() => {
+    process.stdout.write('{"type":"result","subtype":"success","session_id":"claude-session"}\\n');
+    process.exit(0);
+  }, 220);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            let checkedPendingHistory = false;
+            let checkedStreamingReply = false;
+
+            const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: '请持续输出' })
+            }, async payload => {
+                if (!checkedPendingHistory && payload && payload.type === 'meta') {
+                    checkedPendingHistory = true;
+                    const historyRes = await request(`${baseUrl}/api/sessions/demo/messages`, {
+                        headers: { Cookie: authCookie }
+                    });
+                    expect(historyRes.response.status).toBe(200);
+                    const pendingUser = (historyRes.json.messages || []).find(message => message && message.role === 'user');
+                    expect(pendingUser).toEqual(expect.objectContaining({
+                        content: '请持续输出',
+                        pending: true,
+                        mode: 'agent'
+                    }));
+                    const pendingTrace = (historyRes.json.messages || []).find(message => message && message.streamTrace === true);
+                    expect(pendingTrace).toEqual(expect.objectContaining({
+                        pending: true,
+                        streamTrace: true
+                    }));
+                    expect(String(pendingTrace.content || '')).toContain('[执行过程]');
+                }
+                if (!checkedStreamingReply && payload && payload.type === 'content_delta' && payload.content === '第一段回复。') {
+                    checkedStreamingReply = true;
+                    const historyRes = await request(`${baseUrl}/api/sessions/demo/messages`, {
+                        headers: { Cookie: authCookie }
+                    });
+                    expect(historyRes.response.status).toBe(200);
+                    const streamingReply = (historyRes.json.messages || []).find(message => message && message.streamingReply === true);
+                    expect(streamingReply).toEqual(expect.objectContaining({
+                        content: '第一段回复。',
+                        pending: true,
+                        mode: 'agent',
+                        role: 'assistant',
+                        streamingReply: true
+                    }));
+                }
+            });
+
+            expect(streamRes.response.status).toBe(200);
+            expect(checkedPendingHistory).toBe(true);
+            expect(checkedStreamingReply).toBe(true);
+
+            const finalHistoryRes = await request(`${baseUrl}/api/sessions/demo/messages`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(finalHistoryRes.response.status).toBe(200);
+            expect((finalHistoryRes.json.messages || []).some(message => message && message.pending === true)).toBe(false);
+            expect((finalHistoryRes.json.messages || []).some(message => message && message.streamingReply === true)).toBe(false);
+            const finalAssistant = (finalHistoryRes.json.messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
+            expect(finalAssistant).toEqual(expect.objectContaining({
+                content: '第二段回复。'
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should stop running agent stream on demand', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-stop-'));
         const port = await getFreePort();
