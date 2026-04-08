@@ -371,13 +371,17 @@ textarea:focus-visible {
     min-height: 340px;
     border: 1px solid var(--line);
     border-radius: 10px;
+    overflow: hidden;
     background: #fffdfa;
-    color: var(--text);
-    font-family: var(--font-mono);
+}
+
+.config-editor .cm-editor {
+    height: 340px;
     font-size: 13px;
-    line-height: 1.5;
-    padding: 12px;
-    resize: vertical;
+}
+
+.config-editor .cm-scroller {
+    overflow: auto;
 }
 
 .form-grid {
