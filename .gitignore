@@ -19,3 +19,4 @@ docker/lib/
 coverage/
 nohup.out
 libpod/
+dist/

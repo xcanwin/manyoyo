@@ -32,6 +32,9 @@
     "scripts": {
         "dev:release": "node scripts/dev-release.js",
         "build:web-editor": "node scripts/build-web-code-editor.js",
+        "electron:dev": "node scripts/electron-dev.js",
+        "electron:pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
+        "electron:pack:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir zip --x64 --arm64",
         "install-link": "npm link",
         "test": "jest --coverage",
         "test:unit": "jest test/",
@@ -80,6 +83,8 @@
         "@codemirror/state": "^6.6.0",
         "@codemirror/view": "^6.41.0",
         "codemirror": "^6.0.2",
+        "electron": "^41.2.0",
+        "electron-builder": "^26.8.1",
         "jest": "^30.3.0",
         "vitepress": "^1.6.4"
     },
@@ -89,6 +94,34 @@
         "minimatch": "^10.2.2",
         "test-exclude": "^8.0.0",
         "vite": "^6.4.2"
+    },
+    "build": {
+        "appId": "io.github.xcanwin.manyoyo.desktop",
+        "productName": "MANYOYO",
+        "directories": {
+            "output": "dist/electron"
+        },
+        "files": [
+            "apps/electron/**/*",
+            "bin/**/*",
+            "lib/**/*",
+            "package.json",
+            "README.md",
+            "LICENSE",
+            "manyoyo.example.json"
+        ],
+        "asar": true,
+        "extraMetadata": {
+            "main": "apps/electron/main.cjs"
+        },
+        "mac": {
+            "category": "public.app-category.developer-tools",
+            "artifactName": "MANYOYO-${version}-${arch}.${ext}",
+            "target": [
+                "dir",
+                "zip"
+            ]
+        }
     },
     "jest": {
         "testMatch": [
