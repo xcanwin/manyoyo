@@ -255,10 +255,14 @@ describe('Web Server Auth Gateway', () => {
             expect(unauthVendor.response.status).toBe(401);
             const unauthRenderer = await request(`${baseUrl}/app/frontend/markdown-renderer.js`);
             expect(unauthRenderer.response.status).toBe(401);
+            const unauthBridge = await request(`${baseUrl}/app/frontend/platform-bridge.js`);
+            expect(unauthBridge.response.status).toBe(401);
             const unauthStyle = await request(`${baseUrl}/app/frontend/markdown.css`);
             expect(unauthStyle.response.status).toBe(401);
             const unauthFileBrowser = await request(`${baseUrl}/app/frontend/file-browser.js`);
             expect(unauthFileBrowser.response.status).toBe(401);
+            const unauthApiClient = await request(`${baseUrl}/app/frontend/api-client.js`);
+            expect(unauthApiClient.response.status).toBe(401);
             const unauthEditorBundle = await request(`${baseUrl}/app/frontend/codemirror.bundle.js`);
             expect(unauthEditorBundle.response.status).toBe(401);
 
@@ -277,12 +281,26 @@ describe('Web Server Auth Gateway', () => {
             expect(authedRenderer.response.headers.get('content-type')).toContain('application/javascript');
             expect(authedRenderer.text).toContain('window.ManyoyoMarkdown');
 
+            const authedBridge = await request(`${baseUrl}/app/frontend/platform-bridge.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(authedBridge.response.status).toBe(200);
+            expect(authedBridge.response.headers.get('content-type')).toContain('application/javascript');
+            expect(authedBridge.text).toContain('window.ManyoyoPlatform');
+
             const authedFileBrowser = await request(`${baseUrl}/app/frontend/file-browser.js`, {
                 headers: { Cookie: authCookie }
             });
             expect(authedFileBrowser.response.status).toBe(200);
             expect(authedFileBrowser.response.headers.get('content-type')).toContain('application/javascript');
             expect(authedFileBrowser.text).toContain('window.ManyoyoFileBrowser');
+
+            const authedApiClient = await request(`${baseUrl}/app/frontend/api-client.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(authedApiClient.response.status).toBe(200);
+            expect(authedApiClient.response.headers.get('content-type')).toContain('application/javascript');
+            expect(authedApiClient.text).toContain('window.ManyoyoApiClient');
 
             const authedEditorBundle = await request(`${baseUrl}/app/frontend/codemirror.bundle.js`, {
                 headers: { Cookie: authCookie }
@@ -565,6 +583,8 @@ process.exit(2);
         const editorSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/codemirror-entry.js'), 'utf-8');
         const editorBundleSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/codemirror.bundle.js'), 'utf-8');
         const appHtmlSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/app.html'), 'utf-8');
+        const platformSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/platform-bridge.js'), 'utf-8');
+        const apiClientSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/api-client.js'), 'utf-8');
         const appSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/app.js'), 'utf-8');
         const appStyleSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/app.css'), 'utf-8');
         expect(fileBrowserSource).toContain("const FILE_EDIT_MAX_BYTES = 2 * 1024 * 1024;");
@@ -574,7 +594,8 @@ process.exit(2);
         expect(fileBrowserSource).toContain('data-action="mkdir">新建目录</button>');
         expect(fileBrowserSource).not.toContain('data-action="up"');
         expect(fileBrowserSource).not.toContain('data-action="refresh"');
-        expect(fileBrowserSource).toContain("window.confirm(`文件较大（${formatBytes(fileSize)}），继续后将以只读方式全量预览，无法保存。是否继续？`)");
+        expect(fileBrowserSource).toContain("const platform = options && options.platform && typeof options.platform === 'object'");
+        expect(fileBrowserSource).toContain("const yes = platform.confirm(`文件较大（${formatBytes(fileSize)}），继续后将以只读方式全量预览，无法保存。是否继续？`)");
         expect(fileBrowserSource).toContain("'&full=1'");
         expect(fileBrowserSource).toContain("/fs/write");
         expect(fileBrowserSource).toContain("/fs/mkdir");
@@ -586,9 +607,17 @@ process.exit(2);
         expect(fileBrowserSource).not.toContain("renderPreviewEmpty(state.currentPath, '请选择左侧文件进行预览。');");
         expect(editorSource).toContain('getValue() {');
         expect(editorBundleSource).toContain('getValue()');
+        expect(platformSource).toContain('window.ManyoyoPlatform = platform;');
+        expect(platformSource).toContain('openExternal(url) {');
+        expect(apiClientSource).toContain('window.ManyoyoApiClient');
+        expect(apiClientSource).toContain('async function json(url, options) {');
         expect(appHtmlSource).toContain('<div id="configEditor" class="config-editor"></div>');
         expect(appHtmlSource).not.toContain('<textarea id="configEditor"');
+        expect(appHtmlSource).toContain('/app/frontend/platform-bridge.js');
+        expect(appHtmlSource).toContain('/app/frontend/api-client.js');
         expect(appSource).toContain('function ensureConfigCodeEditor() {');
+        expect(appSource).toContain('const platform = window.ManyoyoPlatform || {');
+        expect(appSource).toContain('const apiClient = window.ManyoyoApiClient || null;');
         expect(appSource).toContain("state.configEditor = window.ManyoyoCodeEditor.create(configEditor, {");
         expect(appSource).toContain("language: 'javascript'");
         expect(appSource).toContain('body: JSON.stringify({ raw: getConfigEditorValue() })');
@@ -1141,7 +1170,7 @@ process.exit(2);
             expect(appScript.text).toContain('preferredContainerName: targetContainerName,');
             expect(appScript.text).toContain("preferredName: fallbackSessionName || '',");
             expect(appScript.text).toContain("sendState.textContent = '正在新建 AGENT…';");
-            expect(appScript.text).toContain("const yes = confirm('确认删除 AGENT ' + targetAgent + ' ?');");
+            expect(appScript.text).toContain("const yes = platform.confirm('确认删除 AGENT ' + targetAgent + ' ?');");
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
