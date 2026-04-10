@@ -16,8 +16,8 @@
         <aside class="sidebar">
             <div class="sidebar-top">
                 <div class="brand-wrap">
-                    <div class="brand">MANYOYO Web</div>
-                    <div class="brand-sub">Container Session Console</div>
+                    <div class="brand" id="appBrand">MANYOYO Web</div>
+                    <div class="brand-sub" id="appBrandSub">Container Session Console</div>
                 </div>
                 <div class="sidebar-actions">
                     <button type="button" id="openConfigBtn" class="secondary">配置</button>
@@ -91,6 +91,29 @@
                             <button type="button" class="term-key-btn" data-key="right">&nbsp;▶&nbsp;</button>
                         </div>
                         <div id="terminalScreen" aria-label="终端输出区域"></div>
+                        <div class="term-mobile-tools" id="terminalMobileTools">
+                            <div class="term-mobile-note" id="terminalMobileNote">移动端可用下方输入条补充键盘输入，横屏时终端体验更完整。</div>
+                            <form class="term-mobile-form" id="terminalMobileForm">
+                                <input
+                                    id="terminalMobileInput"
+                                    class="term-mobile-input"
+                                    type="text"
+                                    inputmode="text"
+                                    enterkeyhint="send"
+                                    autocomplete="off"
+                                    autocapitalize="off"
+                                    autocorrect="off"
+                                    spellcheck="false"
+                                    placeholder="输入终端文本，点发送写入当前会话"
+                                />
+                                <div class="term-mobile-actions">
+                                    <button type="submit" class="secondary">发送</button>
+                                    <button type="button" class="secondary" data-term-mobile-action="enter">回车</button>
+                                    <button type="button" class="secondary" data-term-mobile-action="backspace">退格</button>
+                                    <button type="button" class="secondary" data-term-mobile-action="ctrlc">Ctrl+C</button>
+                                </div>
+                            </form>
+                        </div>
                     </section>
                     <section id="filesPanel" class="workspace-pane files-pane" hidden></section>
                     <section id="detailPanel" class="workspace-pane inspector-pane" hidden>

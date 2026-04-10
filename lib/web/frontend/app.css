@@ -1525,6 +1525,8 @@ body.mobile-actions-open .header-actions {
     background: #1a1a1a;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
+    overflow-x: auto;
+    white-space: nowrap;
 }
 
 .term-key-btn {
@@ -1549,6 +1551,54 @@ body.mobile-actions-open .header-actions {
     background: var(--accent);
     color: #fff;
     border-color: var(--accent-strong);
+}
+
+.term-mobile-tools {
+    display: none;
+    padding: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(9, 12, 19, 0.96);
+}
+
+.term-mobile-note {
+    margin-bottom: 8px;
+    color: rgba(232, 237, 245, 0.72);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.term-mobile-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+}
+
+.term-mobile-input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 10px;
+    padding: 10px 11px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #f4f7fb;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.term-mobile-input::placeholder {
+    color: rgba(232, 237, 245, 0.46);
+}
+
+.term-mobile-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.term-mobile-actions button {
+    min-width: 0;
+    white-space: nowrap;
 }
 
 #terminalScreen {
@@ -2091,6 +2141,33 @@ details.trace-card > .trace-card-summary {
         z-index: 3;
     }
 
+    body.terminal-mode .term-mobile-tools {
+        display: block;
+    }
+
+    body.terminal-mode.mobile-terminal-landscape .header {
+        padding: 6px 8px 8px;
+    }
+
+    body.terminal-mode.mobile-terminal-landscape #activeMeta {
+        display: none;
+    }
+
+    body.terminal-mode.mobile-terminal-landscape .workbench-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 2px;
+    }
+
+    body.terminal-mode.mobile-terminal-landscape .workbench-tabs button {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    body.terminal-mode.mobile-terminal-landscape .workspace-shell {
+        padding-top: 6px;
+    }
+
     .mobile-session-toggle,
     .mobile-sidebar-close {
         display: inline-flex;
@@ -2147,6 +2224,10 @@ details.trace-card > .trace-card-summary {
     .composer-toolbar {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .term-mobile-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .files-layout {

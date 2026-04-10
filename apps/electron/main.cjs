@@ -1,14 +1,23 @@
 'use strict';
 
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell, clipboard } = require('electron');
 const { getManyoyoConfigPath } = require('../../lib/global-config');
 const { startElectronWebServer } = require('../../lib/electron/web-runtime');
+const { createAutoUpdateController } = require('../../lib/electron/auto-update');
+
+const APP_NAME = 'MANYOYO Desktop';
+const APP_SHORT_NAME = 'MANYOYO';
+const APP_ID = 'io.github.xcanwin.manyoyo.desktop';
+const ICON_PATH = path.join(__dirname, 'assets', 'icon-512.png');
 
 let mainWindow = null;
 let serverHandle = null;
 let closing = false;
+let desktopUpdater = null;
+let updateDialogLock = false;
 
 if (typeof process.getuid === 'function' && process.getuid() === 0) {
     app.commandLine.appendSwitch('no-sandbox');
@@ -16,7 +25,7 @@ if (typeof process.getuid === 'function' && process.getuid() === 0) {
 }
 
 function buildLoadingHtml(title, message, detail) {
-    const safeTitle = String(title || 'MANYOYO');
+    const safeTitle = String(title || APP_NAME);
     const safeMessage = String(message || '');
     const safeDetail = String(detail || '');
     return `<!doctype html>
@@ -81,7 +90,7 @@ function buildLoadingHtml(title, message, detail) {
 </head>
 <body>
   <main class="card">
-    <div class="eyebrow">MANYOYO Desktop</div>
+    <div class="eyebrow">${APP_NAME}</div>
     <h1>${safeTitle}</h1>
     <p>${safeMessage}</p>
     ${safeDetail ? `<pre>${safeDetail}</pre>` : ''}
@@ -90,8 +99,23 @@ function buildLoadingHtml(title, message, detail) {
 </html>`;
 }
 
+function getApplicationIconPath() {
+    return fs.existsSync(ICON_PATH) ? ICON_PATH : '';
+}
+
 function getLogsDir() {
     return path.join(os.homedir(), '.manyoyo', 'logs');
+}
+
+function getDesktopUpdateStatus() {
+    return desktopUpdater ? desktopUpdater.getStatus() : {
+        enabled: false,
+        canCheck: false,
+        canDownload: false,
+        canInstall: false,
+        label: '自动更新未初始化',
+        detail: '应用尚未完成初始化。'
+    };
 }
 
 async function openPathInSystem(targetPath) {
@@ -116,14 +140,89 @@ async function revealConfigFile() {
 
 function showRuntimeError(error) {
     const message = error && error.message ? error.message : String(error);
-    dialog.showErrorBox('MANYOYO Desktop', message);
+    dialog.showErrorBox(APP_NAME, message);
+}
+
+async function showUpdateDialog(title, message, detail) {
+    if (updateDialogLock) {
+        return;
+    }
+    updateDialogLock = true;
+    try {
+        await dialog.showMessageBox({
+            type: 'info',
+            title,
+            message,
+            detail: detail || '',
+            buttons: ['知道了']
+        });
+    } finally {
+        updateDialogLock = false;
+    }
+}
+
+async function checkForUpdatesFromMenu() {
+    const status = getDesktopUpdateStatus();
+    if (!status.canCheck) {
+        throw new Error(status.detail || status.label);
+    }
+    await desktopUpdater.checkForUpdates();
+    const nextStatus = getDesktopUpdateStatus();
+    await showUpdateDialog('MANYOYO Desktop 更新检查', nextStatus.label, nextStatus.detail);
+}
+
+async function downloadUpdateFromMenu() {
+    const status = getDesktopUpdateStatus();
+    if (!status.canDownload) {
+        throw new Error(status.detail || '当前没有可下载的更新。');
+    }
+    await desktopUpdater.downloadUpdate();
+    const nextStatus = getDesktopUpdateStatus();
+    await showUpdateDialog('MANYOYO Desktop 更新下载', nextStatus.label, nextStatus.detail);
+}
+
+function installDownloadedUpdate() {
+    const status = getDesktopUpdateStatus();
+    if (!status.canInstall) {
+        throw new Error(status.detail || '当前没有已下载完成的更新。');
+    }
+    desktopUpdater.quitAndInstall();
 }
 
 function buildApplicationMenu() {
+    const updateStatus = getDesktopUpdateStatus();
     const template = [
         {
-            label: 'MANYOYO',
+            label: APP_SHORT_NAME,
             submenu: [
+                { label: `版本 ${app.getVersion()}`, enabled: false },
+                { label: updateStatus.label, enabled: false },
+                {
+                    label: '检查更新',
+                    enabled: Boolean(updateStatus.canCheck),
+                    click: function () {
+                        checkForUpdatesFromMenu().catch(showRuntimeError);
+                    }
+                },
+                {
+                    label: '下载更新',
+                    enabled: Boolean(updateStatus.canDownload),
+                    click: function () {
+                        downloadUpdateFromMenu().catch(showRuntimeError);
+                    }
+                },
+                {
+                    label: '安装已下载更新',
+                    enabled: Boolean(updateStatus.canInstall),
+                    click: function () {
+                        try {
+                            installDownloadedUpdate();
+                        } catch (error) {
+                            showRuntimeError(error);
+                        }
+                    }
+                },
+                { type: 'separator' },
                 {
                     label: '重新连接工作台',
                     click: function () {
@@ -166,6 +265,7 @@ function buildApplicationMenu() {
                     }
                 },
                 { type: 'separator' },
+                { role: 'about', label: `关于 ${APP_NAME}` },
                 { role: 'quit', label: '退出' }
             ]
         },
@@ -185,15 +285,17 @@ function buildApplicationMenu() {
 }
 
 function createWindow() {
+    const iconPath = getApplicationIconPath();
     mainWindow = new BrowserWindow({
         width: 1480,
         height: 920,
         minWidth: 1120,
         minHeight: 720,
-        title: 'MANYOYO',
+        title: APP_NAME,
         backgroundColor: '#f3ede4',
         autoHideMenuBar: true,
         show: false,
+        icon: iconPath || undefined,
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
             contextIsolation: true,
@@ -238,8 +340,8 @@ async function connectWorkbench(win) {
     } catch (error) {
         const message = error && error.message ? error.message : String(error);
         console.error('[manyoyo-electron] startup failed', error);
-        await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildLoadingHtml('启动失败', 'MANYOYO Desktop 无法完成本地服务初始化。请先检查 Docker/Podman、镜像配置以及 ~/.manyoyo/manyoyo.json。', message))}`);
-        dialog.showErrorBox('MANYOYO Desktop 启动失败', message);
+        await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildLoadingHtml('启动失败', `${APP_NAME} 无法完成本地服务初始化。请先检查 Docker/Podman、镜像配置以及 ~/.manyoyo/manyoyo.json。`, message))}`);
+        dialog.showErrorBox(`${APP_NAME} 启动失败`, message);
     }
 }
 
@@ -299,7 +401,7 @@ async function restartDesktopServer() {
     if (!win) {
         return;
     }
-    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildLoadingHtml('正在重连', '正在重启 MANYOYO 本地桌面服务。'))}`);
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildLoadingHtml('正在重连', `正在重启 ${APP_NAME} 本地桌面服务。`))}`);
     await closeServerHandle();
     await connectWorkbench(win);
 }
@@ -307,7 +409,7 @@ async function restartDesktopServer() {
 async function bootApplication() {
     buildApplicationMenu();
     const win = createWindow();
-    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildLoadingHtml('正在启动', '正在准备 MANYOYO 本地桌面服务。'))}`);
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildLoadingHtml('正在启动', `正在准备 ${APP_NAME} 本地桌面服务。`))}`);
     await connectWorkbench(win);
 }
 
@@ -335,4 +437,21 @@ app.on('before-quit', function (event) {
     });
 });
 
-app.whenReady().then(bootApplication);
+app.whenReady().then(function () {
+    app.setName(APP_NAME);
+    app.setAppUserModelId(APP_ID);
+    app.setAboutPanelOptions({
+        applicationName: APP_NAME,
+        applicationVersion: app.getVersion(),
+        version: app.getVersion(),
+        website: 'https://github.com/xcanwin/manyoyo'
+    });
+    if (process.platform === 'darwin' && app.dock && getApplicationIconPath()) {
+        app.dock.setIcon(getApplicationIconPath());
+    }
+    desktopUpdater = createAutoUpdateController();
+    desktopUpdater.onDidChange(function () {
+        buildApplicationMenu();
+    });
+    return bootApplication();
+});
