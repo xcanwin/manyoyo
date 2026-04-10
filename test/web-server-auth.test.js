@@ -609,6 +609,7 @@ process.exit(2);
         expect(editorBundleSource).toContain('getValue()');
         expect(platformSource).toContain('window.ManyoyoPlatform = platform;');
         expect(platformSource).toContain('openExternal(url) {');
+        expect(platformSource).toContain('window.Capacitor');
         expect(apiClientSource).toContain('window.ManyoyoApiClient');
         expect(apiClientSource).toContain('async function json(url, options) {');
         expect(appHtmlSource).toContain('<div id="configEditor" class="config-editor"></div>');

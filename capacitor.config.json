@@ -1,0 +1,6 @@
+{
+  "appId": "io.github.xcanwin.manyoyo.mobile",
+  "appName": "MANYOYO Mobile",
+  "webDir": "apps/capacitor/www",
+  "bundledWebRuntime": false
+}

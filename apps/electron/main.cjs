@@ -1,7 +1,9 @@
 'use strict';
 
+const os = require('os');
 const path = require('path');
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, clipboard } = require('electron');
+const { getManyoyoConfigPath } = require('../../lib/global-config');
 const { startElectronWebServer } = require('../../lib/electron/web-runtime');
 
 let mainWindow = null;
@@ -88,6 +90,100 @@ function buildLoadingHtml(title, message, detail) {
 </html>`;
 }
 
+function getLogsDir() {
+    return path.join(os.homedir(), '.manyoyo', 'logs');
+}
+
+async function openPathInSystem(targetPath) {
+    const text = String(targetPath || '').trim();
+    if (!text) {
+        return;
+    }
+    const result = await shell.openPath(text);
+    if (result) {
+        throw new Error(result);
+    }
+}
+
+async function revealConfigFile() {
+    const configPath = getManyoyoConfigPath();
+    try {
+        shell.showItemInFolder(configPath);
+    } catch (error) {
+        await openPathInSystem(path.dirname(configPath));
+    }
+}
+
+function showRuntimeError(error) {
+    const message = error && error.message ? error.message : String(error);
+    dialog.showErrorBox('MANYOYO Desktop', message);
+}
+
+function buildApplicationMenu() {
+    const template = [
+        {
+            label: 'MANYOYO',
+            submenu: [
+                {
+                    label: '重新连接工作台',
+                    click: function () {
+                        restartDesktopServer().catch(showRuntimeError);
+                    }
+                },
+                {
+                    label: '在系统浏览器打开当前工作台',
+                    click: function () {
+                        if (serverHandle && serverHandle.url) {
+                            shell.openExternal(`${serverHandle.url}/`).catch(showRuntimeError);
+                        }
+                    }
+                },
+                {
+                    label: '复制当前工作台地址',
+                    click: function () {
+                        if (serverHandle && serverHandle.url) {
+                            clipboard.writeText(`${serverHandle.url}/`);
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: '打开 manyoyo 配置目录',
+                    click: function () {
+                        openPathInSystem(path.dirname(getManyoyoConfigPath())).catch(showRuntimeError);
+                    }
+                },
+                {
+                    label: '定位 manyoyo 配置文件',
+                    click: function () {
+                        revealConfigFile().catch(showRuntimeError);
+                    }
+                },
+                {
+                    label: '打开日志目录',
+                    click: function () {
+                        openPathInSystem(getLogsDir()).catch(showRuntimeError);
+                    }
+                },
+                { type: 'separator' },
+                { role: 'quit', label: '退出' }
+            ]
+        },
+        {
+            label: '窗口',
+            submenu: [
+                { role: 'reload', label: '刷新' },
+                { role: 'forceReload', label: '强制刷新' },
+                { role: 'togglefullscreen', label: '切换全屏' },
+                { role: 'minimize', label: '最小化' },
+                { role: 'toggleDevTools', label: '开发者工具' }
+            ]
+        }
+    ];
+
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1480,
@@ -132,6 +228,19 @@ function createWindow() {
     });
 
     return mainWindow;
+}
+
+async function connectWorkbench(win) {
+    try {
+        serverHandle = await startElectronWebServer();
+        await installAuthCookie(win.webContents.session, serverHandle.url, serverHandle.authUser, serverHandle.authPass);
+        await win.loadURL(`${serverHandle.url}/`);
+    } catch (error) {
+        const message = error && error.message ? error.message : String(error);
+        console.error('[manyoyo-electron] startup failed', error);
+        await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildLoadingHtml('启动失败', 'MANYOYO Desktop 无法完成本地服务初始化。请先检查 Docker/Podman、镜像配置以及 ~/.manyoyo/manyoyo.json。', message))}`);
+        dialog.showErrorBox('MANYOYO Desktop 启动失败', message);
+    }
 }
 
 async function installAuthCookie(targetSession, baseUrl, authUser, authPass) {
@@ -185,20 +294,21 @@ async function closeServerHandle() {
     }
 }
 
+async function restartDesktopServer() {
+    const win = mainWindow;
+    if (!win) {
+        return;
+    }
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildLoadingHtml('正在重连', '正在重启 MANYOYO 本地桌面服务。'))}`);
+    await closeServerHandle();
+    await connectWorkbench(win);
+}
+
 async function bootApplication() {
+    buildApplicationMenu();
     const win = createWindow();
     await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildLoadingHtml('正在启动', '正在准备 MANYOYO 本地桌面服务。'))}`);
-
-    try {
-        serverHandle = await startElectronWebServer();
-        await installAuthCookie(win.webContents.session, serverHandle.url, serverHandle.authUser, serverHandle.authPass);
-        await win.loadURL(`${serverHandle.url}/`);
-    } catch (error) {
-        const message = error && error.message ? error.message : String(error);
-        console.error('[manyoyo-electron] startup failed', error);
-        await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildLoadingHtml('启动失败', 'MANYOYO Desktop 无法完成本地服务初始化。请先检查 Docker/Podman、镜像配置以及 ~/.manyoyo/manyoyo.json。', message))}`);
-        dialog.showErrorBox('MANYOYO Desktop 启动失败', message);
-    }
+    await connectWorkbench(win);
 }
 
 ipcMain.handle('manyoyo:openExternal', async function (_event, url) {

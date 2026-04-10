@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>MANYOYO Mobile</title>
+    <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+    <main class="shell">
+        <section class="panel">
+            <div class="eyebrow">MANYOYO Mobile</div>
+            <h1>Capacitor 壳已就绪</h1>
+            <p>当前未注入远程 MANYOYO Web 地址，所以这里只显示本地说明页。</p>
+            <p>先在宿主机或服务器启动 <code>manyoyo serve</code>，再生成 Capacitor 配置。</p>
+            <pre><code>MANYOYO_CAP_SERVER_URL=https://your-manyoyo.example.com npm run capacitor:config</code></pre>
+            <pre><code>npm run capacitor:add:ios
+npm run capacitor:add:android
+npm run capacitor:sync</code></pre>
+            <div class="tip">建议正式环境使用 HTTPS。开发期如使用 HTTP，请确保 App 与服务处于可信网络。</div>
+        </section>
+    </main>
+</body>
+</html>

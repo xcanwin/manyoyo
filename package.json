@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "5.10.1",
+    "version": "5.10.2",
     "imageVersion": "1.9.0-common",
     "playwrightCliVersion": "0.1.1",
     "description": "AI Agent CLI Security Sandbox for Docker and Podman",
@@ -32,6 +32,12 @@
     "scripts": {
         "dev:release": "node scripts/dev-release.js",
         "build:web-editor": "node scripts/build-web-code-editor.js",
+        "capacitor:config": "node scripts/write-capacitor-config.js",
+        "capacitor:add:ios": "npm run capacitor:config && npx cap add ios",
+        "capacitor:add:android": "npm run capacitor:config && npx cap add android",
+        "capacitor:sync": "npm run capacitor:config && npx cap sync",
+        "capacitor:open:ios": "npx cap open ios",
+        "capacitor:open:android": "npx cap open android",
         "electron:dev": "node scripts/electron-dev.js",
         "electron:pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
         "electron:pack:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir zip --x64 --arm64",
@@ -51,15 +57,19 @@
         "node": ">=22.0.0"
     },
     "files": [
+        "apps/**",
         "bin/manyoyo.js",
         "lib/**",
         "README.md",
         "LICENSE",
+        "capacitor.config.json",
         "docker/manyoyo.Dockerfile",
         "docker/res/**",
         "manyoyo.example.json"
     ],
     "dependencies": {
+        "@capacitor/browser": "^8.0.3",
+        "@capacitor/core": "^8.3.0",
         "@playwright/mcp": "0.0.68",
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/xterm": "^6.0.0",
@@ -70,6 +80,9 @@
         "ws": "^8.20.0"
     },
     "devDependencies": {
+        "@capacitor/android": "^8.3.0",
+        "@capacitor/cli": "^8.3.0",
+        "@capacitor/ios": "^8.3.0",
         "@codemirror/commands": "^6.10.3",
         "@codemirror/lang-css": "^6.3.1",
         "@codemirror/lang-html": "^6.4.11",

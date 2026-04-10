@@ -20,3 +20,8 @@ coverage/
 nohup.out
 libpod/
 dist/
+.gradle/
+.idea/
+*.iml
+*.xcuserstate
+android/local.properties
