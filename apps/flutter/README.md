@@ -31,8 +31,9 @@ flutter run -d macos --dart-define=MANYOYO_SERVER_URL=http://127.0.0.1:3000
 
 说明：
 
-- Flutter 端当前先走“系统浏览器打开 MANYOYO”方案，避免过早锁定 WebView 技术选型。
+- Flutter 端当前先走“地址输入/保存 + 检测连接 + 系统浏览器打开 MANYOYO”方案，避免过早锁定 WebView 技术选型。
 - `127.0.0.1` 仅适用于当前机器本地运行；真机或其他设备需替换为宿主机可访问地址。
+- 地址会保存在本地偏好设置中，后续启动可直接复用。
 
 下一步建议：
 

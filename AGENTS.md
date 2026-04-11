@@ -33,7 +33,7 @@
 - `docker/res/playwright/playwright-cli-wrapper.sh`: 容器内 `playwright-cli install-browser` 兜底包装脚本，确保浏览器安装到全局 `@playwright/cli` 自带的 Playwright。
 - `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
 - `lib/web/frontend/`: 网页前端静态资源（`app/login/markdown` 的 `html/css/js`）。
-- `apps/flutter/`: Flutter 客户端根目录；`macos/windows/ios/android` 平台目录仅允许出现在该子目录内。
+- `apps/flutter/`: Flutter 客户端根目录；`macos/windows/ios/android` 平台目录仅允许出现在该子目录内。当前默认先走“保存 MANYOYO 地址 + 系统浏览器打开”方案，未明确要求时不提前引入 WebView。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docker/res/`: 各 Agent 默认配置、Playwright 资源与 supervisor 模板。
@@ -96,6 +96,7 @@
 - 容器调试：`manyoyo run -n <name> -x /bin/bash`。
 - 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.4-common`），可加 `--iba TOOL=common`。
 - 维护者发布：`npm run dev:release`；自动确认可用 `npm run dev:release -- --yes`，指定版本可用 `npm run dev:release -- --version <x.y.z>`。
+- Flutter 本机调试：`cd apps/flutter && flutter run -d macos --dart-define=MANYOYO_SERVER_URL=http://127.0.0.1:3000`。
 - 局域网监听网页服务：`manyoyo serve 0.0.0.0:3000 -U <user> -P <pass>`。
 - 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`（需与启动参数/配置一致）。
 - 若未显式设置 `-P/--pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。

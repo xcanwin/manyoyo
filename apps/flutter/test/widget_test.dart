@@ -5,16 +5,22 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:manyoyo_flutter/main.dart';
 
 void main() {
-  testWidgets('renders manyoyo flutter placeholder', (WidgetTester tester) async {
+  testWidgets('renders manyoyo flutter placeholder', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const ManyoyoApp());
 
     expect(find.text('Flutter 客户端骨架已就绪'), findsOneWidget);
     expect(find.text('当前 MANYOYO 地址'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('保存地址'), findsOneWidget);
+    expect(find.text('检测连接'), findsOneWidget);
     expect(find.text('在系统浏览器打开 MANYOYO'), findsOneWidget);
     expect(find.text('macOS'), findsOneWidget);
     expect(find.text('Windows'), findsOneWidget);
