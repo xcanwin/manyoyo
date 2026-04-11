@@ -21,6 +21,33 @@
 
 ---
 
+## 当前分支说明
+
+当前分支是 `Electron-Capacitor`，用于研究 `macOS / Windows / iOS / Android` 应用形态：
+
+- `macOS / Windows`：Electron 桌面壳
+- `iOS / Android`：Capacitor 移动端壳
+- Web 主线仍在 `main` 分支
+
+最简运行入口：
+
+```bash
+npm install
+npm run electron:dev
+```
+
+移动端常用入口：
+
+```bash
+MANYOYO_CAP_SERVER_URL=http://127.0.0.1:3000 npm run capacitor:add:ios
+MANYOYO_CAP_SERVER_URL=http://127.0.0.1:3000 npm run capacitor:open:ios
+
+MANYOYO_CAP_SERVER_URL=http://127.0.0.1:3000 npm run capacitor:add:android
+MANYOYO_CAP_SERVER_URL=http://127.0.0.1:3000 npm run capacitor:open:android
+```
+
+移动端更多说明见 [apps/electron-capacitor/capacitor/README.md](apps/electron-capacitor/capacitor/README.md)。
+
 ## 为什么是 MANYOYO
 
 AI Agent CLI 往往需要：
