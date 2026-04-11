@@ -95,6 +95,28 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
 
   String get _currentUrl => _urlController.text.trim();
 
+  bool get _hasConfiguredUrl => _currentUrl.isNotEmpty;
+
+  String get _connectionStageLabel => switch (_reachable) {
+    true => '服务在线',
+    false => '等待修复',
+    null when _hasConfiguredUrl => '等待检测',
+    null => '尚未配置',
+  };
+
+  String get _connectionSummary => switch (_reachable) {
+    true => '地址已可访问，可以直接从系统浏览器进入 MANYOYO。',
+    false => '最近一次检测失败，请先确认 MANYOYO 服务是否启动并允许当前设备访问。',
+    null when _hasConfiguredUrl => '地址已填写，建议先检测连接，再决定是否直接打开 MANYOYO。',
+    null => '先填入 MANYOYO 地址，再保存、检测连接并打开入口。',
+  };
+
+  Color get _connectionBadgeColor => switch (_reachable) {
+    true => const Color(0xFFD7F4E7),
+    false => const Color(0xFFFDE2E0),
+    null => const Color(0xFFE8F0EC),
+  };
+
   Uri? _parseUrl(String value) {
     final uri = Uri.tryParse(value.trim());
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
@@ -268,141 +290,268 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          'MANYOYO FLUTTER',
-                          style: textTheme.labelSmall?.copyWith(
-                            letterSpacing: 1.4,
-                            fontWeight: FontWeight.w700,
-                            color: colorScheme.primary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        'Flutter 客户端骨架已就绪',
-                        style: textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF13201A),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '当前工程已创建 macOS、Windows、iOS、Android 平台目录。下一步建议接入 MANYOYO Web 或服务端入口，而不是继续保留默认 Demo。',
-                        style: textTheme.bodyLarge?.copyWith(
-                          height: 1.6,
-                          color: const Color(0xFF4D5C56),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF7F3EC),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: colorScheme.primary.withValues(alpha: 0.16),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                'MANYOYO FLUTTER',
+                                style: textTheme.labelSmall?.copyWith(
+                                  letterSpacing: 1.4,
+                                  fontWeight: FontWeight.w700,
+                                  color: colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 18),
                             Text(
-                              '当前 MANYOYO 地址',
-                              style: textTheme.labelLarge?.copyWith(
+                              'Flutter 客户端骨架已就绪',
+                              style: textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
-                                color: const Color(0xFF284238),
+                                color: const Color(0xFF13201A),
                               ),
-                            ),
-                            const SizedBox(height: 10),
-                            TextField(
-                              controller: _urlController,
-                              enabled: !_loading,
-                              decoration: const InputDecoration(
-                                hintText: 'http://127.0.0.1:3000',
-                                border: OutlineInputBorder(),
-                              ),
-                              keyboardType: TextInputType.url,
-                            ),
-                            const SizedBox(height: 14),
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: [
-                                FilledButton(
-                                  onPressed: _loading || _saving
-                                      ? null
-                                      : _saveUrl,
-                                  child: Text(_saving ? '保存中...' : '保存地址'),
-                                ),
-                                OutlinedButton(
-                                  onPressed: _loading || _checking
-                                      ? null
-                                      : _checkConnection,
-                                  child: Text(_checking ? '检测中...' : '检测连接'),
-                                ),
-                                FilledButton.tonal(
-                                  onPressed: _loading ? null : _openManyoyo,
-                                  child: const Text('在系统浏览器打开 MANYOYO'),
-                                ),
-                              ],
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              _statusMessage ??
-                                  '运行时可通过 --dart-define=MANYOYO_SERVER_URL=https://your-manyoyo.example.com 提供默认地址。',
-                              style: textTheme.bodyMedium?.copyWith(
+                              '当前工程已创建 macOS、Windows、iOS、Android 平台目录。下一步建议接入 MANYOYO Web 或服务端入口，而不是继续保留默认 Demo。',
+                              style: textTheme.bodyLarge?.copyWith(
                                 height: 1.6,
-                                color: statusColor,
+                                color: const Color(0xFF4D5C56),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: const [
-                          _PlatformChip(label: 'macOS'),
-                          _PlatformChip(label: 'Windows'),
-                          _PlatformChip(label: 'iOS'),
-                          _PlatformChip(label: 'Android'),
-                        ],
-                      ),
-                      const SizedBox(height: 28),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF0F7F3),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '建议下一步：\n1. 明确 Flutter 端是 WebView 壳，还是原生客户端。\n2. 统一登录、会话和容器访问边界。\n3. 再决定是否接入状态管理、路由和网络层。',
-                          style: textTheme.bodyMedium?.copyWith(
-                            height: 1.7,
-                            color: const Color(0xFF284238),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        '本地示例：flutter run -d macos --dart-define=MANYOYO_SERVER_URL=http://127.0.0.1:3000',
-                        style: textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF5A6B64),
-                          height: 1.6,
-                        ),
-                      ),
+                            const SizedBox(height: 24),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(18),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFFF3F8F5),
+                                    Color(0xFFE8F1EC),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(
+                                  color: colorScheme.primary.withValues(
+                                    alpha: 0.12,
+                                  ),
+                                ),
+                              ),
+                              child: Wrap(
+                                spacing: 16,
+                                runSpacing: 16,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _connectionBadgeColor,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      _connectionStageLabel,
+                                      style: textTheme.labelLarge?.copyWith(
+                                        color: const Color(0xFF173429),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 420,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          '启动页',
+                                          style: textTheme.titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF13201A),
+                                              ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          _connectionSummary,
+                                          style: textTheme.bodyMedium?.copyWith(
+                                            height: 1.6,
+                                            color: const Color(0xFF42524B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(18),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF7F3EC),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: colorScheme.primary.withValues(
+                                    alpha: 0.16,
+                                  ),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '当前 MANYOYO 地址',
+                                    style: textTheme.labelLarge?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF284238),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  TextField(
+                                    controller: _urlController,
+                                    enabled: !_loading,
+                                    decoration: const InputDecoration(
+                                      hintText: 'http://127.0.0.1:3000',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.url,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Wrap(
+                                    spacing: 12,
+                                    runSpacing: 12,
+                                    children: [
+                                      OutlinedButton(
+                                        onPressed: _loading
+                                            ? null
+                                            : () {
+                                                _urlController.text =
+                                                    'http://127.0.0.1:3000';
+                                                setState(() {
+                                                  _statusMessage =
+                                                      '已填入本机默认地址，可直接保存或检测连接。';
+                                                  _reachable = null;
+                                                });
+                                              },
+                                        child: const Text('填入本机地址'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: _loading || _saving
+                                            ? null
+                                            : _saveUrl,
+                                        child: Text(
+                                          _saving ? '保存中...' : '保存地址',
+                                        ),
+                                      ),
+                                      OutlinedButton(
+                                        onPressed: _loading || _checking
+                                            ? null
+                                            : _checkConnection,
+                                        child: Text(
+                                          _checking ? '检测中...' : '检测连接',
+                                        ),
+                                      ),
+                                      FilledButton.tonal(
+                                        onPressed: _loading
+                                            ? null
+                                            : _openManyoyo,
+                                        child: const Text(
+                                          '在系统浏览器打开 MANYOYO',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _statusMessage ??
+                                        '运行时可通过 --dart-define=MANYOYO_SERVER_URL=https://your-manyoyo.example.com 提供默认地址。',
+                                    style: textTheme.bodyMedium?.copyWith(
+                                      height: 1.6,
+                                      color: statusColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: const [
+                                _PlatformChip(label: 'macOS'),
+                                _PlatformChip(label: 'Windows'),
+                                _PlatformChip(label: 'iOS'),
+                                _PlatformChip(label: 'Android'),
+                              ],
+                            ),
+                            const SizedBox(height: 28),
+                            Text(
+                              '推荐流程',
+                              style: textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF13201A),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            const Wrap(
+                              spacing: 14,
+                              runSpacing: 14,
+                              children: [
+                                _StepCard(
+                                  index: '01',
+                                  title: '配置地址',
+                                  body: '填写 MANYOYO 服务地址，可用本机默认地址快速开始。',
+                                ),
+                                _StepCard(
+                                  index: '02',
+                                  title: '检测连接',
+                                  body:
+                                      '确认服务已经启动，避免直接打开后才发现端口或权限问题。',
+                                ),
+                                _StepCard(
+                                  index: '03',
+                                  title: '进入 MANYOYO',
+                                  body:
+                                      '通过系统浏览器打开 MANYOYO，先验证完整链路是否通畅。',
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 28),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(18),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0F7F3),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '建议下一步：\n1. 设计 MANYOYO 登录态与错误页。\n2. 明确 Flutter 端后续是原生客户端，还是保留外部浏览器壳。\n3. 再补路由、状态管理和网络层。',
+                                style: textTheme.bodyMedium?.copyWith(
+                                  height: 1.7,
+                                  color: const Color(0xFF284238),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              '本地示例：flutter run -d macos --dart-define=MANYOYO_SERVER_URL=http://127.0.0.1:3000',
+                              style: textTheme.bodySmall?.copyWith(
+                                color: const Color(0xFF5A6B64),
+                                height: 1.6,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -437,6 +586,65 @@ class _PlatformChip extends StatelessWidget {
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
             color: Colors.white,
             fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StepCard extends StatelessWidget {
+  const _StepCard({
+    required this.index,
+    required this.title,
+    required this.body,
+  });
+
+  final String index;
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 210,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F3EC),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE0D7C8)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                index,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: const Color(0xFF0B6E4F),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: const Color(0xFF13201A),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                body,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  height: 1.6,
+                  color: const Color(0xFF4D5C56),
+                ),
+              ),
+            ],
           ),
         ),
       ),
