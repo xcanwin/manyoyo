@@ -37,6 +37,14 @@ flutter pub get
 flutter run -d macos
 ```
 
+桌面端默认只启动客户端；如需恢复“本地服务 + 客户端”联动模式，可在启动前设置：
+
+```bash
+cd apps/flutter
+MANYOYO_DESKTOP_AUTO_SERVE=1 flutter run -d macos
+MANYOYO_DESKTOP_AUTO_SERVE=1 flutter run -d windows
+```
+
 其他平台可直接替换目标设备：
 
 ```bash

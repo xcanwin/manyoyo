@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -9,6 +12,77 @@ const String _manyoyoServerUrl = String.fromEnvironment(
   'MANYOYO_SERVER_URL',
   defaultValue: '',
 );
+const String _desktopAutoServeEnv = 'MANYOYO_DESKTOP_AUTO_SERVE';
+const String _desktopAutoServeListenEnv = 'MANYOYO_DESKTOP_AUTO_SERVE_LISTEN';
+const String _desktopAutoServeRootEnv = 'MANYOYO_DESKTOP_AUTO_SERVE_ROOT';
+const String _desktopAutoServeNodeEnv = 'MANYOYO_DESKTOP_AUTO_SERVE_NODE';
+const String _defaultDesktopAutoServeListen = '127.0.0.1:3000';
+
+bool _isTruthyEnv(String? value) {
+  final normalized = (value ?? '').trim().toLowerCase();
+  return normalized == '1' ||
+      normalized == 'true' ||
+      normalized == 'yes' ||
+      normalized == 'on';
+}
+
+bool _supportsDesktopAutoServe() => Platform.isMacOS || Platform.isWindows;
+
+String _randomToken([int length = 16]) {
+  final random = Random.secure();
+  final buffer = StringBuffer();
+  for (var i = 0; i < length; i += 1) {
+    buffer.write(random.nextInt(16).toRadixString(16));
+  }
+  return buffer.toString();
+}
+
+String? _findRepoRootFromDirectory(Directory? start) {
+  if (start == null || start.path.trim().isEmpty) {
+    return null;
+  }
+  final separator = Platform.pathSeparator;
+  var current = start.absolute;
+  while (true) {
+    final binFile = File(
+      '${current.path}${separator}bin${separator}manyoyo.js',
+    );
+    if (binFile.existsSync()) {
+      return current.path;
+    }
+    final parent = current.parent;
+    if (parent.path == current.path) {
+      break;
+    }
+    current = parent;
+  }
+  return null;
+}
+
+String? _resolveDesktopAutoServeRepoRoot() {
+  final envRoot = (Platform.environment[_desktopAutoServeRootEnv] ?? '').trim();
+  if (envRoot.isNotEmpty) {
+    return _findRepoRootFromDirectory(Directory(envRoot));
+  }
+
+  final candidates = <Directory>[
+    Directory.current,
+    File(Platform.resolvedExecutable).parent,
+  ];
+
+  final pwd = (Platform.environment['PWD'] ?? '').trim();
+  if (pwd.isNotEmpty) {
+    candidates.add(Directory(pwd));
+  }
+
+  for (final candidate in candidates) {
+    final repoRoot = _findRepoRootFromDirectory(candidate);
+    if (repoRoot != null) {
+      return repoRoot;
+    }
+  }
+  return null;
+}
 
 void main() {
   runApp(const ManyoyoApp());
@@ -44,25 +118,40 @@ class ManyoyoHomePage extends StatefulWidget {
   State<ManyoyoHomePage> createState() => _ManyoyoHomePageState();
 }
 
-class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
+class _ManyoyoHomePageState extends State<ManyoyoHomePage>
+    with WidgetsBindingObserver {
   static const String _serverUrlKey = 'manyoyo_server_url';
 
   final TextEditingController _urlController = TextEditingController();
+  StringBuffer _desktopServerLog = StringBuffer();
 
   bool _loading = true;
   bool _saving = false;
   bool _checking = false;
   String? _statusMessage;
   bool? _reachable;
+  Process? _desktopServerProcess;
+  StreamSubscription<String>? _desktopServerStdoutSub;
+  StreamSubscription<String>? _desktopServerStderrSub;
+  bool _desktopAutoServeOpened = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (_shouldAutoServeOnDesktop()) {
+      _startDesktopAutoServe();
+      return;
+    }
     _loadInitialUrl();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _desktopServerStdoutSub?.cancel();
+    _desktopServerStderrSub?.cancel();
+    _desktopServerProcess?.kill();
     _urlController.dispose();
     super.dispose();
   }
@@ -92,6 +181,217 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
       _urlController.text = initialUrl;
       _loading = false;
     });
+  }
+
+  bool _shouldAutoServeOnDesktop() {
+    return _supportsDesktopAutoServe() &&
+        _isTruthyEnv(Platform.environment[_desktopAutoServeEnv]);
+  }
+
+  void _appendDesktopServerLog(String chunk) {
+    if (chunk.isEmpty) {
+      return;
+    }
+    final current = _desktopServerLog.toString();
+    if (current.length > 8000) {
+      final trimmed = current.substring(current.length - 4000);
+      _desktopServerLog = StringBuffer(trimmed);
+    }
+    _desktopServerLog.write(chunk);
+  }
+
+  String _desktopServerLogText() {
+    return _desktopServerLog.toString().trim();
+  }
+
+  Future<void> _startDesktopAutoServe() async {
+    final repoRoot = _resolveDesktopAutoServeRepoRoot();
+    if (repoRoot == null) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _loading = false;
+        _reachable = false;
+        _statusMessage =
+            '未找到 manyoyo 仓库根目录。可设置 MANYOYO_DESKTOP_AUTO_SERVE_ROOT=/abs/path 后再重试。';
+      });
+      return;
+    }
+
+    final listen =
+        (Platform.environment[_desktopAutoServeListenEnv] ?? '')
+            .trim()
+            .isEmpty
+        ? _defaultDesktopAutoServeListen
+        : (Platform.environment[_desktopAutoServeListenEnv] ?? '').trim();
+    final nodeBin =
+        (Platform.environment[_desktopAutoServeNodeEnv] ?? '').trim().isEmpty
+        ? 'node'
+        : (Platform.environment[_desktopAutoServeNodeEnv] ?? '').trim();
+    final authUser = 'manyoyo_flutter_${_randomToken(8)}';
+    final authPass = _randomToken(24);
+    final baseUrl = 'http://$listen';
+    final binPath =
+        '$repoRoot${Platform.pathSeparator}bin${Platform.pathSeparator}manyoyo.js';
+
+    if (mounted) {
+      setState(() {
+        _statusMessage = '正在启动本地 MANYOYO 服务...';
+        _reachable = null;
+      });
+    }
+
+    try {
+      final process = await Process.start(
+        nodeBin,
+        <String>[
+          binPath,
+          'serve',
+          listen,
+          '-U',
+          authUser,
+          '-P',
+          authPass,
+        ],
+        workingDirectory: repoRoot,
+        includeParentEnvironment: true,
+      );
+      _desktopServerProcess = process;
+      _desktopServerStdoutSub = process.stdout
+          .transform(utf8.decoder)
+          .listen(_appendDesktopServerLog);
+      _desktopServerStderrSub = process.stderr
+          .transform(utf8.decoder)
+          .listen(_appendDesktopServerLog);
+
+      await _waitForDesktopServerReady(process, Uri.parse(baseUrl));
+      await _installDesktopAutoServeCookie(Uri.parse(baseUrl), authUser, authPass);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _urlController.text = baseUrl;
+        _loading = false;
+        _reachable = true;
+        _statusMessage = '本地 MANYOYO 服务已启动，正在进入内置客户端。';
+      });
+
+      if (!_desktopAutoServeOpened) {
+        _desktopAutoServeOpened = true;
+        await _openManyoyoInternally();
+      }
+    } catch (error) {
+      _desktopServerProcess?.kill();
+      _desktopServerProcess = null;
+
+      if (!mounted) {
+        return;
+      }
+
+      final logText = _desktopServerLogText();
+      setState(() {
+        _loading = false;
+        _reachable = false;
+        _statusMessage = logText.isEmpty
+            ? '桌面端自动启动 MANYOYO 服务失败：$error'
+            : '桌面端自动启动 MANYOYO 服务失败：$error\n\n$logText';
+      });
+    }
+  }
+
+  Future<void> _waitForDesktopServerReady(
+    Process process,
+    Uri baseUri,
+  ) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 25));
+    while (DateTime.now().isBefore(deadline)) {
+      if (await _isProcessExited(process)) {
+        final logText = _desktopServerLogText();
+        throw StateError(logText.isEmpty ? 'manyoyo serve 已提前退出。' : logText);
+      }
+
+      final reachable = await _probeManyoyo(baseUri);
+      if (reachable) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    throw StateError('等待 MANYOYO 服务启动超时。');
+  }
+
+  Future<bool> _isProcessExited(Process process) async {
+    final exitCodeFuture = process.exitCode.then((_) => true);
+    final timeoutFuture = Future<bool>.delayed(
+      const Duration(milliseconds: 10),
+      () => false,
+    );
+    return Future.any<bool>(<Future<bool>>[exitCodeFuture, timeoutFuture]);
+  }
+
+  Future<bool> _probeManyoyo(Uri uri) async {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
+    try {
+      final request = await client.getUrl(uri);
+      request.followRedirects = false;
+      final response = await request.close().timeout(const Duration(seconds: 2));
+      await response.drain<void>();
+      return response.statusCode >= 200 && response.statusCode < 500;
+    } catch (_) {
+      return false;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<void> _installDesktopAutoServeCookie(
+    Uri baseUri,
+    String authUser,
+    String authPass,
+  ) async {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+    try {
+      final request = await client.postUrl(baseUri.replace(path: '/auth/login'));
+      request.followRedirects = false;
+      request.headers.contentType = ContentType.json;
+      request.write(
+        jsonEncode(<String, String>{
+          'username': authUser,
+          'password': authPass,
+        }),
+      );
+      final response = await request.close().timeout(const Duration(seconds: 5));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final body = await utf8.decoder.bind(response).join();
+        throw StateError(body.isEmpty ? '自动登录失败。' : body);
+      }
+
+      Cookie? cookie;
+      for (final item in response.cookies) {
+        if (item.name == 'manyoyo_web_auth') {
+          cookie = item;
+          break;
+        }
+      }
+      await response.drain<void>();
+      if (cookie == null) {
+        throw StateError('未获取到 manyoyo_web_auth Cookie。');
+      }
+
+      final cookieManager = CookieManager.instance();
+      await cookieManager.setCookie(
+        url: WebUri(baseUri.toString()),
+        name: cookie.name,
+        value: cookie.value,
+        path: cookie.path.isEmpty ? '/' : cookie.path,
+        isHttpOnly: cookie.httpOnly,
+        isSecure: cookie.secure,
+      );
+    } finally {
+      client.close(force: true);
+    }
   }
 
   String get _currentUrl => _urlController.text.trim();
@@ -502,7 +802,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
                                   const SizedBox(height: 12),
                                   Text(
                                     _statusMessage ??
-                                        '运行时可通过 --dart-define=MANYOYO_SERVER_URL=https://your-manyoyo.example.com 提供默认地址。',
+                                        '运行时可通过 --dart-define=MANYOYO_SERVER_URL=https://your-manyoyo.example.com 提供默认地址；桌面端也可通过 MANYOYO_DESKTOP_AUTO_SERVE=1 自动拉起本地服务。',
                                     style: textTheme.bodyMedium?.copyWith(
                                       height: 1.6,
                                       color: statusColor,
@@ -572,7 +872,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              '本地示例：flutter run -d macos --dart-define=MANYOYO_SERVER_URL=http://127.0.0.1:3000',
+                              '本地示例：flutter run -d macos --dart-define=MANYOYO_SERVER_URL=http://127.0.0.1:3000\n桌面联动示例：MANYOYO_DESKTOP_AUTO_SERVE=1 flutter run -d macos',
                               style: textTheme.bodySmall?.copyWith(
                                 color: const Color(0xFF5A6B64),
                                 height: 1.6,
