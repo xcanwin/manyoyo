@@ -17,6 +17,7 @@ const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent
 const { runPluginCommand, createPlugin } = require('../lib/plugin');
 const { buildManyoyoLogPath } = require('../lib/log-path');
 const { resolveRuntimeConfig } = require('../lib/runtime-resolver');
+const { resolveWorktreeSupport } = require('../lib/worktrees');
 const {
     parseEnvEntry: parseEnvEntryOrThrow,
     normalizeVolume
@@ -938,6 +939,22 @@ function normalizeShellFullArgv(argv) {
     }
 }
 
+function normalizeWorktreeArgv(argv) {
+    for (let i = 0; i < argv.length; i += 1) {
+        if (argv[i] === '--wt') {
+            argv[i] = '--worktrees';
+            continue;
+        }
+        if (argv[i] === '--wtr') {
+            argv[i] = '--worktrees-root';
+            continue;
+        }
+        if (typeof argv[i] === 'string' && argv[i].startsWith('--wtr=')) {
+            argv[i] = `--worktrees-root=${argv[i].slice('--wtr='.length)}`;
+        }
+    }
+}
+
 function appendArrayOption(command, flags, description) {
     return command.option(
         flags,
@@ -983,6 +1000,8 @@ function applyRunStyleOptions(command, options = {}) {
     appendArrayOption(command, '-p, --port <port>', '设置端口映射 XXX:YYY (可多次使用)');
 
     command
+        .option('--worktrees', '启用 Git worktrees 根目录自动挂载 (别名: --wt)')
+        .option('--worktrees-root <path>', '指定项目级 Git worktrees 根目录 (仅支持绝对路径; 隐式启用 --worktrees; 别名: --wtr)')
         .option('--sp, --shell-prefix <command>', '主命令前缀 (常用于临时环境变量)')
         .option('-s, --shell <command>', '主命令')
         .option('--ss, --shell-suffix <command>', '主命令后缀 (追加到 -s 之后，等价于 -- <args>)')
@@ -1260,6 +1279,7 @@ Notes:
 
     // Pre-handle -x/--shell-full: treat all following args as a single command
     normalizeShellFullArgv(process.argv);
+    normalizeWorktreeArgv(process.argv);
 
     // Parse arguments
     program.allowUnknownOption(false);
@@ -1357,7 +1377,8 @@ Notes:
         normalizeCliEnvMap,
         mergeArrayConfig,
         normalizeVolume,
-        parseServerListen
+        parseServerListen,
+        resolveWorktreeSupport
     });
 
     HOST_PATH = resolvedRuntime.hostPath;
@@ -1432,6 +1453,10 @@ Notes:
             volumes: volumeList,
             ports: portList,
             imageBuildArgs: buildArgList,
+            worktrees: resolvedRuntime.worktrees,
+            worktreesRoot: resolvedRuntime.worktreesRoot,
+            worktreeRepoRoot: resolvedRuntime.worktreeRepoRoot,
+            worktreeMainRepoRoot: resolvedRuntime.worktreeMainRepoRoot,
             containerMode: contModeValue || "",
             shellPrefix: EXEC_COMMAND_PREFIX.trim(),
             shell: EXEC_COMMAND || "",

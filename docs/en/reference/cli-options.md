@@ -45,6 +45,8 @@ These commands share the same core runtime options:
 | `--ef, --env-file <file>` | Append env files, absolute paths only |
 | `-v, --volume <volume>` | Append bind mounts, repeatable |
 | `-p, --port <port>` | Append port mappings, repeatable |
+| `--worktrees` / `--wt` | Enable Git worktree support and auto-mount the project-level `worktrees/<project>/` root |
+| `--worktrees-root <path>` / `--wtr <path>` | Set the project-level Git worktrees root, absolute paths only; implicitly enables `--worktrees` |
 | `--sp` / `-s` / `--ss` / `-- <args...>` | Compose prefix, main command, and suffix args |
 | `-x, --shell-full <command...>` | Pass the full command directly; mutually exclusive with `--sp/-s/--ss/--` |
 | `-y, --yolo <cli>` | Start supported Agents in no-confirmation mode |
@@ -136,6 +138,8 @@ manyoyo playwright mcp-add --host localhost
 - `env`: merged by key with the same priority as scalar options
 - `serve` auth options: command line > `runs.<name>` > global config > environment variables > defaults
 - `--ef` and `--first-env-file` accept absolute paths only
+- `--worktrees` infers the project-level worktrees root as `<main-repo-parent>/worktrees/<main-repo-dir-name>` by default; when started from a linked worktree, MANYOYO also mounts the main repo root and that project-level worktrees root
+- `--worktrees-root` means the project-level worktrees root, for example `/Users/name/github/worktrees/manyoyo`; it is not the main repo directory and not a single branch worktree directory
 
 ## Security notes
 

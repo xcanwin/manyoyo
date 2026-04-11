@@ -195,4 +195,56 @@ describe('runtime resolver', () => {
         expect(resolved.serverPass.length).toBeGreaterThan(0);
         expect(resolved.serverPassAuto).toBe(true);
     });
+
+    test('should append worktree mounts and expose worktree metadata', () => {
+        const resolved = resolveRuntimeConfig({
+            cliOptions: {
+                worktrees: true
+            },
+            globalConfig: {
+                volumes: ['/global:/workspace/global']
+            },
+            runConfig: {
+                volumes: ['/run:/workspace/run']
+            },
+            globalFirstConfig: {},
+            runFirstConfig: {},
+            defaults: {
+                hostPath: '/repo',
+                containerName: 'default-name',
+                containerPath: '/repo',
+                imageName: 'localhost/xcanwin/manyoyo',
+                imageVersion: '1.9.0-common'
+            },
+            envVars: {},
+            argv: ['node', 'bin/manyoyo.js', 'config', 'show', '--worktrees'],
+            isServerMode: false,
+            isServerStopMode: false,
+            pickConfigValue,
+            resolveContainerNameTemplate: value => value,
+            normalizeCommandSuffix,
+            normalizeJsonEnvMap,
+            normalizeCliEnvMap,
+            mergeArrayConfig,
+            normalizeVolume,
+            parseServerListen,
+            resolveWorktreeSupport: jest.fn(() => ({
+                enabled: true,
+                worktreesRoot: '/parent/worktrees/repo',
+                worktreeRepoRoot: '/repo',
+                worktreeMainRepoRoot: '/repo',
+                extraVolumes: ['/parent/worktrees/repo:/parent/worktrees/repo']
+            }))
+        });
+
+        expect(resolved.worktrees).toBe(true);
+        expect(resolved.worktreesRoot).toBe('/parent/worktrees/repo');
+        expect(resolved.worktreeRepoRoot).toBe('/repo');
+        expect(resolved.worktreeMainRepoRoot).toBe('/repo');
+        expect(resolved.volumes).toEqual([
+            '/global:/workspace/global',
+            '/run:/workspace/run',
+            '/parent/worktrees/repo:/parent/worktrees/repo'
+        ]);
+    });
 });

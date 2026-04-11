@@ -3,7 +3,7 @@
  * 运行: npm test
  */
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -23,6 +23,22 @@ function writeGlobalConfig(homeDir, configObj) {
 
 function writeExecutable(filePath, content) {
     fs.writeFileSync(filePath, content, { mode: 0o755 });
+}
+
+function runGit(repoPath, args, options = {}) {
+    return execFileSync('git', ['-C', repoPath, ...args], {
+        encoding: 'utf-8',
+        ...options
+    });
+}
+
+function initGitRepo(repoPath) {
+    runGit(repoPath, ['init']);
+    runGit(repoPath, ['config', 'user.email', 'manyoyo-test@example.com']);
+    runGit(repoPath, ['config', 'user.name', 'manyoyo-test']);
+    fs.writeFileSync(path.join(repoPath, 'README.md'), '# temp\n');
+    runGit(repoPath, ['add', 'README.md']);
+    runGit(repoPath, ['commit', '-m', 'init']);
 }
 
 function getFreePort() {
@@ -845,6 +861,138 @@ exit 0
                 );
                 expect(output).toContain('--publish 8080:80');
                 expect(output).toContain('--publish 127.0.0.1:8443:443');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
+        test('config show --wt should infer and create project worktrees root from main repo', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-worktrees-main-'));
+            const repoDir = path.join(tempDir, 'demo');
+            fs.mkdirSync(repoDir, { recursive: true });
+            initGitRepo(repoDir);
+
+            try {
+                const output = execSync(`node ${BIN_PATH} config show --wt`, {
+                    encoding: 'utf-8',
+                    cwd: repoDir
+                });
+                const config = JSON.parse(output);
+                const expectedRoot = path.join(tempDir, 'worktrees', 'demo');
+
+                expect(config.worktrees).toBe(true);
+                expect(config.worktreesRoot).toBe(expectedRoot);
+                expect(config.worktreeRepoRoot).toBe(repoDir);
+                expect(config.worktreeMainRepoRoot).toBe(repoDir);
+                expect(config.volumes).toContain(`${expectedRoot}:${expectedRoot}`);
+                expect(fs.existsSync(expectedRoot)).toBe(true);
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
+        test('config show --wtr should override worktrees root and implicitly enable worktrees', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-worktrees-root-'));
+            const repoDir = path.join(tempDir, 'demo');
+            const customRoot = path.join(tempDir, 'custom-worktrees-root');
+            fs.mkdirSync(repoDir, { recursive: true });
+            initGitRepo(repoDir);
+
+            try {
+                const output = execSync(`node ${BIN_PATH} config show --wtr "${customRoot}"`, {
+                    encoding: 'utf-8',
+                    cwd: repoDir
+                });
+                const config = JSON.parse(output);
+
+                expect(config.worktrees).toBe(true);
+                expect(config.worktreesRoot).toBe(customRoot);
+                expect(config.volumes).toContain(`${customRoot}:${customRoot}`);
+                expect(fs.existsSync(customRoot)).toBe(true);
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
+        test('config show --worktrees should mount main repo and project worktrees root from a git worktree', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-worktrees-branch-'));
+            const repoDir = path.join(tempDir, 'demo');
+            const worktreesRoot = path.join(tempDir, 'worktrees', 'demo');
+            const worktreeDir = path.join(worktreesRoot, 'feature');
+            fs.mkdirSync(repoDir, { recursive: true });
+            initGitRepo(repoDir);
+            runGit(repoDir, ['branch', 'feature']);
+            fs.mkdirSync(worktreesRoot, { recursive: true });
+            runGit(repoDir, ['worktree', 'add', worktreeDir, 'feature']);
+
+            try {
+                const output = execSync(`node ${BIN_PATH} config show --worktrees`, {
+                    encoding: 'utf-8',
+                    cwd: worktreeDir
+                });
+                const config = JSON.parse(output);
+
+                expect(config.worktrees).toBe(true);
+                expect(config.worktreesRoot).toBe(worktreesRoot);
+                expect(config.worktreeRepoRoot).toBe(worktreeDir);
+                expect(config.worktreeMainRepoRoot).toBe(repoDir);
+                expect(config.volumes).toContain(`${repoDir}:${repoDir}`);
+                expect(config.volumes).toContain(`${worktreesRoot}:${worktreesRoot}`);
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
+        test('config command --wt should include inferred worktree mounts', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-worktrees-command-'));
+            const repoDir = path.join(tempDir, 'demo');
+            const worktreesRoot = path.join(tempDir, 'worktrees', 'demo');
+            const worktreeDir = path.join(worktreesRoot, 'feature');
+            const fakeDockerPath = path.join(tempDir, 'docker');
+            fs.mkdirSync(repoDir, { recursive: true });
+            initGitRepo(repoDir);
+            runGit(repoDir, ['branch', 'feature']);
+            fs.mkdirSync(worktreesRoot, { recursive: true });
+            runGit(repoDir, ['worktree', 'add', worktreeDir, 'feature']);
+            fs.writeFileSync(fakeDockerPath, `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "Docker version 26.0.0"
+  exit 0
+fi
+if [ "$1" = "ps" ]; then
+  exit 0
+fi
+exit 0
+`, { mode: 0o755 });
+
+            try {
+                const output = execSync(`node ${BIN_PATH} config command --wt`, {
+                    encoding: 'utf-8',
+                    cwd: worktreeDir,
+                    env: {
+                        ...process.env,
+                        PATH: `${tempDir}:${process.env.PATH}`
+                    }
+                });
+
+                expect(output).toContain(`--volume ${repoDir}:${repoDir}`);
+                expect(output).toContain(`--volume ${worktreesRoot}:${worktreesRoot}`);
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
+        test('config show --wt should reject non-git directories', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-worktrees-non-git-'));
+
+            try {
+                expect(() => {
+                    execSync(`node ${BIN_PATH} config show --wt`, {
+                        encoding: 'utf-8',
+                        cwd: tempDir,
+                        stdio: 'pipe'
+                    });
+                }).toThrow();
             } finally {
                 fs.rmSync(tempDir, { recursive: true, force: true });
             }
