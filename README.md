@@ -32,7 +32,7 @@
 最简运行入口：
 
 ```bash
-npm install
+ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/ npm install
 npm run electron:dev
 ```
 
