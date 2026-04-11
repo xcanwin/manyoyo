@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart' hide Cookie;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -385,7 +385,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage>
         url: WebUri(baseUri.toString()),
         name: cookie.name,
         value: cookie.value,
-        path: cookie.path.isEmpty ? '/' : cookie.path,
+        path: (cookie.path?.isNotEmpty ?? false) ? cookie.path! : '/',
         isHttpOnly: cookie.httpOnly,
         isSecure: cookie.secure,
       );
