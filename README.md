@@ -21,6 +21,32 @@
 
 ---
 
+## 当前分支说明
+
+当前分支是 `Flutter`，用于研究 `macOS / Windows / iOS / Android` 应用形态：
+
+- Flutter 端当前定位为 MANYOYO Web 的宿主壳
+- Web 主线仍在 `main` 分支
+- 平台工程统一放在 `apps/flutter/`
+
+最简运行入口：
+
+```bash
+cd apps/flutter
+flutter pub get
+flutter run -d macos
+```
+
+其他平台可直接替换目标设备：
+
+```bash
+flutter run -d windows
+flutter run -d ios
+flutter run -d android
+```
+
+分支内更完整说明见 [apps/flutter/README.md](apps/flutter/README.md)。
+
 ## 为什么是 MANYOYO
 
 AI Agent CLI 往往需要：
