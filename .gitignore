@@ -19,3 +19,13 @@ docker/lib/
 coverage/
 nohup.out
 libpod/
+apps/flutter/.dart_tool/
+apps/flutter/.flutter-plugins
+apps/flutter/.flutter-plugins-dependencies
+apps/flutter/.metadata
+apps/flutter/.packages
+apps/flutter/android/local.properties
+apps/flutter/build/
+apps/flutter/ios/Flutter/ephemeral/
+apps/flutter/macos/Flutter/ephemeral/
+apps/flutter/windows/flutter/ephemeral/
