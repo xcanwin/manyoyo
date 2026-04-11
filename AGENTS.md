@@ -33,7 +33,7 @@
 - `docker/res/playwright/playwright-cli-wrapper.sh`: 容器内 `playwright-cli install-browser` 兜底包装脚本，确保浏览器安装到全局 `@playwright/cli` 自带的 Playwright。
 - `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
 - `lib/web/frontend/`: 网页前端静态资源（`app/login/markdown` 的 `html/css/js`）。
-- `apps/flutter/`: Flutter 客户端根目录；`macos/windows/ios/android` 平台目录仅允许出现在该子目录内。当前默认先走“保存 MANYOYO 地址 + 系统浏览器打开”方案，未明确要求时不提前引入 WebView。
+- `apps/flutter/`: Flutter 客户端根目录；`macos/windows/ios/android` 平台目录仅允许出现在该子目录内。当前正式方案为“地址管理 + 连接检测 + 内嵌 MANYOYO WebView + 外部浏览器兜底”，目标是与 `main` 分支现有 Web 功能保持一致。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docker/res/`: 各 Agent 默认配置、Playwright 资源与 supervisor 模板。
@@ -73,6 +73,7 @@
 - 插件相关改动优先补充 `test/plugin-command.test.js`，至少覆盖 host/container 两类场景的关键分支（配置生成、参数透传、挂载或启动路径）。
 - 修复 bug 时建议加入回归测试，并注明 case。
 - 涉及网页服务认证时，至少验证未登录 `401`、登录成功可访问、登出后失效。
+- Flutter 改动至少跑宿主机 `flutter analyze` 与 `flutter test`；涉及 WebView、macOS 权限或原生插件时，再额外跑一次宿主机 `flutter run -d macos` 做冒烟验证。
 
 ## TDD 模式
 - 默认适用：新增功能、行为变更、bug 修复；纯文档改动可例外。

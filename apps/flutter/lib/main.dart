@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -44,7 +45,7 @@ class ManyoyoHomePage extends StatefulWidget {
 }
 
 class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
-  static const _serverUrlKey = 'manyoyo_server_url';
+  static const String _serverUrlKey = 'manyoyo_server_url';
 
   final TextEditingController _urlController = TextEditingController();
 
@@ -105,10 +106,10 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
   };
 
   String get _connectionSummary => switch (_reachable) {
-    true => '地址已可访问，可以直接从系统浏览器进入 MANYOYO。',
-    false => '最近一次检测失败，请先确认 MANYOYO 服务是否启动并允许当前设备访问。',
-    null when _hasConfiguredUrl => '地址已填写，建议先检测连接，再决定是否直接打开 MANYOYO。',
-    null => '先填入 MANYOYO 地址，再保存、检测连接并打开入口。',
+    true => '地址已可访问，可以直接进入内置 MANYOYO Web 客户端。',
+    false => '最近一次检测失败，请先确认 MANYOYO 服务已启动并允许当前设备访问。',
+    null when _hasConfiguredUrl => '地址已填写，建议先检测连接，再进入内置 MANYOYO。',
+    null => '先填入 MANYOYO 地址，再保存、检测连接并进入 Web 客户端。',
   };
 
   Color get _connectionBadgeColor => switch (_reachable) {
@@ -171,7 +172,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
     }
   }
 
-  Future<void> _openManyoyo() async {
+  Future<void> _openManyoyoExternally() async {
     final uri = _parseUrl(_currentUrl);
     if (uri == null) {
       setState(() {
@@ -188,6 +189,25 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
         _reachable = false;
       });
     }
+  }
+
+  Future<void> _openManyoyoInternally() async {
+    final uri = _parseUrl(_currentUrl);
+    if (uri == null) {
+      setState(() {
+        _statusMessage = '请输入合法的 MANYOYO 地址，例如 http://127.0.0.1:3000';
+        _reachable = false;
+      });
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => ManyoyoWebShellPage(
+          initialUrl: uri.toString(),
+        ),
+      ),
+    );
   }
 
   Future<void> _checkConnection() async {
@@ -268,7 +288,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
                 ),
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 760),
+                    constraints: const BoxConstraints(maxWidth: 820),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.92),
@@ -276,11 +296,11 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
                         border: Border.all(
                           color: colorScheme.primary.withValues(alpha: 0.22),
                         ),
-                        boxShadow: [
+                        boxShadow: const [
                           BoxShadow(
-                            color: const Color(0x330F2A22),
+                            color: Color(0x330F2A22),
                             blurRadius: 32,
-                            offset: const Offset(0, 18),
+                            offset: Offset(0, 18),
                           ),
                         ],
                       ),
@@ -310,7 +330,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
                             ),
                             const SizedBox(height: 18),
                             Text(
-                              'Flutter 客户端骨架已就绪',
+                              'Flutter Web 客户端已接管正式入口',
                               style: textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: const Color(0xFF13201A),
@@ -318,7 +338,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              '当前工程已创建 macOS、Windows、iOS、Android 平台目录。下一步建议接入 MANYOYO Web 或服务端入口，而不是继续保留默认 Demo。',
+                              '目标是不重写 main 分支现有 Web 前端，而是在 Flutter 中内嵌 MANYOYO Web 界面，让登录页、主界面、会话流、文件与终端等功能整体复用。',
                               style: textTheme.bodyLarge?.copyWith(
                                 height: 1.6,
                                 color: const Color(0xFF4D5C56),
@@ -367,7 +387,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
                                     ),
                                   ),
                                   SizedBox(
-                                    width: 420,
+                                    width: 460,
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
@@ -463,10 +483,16 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
                                           _checking ? '检测中...' : '检测连接',
                                         ),
                                       ),
+                                      FilledButton(
+                                        onPressed: _loading
+                                            ? null
+                                            : _openManyoyoInternally,
+                                        child: const Text('进入内置 MANYOYO'),
+                                      ),
                                       FilledButton.tonal(
                                         onPressed: _loading
                                             ? null
-                                            : _openManyoyo,
+                                            : _openManyoyoExternally,
                                         child: const Text(
                                           '在系统浏览器打开 MANYOYO',
                                         ),
@@ -518,13 +544,13 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
                                   index: '02',
                                   title: '检测连接',
                                   body:
-                                      '确认服务已经启动，避免直接打开后才发现端口或权限问题。',
+                                      '确认服务已经启动，避免进入内置 Web 客户端后才发现端口或权限问题。',
                                 ),
                                 _StepCard(
                                   index: '03',
                                   title: '进入 MANYOYO',
                                   body:
-                                      '通过系统浏览器打开 MANYOYO，先验证完整链路是否通畅。',
+                                      '直接进入内置 MANYOYO Web 壳，复用 main 分支已有登录页与主界面。',
                                 ),
                               ],
                             ),
@@ -537,7 +563,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
-                                '建议下一步：\n1. 设计 MANYOYO 登录态与错误页。\n2. 明确 Flutter 端后续是原生客户端，还是保留外部浏览器壳。\n3. 再补路由、状态管理和网络层。',
+                                '当前方向：Flutter 负责宿主壳、地址管理和原生入口；MANYOYO 的核心业务界面继续复用 main 分支现有 Web 实现。',
                                 style: textTheme.bodyMedium?.copyWith(
                                   height: 1.7,
                                   color: const Color(0xFF284238),
@@ -562,6 +588,260 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class ManyoyoWebShellPage extends StatefulWidget {
+  const ManyoyoWebShellPage({super.key, required this.initialUrl});
+
+  final String initialUrl;
+
+  @override
+  State<ManyoyoWebShellPage> createState() => _ManyoyoWebShellPageState();
+}
+
+class _ManyoyoWebShellPageState extends State<ManyoyoWebShellPage> {
+  InAppWebViewController? _controller;
+  double _progress = 0;
+  String _currentUrl = '';
+  String _pageTitle = 'MANYOYO';
+  String _statusText = '正在连接 MANYOYO...';
+  bool _canGoBack = false;
+  bool _canGoForward = false;
+  String? _lastError;
+
+  InAppWebViewSettings get _webViewSettings => InAppWebViewSettings(
+    isInspectable: true,
+    mediaPlaybackRequiresUserGesture: false,
+    allowsInlineMediaPlayback: true,
+    javaScriptCanOpenWindowsAutomatically: true,
+    useShouldOverrideUrlLoading: true,
+    supportZoom: false,
+  );
+
+  Future<void> _syncNavigationState() async {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+
+    final canGoBack = await controller.canGoBack();
+    final canGoForward = await controller.canGoForward();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _canGoBack = canGoBack;
+      _canGoForward = canGoForward;
+    });
+  }
+
+  Future<void> _openCurrentUrlExternally() async {
+    final uri = Uri.tryParse(_currentUrl);
+    if (uri == null) {
+      return;
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _goHome() async {
+    await _controller?.loadUrl(
+      urlRequest: URLRequest(url: WebUri(widget.initialUrl)),
+    );
+  }
+
+  Future<void> _reload() async {
+    await _controller?.reload();
+  }
+
+  Future<NavigationActionPolicy> _handleNavigation(
+    NavigationAction navigationAction,
+  ) async {
+    final requestUrl = navigationAction.request.url;
+    final uri = requestUrl == null ? null : Uri.tryParse(requestUrl.toString());
+    if (uri == null) {
+      return NavigationActionPolicy.ALLOW;
+    }
+
+    if (['http', 'https', 'file', 'about', 'data', 'javascript'].contains(
+      uri.scheme,
+    )) {
+      return NavigationActionPolicy.ALLOW;
+    }
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return NavigationActionPolicy.CANCEL;
+    }
+
+    return NavigationActionPolicy.ALLOW;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        titleSpacing: 12,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _pageTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              _currentUrl.isEmpty ? widget.initialUrl : _currentUrl,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF4D5C56),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            onPressed: _canGoBack ? () => _controller?.goBack() : null,
+            tooltip: '后退',
+            icon: const Icon(Icons.arrow_back),
+          ),
+          IconButton(
+            onPressed: _canGoForward ? () => _controller?.goForward() : null,
+            tooltip: '前进',
+            icon: const Icon(Icons.arrow_forward),
+          ),
+          IconButton(
+            onPressed: _goHome,
+            tooltip: '回到 MANYOYO 首页',
+            icon: const Icon(Icons.home_outlined),
+          ),
+          IconButton(
+            onPressed: _reload,
+            tooltip: '刷新',
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            onPressed: _openCurrentUrlExternally,
+            tooltip: '在系统浏览器打开',
+            icon: const Icon(Icons.open_in_new),
+          ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(42),
+          child: Column(
+            children: [
+              if (_progress < 1)
+                LinearProgressIndicator(value: _progress)
+              else
+                const SizedBox(height: 4),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                child: Text(
+                  _lastError ?? _statusText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: _lastError == null
+                        ? const Color(0xFF4D5C56)
+                        : const Color(0xFFB42318),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      body: InAppWebView(
+        initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
+        initialSettings: _webViewSettings,
+        onWebViewCreated: (InAppWebViewController controller) {
+          _controller = controller;
+        },
+        shouldOverrideUrlLoading: (
+          InAppWebViewController controller,
+          NavigationAction navigationAction,
+        ) async {
+          return _handleNavigation(navigationAction);
+        },
+        onLoadStart: (InAppWebViewController controller, WebUri? url) {
+          setState(() {
+            _currentUrl = url?.toString() ?? widget.initialUrl;
+            _statusText = '正在加载 $_currentUrl';
+            _lastError = null;
+          });
+          _syncNavigationState();
+        },
+        onTitleChanged: (
+          InAppWebViewController controller,
+          String? title,
+        ) {
+          if (!mounted || title == null || title.trim().isEmpty) {
+            return;
+          }
+          setState(() {
+            _pageTitle = title.trim();
+          });
+        },
+        onLoadStop: (InAppWebViewController controller, WebUri? url) async {
+          await _syncNavigationState();
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _currentUrl = url?.toString() ?? widget.initialUrl;
+            _statusText = '已进入 MANYOYO Web 客户端';
+            _lastError = null;
+            _progress = 1;
+          });
+        },
+        onProgressChanged: (
+          InAppWebViewController controller,
+          int progress,
+        ) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _progress = progress / 100;
+            if (_lastError == null) {
+              _statusText = progress >= 100
+                  ? '已进入 MANYOYO Web 客户端'
+                  : '加载中 ${progress.toString()}%';
+            }
+          });
+        },
+        onUpdateVisitedHistory: (
+          InAppWebViewController controller,
+          WebUri? url,
+          bool? isReload,
+        ) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _currentUrl = url?.toString() ?? _currentUrl;
+          });
+          _syncNavigationState();
+        },
+        onReceivedError: (
+          InAppWebViewController controller,
+          WebResourceRequest request,
+          WebResourceError error,
+        ) {
+          if (request.isForMainFrame != true) {
+            return;
+          }
+          setState(() {
+            _lastError = '页面加载失败：${error.description}';
+            _progress = 1;
+          });
+        },
       ),
     );
   }
@@ -607,7 +887,7 @@ class _StepCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 210,
+      width: 220,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: const Color(0xFFF7F3EC),
