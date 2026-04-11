@@ -2,6 +2,13 @@
 
 这个目录用于 `iOS / Android` 移动端壳。
 
+当前 Electron-Capacitor 技术栈统一收口在 `apps/electron-capacitor/`：
+
+- `electron/`: Electron 桌面壳
+- `capacitor/`: 共享 Web 壳与说明页
+- `android/`: Android 原生工程
+- `ios/`: iOS 原生工程
+
 当前方案不是在手机里运行 manyoyo 的 Node 服务，而是直接加载远程 `manyoyo serve`：
 
 1. 在宿主机或服务器启动 `manyoyo serve`

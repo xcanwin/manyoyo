@@ -4,9 +4,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell, clipboard } = require('electron');
-const { getManyoyoConfigPath } = require('../../lib/global-config');
-const { startElectronWebServer } = require('../../lib/electron/web-runtime');
-const { createAutoUpdateController } = require('../../lib/electron/auto-update');
+const { getManyoyoConfigPath } = require('../../../lib/global-config');
+const { startElectronWebServer } = require('../../../lib/electron/web-runtime');
+const { createAutoUpdateController } = require('../../../lib/electron/auto-update');
 
 const APP_NAME = 'MANYOYO Desktop';
 const APP_SHORT_NAME = 'MANYOYO';

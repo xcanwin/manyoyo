@@ -5,8 +5,8 @@ const path = require('path');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
-const SOURCE_PATH = path.join(ROOT, 'apps', 'electron', 'assets', 'icon.svg');
-const OUTPUT_DIR = path.join(ROOT, 'apps', 'electron', 'assets');
+const SOURCE_PATH = path.join(ROOT, 'apps', 'electron-capacitor', 'electron', 'assets', 'icon.svg');
+const OUTPUT_DIR = path.join(ROOT, 'apps', 'electron-capacitor', 'electron', 'assets');
 const OUTPUTS = [
     { size: 1024, filename: 'icon-1024.png' },
     { size: 512, filename: 'icon-512.png' },

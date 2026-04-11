@@ -4,7 +4,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 const electronBinary = require('electron');
-const entry = path.join(__dirname, '..', 'apps', 'electron', 'main.cjs');
+const entry = path.join(__dirname, '..', 'apps', 'electron-capacitor', 'electron', 'main.cjs');
 const args = [];
 
 if (typeof process.getuid === 'function' && process.getuid() === 0) {

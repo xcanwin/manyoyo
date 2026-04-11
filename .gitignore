@@ -20,8 +20,9 @@ coverage/
 nohup.out
 libpod/
 dist/
+apps/electron-capacitor/dist/
 .gradle/
 .idea/
 *.iml
 *.xcuserstate
-android/local.properties
+apps/electron-capacitor/android/local.properties

@@ -33,9 +33,9 @@
 - `docker/res/playwright/playwright-cli-wrapper.sh`: 容器内 `playwright-cli install-browser` 兜底包装脚本，确保浏览器安装到全局 `@playwright/cli` 自带的 Playwright。
 - `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
 - `lib/web/frontend/`: 网页前端静态资源（`app/login/markdown` 的 `html/css/js`）。
-- `apps/electron/` + `lib/electron/`: Electron 桌面壳、preload、自动更新预留与桌面运行时。
-- `apps/capacitor/` + `capacitor.config.json`: Capacitor 移动壳入口、说明文档与共享 Web 资源配置。
-- `ios/` + `android/`: Capacitor 生成并维护的 iOS/Android 原生工程与构建脚本。
+- `apps/electron-capacitor/electron/` + `lib/electron/`: Electron 桌面壳、preload、自动更新预留与桌面运行时。
+- `apps/electron-capacitor/capacitor/` + `capacitor.config.json`: Capacitor 移动壳入口、说明文档与共享 Web 资源配置。
+- `apps/electron-capacitor/ios/` + `apps/electron-capacitor/android/`: Capacitor 生成并维护的 iOS/Android 原生工程与构建脚本。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docker/res/`: 各 Agent 默认配置、Playwright 资源与 supervisor 模板。
@@ -48,8 +48,8 @@
 - `docs/en/guide/` `docs/en/configuration/` `docs/en/reference/` `docs/en/advanced/` `docs/en/troubleshooting/`
 - `docs/guide/` `docs/configuration/` `docs/reference/` `docs/advanced/` `docs/troubleshooting/`
 - `lib/web/` `lib/web/frontend/`
-- `apps/electron/` `apps/capacitor/` `lib/electron/`
-- `ios/` `android/`
+- `apps/electron-capacitor/electron/` `apps/electron-capacitor/capacitor/` `lib/electron/`
+- `apps/electron-capacitor/ios/` `apps/electron-capacitor/android/`
 - `docker/` `bin/` `scripts/` `test/` `assets/` `coverage/`
 
 ## 构建、测试与开发命令

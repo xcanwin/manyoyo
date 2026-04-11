@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "5.10.3",
+    "version": "5.10.4",
     "imageVersion": "1.9.0-common",
     "playwrightCliVersion": "0.1.1",
     "description": "AI Agent CLI Security Sandbox for Docker and Podman",
@@ -114,10 +114,10 @@
         "appId": "io.github.xcanwin.manyoyo.desktop",
         "productName": "MANYOYO Desktop",
         "directories": {
-            "output": "dist/electron"
+            "output": "apps/electron-capacitor/dist/electron"
         },
         "files": [
-            "apps/electron/**/*",
+            "apps/electron-capacitor/electron/**/*",
             "bin/**/*",
             "lib/**/*",
             "package.json",
@@ -126,14 +126,14 @@
             "manyoyo.example.json"
         ],
         "asar": true,
-        "icon": "apps/electron/assets/icon-1024.png",
+        "icon": "apps/electron-capacitor/electron/assets/icon-1024.png",
         "extraMetadata": {
-            "main": "apps/electron/main.cjs"
+            "main": "apps/electron-capacitor/electron/main.cjs"
         },
         "mac": {
             "category": "public.app-category.developer-tools",
             "artifactName": "MANYOYO-Desktop-${version}-${arch}.${ext}",
-            "icon": "apps/electron/assets/icon-1024.png",
+            "icon": "apps/electron-capacitor/electron/assets/icon-1024.png",
             "target": [
                 "dir",
                 "zip"
@@ -141,7 +141,7 @@
         },
         "win": {
             "artifactName": "MANYOYO-Desktop-${version}-${arch}.${ext}",
-            "icon": "apps/electron/assets/icon-1024.png",
+            "icon": "apps/electron-capacitor/electron/assets/icon-1024.png",
             "executableName": "manyoyo-desktop"
         }
     },

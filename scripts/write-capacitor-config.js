@@ -14,8 +14,14 @@ function isHttpUrl(value) {
 const config = {
     appId: 'io.github.xcanwin.manyoyo.mobile',
     appName: 'MANYOYO Mobile',
-    webDir: 'apps/capacitor/www',
-    bundledWebRuntime: false
+    webDir: 'apps/electron-capacitor/capacitor/www',
+    bundledWebRuntime: false,
+    android: {
+        path: 'apps/electron-capacitor/android'
+    },
+    ios: {
+        path: 'apps/electron-capacitor/ios'
+    }
 };
 
 if (remoteUrl) {
