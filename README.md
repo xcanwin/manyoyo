@@ -36,6 +36,12 @@ ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/ npm install
 npm run electron:dev
 ```
 
+桌面端默认只启动客户端；如需恢复“本地服务 + 客户端”联动模式，可在启动前设置：
+
+```bash
+MANYOYO_DESKTOP_AUTO_SERVE=1 npm run electron:dev
+```
+
 移动端常用入口：
 
 ```bash
