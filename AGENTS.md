@@ -74,6 +74,8 @@
 - 修复 bug 时建议加入回归测试，并注明 case。
 - 涉及网页服务认证时，至少验证未登录 `401`、登录成功可访问、登出后失效。
 - Flutter 改动至少跑宿主机 `flutter analyze` 与 `flutter test`；涉及 WebView、macOS 权限或原生插件时，再额外跑一次宿主机 `flutter run -d macos` 做冒烟验证。
+- 本仓库 Flutter SDK 约定固定使用仓库根目录下的 `temp/tools/flutter-sdk-3.41.6`；若环境重置导致 `flutter` / `dart` 缺失，直接将 `/usr/local/bin/flutter`、`/usr/local/bin/dart` 软链到该目录下对应可执行文件，不再依赖 `temp/tools/flutter-sdk` 中间软链。
+- 在 root 容器中执行 Flutter 命令时，优先带上 `CI=true FLUTTER_SUPPRESS_ANALYTICS=true PUB_CACHE="$(git rev-parse --show-toplevel)/temp/tools/pub-cache" HOME="$(git rev-parse --show-toplevel)/temp"`，避免首次启动锁与分析统计干扰。
 
 ## TDD 模式
 - 默认适用：新增功能、行为变更、bug 修复；纯文档改动可例外。
@@ -98,6 +100,7 @@
 - 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.4-common`），可加 `--iba TOOL=common`。
 - 维护者发布：`npm run dev:release`；自动确认可用 `npm run dev:release -- --yes`，指定版本可用 `npm run dev:release -- --version <x.y.z>`。
 - Flutter 本机调试：`cd apps/flutter && flutter run -d macos --dart-define=MANYOYO_SERVER_URL=http://127.0.0.1:3000`。
+- Flutter 命令恢复（在仓库根目录执行）：`ln -sfn "$(pwd)/temp/tools/flutter-sdk-3.41.6/bin/flutter" /usr/local/bin/flutter && ln -sfn "$(pwd)/temp/tools/flutter-sdk-3.41.6/bin/dart" /usr/local/bin/dart`。
 - 局域网监听网页服务：`manyoyo serve 0.0.0.0:3000 -U <user> -P <pass>`。
 - 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`（需与启动参数/配置一致）。
 - 若未显式设置 `-P/--pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。

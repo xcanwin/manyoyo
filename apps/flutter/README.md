@@ -23,6 +23,25 @@ flutter test
 flutter run -d macos
 ```
 
+Flutter SDK 约定：
+
+- 仓库内固定复用仓库根目录下的 `temp/tools/flutter-sdk-3.41.6`，不再维护 `temp/tools/flutter-sdk` 这一层软链。
+- 若容器或本地环境重置后 `flutter` / `dart` 命令丢失，在仓库根目录执行以下命令恢复到 `/usr/local/bin/`：
+
+```bash
+ln -sfn "$(pwd)/temp/tools/flutter-sdk-3.41.6/bin/flutter" /usr/local/bin/flutter
+ln -sfn "$(pwd)/temp/tools/flutter-sdk-3.41.6/bin/dart" /usr/local/bin/dart
+```
+
+- 若在 root 容器里执行 Flutter 命令，建议固定 `PUB_CACHE` 与 `HOME`，避免首次启动锁或分析统计干扰：
+
+```bash
+CI=true FLUTTER_SUPPRESS_ANALYTICS=true \
+PUB_CACHE="$(git rev-parse --show-toplevel)/temp/tools/pub-cache" \
+HOME="$(git rev-parse --show-toplevel)/temp" \
+flutter test
+```
+
 桌面端默认只启动客户端；如需恢复“本地服务 + 客户端”联动模式，可在启动前设置：
 
 ```bash

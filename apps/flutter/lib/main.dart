@@ -8,6 +8,8 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart' hide Cookie;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:manyoyo_flutter/web_shell_navigation.dart';
+
 const String _manyoyoServerUrl = String.fromEnvironment(
   'MANYOYO_SERVER_URL',
   defaultValue: '',
@@ -918,6 +920,7 @@ class _ManyoyoWebShellPageState extends State<ManyoyoWebShellPage> {
     allowsInlineMediaPlayback: true,
     javaScriptCanOpenWindowsAutomatically: true,
     useShouldOverrideUrlLoading: true,
+    supportMultipleWindows: true,
     supportZoom: false,
   );
 
@@ -960,24 +963,29 @@ class _ManyoyoWebShellPageState extends State<ManyoyoWebShellPage> {
   Future<NavigationActionPolicy> _handleNavigation(
     NavigationAction navigationAction,
   ) async {
-    final requestUrl = navigationAction.request.url;
-    final uri = requestUrl == null ? null : Uri.tryParse(requestUrl.toString());
-    if (uri == null) {
+    final uri = parseWebUri(navigationAction.request.url);
+    if (shouldAllowInAppNavigation(uri)) {
       return NavigationActionPolicy.ALLOW;
     }
 
-    if (['http', 'https', 'file', 'about', 'data', 'javascript'].contains(
-      uri.scheme,
-    )) {
-      return NavigationActionPolicy.ALLOW;
-    }
-
-    if (await canLaunchUrl(uri)) {
+    if (uri != null && await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
       return NavigationActionPolicy.CANCEL;
     }
 
     return NavigationActionPolicy.ALLOW;
+  }
+
+  Future<bool> _handleCreateWindow(CreateWindowAction createWindowAction) async {
+    final uri = parseWebUri(createWindowAction.request.url);
+    if (!shouldOpenExternalWindow(uri)) {
+      return false;
+    }
+
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+    return false;
   }
 
   @override
@@ -1068,6 +1076,12 @@ class _ManyoyoWebShellPageState extends State<ManyoyoWebShellPage> {
           NavigationAction navigationAction,
         ) async {
           return _handleNavigation(navigationAction);
+        },
+        onCreateWindow: (
+          InAppWebViewController controller,
+          CreateWindowAction createWindowAction,
+        ) async {
+          return _handleCreateWindow(createWindowAction);
         },
         onLoadStart: (InAppWebViewController controller, WebUri? url) {
           setState(() {
