@@ -33,6 +33,9 @@
 - `docker/res/playwright/playwright-cli-wrapper.sh`: 容器内 `playwright-cli install-browser` 兜底包装脚本，确保浏览器安装到全局 `@playwright/cli` 自带的 Playwright。
 - `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
 - `lib/web/frontend/`: 网页前端静态资源（`app/login/markdown` 的 `html/css/js`）。
+- `apps/electron/` + `lib/electron/`: Electron 桌面壳、preload、自动更新预留与桌面运行时。
+- `apps/capacitor/` + `capacitor.config.json`: Capacitor 移动壳入口、说明文档与共享 Web 资源配置。
+- `ios/` + `android/`: Capacitor 生成并维护的 iOS/Android 原生工程与构建脚本。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docker/res/`: 各 Agent 默认配置、Playwright 资源与 supervisor 模板。
@@ -45,6 +48,8 @@
 - `docs/en/guide/` `docs/en/configuration/` `docs/en/reference/` `docs/en/advanced/` `docs/en/troubleshooting/`
 - `docs/guide/` `docs/configuration/` `docs/reference/` `docs/advanced/` `docs/troubleshooting/`
 - `lib/web/` `lib/web/frontend/`
+- `apps/electron/` `apps/capacitor/` `lib/electron/`
+- `ios/` `android/`
 - `docker/` `bin/` `scripts/` `test/` `assets/` `coverage/`
 
 ## 构建、测试与开发命令
@@ -56,6 +61,10 @@
 - `npm run test:unit`: 仅跑 `test/` 下的单元测试。
 - `npm run lint`: 占位的 lint 检查（不做风格约束）。
 - `npm run docs:dev|build|preview`: 启动/构建/预览文档站点。提交前或文档校验时先执行 `npm ci --include=optional`，再执行 `npm run docs:build`（不要并行）。
+- `npm run electron:assets` / `npm run electron:dev`: 生成 Electron 图标资源，并以本地 manyoyo Web 服务启动桌面壳。
+- `npm run electron:pack` / `npm run electron:pack:mac`: 打包 Electron 桌面应用；`electron:pack:mac` 输出 macOS `dir + zip` 产物。
+- `npm run capacitor:config` / `npm run capacitor:sync`: 生成 Capacitor 配置并同步共享 Web 资源到原生工程。
+- `npm run capacitor:add:ios|android` / `npm run capacitor:open:ios|android`: 初始化或打开对应原生工程。
 - `npm install -g .` / `npm link` / `npm run install-link`: 本地全局安装或软链 CLI。
 
 ## 编码风格与命名约定
@@ -94,6 +103,10 @@
 - 容器调试：`manyoyo run -n <name> -x /bin/bash`。
 - 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.4-common`），可加 `--iba TOOL=common`。
 - 维护者发布：`npm run dev:release`；自动确认可用 `npm run dev:release -- --yes`，指定版本可用 `npm run dev:release -- --version <x.y.z>`。
+- 本地启动 Electron 工作台：`npm run electron:dev`。
+- 打包 macOS 桌面应用：`npm run electron:pack:mac`。
+- 同步移动壳静态资源：`npm run capacitor:sync`。
+- 打开原生工程继续调试或打包：`npm run capacitor:open:ios` / `npm run capacitor:open:android`。
 - 局域网监听网页服务：`manyoyo serve 0.0.0.0:3000 -U <user> -P <pass>`。
 - 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`（需与启动参数/配置一致）。
 - 若未显式设置 `-P/--pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。
@@ -118,6 +131,7 @@
 
 ## 环境与兼容性
 - 运行环境：`node` >= 22，容器运行时支持 `podman` 或 `docker`。
+- Electron 与 Capacitor 依赖本机对应工具链；Android 打包需可用的 JDK/Android SDK，iOS 打包需 `macOS + Xcode`。
 - CLI 入口：`manyoyo` 与 `my` 指向同一可执行文件。
 - 发布检查：核对 `package.json` 的 `version` 与 `imageVersion` 是否匹配文档。
 - Playwright CLI 版本单一来源为 `package.json.playwrightCliVersion`；镜像内安装 `@playwright/cli` 时禁止改回 `@latest`，也不要误用 `dependencies.playwright` 作为其版本来源。
