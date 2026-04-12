@@ -55,6 +55,18 @@ MANYOYO_DESKTOP_AUTO_SERVE=1 flutter run -d windows
 flutter run -d macos --dart-define=MANYOYO_SERVER_URL=http://127.0.0.1:3000
 ```
 
+iOS 真机补充：
+
+- `flutter run -d ios` 不是固定可用写法，先执行 `flutter devices`，再使用实际设备 ID，例如 `flutter run -d 00008101-001568102E60001E`。
+- 若 Xcode/Flutter 提示 `Runner.app is not a valid bundle`、`CFBundleExecutable` 或安装阶段使用了残缺的 `build/ios/iphoneos/Runner.app`，先执行：
+
+```bash
+flutter clean
+rm -rf build/ios
+cd ios && pod install && cd ..
+flutter run -d <device-id>
+```
+
 说明：
 
 - Flutter 端当前支持“地址输入/保存 + 检测连接 + 内置 MANYOYO WebView + 外部浏览器打开”。

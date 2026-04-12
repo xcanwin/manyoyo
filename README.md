@@ -48,6 +48,7 @@ MANYOYO_DESKTOP_AUTO_SERVE=1 flutter run -d windows
 其他平台可直接替换目标设备：
 
 ```bash
+flutter devices
 flutter run -d windows
 flutter run -d ios
 flutter run -d android
