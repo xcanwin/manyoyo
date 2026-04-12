@@ -67,6 +67,10 @@ cd ios && pod install && cd ..
 flutter run -d <device-id>
 ```
 
+Android 调试补充：
+
+- Android WebView 默认会拦截明文 HTTP；若 MANYOYO 使用局域网地址（如 `http://192.168.x.x:3000`），需要在 Android manifest 显式允许 cleartext traffic，否则可能出现“检测连接成功，但进入页面报 `net::ERR_CLEARTEXT_NOT_PERMITTED`”。
+
 说明：
 
 - Flutter 端当前支持“地址输入/保存 + 检测连接 + 内置 MANYOYO WebView + 外部浏览器打开”。
