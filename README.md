@@ -21,29 +21,13 @@
 
 ---
 
-## 分支说明
+## 生态仓库
 
-当前仓库有 3 个长期分支：
-
-- `main`：主线 Web 版本，也是默认对外说明入口
-- `Electron-Capacitor`：研究 `macOS / Windows / iOS / Android` 应用形态，其中桌面端走 Electron，移动端走 Capacitor
-- `Flutter`：研究 `macOS / Windows / iOS / Android` 应用形态，当前走 Flutter 宿主壳方案
-
-快速切换：
-
-```bash
-git switch Electron-Capacitor
-git switch Flutter
-```
-
-最简运行入口：
-
-```bash
-git switch Electron-Capacitor && npm install && npm run electron:dev
-git switch Flutter && cd apps/flutter && flutter pub get && flutter run -d macos
-```
-
-更完整的 `Windows / iOS / Android` 运行方式请查看对应分支自己的 `README.md`。
+| 仓库 | 定位 |
+|------|------|
+| [manyoyo](https://github.com/xcanwin/manyoyo) | CLI + 容器运行时 + Web 服务 |
+| [manyoyo-app](https://github.com/xcanwin/manyoyo-app) | Flutter 原生 UI 客户端（macOS / Windows / iOS / Android） |
+| [manyoyo-studio](https://github.com/xcanwin/manyoyo-studio) | Electron 桌面端 + Capacitor 移动端 |
 
 ## 为什么是 MANYOYO
 
