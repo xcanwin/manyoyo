@@ -222,9 +222,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage>
     }
 
     final listen =
-        (Platform.environment[_desktopAutoServeListenEnv] ?? '')
-            .trim()
-            .isEmpty
+        (Platform.environment[_desktopAutoServeListenEnv] ?? '').trim().isEmpty
         ? _defaultDesktopAutoServeListen
         : (Platform.environment[_desktopAutoServeListenEnv] ?? '').trim();
     final nodeBin =
@@ -247,15 +245,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage>
     try {
       final process = await Process.start(
         nodeBin,
-        <String>[
-          binPath,
-          'serve',
-          listen,
-          '-U',
-          authUser,
-          '-P',
-          authPass,
-        ],
+        <String>[binPath, 'serve', listen, '-U', authUser, '-P', authPass],
         workingDirectory: repoRoot,
         includeParentEnvironment: true,
       );
@@ -268,7 +258,11 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage>
           .listen(_appendDesktopServerLog);
 
       await _waitForDesktopServerReady(process, Uri.parse(baseUrl));
-      await _installDesktopAutoServeCookie(Uri.parse(baseUrl), authUser, authPass);
+      await _installDesktopAutoServeCookie(
+        Uri.parse(baseUrl),
+        authUser,
+        authPass,
+      );
 
       if (!mounted) {
         return;
@@ -304,10 +298,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage>
     }
   }
 
-  Future<void> _waitForDesktopServerReady(
-    Process process,
-    Uri baseUri,
-  ) async {
+  Future<void> _waitForDesktopServerReady(Process process, Uri baseUri) async {
     final deadline = DateTime.now().add(const Duration(seconds: 25));
     while (DateTime.now().isBefore(deadline)) {
       if (await _isProcessExited(process)) {
@@ -338,7 +329,9 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage>
     try {
       final request = await client.getUrl(uri);
       request.followRedirects = false;
-      final response = await request.close().timeout(const Duration(seconds: 2));
+      final response = await request.close().timeout(
+        const Duration(seconds: 2),
+      );
       await response.drain<void>();
       return response.statusCode >= 200 && response.statusCode < 500;
     } catch (_) {
@@ -355,7 +348,9 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage>
   ) async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
     try {
-      final request = await client.postUrl(baseUri.replace(path: '/auth/login'));
+      final request = await client.postUrl(
+        baseUri.replace(path: '/auth/login'),
+      );
       request.followRedirects = false;
       request.headers.contentType = ContentType.json;
       request.write(
@@ -364,7 +359,9 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage>
           'password': authPass,
         }),
       );
-      final response = await request.close().timeout(const Duration(seconds: 5));
+      final response = await request.close().timeout(
+        const Duration(seconds: 5),
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final body = await utf8.decoder.bind(response).join();
         throw StateError(body.isEmpty ? '自动登录失败。' : body);
@@ -505,9 +502,8 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage>
 
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (BuildContext context) => ManyoyoWebShellPage(
-          initialUrl: uri.toString(),
-        ),
+        builder: (BuildContext context) =>
+            ManyoyoWebShellPage(initialUrl: uri.toString()),
       ),
     );
   }
@@ -795,9 +791,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage>
                                         onPressed: _loading
                                             ? null
                                             : _openManyoyoExternally,
-                                        child: const Text(
-                                          '在系统浏览器打开 MANYOYO',
-                                        ),
+                                        child: const Text('在系统浏览器打开 MANYOYO'),
                                       ),
                                     ],
                                   ),
@@ -845,8 +839,7 @@ class _ManyoyoHomePageState extends State<ManyoyoHomePage>
                                 _StepCard(
                                   index: '02',
                                   title: '检测连接',
-                                  body:
-                                      '确认服务已经启动，避免进入内置 Web 客户端后才发现端口或权限问题。',
+                                  body: '确认服务已经启动，避免进入内置 Web 客户端后才发现端口或权限问题。',
                                 ),
                                 _StepCard(
                                   index: '03',
@@ -904,15 +897,61 @@ class ManyoyoWebShellPage extends StatefulWidget {
   State<ManyoyoWebShellPage> createState() => _ManyoyoWebShellPageState();
 }
 
-class _ManyoyoWebShellPageState extends State<ManyoyoWebShellPage> {
+String _buildManyoyoHostSafeAreaScript(EdgeInsets viewPadding) {
+  const hostSafeAreaStyle = '''
+@media (max-width: 980px) {
+  :root.manyoyo-host-safe-area .header {
+    padding-top: calc(6px + var(--manyoyo-host-safe-top) + 12px) !important;
+  }
+
+  :root.manyoyo-host-safe-area .sidebar {
+    padding-top: calc(16px + var(--manyoyo-host-safe-top) + 12px) !important;
+    padding-right: calc(16px + var(--manyoyo-host-safe-right)) !important;
+    padding-bottom: calc(16px + var(--manyoyo-host-safe-bottom)) !important;
+    padding-left: calc(16px + var(--manyoyo-host-safe-left)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  :root.manyoyo-host-safe-area .header {
+    padding: calc(10px + var(--manyoyo-host-safe-top) + 12px) 12px 16px !important;
+  }
+}
+''';
+  final top = '${viewPadding.top.toStringAsFixed(2)}px';
+  final right = '${viewPadding.right.toStringAsFixed(2)}px';
+  final bottom = '${viewPadding.bottom.toStringAsFixed(2)}px';
+  final left = '${viewPadding.left.toStringAsFixed(2)}px';
+  final styleJson = jsonEncode(hostSafeAreaStyle);
+  return '''
+(() => {
+  const root = document.documentElement;
+  if (!root) {
+    return;
+  }
+  root.classList.add('manyoyo-host-safe-area');
+  root.style.setProperty('--manyoyo-host-safe-top', ${jsonEncode(top)});
+  root.style.setProperty('--manyoyo-host-safe-right', ${jsonEncode(right)});
+  root.style.setProperty('--manyoyo-host-safe-bottom', ${jsonEncode(bottom)});
+  root.style.setProperty('--manyoyo-host-safe-left', ${jsonEncode(left)});
+  const styleId = 'manyoyo-host-safe-area-style';
+  let style = document.getElementById(styleId);
+  if (!style) {
+    style = document.createElement('style');
+    style.id = styleId;
+    (document.head || document.documentElement).appendChild(style);
+  }
+  style.textContent = $styleJson;
+})();
+''';
+}
+
+class _ManyoyoWebShellPageState extends State<ManyoyoWebShellPage>
+    with WidgetsBindingObserver {
   InAppWebViewController? _controller;
-  double _progress = 0;
-  String _currentUrl = '';
-  String _pageTitle = 'MANYOYO';
-  String _statusText = '正在连接 MANYOYO...';
-  bool _canGoBack = false;
-  bool _canGoForward = false;
   String? _lastError;
+  late final Uri? _shellBaseUri;
+  String? _lastInjectedSafeAreaKey;
 
   InAppWebViewSettings get _webViewSettings => InAppWebViewSettings(
     isInspectable: true,
@@ -924,47 +963,58 @@ class _ManyoyoWebShellPageState extends State<ManyoyoWebShellPage> {
     supportZoom: false,
   );
 
-  Future<void> _syncNavigationState() async {
-    final controller = _controller;
-    if (controller == null) {
-      return;
-    }
-
-    final canGoBack = await controller.canGoBack();
-    final canGoForward = await controller.canGoForward();
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _canGoBack = canGoBack;
-      _canGoForward = canGoForward;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _shellBaseUri = Uri.tryParse(widget.initialUrl);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_injectHostSafeAreaStyling(force: true));
     });
   }
 
-  Future<void> _openCurrentUrlExternally() async {
-    final uri = Uri.tryParse(_currentUrl);
-    if (uri == null) {
+  @override
+  void didChangeMetrics() {
+    unawaited(_injectHostSafeAreaStyling(force: true));
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _injectHostSafeAreaStyling({bool force = false}) async {
+    final controller = _controller;
+    if (!mounted || controller == null) {
       return;
     }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
 
-  Future<void> _goHome() async {
-    await _controller?.loadUrl(
-      urlRequest: URLRequest(url: WebUri(widget.initialUrl)),
-    );
-  }
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final cacheKey =
+        '${viewPadding.top.toStringAsFixed(2)}|'
+        '${viewPadding.right.toStringAsFixed(2)}|'
+        '${viewPadding.bottom.toStringAsFixed(2)}|'
+        '${viewPadding.left.toStringAsFixed(2)}';
+    if (!force && cacheKey == _lastInjectedSafeAreaKey) {
+      return;
+    }
 
-  Future<void> _reload() async {
-    await _controller?.reload();
+    try {
+      await controller.evaluateJavascript(
+        source: _buildManyoyoHostSafeAreaScript(viewPadding),
+      );
+      _lastInjectedSafeAreaKey = cacheKey;
+    } catch (_) {
+      // Ignore transient injection failures while the page is navigating.
+    }
   }
 
   Future<NavigationActionPolicy> _handleNavigation(
     NavigationAction navigationAction,
   ) async {
     final uri = parseWebUri(navigationAction.request.url);
-    if (shouldAllowInAppNavigation(uri)) {
+    if (shouldAllowInAppNavigation(uri, shellBaseUri: _shellBaseUri)) {
       return NavigationActionPolicy.ALLOW;
     }
 
@@ -976,9 +1026,20 @@ class _ManyoyoWebShellPageState extends State<ManyoyoWebShellPage> {
     return NavigationActionPolicy.ALLOW;
   }
 
-  Future<bool> _handleCreateWindow(CreateWindowAction createWindowAction) async {
+  Future<bool> _handleCreateWindow(
+    CreateWindowAction createWindowAction,
+  ) async {
     final uri = parseWebUri(createWindowAction.request.url);
-    if (!shouldOpenExternalWindow(uri)) {
+    if (shouldAllowInAppNavigation(uri, shellBaseUri: _shellBaseUri)) {
+      if (uri != null) {
+        await _controller?.loadUrl(
+          urlRequest: URLRequest(url: WebUri(uri.toString())),
+        );
+      }
+      return false;
+    }
+
+    if (!shouldOpenExternalWindow(uri, shellBaseUri: _shellBaseUri)) {
       return false;
     }
 
@@ -991,171 +1052,92 @@ class _ManyoyoWebShellPageState extends State<ManyoyoWebShellPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 12,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _pageTitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: InAppWebView(
+              initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
+              initialSettings: _webViewSettings,
+              onWebViewCreated: (InAppWebViewController controller) {
+                _controller = controller;
+                unawaited(_injectHostSafeAreaStyling(force: true));
+              },
+              shouldOverrideUrlLoading:
+                  (
+                    InAppWebViewController controller,
+                    NavigationAction navigationAction,
+                  ) async {
+                    return _handleNavigation(navigationAction);
+                  },
+              onCreateWindow:
+                  (
+                    InAppWebViewController controller,
+                    CreateWindowAction createWindowAction,
+                  ) async {
+                    return _handleCreateWindow(createWindowAction);
+                  },
+              onLoadStart: (InAppWebViewController controller, WebUri? url) {
+                if (!mounted) {
+                  return;
+                }
+                setState(() {
+                  _lastError = null;
+                });
+              },
+              onLoadStop:
+                  (InAppWebViewController controller, WebUri? url) async {
+                    if (!mounted) {
+                      return;
+                    }
+                    setState(() {
+                      _lastError = null;
+                    });
+                    await _injectHostSafeAreaStyling(force: true);
+                  },
+              onReceivedError:
+                  (
+                    InAppWebViewController controller,
+                    WebResourceRequest request,
+                    WebResourceError error,
+                  ) {
+                    if (request.isForMainFrame != true) {
+                      return;
+                    }
+                    setState(() {
+                      _lastError = '页面加载失败：${error.description}';
+                    });
+                  },
             ),
-            Text(
-              _currentUrl.isEmpty ? widget.initialUrl : _currentUrl,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF4D5C56),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            onPressed: _canGoBack ? () => _controller?.goBack() : null,
-            tooltip: '后退',
-            icon: const Icon(Icons.arrow_back),
           ),
-          IconButton(
-            onPressed: _canGoForward ? () => _controller?.goForward() : null,
-            tooltip: '前进',
-            icon: const Icon(Icons.arrow_forward),
-          ),
-          IconButton(
-            onPressed: _goHome,
-            tooltip: '回到 MANYOYO 首页',
-            icon: const Icon(Icons.home_outlined),
-          ),
-          IconButton(
-            onPressed: _reload,
-            tooltip: '刷新',
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            onPressed: _openCurrentUrlExternally,
-            tooltip: '在系统浏览器打开',
-            icon: const Icon(Icons.open_in_new),
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(42),
-          child: Column(
-            children: [
-              if (_progress < 1)
-                LinearProgressIndicator(value: _progress)
-              else
-                const SizedBox(height: 4),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-                child: Text(
-                  _lastError ?? _statusText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: _lastError == null
-                        ? const Color(0xFF4D5C56)
-                        : const Color(0xFFB42318),
+          if (_lastError != null)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 16,
+              child: Material(
+                color: Colors.transparent,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFDE2E0),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    child: Text(
+                      _lastError!,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFFB42318),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-      body: InAppWebView(
-        initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
-        initialSettings: _webViewSettings,
-        onWebViewCreated: (InAppWebViewController controller) {
-          _controller = controller;
-        },
-        shouldOverrideUrlLoading: (
-          InAppWebViewController controller,
-          NavigationAction navigationAction,
-        ) async {
-          return _handleNavigation(navigationAction);
-        },
-        onCreateWindow: (
-          InAppWebViewController controller,
-          CreateWindowAction createWindowAction,
-        ) async {
-          return _handleCreateWindow(createWindowAction);
-        },
-        onLoadStart: (InAppWebViewController controller, WebUri? url) {
-          setState(() {
-            _currentUrl = url?.toString() ?? widget.initialUrl;
-            _statusText = '正在加载 $_currentUrl';
-            _lastError = null;
-          });
-          _syncNavigationState();
-        },
-        onTitleChanged: (
-          InAppWebViewController controller,
-          String? title,
-        ) {
-          if (!mounted || title == null || title.trim().isEmpty) {
-            return;
-          }
-          setState(() {
-            _pageTitle = title.trim();
-          });
-        },
-        onLoadStop: (InAppWebViewController controller, WebUri? url) async {
-          await _syncNavigationState();
-          if (!mounted) {
-            return;
-          }
-          setState(() {
-            _currentUrl = url?.toString() ?? widget.initialUrl;
-            _statusText = '已进入 MANYOYO Web 客户端';
-            _lastError = null;
-            _progress = 1;
-          });
-        },
-        onProgressChanged: (
-          InAppWebViewController controller,
-          int progress,
-        ) {
-          if (!mounted) {
-            return;
-          }
-          setState(() {
-            _progress = progress / 100;
-            if (_lastError == null) {
-              _statusText = progress >= 100
-                  ? '已进入 MANYOYO Web 客户端'
-                  : '加载中 ${progress.toString()}%';
-            }
-          });
-        },
-        onUpdateVisitedHistory: (
-          InAppWebViewController controller,
-          WebUri? url,
-          bool? isReload,
-        ) {
-          if (!mounted) {
-            return;
-          }
-          setState(() {
-            _currentUrl = url?.toString() ?? _currentUrl;
-          });
-          _syncNavigationState();
-        },
-        onReceivedError: (
-          InAppWebViewController controller,
-          WebResourceRequest request,
-          WebResourceError error,
-        ) {
-          if (request.isForMainFrame != true) {
-            return;
-          }
-          setState(() {
-            _lastError = '页面加载失败：${error.description}';
-            _progress = 1;
-          });
-        },
+            ),
+        ],
       ),
     );
   }
