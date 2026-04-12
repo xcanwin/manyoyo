@@ -57,7 +57,8 @@ flutter run -d macos --dart-define=MANYOYO_SERVER_URL=http://127.0.0.1:3000
 
 iOS 真机补充：
 
-- `flutter run -d ios` 不是固定可用写法，先执行 `flutter devices`，再使用实际设备 ID，例如 `flutter run -d 00008101-001568102E60001E`。
+- `flutter run -d ios` 不是固定可用写法，先执行 `flutter devices`，再使用实际设备 ID。
+- iOS 14+ 下，`debug` 包通常只能从 Flutter tooling、IDE 或 Xcode 启动；若需要从桌面反复打开，使用 `flutter run --profile -d <device-id>` 或 `flutter run --release -d <device-id>`。
 - 若 Xcode/Flutter 提示 `Runner.app is not a valid bundle`、`CFBundleExecutable` 或安装阶段使用了残缺的 `build/ios/iphoneos/Runner.app`，先执行：
 
 ```bash
