@@ -138,6 +138,15 @@ class _FakeRepository implements ManyoyoRepository {
   }
 
   @override
+  Future<RunCommandResult> runCommand(
+    StoredSession session,
+    String sessionName,
+    String command,
+  ) async {
+    return const RunCommandResult(exitCode: 0, output: 'ok');
+  }
+
+  @override
   Future<SessionDetail> fetchSessionDetail(
     StoredSession session,
     String sessionName,

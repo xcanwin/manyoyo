@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_controller.dart';
 import 'models.dart';
@@ -716,6 +717,12 @@ class _WorkspaceScreenState extends State<_WorkspaceScreen> {
             }
           },
           onOpenCreate: _openCreateDialog,
+          compact: !wide,
+          onCloseSidebar: !wide
+              ? () {
+                  Navigator.of(context).maybePop();
+                }
+              : null,
           onSelectSession: !wide
               ? () {
                   Navigator.of(context).maybePop();
@@ -783,22 +790,112 @@ class _WorkspaceScreenState extends State<_WorkspaceScreen> {
   }
 }
 
-class _SidebarPanel extends StatelessWidget {
+class _SidebarPanel extends StatefulWidget {
   const _SidebarPanel({
     required this.controller,
     required this.onOpenConfig,
     required this.onOpenCreate,
+    this.compact = false,
+    this.onCloseSidebar,
     this.onSelectSession,
   });
 
   final ManyoyoAppController controller;
   final Future<void> Function() onOpenConfig;
   final Future<void> Function() onOpenCreate;
+  final bool compact;
+  final VoidCallback? onCloseSidebar;
   final VoidCallback? onSelectSession;
 
   @override
+  State<_SidebarPanel> createState() => _SidebarPanelState();
+}
+
+class _SidebarPanelState extends State<_SidebarPanel> {
+  final Map<String, bool> _expandedDirectories = <String, bool>{};
+  final Map<String, bool> _expandedContainers = <String, bool>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _primeExpansionState();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SidebarPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _primeExpansionState();
+  }
+
+  void _primeExpansionState() {
+    final String activeSessionName = widget.controller.activeSessionName;
+    if (activeSessionName.isEmpty) {
+      return;
+    }
+    final List<_SidebarDirectoryGroup> groups = _groupSessionsByDirectory(
+      widget.controller.sessions,
+    );
+    for (final _SidebarDirectoryGroup group in groups) {
+      final bool groupHasActive = group.containers.any(
+        (_SidebarContainerGroup container) => container.sessions.any(
+          (SessionSummary session) => session.name == activeSessionName,
+        ),
+      );
+      if (groupHasActive && !_expandedDirectories.containsKey(group.path)) {
+        _expandedDirectories[group.path] = true;
+      }
+      for (final _SidebarContainerGroup container in group.containers) {
+        final bool containerHasActive = container.sessions.any(
+          (SessionSummary session) => session.name == activeSessionName,
+        );
+        final String key = _sidebarContainerKey(
+          group.path,
+          container.container,
+        );
+        if (containerHasActive && !_expandedContainers.containsKey(key)) {
+          _expandedContainers[key] = true;
+        }
+      }
+    }
+  }
+
+  bool _isDirectoryExpanded(_SidebarDirectoryGroup group) {
+    return _expandedDirectories[group.path] ?? false;
+  }
+
+  bool _isContainerExpanded(_SidebarContainerGroup group) {
+    return _expandedContainers[_sidebarContainerKey(
+          group.path,
+          group.container,
+        )] ??
+        false;
+  }
+
+  void _toggleDirectory(_SidebarDirectoryGroup group) {
+    setState(() {
+      _expandedDirectories[group.path] = !_isDirectoryExpanded(group);
+    });
+  }
+
+  void _toggleContainer(_SidebarContainerGroup group) {
+    setState(() {
+      final String key = _sidebarContainerKey(group.path, group.container);
+      _expandedContainers[key] = !_isContainerExpanded(group);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final int count = controller.sessions.length;
+    final ManyoyoAppController controller = widget.controller;
+    final List<_SidebarDirectoryGroup> groups = _groupSessionsByDirectory(
+      controller.sessions,
+    );
+    final int directoryCount = groups.length;
+    final int containerCount = controller.sessions
+        .map((SessionSummary session) => session.containerName.trim())
+        .where((String name) => name.isNotEmpty)
+        .toSet()
+        .length;
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -817,55 +914,69 @@ class _SidebarPanel extends StatelessWidget {
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: Color(0x73B59263))),
             ),
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        'MANYOYO Web',
-                        style: _displayStyle(
-                          Theme.of(context).textTheme.titleLarge,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.1,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Container Session Console',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          fontSize: 11,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.end,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    FilledButton(
-                      style: _buttonStyle(_ButtonTone.secondary),
-                      onPressed: () async {
-                        await onOpenConfig();
-                      },
-                      child: const Text('配置'),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            'MANYOYO Web',
+                            style: _displayStyle(
+                              Theme.of(context).textTheme.titleLarge,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Container Session Console',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(fontSize: 11, letterSpacing: 0.3),
+                          ),
+                        ],
+                      ),
                     ),
-                    FilledButton(
-                      style: _buttonStyle(_ButtonTone.primary),
-                      onPressed: () async {
-                        await onOpenCreate();
-                      },
-                      child: const Text('新建'),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.end,
+                        children: <Widget>[
+                          FilledButton(
+                            style: _buttonStyle(_ButtonTone.secondary),
+                            onPressed: () async {
+                              await widget.onOpenConfig();
+                            },
+                            child: const Text('配置'),
+                          ),
+                          FilledButton(
+                            style: _buttonStyle(_ButtonTone.primary),
+                            onPressed: () async {
+                              await widget.onOpenCreate();
+                            },
+                            child: const Text('新建'),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
+                if (widget.compact &&
+                    widget.onCloseSidebar != null) ...<Widget>[
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    style: _buttonStyle(_ButtonTone.secondary),
+                    onPressed: widget.onCloseSidebar,
+                    child: const Text('关闭'),
+                  ),
+                ],
               ],
             ),
           ),
@@ -881,7 +992,9 @@ class _SidebarPanel extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '$count 个',
+                controller.loadingSessions
+                    ? '加载中...'
+                    : '$directoryCount 个 目录 / $containerCount 个容器 / ${controller.sessions.length} 个 AGENT',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   color: _WebColors.muted,
                   fontSize: 12,
@@ -900,26 +1013,35 @@ class _SidebarPanel extends StatelessWidget {
                   )
                 : controller.sessions.isEmpty
                 ? Center(
-                    child: Text(
-                      '当前没有可用会话',
-                      style: Theme.of(context).textTheme.bodyMedium,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: _EmptyNoteCard(message: '暂无 manyoyo 会话'),
                     ),
                   )
-                : ListView.separated(
-                    itemCount: controller.sessions.length,
-                    padding: EdgeInsets.zero,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (BuildContext context, int index) {
-                      final SessionSummary session = controller.sessions[index];
-                      return _SessionTile(
-                        session: session,
-                        selected: session.name == controller.activeSessionName,
-                        onTap: () async {
-                          await controller.selectSession(session.name);
-                          onSelectSession?.call();
-                        },
-                      );
-                    },
+                : Scrollbar(
+                    child: ListView.separated(
+                      itemCount: groups.length,
+                      padding: const EdgeInsets.only(right: 4),
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (BuildContext context, int index) {
+                        final _SidebarDirectoryGroup group = groups[index];
+                        return _SidebarDirectoryBlock(
+                          group: group,
+                          isLastSibling: index == groups.length - 1,
+                          expanded: _isDirectoryExpanded(group),
+                          activeSessionName: controller.activeSessionName,
+                          onToggle: () {
+                            _toggleDirectory(group);
+                          },
+                          onToggleContainer: _toggleContainer,
+                          isContainerExpanded: _isContainerExpanded,
+                          onSelectSession: (String sessionName) async {
+                            await controller.selectSession(sessionName);
+                            widget.onSelectSession?.call();
+                          },
+                        );
+                      },
+                    ),
                   ),
           ),
         ],
@@ -928,110 +1050,454 @@ class _SidebarPanel extends StatelessWidget {
   }
 }
 
-class _SessionTile extends StatelessWidget {
-  const _SessionTile({
-    required this.session,
-    required this.selected,
-    required this.onTap,
+class _SidebarDirectoryBlock extends StatelessWidget {
+  const _SidebarDirectoryBlock({
+    required this.group,
+    required this.isLastSibling,
+    required this.expanded,
+    required this.activeSessionName,
+    required this.onToggle,
+    required this.onToggleContainer,
+    required this.isContainerExpanded,
+    required this.onSelectSession,
   });
 
-  final SessionSummary session;
-  final bool selected;
-  final Future<void> Function() onTap;
+  final _SidebarDirectoryGroup group;
+  final bool isLastSibling;
+  final bool expanded;
+  final String activeSessionName;
+  final VoidCallback onToggle;
+  final void Function(_SidebarContainerGroup group) onToggleContainer;
+  final bool Function(_SidebarContainerGroup group) isContainerExpanded;
+  final Future<void> Function(String sessionName) onSelectSession;
 
   @override
   Widget build(BuildContext context) {
-    final _StatusTheme tone = _statusTheme(session.status);
-    final bool subdued =
-        !selected &&
-        (session.status == 'history' ||
-            session.status == 'stopped' ||
-            session.status == 'unknown');
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () async {
-          await onTap();
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.fromLTRB(10, 11, 11, 11),
-          decoration: BoxDecoration(
-            color: selected
-                ? const Color(0xFFFFF3E8)
-                : subdued
-                ? Colors.white.withValues(alpha: 0.72)
-                : _WebColors.panelStrong,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected
-                  ? const Color(0xFFC68D5A)
-                  : subdued
-                  ? const Color(0x38B59263)
-                  : _WebColors.line,
-            ),
-            boxShadow: selected
-                ? const <BoxShadow>[
-                    BoxShadow(
-                      color: Color(0x24C4551F),
-                      blurRadius: 0,
-                      spreadRadius: 2,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Opacity(
-            opacity: subdued ? 0.25 : 1,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  session.name,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: <Widget>[
-                    _StatusPill(
-                      label: session.status,
-                      backgroundColor: tone.background,
-                      foregroundColor: tone.foreground,
-                      borderColor: tone.border,
-                    ),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        '${session.agentName} · ${session.messageCount} 条',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.labelMedium?.copyWith(fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  session.updatedAt.isEmpty
-                      ? session.createdAt
-                      : session.updatedAt,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontSize: 11,
-                    color: const Color(0xFF7B6D5D),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ),
+    final bool hasActive = group.containers.any(
+      (_SidebarContainerGroup container) => container.sessions.any(
+        (SessionSummary session) => session.name == activeSessionName,
       ),
     );
+    final List<Widget> children = <Widget>[
+      _SidebarTreeItem(
+        ancestorHasNext: const <bool>[],
+        isLastSibling: isLastSibling,
+        kind: _SidebarTreeItemKind.directory,
+        title: group.path,
+        expandable: group.containers.isNotEmpty,
+        expanded: expanded,
+        emphasized: hasActive,
+        onPressed: onToggle,
+      ),
+    ];
+    if (expanded && group.containers.isNotEmpty) {
+      children.add(const SizedBox(height: 8));
+      children.add(
+        Column(
+          children: <Widget>[
+            for (
+              int index = 0;
+              index < group.containers.length;
+              index++
+            ) ...<Widget>[
+              _SidebarContainerBlock(
+                group: group.containers[index],
+                ancestorHasNext: <bool>[!isLastSibling],
+                isLastSibling: index == group.containers.length - 1,
+                expanded: isContainerExpanded(group.containers[index]),
+                activeSessionName: activeSessionName,
+                onToggle: () {
+                  onToggleContainer(group.containers[index]);
+                },
+                onSelectSession: onSelectSession,
+              ),
+              if (index != group.containers.length - 1)
+                const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+}
+
+class _SidebarContainerBlock extends StatelessWidget {
+  const _SidebarContainerBlock({
+    required this.group,
+    required this.ancestorHasNext,
+    required this.isLastSibling,
+    required this.expanded,
+    required this.activeSessionName,
+    required this.onToggle,
+    required this.onSelectSession,
+  });
+
+  final _SidebarContainerGroup group;
+  final List<bool> ancestorHasNext;
+  final bool isLastSibling;
+  final bool expanded;
+  final String activeSessionName;
+  final VoidCallback onToggle;
+  final Future<void> Function(String sessionName) onSelectSession;
+
+  @override
+  Widget build(BuildContext context) {
+    final _SidebarStatusInfo status = _sidebarStatusInfo(group.status);
+    final bool hasActive = group.sessions.any(
+      (SessionSummary session) => session.name == activeSessionName,
+    );
+    final List<Widget> children = <Widget>[
+      _SidebarTreeItem(
+        ancestorHasNext: ancestorHasNext,
+        isLastSibling: isLastSibling,
+        kind: _SidebarTreeItemKind.container,
+        title: group.container.isEmpty ? '未命名容器' : group.container,
+        meta: status.label,
+        metaColor: status.color,
+        expandable: group.sessions.isNotEmpty,
+        expanded: expanded,
+        emphasized: hasActive,
+        historyTone: status.tone == 'history',
+        onPressed: onToggle,
+      ),
+    ];
+    if (expanded && group.sessions.isNotEmpty) {
+      children.add(const SizedBox(height: 8));
+      children.add(
+        Column(
+          children: <Widget>[
+            for (
+              int index = 0;
+              index < group.sessions.length;
+              index++
+            ) ...<Widget>[
+              _SidebarTreeItem(
+                ancestorHasNext: ancestorHasNext.followedBy(<bool>[
+                  !isLastSibling,
+                ]).toList(),
+                isLastSibling: index == group.sessions.length - 1,
+                kind: _SidebarTreeItemKind.agent,
+                title: group.sessions[index].agentName,
+                meta: _formatSidebarDateTime(group.sessions[index].updatedAt),
+                active: group.sessions[index].name == activeSessionName,
+                historyTone: status.tone == 'history',
+                onPressed: () async {
+                  await onSelectSession(group.sessions[index].name);
+                },
+              ),
+              if (index != group.sessions.length - 1) const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+}
+
+enum _SidebarTreeItemKind { directory, container, agent }
+
+class _SidebarTreeItem extends StatefulWidget {
+  const _SidebarTreeItem({
+    required this.ancestorHasNext,
+    required this.isLastSibling,
+    required this.kind,
+    required this.title,
+    required this.onPressed,
+    this.meta,
+    this.metaColor,
+    this.expandable = false,
+    this.expanded = false,
+    this.active = false,
+    this.emphasized = false,
+    this.historyTone = false,
+  });
+
+  final List<bool> ancestorHasNext;
+  final bool isLastSibling;
+  final _SidebarTreeItemKind kind;
+  final String title;
+  final String? meta;
+  final Color? metaColor;
+  final VoidCallback onPressed;
+  final bool expandable;
+  final bool expanded;
+  final bool active;
+  final bool emphasized;
+  final bool historyTone;
+
+  @override
+  State<_SidebarTreeItem> createState() => _SidebarTreeItemState();
+}
+
+class _SidebarTreeItemState extends State<_SidebarTreeItem> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool useTreeGradient =
+        widget.kind == _SidebarTreeItemKind.directory ||
+        widget.kind == _SidebarTreeItemKind.container;
+    final Color borderColor = widget.active
+        ? const Color(0xFFC68D5A)
+        : _hovering
+        ? const Color(0xFFD1AA7F)
+        : widget.emphasized
+        ? const Color(0xFFC68D5A)
+        : const Color(0x61B59263);
+    final List<BoxShadow>? boxShadow = widget.active
+        ? const <BoxShadow>[
+            BoxShadow(color: Color(0x24C4551F), blurRadius: 0, spreadRadius: 2),
+          ]
+        : widget.emphasized
+        ? const <BoxShadow>[
+            BoxShadow(color: Color(0x14C4551F), blurRadius: 0, spreadRadius: 2),
+          ]
+        : null;
+    final Color backgroundColor = widget.active
+        ? const Color(0xFFFFF3E8)
+        : _hovering
+        ? const Color(0xFFFFF8EF)
+        : const Color(0xF0FFFFFF);
+    final Gradient? backgroundGradient =
+        widget.active || _hovering || !useTreeGradient
+        ? null
+        : const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[Color(0xF5FFFFFF), Color(0xFAF9F2E8)],
+          );
+    final Color titleColor = widget.historyTone
+        ? _WebColors.statusHistoryText
+        : _WebColors.text;
+    final Color metaColor =
+        widget.metaColor ??
+        (widget.historyTone
+            ? _WebColors.statusHistoryText
+            : const Color(0xFF7B6D5D));
+    return MouseRegion(
+      onEnter: (_) {
+        setState(() {
+          _hovering = true;
+        });
+      },
+      onExit: (_) {
+        setState(() {
+          _hovering = false;
+        });
+      },
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _SidebarTreePrefix(
+            ancestorHasNext: widget.ancestorHasNext,
+            isLastSibling: widget.isLastSibling,
+            expandable: widget.expandable,
+            expanded: widget.expanded,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: widget.onPressed,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: backgroundGradient == null ? backgroundColor : null,
+                    gradient: backgroundGradient,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: borderColor),
+                    boxShadow: boxShadow,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      if (widget.active) ...<Widget>[
+                        Container(
+                          width: 3,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: _WebColors.accent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              widget.title,
+                              style:
+                                  (widget.kind == _SidebarTreeItemKind.agent
+                                          ? Theme.of(
+                                              context,
+                                            ).textTheme.titleSmall
+                                          : _monoStyle(
+                                              Theme.of(
+                                                context,
+                                              ).textTheme.titleSmall,
+                                            ))
+                                      ?.copyWith(
+                                        color: titleColor,
+                                        fontSize:
+                                            widget.kind ==
+                                                _SidebarTreeItemKind.agent
+                                            ? 13
+                                            : 12,
+                                        fontWeight:
+                                            widget.kind ==
+                                                _SidebarTreeItemKind.agent
+                                            ? FontWeight.w700
+                                            : FontWeight.w600,
+                                        height: 1.5,
+                                      ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if ((widget.meta ?? '')
+                                .trim()
+                                .isNotEmpty) ...<Widget>[
+                              const SizedBox(height: 6),
+                              Text(
+                                widget.meta!,
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: metaColor,
+                                      fontSize:
+                                          widget.kind ==
+                                              _SidebarTreeItemKind.container
+                                          ? 12
+                                          : 11,
+                                      fontWeight:
+                                          widget.kind ==
+                                              _SidebarTreeItemKind.container
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      height: 1.45,
+                                    ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SidebarTreePrefix extends StatelessWidget {
+  const _SidebarTreePrefix({
+    required this.ancestorHasNext,
+    required this.isLastSibling,
+    required this.expandable,
+    required this.expanded,
+  });
+
+  final List<bool> ancestorHasNext;
+  final bool isLastSibling;
+  final bool expandable;
+  final bool expanded;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 38,
+      child: Row(
+        children: <Widget>[
+          for (final bool _ in ancestorHasNext)
+            const SizedBox(width: 10, height: 38),
+          SizedBox(
+            width: 10,
+            height: 38,
+            child: CustomPaint(
+              painter: _SidebarBranchPainter(isLastSibling: isLastSibling),
+            ),
+          ),
+          if (expandable)
+            SizedBox(
+              width: 16,
+              height: 38,
+              child: Center(
+                child: AnimatedRotation(
+                  duration: const Duration(milliseconds: 140),
+                  turns: expanded ? 0.25 : 0,
+                  child: const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 14,
+                    color: Color(0xFF8C7257),
+                  ),
+                ),
+              ),
+            )
+          else
+            const SizedBox(
+              width: 12,
+              height: 38,
+              child: Center(
+                child: SizedBox(
+                  width: 10,
+                  child: Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Color(0xFFD9C7AD),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SidebarBranchPainter extends CustomPainter {
+  const _SidebarBranchPainter({required this.isLastSibling});
+
+  final bool isLastSibling;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint verticalPaint = Paint()
+      ..color = const Color(0xFFCCB79E)
+      ..strokeWidth = 1;
+    final Paint horizontalPaint = Paint()
+      ..color = const Color(0xFFD9C7AD)
+      ..strokeWidth = 1;
+    final double x = 5;
+    final double midY = size.height / 2;
+    canvas.drawLine(
+      Offset(x, -6),
+      Offset(x, isLastSibling ? midY : size.height + 6),
+      verticalPaint,
+    );
+    canvas.drawLine(Offset(x, midY), Offset(size.width, midY), horizontalPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SidebarBranchPainter oldDelegate) {
+    return oldDelegate.isLastSibling != isLastSibling;
   }
 }
 
@@ -1448,9 +1914,17 @@ class _ConversationPaneState extends State<_ConversationPane> {
                       children: <Widget>[
                         FilledButton(
                           style: _buttonStyle(_ButtonTone.primary),
-                          onPressed: controller.streamingAgent ? null : _submit,
+                          onPressed:
+                              controller.streamingAgent ||
+                                  controller.runningCommand
+                              ? null
+                              : _submit,
                           child: Text(
-                            controller.streamingAgent ? '运行中…' : '发送',
+                            controller.streamingAgent
+                                ? '运行中…'
+                                : controller.runningCommand
+                                ? '执行中…'
+                                : '发送',
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -1482,8 +1956,10 @@ class _ConversationPaneState extends State<_ConversationPane> {
                           ? '未选择会话'
                           : controller.streamingAgent
                           ? '发送中'
+                          : controller.runningCommand
+                          ? '执行中'
                           : _mode == _ComposerMode.command
-                          ? '命令模式待接入'
+                          ? '命令模式已接入'
                           : '已就绪',
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         fontSize: 12,
@@ -1506,14 +1982,15 @@ class _ConversationPaneState extends State<_ConversationPane> {
   }
 
   Future<void> _submit() async {
-    if (_mode == _ComposerMode.command) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Flutter 端命令模式还未接入。')));
+    final String prompt = _promptController.text;
+    if (prompt.trim().isEmpty) {
       return;
     }
-    final String prompt = _promptController.text;
     _promptController.clear();
+    if (_mode == _ComposerMode.command) {
+      await widget.controller.runCommand(prompt);
+      return;
+    }
     await widget.controller.sendPrompt(prompt);
   }
 }
@@ -2058,16 +2535,19 @@ class _TerminalPane extends StatefulWidget {
 
 class _TerminalPaneState extends State<_TerminalPane> {
   late final TextEditingController _inputController;
+  late final FocusNode _terminalFocusNode;
 
   @override
   void initState() {
     super.initState();
     _inputController = TextEditingController();
+    _terminalFocusNode = FocusNode(debugLabel: 'manyoyoTerminalFocus');
   }
 
   @override
   void dispose() {
     _inputController.dispose();
+    _terminalFocusNode.dispose();
     super.dispose();
   }
 
@@ -2157,22 +2637,63 @@ class _TerminalPaneState extends State<_TerminalPane> {
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _WebColors.terminalBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    controller.terminalOutput.isEmpty
-                        ? '终端输出会显示在这里。'
-                        : controller.terminalOutput,
-                    style: _monoStyle(
-                      Theme.of(context).textTheme.bodyMedium,
-                      color: _WebColors.terminalFg,
-                      height: 1.35,
+              child: KeyboardListener(
+                focusNode: _terminalFocusNode,
+                onKeyEvent: _handleTerminalKeyEvent,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    _terminalFocusNode.requestFocus();
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _WebColors.terminalBg,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Stack(
+                      children: <Widget>[
+                        Positioned.fill(
+                          child: SingleChildScrollView(
+                            child: SelectableText(
+                              controller.terminalOutput.isEmpty
+                                  ? '终端输出会显示在这里。点击这里后可直接键盘交互。'
+                                  : controller.terminalOutput,
+                              style: _monoStyle(
+                                Theme.of(context).textTheme.bodyMedium,
+                                color: _WebColors.terminalFg,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.12),
+                              ),
+                            ),
+                            child: Text(
+                              _terminalFocusNode.hasFocus ? '键盘已接管' : '点击进入交互',
+                              style: _monoStyle(
+                                Theme.of(context).textTheme.labelSmall,
+                                color: const Color(0xFFBBBBBB),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -2218,6 +2739,17 @@ class _TerminalPaneState extends State<_TerminalPane> {
     }
     widget.controller.sendTerminalLine(text);
     _inputController.clear();
+  }
+
+  void _handleTerminalKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return;
+    }
+    final String? data = _keyEventToTerminalData(event);
+    if (data == null || data.isEmpty) {
+      return;
+    }
+    widget.controller.sendTerminalInput(data);
   }
 }
 
@@ -3008,6 +3540,194 @@ class _LabeledField extends StatelessWidget {
   }
 }
 
+class _SidebarDirectoryGroup {
+  const _SidebarDirectoryGroup({
+    required this.path,
+    required this.updatedAt,
+    required this.containers,
+  });
+
+  final String path;
+  final String updatedAt;
+  final List<_SidebarContainerGroup> containers;
+}
+
+class _SidebarContainerGroup {
+  const _SidebarContainerGroup({
+    required this.path,
+    required this.container,
+    required this.status,
+    required this.updatedAt,
+    required this.sessions,
+  });
+
+  final String path;
+  final String container;
+  final String status;
+  final String updatedAt;
+  final List<SessionSummary> sessions;
+}
+
+class _SidebarStatusInfo {
+  const _SidebarStatusInfo({
+    required this.tone,
+    required this.label,
+    required this.color,
+  });
+
+  final String tone;
+  final String label;
+  final Color color;
+}
+
+String _sidebarContainerKey(String path, String container) {
+  return '$path::$container';
+}
+
+List<_SidebarDirectoryGroup> _groupSessionsByDirectory(
+  List<SessionSummary> sessions,
+) {
+  final Map<String, List<SessionSummary>> grouped =
+      <String, List<SessionSummary>>{};
+  for (final SessionSummary session in sessions) {
+    final String path = session.hostPath.trim().isEmpty
+        ? '未配置目录'
+        : session.hostPath.trim();
+    grouped.putIfAbsent(path, () => <SessionSummary>[]).add(session);
+  }
+  final List<_SidebarDirectoryGroup> result =
+      grouped.entries.map((MapEntry<String, List<SessionSummary>> entry) {
+        final Map<String, List<SessionSummary>> containerMap =
+            <String, List<SessionSummary>>{};
+        for (final SessionSummary session in entry.value) {
+          containerMap
+              .putIfAbsent(session.containerName, () => <SessionSummary>[])
+              .add(session);
+        }
+        final List<_SidebarContainerGroup> containers =
+            containerMap.entries.map((
+              MapEntry<String, List<SessionSummary>> item,
+            ) {
+              final List<SessionSummary> orderedSessions = item.value.toList()
+                ..sort(_compareSidebarSessionByCreatedDesc);
+              SessionSummary latest = orderedSessions.first;
+              for (final SessionSummary session in orderedSessions) {
+                if (_sessionTime(session.updatedAt) >
+                    _sessionTime(latest.updatedAt)) {
+                  latest = session;
+                }
+              }
+              return _SidebarContainerGroup(
+                path: entry.key,
+                container: item.key,
+                status: latest.status,
+                updatedAt: latest.updatedAt,
+                sessions: orderedSessions,
+              );
+            }).toList()..sort(
+              (_SidebarContainerGroup a, _SidebarContainerGroup b) =>
+                  _sessionTime(
+                    b.updatedAt,
+                  ).compareTo(_sessionTime(a.updatedAt)),
+            );
+        String updatedAt = '';
+        for (final _SidebarContainerGroup container in containers) {
+          if (_sessionTime(container.updatedAt) > _sessionTime(updatedAt)) {
+            updatedAt = container.updatedAt;
+          }
+        }
+        return _SidebarDirectoryGroup(
+          path: entry.key,
+          updatedAt: updatedAt,
+          containers: containers,
+        );
+      }).toList()..sort(
+        (_SidebarDirectoryGroup a, _SidebarDirectoryGroup b) =>
+            _sessionTime(b.updatedAt).compareTo(_sessionTime(a.updatedAt)),
+      );
+  return result;
+}
+
+int _compareSidebarSessionByCreatedDesc(SessionSummary a, SessionSummary b) {
+  final int createdDiff = _sessionTime(
+    b.createdAt,
+  ).compareTo(_sessionTime(a.createdAt));
+  if (createdDiff != 0) {
+    return createdDiff;
+  }
+  if (a.containerName == b.containerName) {
+    final int rankDiff = _sidebarAgentRank(
+      b.agentId,
+    ).compareTo(_sidebarAgentRank(a.agentId));
+    if (rankDiff != 0) {
+      return rankDiff;
+    }
+  }
+  final int updatedDiff = _sessionTime(
+    b.updatedAt,
+  ).compareTo(_sessionTime(a.updatedAt));
+  if (updatedDiff != 0) {
+    return updatedDiff;
+  }
+  return a.name.compareTo(b.name);
+}
+
+int _sidebarAgentRank(String agentId) {
+  final String value = agentId.trim();
+  if (value.isEmpty || value == 'default') {
+    return 1;
+  }
+  final RegExpMatch? matched = RegExp(r'^agent-(\d+)$').firstMatch(value);
+  return matched == null ? 0 : int.tryParse(matched.group(1) ?? '0') ?? 0;
+}
+
+int _sessionTime(String value) {
+  final String text = value.trim();
+  if (text.isEmpty) {
+    return 0;
+  }
+  return DateTime.tryParse(text)?.millisecondsSinceEpoch ?? 0;
+}
+
+String _formatSidebarDateTime(String value) {
+  final DateTime? date = DateTime.tryParse(value.trim());
+  if (date == null) {
+    return '暂无更新';
+  }
+  String twoDigits(int source) => source.toString().padLeft(2, '0');
+  return '${twoDigits(date.month)}/${twoDigits(date.day)} ${twoDigits(date.hour)}:${twoDigits(date.minute)}';
+}
+
+_SidebarStatusInfo _sidebarStatusInfo(String status) {
+  final String normalized = status.toLowerCase();
+  if (normalized == 'history') {
+    return const _SidebarStatusInfo(
+      tone: 'history',
+      label: '仅历史',
+      color: _WebColors.statusHistoryText,
+    );
+  }
+  if (normalized.contains('up') || normalized.contains('running')) {
+    return const _SidebarStatusInfo(
+      tone: 'running',
+      label: '运行中',
+      color: _WebColors.statusRunningText,
+    );
+  }
+  if (normalized.contains('exited') || normalized.contains('created')) {
+    return const _SidebarStatusInfo(
+      tone: 'stopped',
+      label: '已停止',
+      color: _WebColors.statusStoppedText,
+    );
+  }
+  return const _SidebarStatusInfo(
+    tone: 'unknown',
+    label: '未知',
+    color: _WebColors.statusUnknownText,
+  );
+}
+
 class _StatusTheme {
   const _StatusTheme({
     required this.background,
@@ -3052,40 +3772,6 @@ _KvTone _statusToneLabel(String status) {
     'history' => _KvTone.warn,
     _ => _KvTone.warn,
   };
-}
-
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({
-    required this.label,
-    required this.backgroundColor,
-    required this.foregroundColor,
-    required this.borderColor,
-  });
-
-  final String label;
-  final Color backgroundColor;
-  final Color foregroundColor;
-  final Color borderColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: borderColor),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: foregroundColor,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
 }
 
 class _InfoChip extends StatelessWidget {
@@ -3368,6 +4054,69 @@ class _EmptyNoteCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String? _keyEventToTerminalData(KeyEvent event) {
+  final LogicalKeyboardKey key = event.logicalKey;
+  final HardwareKeyboard keyboard = HardwareKeyboard.instance;
+
+  if (key == LogicalKeyboardKey.enter ||
+      key == LogicalKeyboardKey.numpadEnter) {
+    return '\r';
+  }
+  if (key == LogicalKeyboardKey.backspace) {
+    return '\u007f';
+  }
+  if (key == LogicalKeyboardKey.tab) {
+    return '\t';
+  }
+  if (key == LogicalKeyboardKey.escape) {
+    return '\u001b';
+  }
+  if (key == LogicalKeyboardKey.arrowUp) {
+    return '\u001b[A';
+  }
+  if (key == LogicalKeyboardKey.arrowDown) {
+    return '\u001b[B';
+  }
+  if (key == LogicalKeyboardKey.arrowRight) {
+    return '\u001b[C';
+  }
+  if (key == LogicalKeyboardKey.arrowLeft) {
+    return '\u001b[D';
+  }
+  if (key == LogicalKeyboardKey.delete) {
+    return '\u001b[3~';
+  }
+  if (key == LogicalKeyboardKey.home) {
+    return '\u001b[H';
+  }
+  if (key == LogicalKeyboardKey.end) {
+    return '\u001b[F';
+  }
+  if (key == LogicalKeyboardKey.pageUp) {
+    return '\u001b[5~';
+  }
+  if (key == LogicalKeyboardKey.pageDown) {
+    return '\u001b[6~';
+  }
+
+  final String? character = event.character;
+  if (character == null || character.isEmpty) {
+    return null;
+  }
+
+  String output = character;
+  if (keyboard.isControlPressed) {
+    final int codeUnit = character.toUpperCase().codeUnitAt(0);
+    if (codeUnit >= 64 && codeUnit <= 95) {
+      output = String.fromCharCode(codeUnit - 64);
+    }
+  }
+  if (keyboard.isAltPressed) {
+    output = '\u001b$output';
+  }
+  return output;
 }
 
 String _summarizeCli({required SessionDetail? detail}) {

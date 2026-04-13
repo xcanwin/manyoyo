@@ -5,9 +5,7 @@ Map<String, dynamic> asJsonMap(Object? value) {
     return value;
   }
   if (value is Map) {
-    return value.map(
-      (Object? key, Object? nested) => MapEntry('$key', nested),
-    );
+    return value.map((Object? key, Object? nested) => MapEntry('$key', nested));
   }
   return <String, dynamic>{};
 }
@@ -49,11 +47,7 @@ class StoredSession {
 
   Uri get uri => Uri.parse(baseUrl);
 
-  StoredSession copyWith({
-    String? baseUrl,
-    String? username,
-    String? cookie,
-  }) {
+  StoredSession copyWith({String? baseUrl, String? username, String? cookie}) {
     return StoredSession(
       baseUrl: baseUrl ?? this.baseUrl,
       username: username ?? this.username,
@@ -175,7 +169,9 @@ class SessionDetail extends SessionSummary {
       latestRole: asString(json['latestRole']),
       latestTimestamp: asString(json['latestTimestamp']),
       agentPromptCommand: asString(json['agentPromptCommand']),
-      containerAgentPromptCommand: asString(json['containerAgentPromptCommand']),
+      containerAgentPromptCommand: asString(
+        json['containerAgentPromptCommand'],
+      ),
       agentPromptCommandOverride: asString(json['agentPromptCommandOverride']),
       inferredAgentPromptCommand: asString(json['inferredAgentPromptCommand']),
       agentPromptSource: asString(json['agentPromptSource']),
@@ -218,10 +214,7 @@ class MessageItem {
     );
   }
 
-  MessageItem copyWith({
-    String? content,
-    bool? pending,
-  }) {
+  MessageItem copyWith({String? content, bool? pending}) {
     return MessageItem(
       id: id,
       role: role,
@@ -259,6 +252,20 @@ class AgentStreamEvent {
       error: asString(json['error']),
       exitCode: asInt(json['exitCode']),
       interrupted: asBool(json['interrupted']) ?? false,
+    );
+  }
+}
+
+class RunCommandResult {
+  const RunCommandResult({required this.exitCode, required this.output});
+
+  final int? exitCode;
+  final String output;
+
+  factory RunCommandResult.fromJson(Map<String, dynamic> json) {
+    return RunCommandResult(
+      exitCode: asInt(json['exitCode']),
+      output: asString(json['output']),
     );
   }
 }
@@ -304,9 +311,9 @@ class FileListResult {
     return FileListResult(
       path: asString(json['path']),
       parentPath: asString(json['parentPath']),
-      entries: asJsonList(json['entries'])
-          .map((dynamic item) => FileNode.fromJson(asJsonMap(item)))
-          .toList(),
+      entries: asJsonList(
+        json['entries'],
+      ).map((dynamic item) => FileNode.fromJson(asJsonMap(item))).toList(),
     );
   }
 }
@@ -420,7 +427,9 @@ class CreateSessionDraft {
       'agentPromptCommand': agentPromptCommand.trim(),
       'yolo': yolo.trim(),
     };
-    options.removeWhere((String key, dynamic value) => value is String && value.isEmpty);
+    options.removeWhere(
+      (String key, dynamic value) => value is String && value.isEmpty,
+    );
     return <String, dynamic>{
       if (run.trim().isNotEmpty) 'run': run.trim(),
       'createOptions': options,
@@ -429,10 +438,7 @@ class CreateSessionDraft {
 }
 
 class CreateSessionSeed {
-  const CreateSessionSeed({
-    required this.defaults,
-    required this.runs,
-  });
+  const CreateSessionSeed({required this.defaults, required this.runs});
 
   final Map<String, dynamic> defaults;
   final Map<String, Map<String, dynamic>> runs;

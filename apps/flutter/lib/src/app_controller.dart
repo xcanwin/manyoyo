@@ -24,6 +24,7 @@ class ManyoyoAppController extends ChangeNotifier {
   bool loadingSessionContent = false;
   bool streamingAgent = false;
   bool stoppingAgent = false;
+  bool runningCommand = false;
   bool loadingFiles = false;
   bool savingFile = false;
   bool loadingConfig = false;
@@ -326,6 +327,49 @@ class ManyoyoAppController extends ChangeNotifier {
       workspaceError = error.toString();
     } finally {
       stoppingAgent = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> runCommand(String command) async {
+    final current = _requireSession();
+    final normalizedCommand = command.trim();
+    if (activeSessionName.isEmpty || normalizedCommand.isEmpty) {
+      return;
+    }
+    final now = DateTime.now().toIso8601String();
+    final optimisticUser = MessageItem(
+      id: 'local-command-$now',
+      role: 'user',
+      content: normalizedCommand,
+      timestamp: now,
+      pending: true,
+      mode: 'command',
+    );
+    messages = <MessageItem>[...messages, optimisticUser];
+    runningCommand = true;
+    workspaceError = '';
+    notifyListeners();
+
+    try {
+      await _repository.runCommand(
+        current,
+        activeSessionName,
+        normalizedCommand,
+      );
+      await loadActiveSession();
+    } on ManyoyoApiException catch (error) {
+      messages = messages
+          .where((MessageItem item) => item.id != optimisticUser.id)
+          .toList();
+      workspaceError = error.message;
+    } catch (error) {
+      messages = messages
+          .where((MessageItem item) => item.id != optimisticUser.id)
+          .toList();
+      workspaceError = error.toString();
+    } finally {
+      runningCommand = false;
       notifyListeners();
     }
   }

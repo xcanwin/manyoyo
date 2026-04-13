@@ -31,6 +31,12 @@ abstract class ManyoyoRepository {
     String prompt,
   );
 
+  Future<RunCommandResult> runCommand(
+    StoredSession session,
+    String sessionName,
+    String command,
+  );
+
   Future<void> stopAgent(StoredSession session, String sessionName);
 
   Future<FileListResult> listFiles(
@@ -59,10 +65,7 @@ abstract class ManyoyoRepository {
 
   Future<void> saveConfig(StoredSession session, String raw);
 
-  Future<String> createSession(
-    StoredSession session,
-    CreateSessionDraft draft,
-  );
+  Future<String> createSession(StoredSession session, CreateSessionDraft draft);
 
   Future<CreateSessionSeed> loadCreateSessionSeed(StoredSession session);
 
@@ -87,7 +90,8 @@ class ManyoyoApiException implements Exception {
 }
 
 class HttpManyoyoRepository implements ManyoyoRepository {
-  HttpManyoyoRepository({HttpClient? client}) : _client = client ?? HttpClient();
+  HttpManyoyoRepository({HttpClient? client})
+    : _client = client ?? HttpClient();
 
   final HttpClient _client;
 
@@ -121,9 +125,9 @@ class HttpManyoyoRepository implements ManyoyoRepository {
       'GET',
       '/api/sessions/${Uri.encodeComponent(sessionName)}/messages',
     );
-    return asJsonList(payload['messages'])
-        .map((dynamic item) => MessageItem.fromJson(asJsonMap(item)))
-        .toList();
+    return asJsonList(
+      payload['messages'],
+    ).map((dynamic item) => MessageItem.fromJson(asJsonMap(item))).toList();
   }
 
   @override
@@ -142,9 +146,9 @@ class HttpManyoyoRepository implements ManyoyoRepository {
   @override
   Future<List<SessionSummary>> fetchSessions(StoredSession session) async {
     final payload = await _sendJson(session, 'GET', '/api/sessions');
-    return asJsonList(payload['sessions'])
-        .map((dynamic item) => SessionSummary.fromJson(asJsonMap(item)))
-        .toList();
+    return asJsonList(
+      payload['sessions'],
+    ).map((dynamic item) => SessionSummary.fromJson(asJsonMap(item))).toList();
   }
 
   @override
@@ -234,7 +238,11 @@ class HttpManyoyoRepository implements ManyoyoRepository {
   }
 
   @override
-  Future<void> mkdir(StoredSession session, String sessionName, String path) async {
+  Future<void> mkdir(
+    StoredSession session,
+    String sessionName,
+    String path,
+  ) async {
     await _sendJson(
       session,
       'POST',
@@ -254,10 +262,7 @@ class HttpManyoyoRepository implements ManyoyoRepository {
       session,
       'GET',
       '/api/sessions/${Uri.encodeComponent(sessionName)}/fs/read',
-      query: <String, String>{
-        'path': path,
-        if (full) 'full': 'true',
-      },
+      query: <String, String>{'path': path, if (full) 'full': 'true'},
     );
     return FileReadResult.fromJson(payload);
   }
@@ -289,15 +294,29 @@ class HttpManyoyoRepository implements ManyoyoRepository {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw await _buildError(response);
     }
-    await for (final String line in utf8.decoder
-        .bind(response)
-        .transform(const LineSplitter())) {
+    await for (final String line
+        in utf8.decoder.bind(response).transform(const LineSplitter())) {
       final text = line.trim();
       if (text.isEmpty) {
         continue;
       }
       yield AgentStreamEvent.fromJson(asJsonMap(jsonDecode(text)));
     }
+  }
+
+  @override
+  Future<RunCommandResult> runCommand(
+    StoredSession session,
+    String sessionName,
+    String command,
+  ) async {
+    final payload = await _sendJson(
+      session,
+      'POST',
+      '/api/sessions/${Uri.encodeComponent(sessionName)}/run',
+      body: <String, dynamic>{'command': command},
+    );
+    return RunCommandResult.fromJson(payload);
   }
 
   @override
@@ -333,13 +352,13 @@ class HttpManyoyoRepository implements ManyoyoRepository {
         final detail = asString(payload['detail']);
         final message = detail.isNotEmpty ? '$error: $detail' : error;
         if (message.isNotEmpty) {
-          return ManyoyoApiException(
-            message,
-            statusCode: response.statusCode,
-          );
+          return ManyoyoApiException(message, statusCode: response.statusCode);
         }
       } catch (_) {
-        return ManyoyoApiException(text.trim(), statusCode: response.statusCode);
+        return ManyoyoApiException(
+          text.trim(),
+          statusCode: response.statusCode,
+        );
       }
       return ManyoyoApiException(text.trim(), statusCode: response.statusCode);
     }
@@ -392,7 +411,9 @@ class HttpManyoyoRepository implements ManyoyoRepository {
       throw await _buildError(response);
     }
     final text = await utf8.decoder.bind(response).join();
-    return text.trim().isEmpty ? <String, dynamic>{} : asJsonMap(jsonDecode(text));
+    return text.trim().isEmpty
+        ? <String, dynamic>{}
+        : asJsonMap(jsonDecode(text));
   }
 
   Uri _buildUri(String baseUrl, String path, [Map<String, String>? query]) {
@@ -432,7 +453,12 @@ class WebSocketTerminalConnection implements TerminalConnection {
       },
       onDone: () {
         _events.add(
-          const TerminalEvent(type: 'status', data: '', phase: 'closed', error: ''),
+          const TerminalEvent(
+            type: 'status',
+            data: '',
+            phase: 'closed',
+            error: '',
+          ),
         );
       },
       onError: (Object error) {
@@ -463,12 +489,8 @@ class WebSocketTerminalConnection implements TerminalConnection {
     final scheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
     final uri = baseUri.replace(
       scheme: scheme,
-      path:
-          '/api/sessions/${Uri.encodeComponent(sessionName)}/terminal/ws',
-      queryParameters: <String, String>{
-        'cols': '$cols',
-        'rows': '$rows',
-      },
+      path: '/api/sessions/${Uri.encodeComponent(sessionName)}/terminal/ws',
+      queryParameters: <String, String>{'cols': '$cols', 'rows': '$rows'},
     );
     final socket = await WebSocket.connect(
       uri.toString(),

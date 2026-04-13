@@ -28,6 +28,29 @@ void main() {
     expect(controller.messages.last.content, '已改为原生消息流。');
     expect(controller.streamingAgent, isFalse);
   });
+
+  test('controller runs command and reloads latest messages', () async {
+    final repository = _ControllerFakeRepository();
+    final controller = ManyoyoAppController(
+      repository: repository,
+      storage: _MemoryStorage(
+        session: const StoredSession(
+          baseUrl: 'http://127.0.0.1:3000',
+          username: 'demo',
+          cookie: 'manyoyo_web_auth=ok',
+        ),
+      ),
+    );
+
+    await controller.initialize();
+    await controller.runCommand('ls -la');
+
+    expect(repository.lastCommand, 'ls -la');
+    expect(controller.messages.last.role, 'assistant');
+    expect(controller.messages.last.mode, 'command');
+    expect(controller.messages.last.content, 'command done');
+    expect(controller.runningCommand, isFalse);
+  });
 }
 
 class _MemoryStorage implements ManyoyoSessionStorage {
@@ -51,6 +74,7 @@ class _MemoryStorage implements ManyoyoSessionStorage {
 
 class _ControllerFakeRepository implements ManyoyoRepository {
   String lastPrompt = '';
+  String lastCommand = '';
   final List<MessageItem> _messages = [
     const MessageItem(
       id: 'm1',
@@ -178,7 +202,11 @@ class _ControllerFakeRepository implements ManyoyoRepository {
   Future<void> logout(StoredSession session) async {}
 
   @override
-  Future<void> mkdir(StoredSession session, String sessionName, String path) async {}
+  Future<void> mkdir(
+    StoredSession session,
+    String sessionName,
+    String path,
+  ) async {}
 
   @override
   Future<TerminalConnection> openTerminal(
@@ -210,6 +238,37 @@ class _ControllerFakeRepository implements ManyoyoRepository {
 
   @override
   Future<void> saveConfig(StoredSession session, String raw) async {}
+
+  @override
+  Future<RunCommandResult> runCommand(
+    StoredSession session,
+    String sessionName,
+    String command,
+  ) async {
+    lastCommand = command;
+    _messages.add(
+      MessageItem(
+        id: 'm-command-user',
+        role: 'user',
+        content: command,
+        timestamp: '2026-04-14T00:02:00.000Z',
+        pending: false,
+        mode: 'command',
+      ),
+    );
+    _messages.add(
+      const MessageItem(
+        id: 'm-command-assistant',
+        role: 'assistant',
+        content: 'command done',
+        timestamp: '2026-04-14T00:02:01.000Z',
+        pending: false,
+        mode: 'command',
+        exitCode: 0,
+      ),
+    );
+    return const RunCommandResult(exitCode: 0, output: 'command done');
+  }
 
   @override
   Stream<AgentStreamEvent> streamAgent(
