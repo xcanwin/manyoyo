@@ -1,35 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:manyoyo_flutter/src/app.dart';
 import 'package:manyoyo_flutter/src/app_controller.dart';
 import 'package:manyoyo_flutter/src/models.dart';
 import 'package:manyoyo_flutter/src/repository.dart';
 import 'package:manyoyo_flutter/src/session_storage.dart';
 
 void main() {
-  testWidgets('shows native login screen when no saved session exists', (
-    WidgetTester tester,
-  ) async {
+  test('controller streams prompt and reloads latest messages', () async {
+    final repository = _ControllerFakeRepository();
     final controller = ManyoyoAppController(
-      repository: _FakeRepository(),
-      storage: _MemoryStorage(),
-    );
-
-    await controller.initialize();
-    await tester.pumpWidget(ManyoyoApp(controller: controller));
-    await tester.pumpAndSettle();
-
-    expect(find.text('MANYOYO 原生工作台'), findsOneWidget);
-    expect(find.text('登录 MANYOYO'), findsOneWidget);
-    expect(find.textContaining('WebView'), findsNothing);
-  });
-
-  testWidgets('renders native workspace for authenticated session', (
-    WidgetTester tester,
-  ) async {
-    final controller = ManyoyoAppController(
-      repository: _FakeRepository(),
+      repository: repository,
       storage: _MemoryStorage(
         session: const StoredSession(
           baseUrl: 'http://127.0.0.1:3000',
@@ -40,16 +21,12 @@ void main() {
     );
 
     await controller.initialize();
-    await tester.pumpWidget(ManyoyoApp(controller: controller));
-    await tester.pumpAndSettle();
+    await controller.sendPrompt('实现一个 Flutter 页面');
 
-    expect(find.text('会话'), findsOneWidget);
-    expect(find.text('文件'), findsOneWidget);
-    expect(find.text('终端'), findsOneWidget);
-    expect(find.text('配置'), findsOneWidget);
-    expect(find.text('demo'), findsWidgets);
-    expect(find.text('发送'), findsOneWidget);
-    expect(find.text('保存文件'), findsNothing);
+    expect(repository.lastPrompt, '实现一个 Flutter 页面');
+    expect(controller.messages.last.role, 'assistant');
+    expect(controller.messages.last.content, '已改为原生消息流。');
+    expect(controller.streamingAgent, isFalse);
   });
 }
 
@@ -72,9 +49,54 @@ class _MemoryStorage implements ManyoyoSessionStorage {
   }
 }
 
-class _FakeRepository implements ManyoyoRepository {
-  final List<SessionSummary> _sessions = [
-    const SessionSummary(
+class _ControllerFakeRepository implements ManyoyoRepository {
+  String lastPrompt = '';
+  final List<MessageItem> _messages = [
+    const MessageItem(
+      id: 'm1',
+      role: 'assistant',
+      content: '欢迎使用 MANYOYO。',
+      timestamp: '2026-04-14T00:00:00.000Z',
+      pending: false,
+      mode: 'agent',
+    ),
+  ];
+
+  @override
+  Future<String> createSession(
+    StoredSession session,
+    CreateSessionDraft draft,
+  ) async {
+    return 'demo';
+  }
+
+  @override
+  Future<ConfigSnapshot> fetchConfig(StoredSession session) async {
+    return const ConfigSnapshot(
+      path: '/tmp/manyoyo.json',
+      raw: '{}',
+      parsed: {'runs': {}},
+      defaults: {'hostPath': '/workspace/demo'},
+      parseError: '',
+      editable: true,
+      notice: '',
+    );
+  }
+
+  @override
+  Future<List<MessageItem>> fetchMessages(
+    StoredSession session,
+    String sessionName,
+  ) async {
+    return List<MessageItem>.from(_messages);
+  }
+
+  @override
+  Future<SessionDetail> fetchSessionDetail(
+    StoredSession session,
+    String sessionName,
+  ) async {
+    return const SessionDetail(
       name: 'demo',
       containerName: 'demo',
       agentId: 'default',
@@ -89,74 +111,8 @@ class _FakeRepository implements ManyoyoRepository {
       resumeSupported: true,
       hostPath: '/workspace/demo',
       containerPath: '/workspace/demo',
-    ),
-  ];
-
-  final Map<String, List<MessageItem>> _messages = {
-    'demo': const [
-      MessageItem(
-        id: 'm1',
-        role: 'assistant',
-        content: '欢迎进入 MANYOYO 原生客户端。',
-        timestamp: '2026-04-14T00:00:00.000Z',
-        pending: false,
-        mode: 'agent',
-      ),
-    ],
-  };
-
-  @override
-  Future<String> createSession(
-    StoredSession session,
-    CreateSessionDraft draft,
-  ) async {
-    return 'demo';
-  }
-
-  @override
-  Future<ConfigSnapshot> fetchConfig(StoredSession session) async {
-    return const ConfigSnapshot(
-      path: '/tmp/manyoyo.json',
-      raw: '{ "hostPath": "/workspace/demo" }',
-      parsed: {'runs': {}},
-      defaults: {'hostPath': '/workspace/demo'},
-      parseError: '',
-      editable: true,
-      notice: 'config notice',
-    );
-  }
-
-  @override
-  Future<List<MessageItem>> fetchMessages(
-    StoredSession session,
-    String sessionName,
-  ) async {
-    return _messages[sessionName] ?? const <MessageItem>[];
-  }
-
-  @override
-  Future<SessionDetail> fetchSessionDetail(
-    StoredSession session,
-    String sessionName,
-  ) async {
-    final summary = _sessions.first;
-    return SessionDetail(
-      name: summary.name,
-      containerName: summary.containerName,
-      agentId: summary.agentId,
-      agentName: summary.agentName,
-      status: summary.status,
-      image: summary.image,
-      createdAt: summary.createdAt,
-      updatedAt: summary.updatedAt,
-      messageCount: summary.messageCount,
-      agentEnabled: summary.agentEnabled,
-      agentProgram: summary.agentProgram,
-      resumeSupported: summary.resumeSupported,
-      hostPath: summary.hostPath,
-      containerPath: summary.containerPath,
       latestRole: 'assistant',
-      latestTimestamp: summary.updatedAt,
+      latestTimestamp: '2026-04-14T00:00:00.000Z',
       agentPromptCommand: 'codex',
       containerAgentPromptCommand: '',
       agentPromptCommandOverride: '',
@@ -165,13 +121,30 @@ class _FakeRepository implements ManyoyoRepository {
       lastResumeAt: '',
       lastResumeOk: true,
       lastResumeError: '',
-      applied: const {'hostPath': '/workspace/demo'},
+      applied: {'hostPath': '/workspace/demo'},
     );
   }
 
   @override
   Future<List<SessionSummary>> fetchSessions(StoredSession session) async {
-    return _sessions;
+    return const [
+      SessionSummary(
+        name: 'demo',
+        containerName: 'demo',
+        agentId: 'default',
+        agentName: 'AGENT 1',
+        status: 'running',
+        image: 'localhost/xcanwin/manyoyo:demo',
+        createdAt: '2026-04-14T00:00:00.000Z',
+        updatedAt: '2026-04-14T00:00:00.000Z',
+        messageCount: 1,
+        agentEnabled: true,
+        agentProgram: 'codex',
+        resumeSupported: true,
+        hostPath: '/workspace/demo',
+        containerPath: '/workspace/demo',
+      ),
+    ];
   }
 
   @override
@@ -189,10 +162,7 @@ class _FakeRepository implements ManyoyoRepository {
 
   @override
   Future<CreateSessionSeed> loadCreateSessionSeed(StoredSession session) async {
-    return const CreateSessionSeed(
-      defaults: {'hostPath': '/workspace/demo'},
-      runs: {},
-    );
+    return const CreateSessionSeed(defaults: {}, runs: {});
   }
 
   @override
@@ -201,19 +171,7 @@ class _FakeRepository implements ManyoyoRepository {
     String sessionName,
     String path,
   ) async {
-    return const FileListResult(
-      path: '/',
-      parentPath: '',
-      entries: [
-        FileNode(
-          name: 'README.md',
-          path: '/README.md',
-          kind: 'file',
-          size: 12,
-          mtimeMs: 0,
-        ),
-      ],
-    );
+    return const FileListResult(path: '/', parentPath: '', entries: []);
   }
 
   @override
@@ -242,9 +200,9 @@ class _FakeRepository implements ManyoyoRepository {
     return const FileReadResult(
       path: '/README.md',
       kind: 'text',
-      size: 12,
+      size: 10,
       truncated: false,
-      content: 'hello world',
+      content: 'hello',
       language: 'markdown',
       editable: true,
     );
@@ -258,7 +216,53 @@ class _FakeRepository implements ManyoyoRepository {
     StoredSession session,
     String sessionName,
     String prompt,
-  ) async* {}
+  ) async* {
+    lastPrompt = prompt;
+    yield const AgentStreamEvent(
+      type: 'trace',
+      content: '',
+      text: 'Agent 已启动',
+      error: '',
+      exitCode: null,
+      interrupted: false,
+    );
+    yield const AgentStreamEvent(
+      type: 'content_delta',
+      content: '已改为原生',
+      text: '',
+      error: '',
+      exitCode: null,
+      interrupted: false,
+    );
+    _messages.add(
+      MessageItem(
+        id: 'm2',
+        role: 'user',
+        content: prompt,
+        timestamp: '2026-04-14T00:01:00.000Z',
+        pending: false,
+        mode: 'agent',
+      ),
+    );
+    _messages.add(
+      const MessageItem(
+        id: 'm3',
+        role: 'assistant',
+        content: '已改为原生消息流。',
+        timestamp: '2026-04-14T00:01:01.000Z',
+        pending: false,
+        mode: 'agent',
+      ),
+    );
+    yield const AgentStreamEvent(
+      type: 'result',
+      content: '',
+      text: '',
+      error: '',
+      exitCode: 0,
+      interrupted: false,
+    );
+  }
 
   @override
   Future<void> stopAgent(StoredSession session, String sessionName) async {}
@@ -273,16 +277,11 @@ class _FakeRepository implements ManyoyoRepository {
 }
 
 class _FakeTerminalConnection implements TerminalConnection {
-  final StreamController<TerminalEvent> _controller =
-      StreamController<TerminalEvent>.broadcast();
+  @override
+  Future<void> close() async {}
 
   @override
-  Future<void> close() async {
-    await _controller.close();
-  }
-
-  @override
-  Stream<TerminalEvent> get events => _controller.stream;
+  Stream<TerminalEvent> get events => const Stream<TerminalEvent>.empty();
 
   @override
   void resize({required int cols, required int rows}) {}

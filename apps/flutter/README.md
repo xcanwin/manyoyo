@@ -1,17 +1,19 @@
 # MANYOYO Flutter
 
-当前目录已经初始化为 Flutter 多端工程，目标平台包括：
+当前 `apps/flutter/` 已切换为纯 Flutter 原生客户端：
 
-- macOS
-- Windows
-- iOS
-- Android
+- 不再内嵌 MANYOYO WebView。
+- 目标平台仍为 `macOS`、`Windows`、`iOS`、`Android`。
+- Flutter 端直接消费 MANYOYO `serve` 提供的认证、会话、消息流、文件、终端、配置接口。
 
-当前阶段定位：
+当前原生 UI 已覆盖的主链路：
 
-- 这是 `Flutter` 分支的独立客户端骨架。
-- Flutter 端当前正式走“内嵌 MANYOYO Web 应用”的宿主壳方案，以便与 `main` 分支现有 Web 功能保持一致。
-- 不在仓库根目录创建 Flutter 平台目录，所有平台工程都固定在 `apps/flutter/` 下。
+- 服务地址 + 用户名/密码登录
+- 会话列表与会话详情
+- AGENT 流式消息发送 / 停止
+- 文件浏览、文本文件读取与保存
+- 基础终端连接与输入输出
+- 配置文件查看与保存
 
 常用命令：
 
@@ -23,66 +25,17 @@ flutter test
 flutter run -d macos
 ```
 
-Flutter SDK 约定：
-
-- 仓库内固定复用仓库根目录下的 `temp/tools/flutter-sdk-3.41.6`，不再维护 `temp/tools/flutter-sdk` 这一层软链。
-- 若容器或本地环境重置后 `flutter` / `dart` 命令丢失，在仓库根目录执行以下命令恢复到 `/usr/local/bin/`：
-
-```bash
-ln -sfn "$(pwd)/temp/tools/flutter-sdk-3.41.6/bin/flutter" /usr/local/bin/flutter
-ln -sfn "$(pwd)/temp/tools/flutter-sdk-3.41.6/bin/dart" /usr/local/bin/dart
-```
-
-- 若在 root 容器里执行 Flutter 命令，建议固定 `PUB_CACHE` 与 `HOME`，避免首次启动锁或分析统计干扰：
-
-```bash
-CI=true FLUTTER_SUPPRESS_ANALYTICS=true \
-PUB_CACHE="$(git rev-parse --show-toplevel)/temp/tools/pub-cache" \
-HOME="$(git rev-parse --show-toplevel)/temp" \
-flutter test
-```
-
-桌面端默认只启动客户端；如需恢复“本地服务 + 客户端”联动模式，可在启动前设置：
-
-```bash
-MANYOYO_DESKTOP_AUTO_SERVE=1 flutter run -d macos
-MANYOYO_DESKTOP_AUTO_SERVE=1 flutter run -d windows
-```
-
 连接 MANYOYO：
 
 ```bash
-flutter run -d macos --dart-define=MANYOYO_SERVER_URL=http://127.0.0.1:3000
+manyoyo serve 127.0.0.1:3000 -U demo -P demo123
+cd apps/flutter
+flutter run -d macos
 ```
-
-iOS 真机补充：
-
-- `flutter run -d ios` 不是固定可用写法，先执行 `flutter devices`，再使用实际设备 ID。
-- iOS 14+ 下，`debug` 包通常只能从 Flutter tooling、IDE 或 Xcode 启动；若需要从桌面反复打开，使用 `flutter run --profile -d <device-id>` 或 `flutter run --release -d <device-id>`。
-- 若 Xcode/Flutter 提示 `Runner.app is not a valid bundle`、`CFBundleExecutable` 或安装阶段使用了残缺的 `build/ios/iphoneos/Runner.app`，先执行：
-
-```bash
-flutter clean
-rm -rf build/ios
-cd ios && pod install && cd ..
-flutter run -d <device-id>
-```
-
-Android 调试补充：
-
-- Android WebView 默认会拦截明文 HTTP；若 MANYOYO 使用局域网地址（如 `http://192.168.x.x:3000`），需要在 Android manifest 显式允许 cleartext traffic，否则可能出现“检测连接成功，但进入页面报 `net::ERR_CLEARTEXT_NOT_PERMITTED`”。
 
 说明：
 
-- Flutter 端当前支持“地址输入/保存 + 检测连接 + 内置 MANYOYO WebView + 外部浏览器打开”。
-- `127.0.0.1` 仅适用于当前机器本地运行；真机或其他设备需替换为宿主机可访问地址。
-- 地址会保存在本地偏好设置中，后续启动可直接复用。
-- 启动页会展示当前连接阶段，并提供“填入本机地址 → 检测连接 → 进入 MANYOYO”的推荐流程。
-- macOS 已补出站网络权限，允许沙箱内应用访问本机或局域网 MANYOYO 服务。
-- 通过 `flutter_inappwebview` 直接承接 MANYOYO 登录页与主界面；Windows 端需本机具备 NuGet CLI 与 WebView2 运行环境。
-
-下一步建议：
-
-1. 明确内置 WebView 下的登录态、登出与错误页体验。
-2. 决定哪些能力继续复用 Web，哪些需要 Flutter 原生承接。
-3. 再补原生通知、文件选择、分享等宿主能力。
+- Flutter 客户端通过 MANYOYO 的 Cookie 认证访问 `/api/*` 与终端 WebSocket。
+- 纯原生方案下，不再提供“进入内置 MANYOYO WebView”或“外部浏览器兜底”路径。
+- 若服务端返回 `401`，客户端会回到登录页重新鉴权。
+- 文件编辑当前仅支持文本文件；终端当前为基础原生终端视图，优先保证会话、文件与命令输入输出链路稳定。
