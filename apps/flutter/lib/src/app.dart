@@ -1210,6 +1210,9 @@ class _HeaderActions extends StatelessWidget {
             value: _HeaderAction.config,
             child: Text('配置'),
           ),
+          PopupMenuItem<_HeaderAction>(enabled: false, child: Text('删除容器')),
+          PopupMenuItem<_HeaderAction>(enabled: false, child: Text('新建 AGENT')),
+          PopupMenuItem<_HeaderAction>(enabled: false, child: Text('删除 AGENT')),
           PopupMenuDivider(height: 8),
           PopupMenuItem<_HeaderAction>(
             value: _HeaderAction.logout,
@@ -1265,6 +1268,10 @@ class _WorkspacePane extends StatelessWidget {
 }
 
 enum _ComposerMode { agent, command }
+
+extension on _ComposerMode {
+  String get label => this == _ComposerMode.agent ? 'agent' : 'command';
+}
 
 class _ConversationPane extends StatefulWidget {
   const _ConversationPane({required this.controller});
@@ -1330,7 +1337,10 @@ class _ConversationPaneState extends State<_ConversationPane> {
                               itemBuilder: (BuildContext context, int index) {
                                 final MessageItem message =
                                     controller.messages[index];
-                                return _MessageBubble(message: message);
+                                return _MessageBubble(
+                                  message: message,
+                                  activeMode: _mode.label,
+                                );
                               },
                             ),
                           ),
@@ -1399,22 +1409,16 @@ class _ConversationPaneState extends State<_ConversationPane> {
                       ],
                     ),
                     const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _WebColors.panelSoft,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: _WebColors.line),
-                      ),
-                      child: Text(
-                        '模型 · $agentProgram',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.labelMedium?.copyWith(fontSize: 12),
-                      ),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        _ToolbarChip(
+                          label:
+                              'CLI · ${_summarizeCli(detail: controller.activeSessionDetail)}',
+                        ),
+                        _ToolbarChip(label: '模型 · $agentProgram'),
+                      ],
                     ),
                   ],
                 ),
@@ -1810,6 +1814,7 @@ class _FileBrowserState extends State<_FileBrowser> {
                         icon: Icons.arrow_upward,
                         title: '..',
                         subtitle: parentPath,
+                        metadata: 'parent',
                         selected: false,
                         onTap: () async {
                           await controller.openDirectory(parentPath);
@@ -1825,6 +1830,7 @@ class _FileBrowserState extends State<_FileBrowser> {
                           : Icons.insert_drive_file_outlined,
                       title: entry.name,
                       subtitle: entry.path,
+                      metadata: _formatFileNodeMeta(entry),
                       selected: controller.fileRead?.path == entry.path,
                       onTap: () async {
                         if (isDir) {
@@ -1847,6 +1853,7 @@ class _FileNodeTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    required this.metadata,
     required this.selected,
     required this.onTap,
   });
@@ -1854,6 +1861,7 @@ class _FileNodeTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final String metadata;
   final bool selected;
   final Future<void> Function() onTap;
 
@@ -1866,17 +1874,19 @@ class _FileNodeTile extends StatelessWidget {
           await onTap();
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: selected ? const Color(0x15C4551F) : Colors.transparent,
+            color: selected ? const Color(0xFFFDF0DA) : Colors.transparent,
             border: Border(
               left: BorderSide(
-                color: selected ? _WebColors.accent : Colors.transparent,
+                color: selected ? const Color(0x94784E1B) : Colors.transparent,
                 width: 3,
               ),
+              bottom: const BorderSide(color: Color(0x2FB59263)),
             ),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Icon(icon, size: 18, color: _WebColors.muted),
               const SizedBox(width: 10),
@@ -1887,8 +1897,10 @@ class _FileNodeTile extends StatelessWidget {
                     Text(
                       title,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
+                      softWrap: true,
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -1901,6 +1913,14 @@ class _FileNodeTile extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                metadata,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontSize: 11),
+                textAlign: TextAlign.right,
               ),
             ],
           ),
@@ -1919,58 +1939,111 @@ class _FileEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final FileReadResult? file = controller.fileRead;
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: file == null
-          ? const _EmptyPanelBody(message: '从左侧选择一个文件')
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(file.path, style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 6),
-                Text(
-                  file.isText
-                      ? '语言：${file.language} · ${file.size} bytes'
-                      : '当前文件不是可编辑文本文件',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                if (file.truncated) ...<Widget>[
-                  const SizedBox(height: 8),
-                  const _Banner(
-                    backgroundColor: Color(0xFFFFF0DD),
-                    borderColor: Color(0xFFEDC98E),
-                    textColor: Color(0xFF9A5A09),
-                    text: '当前文件内容已截断显示。',
+    return file == null
+        ? const _EmptyPanelBody(message: '从左侧选择一个文件')
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.96),
+                  border: const Border(
+                    bottom: BorderSide(color: _WebColors.line),
                   ),
-                ],
-                const SizedBox(height: 12),
-                Expanded(
-                  child: file.isText
-                      ? TextField(
-                          controller: editorController,
-                          expands: true,
-                          maxLines: null,
-                          minLines: null,
-                          style: _monoStyle(
-                            Theme.of(context).textTheme.bodyMedium,
-                            fontSize: 13,
-                            height: 1.5,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            file.path,
+                            style: _displayStyle(
+                              Theme.of(context).textTheme.titleSmall,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                          decoration: const InputDecoration(),
-                        )
-                      : const _EmptyPanelBody(message: '暂不支持二进制文件预览'),
+                          const SizedBox(height: 6),
+                          Text(
+                            file.isText
+                                ? '语言：${file.language} · ${file.size} bytes'
+                                : '当前文件不是可编辑文本文件',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodySmall?.copyWith(fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton(
+                      style: _buttonStyle(_ButtonTone.primary),
+                      onPressed: !file.editable || controller.savingFile
+                          ? null
+                          : () => controller.saveOpenedFile(
+                              editorController.text,
+                            ),
+                      child: Text(controller.savingFile ? '保存中…' : '保存文件'),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                FilledButton(
-                  style: _buttonStyle(_ButtonTone.primary),
-                  onPressed: !file.editable || controller.savingFile
-                      ? null
-                      : () => controller.saveOpenedFile(editorController.text),
-                  child: Text(controller.savingFile ? '保存中…' : '保存文件'),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    children: <Widget>[
+                      if (file.truncated)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8),
+                          child: _Banner(
+                            backgroundColor: Color(0xFFFFF0DD),
+                            borderColor: Color(0xFFEDC98E),
+                            textColor: Color(0xFF9A5A09),
+                            text: '当前文件内容已截断显示。',
+                          ),
+                        ),
+                      Expanded(
+                        child: file.isText
+                            ? Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.98),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: const Color(0x33B59263),
+                                  ),
+                                ),
+                                padding: const EdgeInsets.all(8),
+                                child: TextField(
+                                  controller: editorController,
+                                  expands: true,
+                                  maxLines: null,
+                                  minLines: null,
+                                  style: _monoStyle(
+                                    Theme.of(context).textTheme.bodyMedium,
+                                    fontSize: 13,
+                                    height: 1.45,
+                                  ),
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                ),
+                              )
+                            : const _EmptyPanelBody(message: '暂不支持二进制文件预览'),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-    );
+              ),
+            ],
+          );
   }
 }
 
@@ -2216,7 +2289,7 @@ class _DetailPane extends StatelessWidget {
           description: '当前容器会话的运行状态、镜像和时间信息。',
           child: Column(
             children: <Widget>[
-              _KvRow(label: '名称', value: detail.name),
+              _KvRow(label: '名称', value: detail.name, first: true),
               _KvRow(label: '容器', value: detail.containerName),
               _KvRow(
                 label: '状态',
@@ -2234,7 +2307,7 @@ class _DetailPane extends StatelessWidget {
           description: 'Agent 识别、resume 能力与提示词命令来源。',
           child: Column(
             children: <Widget>[
-              _KvRow(label: 'Agent 名称', value: detail.agentName),
+              _KvRow(label: 'Agent 名称', value: detail.agentName, first: true),
               _KvRow(label: 'Agent ID', value: detail.agentId),
               _KvRow(
                 label: '启用',
@@ -2265,7 +2338,7 @@ class _DetailPane extends StatelessWidget {
           description: '宿主机与容器内工作目录路径。',
           child: Column(
             children: <Widget>[
-              _KvRow(label: '宿主路径', value: detail.hostPath),
+              _KvRow(label: '宿主路径', value: detail.hostPath, first: true),
               _KvRow(label: '容器路径', value: detail.containerPath),
               _KvRow(label: '最近角色', value: detail.latestRole),
               _KvRow(label: '最近时间', value: detail.latestTimestamp),
@@ -2508,6 +2581,7 @@ class _CheckPane extends StatelessWidget {
                 tone: (detail?.hostPath ?? '').isEmpty
                     ? _KvTone.warn
                     : _KvTone.ok,
+                first: true,
               ),
               _KvRow(
                 label: '容器路径',
@@ -2603,11 +2677,13 @@ class _KvRow extends StatelessWidget {
     required this.label,
     required this.value,
     this.tone = _KvTone.normal,
+    this.first = false,
   });
 
   final String label;
   final String value;
   final _KvTone tone;
+  final bool first;
 
   @override
   Widget build(BuildContext context) {
@@ -2618,9 +2694,13 @@ class _KvRow extends StatelessWidget {
       _KvTone.normal => _WebColors.text,
     };
     return Container(
-      padding: const EdgeInsets.only(top: 8),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Color(0x57B59263))),
+      padding: EdgeInsets.only(top: first ? 0 : 8),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: first ? Colors.transparent : const Color(0x57B59263),
+          ),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3054,15 +3134,45 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
+class _ToolbarChip extends StatelessWidget {
+  const _ToolbarChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: _WebColors.panelSoft,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _WebColors.line),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(fontSize: 12),
+      ),
+    );
+  }
+}
+
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({required this.message, required this.activeMode});
 
   final MessageItem message;
+  final String activeMode;
 
   @override
   Widget build(BuildContext context) {
     final bool isUser = message.role == 'user';
     final bool isSystem = message.role == 'system';
+    final bool modeMismatch =
+        message.mode.isNotEmpty &&
+        message.mode != activeMode &&
+        ((activeMode == 'agent' && message.mode == 'command') ||
+            (activeMode == 'command' && message.mode == 'agent'));
+    final bool streamingReply =
+        message.pending && message.role == 'assistant' && !modeMismatch;
     final Color background = isUser
         ? _WebColors.userBubble
         : isSystem
@@ -3072,6 +3182,8 @@ class _MessageBubble extends StatelessWidget {
         ? const Color(0xFFE9B994)
         : isSystem
         ? const Color(0xFFB8E3DD)
+        : streamingReply
+        ? _WebColors.subaccent
         : _WebColors.line;
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -3111,7 +3223,11 @@ class _MessageBubble extends StatelessWidget {
             ],
             const SizedBox(height: 6),
             Opacity(
-              opacity: message.pending ? 0.78 : 1,
+              opacity: modeMismatch
+                  ? 0.25
+                  : message.pending
+                  ? 0.78
+                  : 1,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -3129,9 +3245,33 @@ class _MessageBubble extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: SelectableText(
-                  message.content.isEmpty ? '…' : message.content,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                child: SelectableText.rich(
+                  TextSpan(
+                    style: _monoStyle(
+                      Theme.of(context).textTheme.bodyMedium,
+                      color: _WebColors.text,
+                      fontSize: 13,
+                      height: 1.55,
+                    ),
+                    children: <InlineSpan>[
+                      TextSpan(
+                        text: message.content.isEmpty ? '…' : message.content,
+                      ),
+                      if (streamingReply)
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.middle,
+                          child: Container(
+                            width: 7,
+                            height: 16,
+                            margin: const EdgeInsets.only(left: 2),
+                            decoration: BoxDecoration(
+                              color: _WebColors.subaccent,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -3186,7 +3326,7 @@ class _EmptyPane extends StatelessWidget {
     return Container(
       decoration: _paneDecoration(),
       child: Center(
-        child: Text(message, style: Theme.of(context).textTheme.bodyLarge),
+        child: SizedBox(width: 340, child: _EmptyNoteCard(message: message)),
       ),
     );
   }
@@ -3200,13 +3340,82 @@ class _EmptyPanelBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
+      child: SizedBox(width: 340, child: _EmptyNoteCard(message: message)),
+    );
+  }
+}
+
+class _EmptyNoteCard extends StatelessWidget {
+  const _EmptyNoteCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0x73B59263)),
+      ),
       child: Text(
         message,
-        style: Theme.of(context).textTheme.bodyLarge,
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: _WebColors.muted, height: 1.6),
         textAlign: TextAlign.center,
       ),
     );
   }
+}
+
+String _summarizeCli({required SessionDetail? detail}) {
+  if (detail == null) {
+    return '—';
+  }
+  final String raw = _firstNonEmpty(<String>[
+    detail.containerAgentPromptCommand,
+    detail.agentPromptCommandOverride,
+    detail.inferredAgentPromptCommand,
+    detail.agentPromptCommand,
+    detail.agentProgram,
+  ]).trim();
+  if (raw.isEmpty || raw == '—') {
+    return '—';
+  }
+  final String first = raw.split(RegExp(r'\s+')).first.trim();
+  return first.isEmpty ? raw : first;
+}
+
+String _formatFileNodeMeta(FileNode entry) {
+  final String kind = entry.kind == 'directory'
+      ? 'dir'
+      : _formatFileSize(entry.size);
+  final String time = _formatMtimeMs(entry.mtimeMs);
+  return time.isEmpty ? kind : '$kind\n$time';
+}
+
+String _formatFileSize(int size) {
+  if (size < 1024) {
+    return '$size B';
+  }
+  if (size < 1024 * 1024) {
+    return '${(size / 1024).toStringAsFixed(size >= 10 * 1024 ? 0 : 1)} KB';
+  }
+  return '${(size / (1024 * 1024)).toStringAsFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB';
+}
+
+String _formatMtimeMs(int mtimeMs) {
+  if (mtimeMs <= 0) {
+    return '';
+  }
+  final DateTime dt = DateTime.fromMillisecondsSinceEpoch(mtimeMs);
+  final String mm = dt.month.toString().padLeft(2, '0');
+  final String dd = dt.day.toString().padLeft(2, '0');
+  final String hh = dt.hour.toString().padLeft(2, '0');
+  final String mi = dt.minute.toString().padLeft(2, '0');
+  return '$mm-$dd $hh:$mi';
 }
 
 String _firstNonEmpty(List<String> values) {
