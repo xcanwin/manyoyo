@@ -20,8 +20,8 @@ void main() {
     await tester.pumpWidget(ManyoyoApp(controller: controller));
     await tester.pumpAndSettle();
 
-    expect(find.text('MANYOYO 原生工作台'), findsOneWidget);
-    expect(find.text('登录 MANYOYO'), findsOneWidget);
+    expect(find.text('Web 登录'), findsOneWidget);
+    expect(find.text('登录'), findsOneWidget);
     expect(find.textContaining('WebView'), findsNothing);
   });
 
@@ -43,10 +43,13 @@ void main() {
     await tester.pumpWidget(ManyoyoApp(controller: controller));
     await tester.pumpAndSettle();
 
+    expect(find.text('活动'), findsOneWidget);
     expect(find.text('会话'), findsOneWidget);
     expect(find.text('文件'), findsOneWidget);
     expect(find.text('终端'), findsOneWidget);
+    expect(find.text('详情'), findsOneWidget);
     expect(find.text('配置'), findsOneWidget);
+    expect(find.text('检查'), findsOneWidget);
     expect(find.text('demo'), findsWidgets);
     expect(find.text('发送'), findsOneWidget);
     expect(find.text('保存文件'), findsNothing);
@@ -220,7 +223,11 @@ class _FakeRepository implements ManyoyoRepository {
   Future<void> logout(StoredSession session) async {}
 
   @override
-  Future<void> mkdir(StoredSession session, String sessionName, String path) async {}
+  Future<void> mkdir(
+    StoredSession session,
+    String sessionName,
+    String path,
+  ) async {}
 
   @override
   Future<TerminalConnection> openTerminal(

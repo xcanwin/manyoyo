@@ -6,7 +6,7 @@ import 'models.dart';
 import 'repository.dart';
 import 'session_storage.dart';
 
-enum WorkspacePane { conversation, files, terminal, config }
+enum WorkspacePane { conversation, terminal, files, detail, config, check }
 
 class ManyoyoAppController extends ChangeNotifier {
   ManyoyoAppController({
@@ -200,7 +200,11 @@ class ManyoyoAppController extends ChangeNotifier {
         current,
         activeSessionName,
       );
-      final filesFuture = _repository.listFiles(current, activeSessionName, '/');
+      final filesFuture = _repository.listFiles(
+        current,
+        activeSessionName,
+        '/',
+      );
       final results = await Future.wait<Object>(<Future<Object>>[
         detailFuture,
         messagesFuture,
@@ -239,7 +243,7 @@ class ManyoyoAppController extends ChangeNotifier {
     }
     pane = nextPane;
     notifyListeners();
-    if (nextPane == WorkspacePane.config) {
+    if (nextPane == WorkspacePane.config || nextPane == WorkspacePane.check) {
       await loadConfig();
     }
     if (nextPane == WorkspacePane.terminal) {
@@ -270,11 +274,7 @@ class ManyoyoAppController extends ChangeNotifier {
       pending: true,
       mode: 'agent',
     );
-    messages = <MessageItem>[
-      ...messages,
-      optimisticUser,
-      optimisticAssistant,
-    ];
+    messages = <MessageItem>[...messages, optimisticUser, optimisticAssistant];
     streamingAgent = true;
     liveTrace = '';
     notifyListeners();
@@ -373,7 +373,9 @@ class ManyoyoAppController extends ChangeNotifier {
   Future<void> saveOpenedFile(String content) async {
     final current = _requireSession();
     final openedFile = fileRead;
-    if (activeSessionName.isEmpty || openedFile == null || !openedFile.editable) {
+    if (activeSessionName.isEmpty ||
+        openedFile == null ||
+        !openedFile.editable) {
       return;
     }
     savingFile = true;
@@ -512,7 +514,11 @@ class ManyoyoAppController extends ChangeNotifier {
   }
 
   void sendTerminalLine(String line) {
-    _terminalConnection?.sendInput('$line\n');
+    sendTerminalInput('$line\n');
+  }
+
+  void sendTerminalInput(String data) {
+    _terminalConnection?.sendInput(data);
   }
 
   void sendTerminalControlC() {

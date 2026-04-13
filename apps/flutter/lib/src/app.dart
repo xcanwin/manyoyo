@@ -1,7 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
 import 'models.dart';
+
+const JsonEncoder _prettyJson = JsonEncoder.withIndent('  ');
 
 class ManyoyoApp extends StatelessWidget {
   const ManyoyoApp({required this.controller, super.key});
@@ -16,14 +20,10 @@ class ManyoyoApp extends StatelessWidget {
         return MaterialApp(
           title: 'MANYOYO Flutter',
           debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF155E4A),
-              brightness: Brightness.light,
-            ),
-            scaffoldBackgroundColor: const Color(0xFFF2EFE8),
-          ),
+          theme: _buildTheme(),
+          builder: (BuildContext context, Widget? child) {
+            return _AppBackground(child: child ?? const SizedBox.shrink());
+          },
           home: controller.booting
               ? const _BootScreen()
               : controller.isAuthenticated
@@ -45,20 +45,450 @@ class ManyoyoApp extends StatelessWidget {
   }
 }
 
+ThemeData _buildTheme() {
+  final ThemeData base = ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.light,
+    colorScheme: const ColorScheme.light(
+      primary: _WebColors.accent,
+      onPrimary: Colors.white,
+      secondary: _WebColors.subaccent,
+      onSecondary: Colors.white,
+      error: _WebColors.danger,
+      onError: Colors.white,
+      surface: _WebColors.panelStrong,
+      onSurface: _WebColors.text,
+      outline: _WebColors.line,
+      surfaceContainerHighest: _WebColors.panelSoft,
+    ),
+  );
+  final TextTheme seededTextTheme = base.textTheme.apply(
+    fontFamily: _WebFonts.ui,
+    bodyColor: _WebColors.text,
+    displayColor: _WebColors.text,
+  );
+  final TextTheme textTheme = seededTextTheme.copyWith(
+    headlineSmall: _displayStyle(
+      seededTextTheme.headlineSmall,
+      fontWeight: FontWeight.w700,
+      color: _WebColors.text,
+      height: 1.05,
+      letterSpacing: 0.4,
+    ),
+    titleLarge: _displayStyle(
+      seededTextTheme.titleLarge,
+      fontWeight: FontWeight.w700,
+      color: _WebColors.text,
+      height: 1.1,
+      letterSpacing: 0.4,
+    ),
+    titleMedium: _uiStyle(
+      seededTextTheme.titleMedium,
+      fontWeight: FontWeight.w700,
+      color: _WebColors.text,
+    ),
+    titleSmall: _uiStyle(
+      seededTextTheme.titleSmall,
+      fontWeight: FontWeight.w700,
+      color: _WebColors.text,
+    ),
+    bodyLarge: _uiStyle(
+      seededTextTheme.bodyLarge,
+      color: _WebColors.text,
+      height: 1.55,
+    ),
+    bodyMedium: _uiStyle(
+      seededTextTheme.bodyMedium,
+      color: _WebColors.text,
+      height: 1.5,
+    ),
+    bodySmall: _uiStyle(
+      seededTextTheme.bodySmall,
+      color: _WebColors.muted,
+      height: 1.45,
+    ),
+    labelLarge: _uiStyle(
+      seededTextTheme.labelLarge,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.15,
+    ),
+    labelMedium: _uiStyle(
+      seededTextTheme.labelMedium,
+      color: _WebColors.muted,
+      fontWeight: FontWeight.w600,
+    ),
+    labelSmall: _uiStyle(
+      seededTextTheme.labelSmall,
+      color: _WebColors.muted,
+      fontWeight: FontWeight.w600,
+    ),
+  );
+
+  return base.copyWith(
+    scaffoldBackgroundColor: Colors.transparent,
+    textTheme: textTheme,
+    splashFactory: InkRipple.splashFactory,
+    dividerColor: _WebColors.line,
+    dialogTheme: DialogThemeData(
+      backgroundColor: _WebColors.panelStrong,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: _WebColors.line),
+      ),
+      titleTextStyle: textTheme.titleLarge,
+      contentTextStyle: textTheme.bodyMedium,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+      labelStyle: textTheme.bodySmall?.copyWith(
+        color: _WebColors.muted,
+        fontWeight: FontWeight.w700,
+      ),
+      hintStyle: textTheme.bodyMedium?.copyWith(
+        color: _WebColors.muted.withValues(alpha: 0.74),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: _WebColors.line),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: _WebColors.accent),
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: _WebColors.line),
+      ),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: const Color(0xFFFFFAF2),
+      surfaceTintColor: Colors.transparent,
+      textStyle: textTheme.bodyMedium,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: _WebColors.line),
+      ),
+    ),
+  );
+}
+
+class _WebColors {
+  static const Color bgCanvas = Color(0xFFF3EDE4);
+  static const Color bgCanvasAlt = Color(0xFFEFE4D3);
+  static const Color bgGrid = Color(0x298A7253);
+  static const Color panelSoft = Color(0xFFF9F2E7);
+  static const Color panelStrong = Color(0xFFFFFFFF);
+  static const Color line = Color(0xFFD9C7AD);
+  static const Color text = Color(0xFF1F1A14);
+  static const Color muted = Color(0xFF6A5F52);
+  static const Color accent = Color(0xFFC4551F);
+  static const Color accentStrong = Color(0xFF9D4418);
+  static const Color subaccent = Color(0xFF0F7C72);
+  static const Color subaccentStrong = Color(0xFF0A655E);
+  static const Color danger = Color(0xFFBF332D);
+  static const Color dangerStrong = Color(0xFF962824);
+  static const Color dangerSoft = Color(0xFFFFE8E5);
+  static const Color userBubble = Color(0xFFFEE9DD);
+  static const Color assistantBubble = Color(0xFFFFFDF8);
+  static const Color systemBubble = Color(0xFFE5F3F1);
+  static const Color terminalBg = Color(0xFF11161D);
+  static const Color terminalFg = Color(0xFFE8EDF5);
+  static const Color statusRunningBg = Color(0xFFE0F5EF);
+  static const Color statusRunningText = Color(0xFF0C695F);
+  static const Color statusStoppedBg = Color(0xFFFFF0DD);
+  static const Color statusStoppedText = Color(0xFF9A5A09);
+  static const Color statusHistoryBg = Color(0xFFECE7DF);
+  static const Color statusHistoryText = Color(0xFF645647);
+  static const Color statusUnknownBg = Color(0xFFECE9FF);
+  static const Color statusUnknownText = Color(0xFF5A4BB0);
+}
+
+class _WebFonts {
+  static const String ui = 'IBM Plex Sans';
+  static const String display = 'IBM Plex Sans Condensed';
+  static const String mono = 'IBM Plex Mono';
+}
+
+TextStyle _uiStyle(
+  TextStyle? base, {
+  Color? color,
+  FontWeight? fontWeight,
+  double? fontSize,
+  double? height,
+  double? letterSpacing,
+}) {
+  return (base ?? const TextStyle()).copyWith(
+    fontFamily: _WebFonts.ui,
+    color: color,
+    fontWeight: fontWeight,
+    fontSize: fontSize,
+    height: height,
+    letterSpacing: letterSpacing,
+  );
+}
+
+TextStyle _displayStyle(
+  TextStyle? base, {
+  Color? color,
+  FontWeight? fontWeight,
+  double? fontSize,
+  double? height,
+  double? letterSpacing,
+}) {
+  return (base ?? const TextStyle()).copyWith(
+    fontFamily: _WebFonts.display,
+    color: color,
+    fontWeight: fontWeight,
+    fontSize: fontSize,
+    height: height,
+    letterSpacing: letterSpacing,
+  );
+}
+
+TextStyle _monoStyle(
+  TextStyle? base, {
+  Color? color,
+  FontWeight? fontWeight,
+  double? fontSize,
+  double? height,
+  double? letterSpacing,
+}) {
+  return (base ?? const TextStyle()).copyWith(
+    fontFamily: _WebFonts.mono,
+    color: color,
+    fontWeight: fontWeight,
+    fontSize: fontSize,
+    height: height,
+    letterSpacing: letterSpacing,
+  );
+}
+
+class _AppBackground extends StatelessWidget {
+  const _AppBackground({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[_WebColors.bgCanvas, _WebColors.bgCanvasAlt],
+        ),
+      ),
+      child: Stack(
+        children: <Widget>[
+          const Positioned.fill(child: IgnorePointer(child: _BackdropLight())),
+          const Positioned.fill(
+            child: IgnorePointer(child: CustomPaint(painter: _GridPainter())),
+          ),
+          Positioned.fill(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+class _BackdropLight extends StatelessWidget {
+  const _BackdropLight();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: <Widget>[
+        Positioned(
+          left: -180,
+          top: -170,
+          width: 540,
+          height: 360,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                colors: <Color>[
+                  const Color(0xFFF8F2EA),
+                  const Color(0xFFF8F2EA).withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          right: -120,
+          bottom: -140,
+          width: 460,
+          height: 330,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                colors: <Color>[
+                  const Color(0xFFF2DDC6),
+                  const Color(0xFFF2DDC6).withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: <Color>[
+                  _WebColors.accent.withValues(alpha: 0.08),
+                  Colors.transparent,
+                  _WebColors.subaccent.withValues(alpha: 0.08),
+                ],
+                stops: const <double>[0, 0.42, 1],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GridPainter extends CustomPainter {
+  const _GridPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = _WebColors.bgGrid.withValues(alpha: 0.22)
+      ..strokeWidth = 1;
+    const double gap = 28;
+    for (double x = gap; x < size.width; x += gap) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+enum _ButtonTone { primary, secondary, danger, dangerOutline }
+
+ButtonStyle _buttonStyle(_ButtonTone tone) {
+  final Color background = switch (tone) {
+    _ButtonTone.primary => _WebColors.accent,
+    _ButtonTone.secondary => _WebColors.panelSoft,
+    _ButtonTone.danger => _WebColors.danger,
+    _ButtonTone.dangerOutline => const Color(0xFFFFF5F3),
+  };
+  final Color foreground = switch (tone) {
+    _ButtonTone.primary => Colors.white,
+    _ButtonTone.secondary => _WebColors.text,
+    _ButtonTone.danger => Colors.white,
+    _ButtonTone.dangerOutline => _WebColors.danger,
+  };
+  final Color border = switch (tone) {
+    _ButtonTone.primary => Colors.transparent,
+    _ButtonTone.secondary => _WebColors.line,
+    _ButtonTone.danger => Colors.transparent,
+    _ButtonTone.dangerOutline => const Color(0xFFEDC1BC),
+  };
+  return ButtonStyle(
+    minimumSize: const WidgetStatePropertyAll<Size>(Size(0, 40)),
+    padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+      EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+    ),
+    elevation: const WidgetStatePropertyAll<double>(0),
+    backgroundColor: WidgetStateProperty.resolveWith<Color>((
+      Set<WidgetState> states,
+    ) {
+      if (states.contains(WidgetState.disabled)) {
+        return background.withValues(alpha: 0.58);
+      }
+      if (states.contains(WidgetState.hovered) ||
+          states.contains(WidgetState.pressed)) {
+        return switch (tone) {
+          _ButtonTone.primary => _WebColors.accentStrong,
+          _ButtonTone.secondary => const Color(0xFFF5EBDF),
+          _ButtonTone.danger => _WebColors.dangerStrong,
+          _ButtonTone.dangerOutline => _WebColors.dangerSoft,
+        };
+      }
+      return background;
+    }),
+    foregroundColor: WidgetStatePropertyAll<Color>(foreground),
+    shape: WidgetStatePropertyAll<OutlinedBorder>(
+      RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: border),
+      ),
+    ),
+    textStyle: const WidgetStatePropertyAll<TextStyle>(
+      TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+    ),
+  );
+}
+
+BoxDecoration _paneDecoration({bool dark = false}) {
+  if (dark) {
+    return BoxDecoration(
+      color: const Color(0xFF131923),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: _WebColors.line),
+      boxShadow: const <BoxShadow>[
+        BoxShadow(
+          color: Color(0x1F2C1F0F),
+          blurRadius: 34,
+          offset: Offset(0, 14),
+        ),
+      ],
+    );
+  }
+  return BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: <Color>[
+        Colors.white.withValues(alpha: 0.88),
+        const Color(0xFFFCF6EC).withValues(alpha: 0.88),
+      ],
+    ),
+    borderRadius: BorderRadius.circular(14),
+    border: Border.all(color: _WebColors.line),
+  );
+}
+
 class _BootScreen extends StatelessWidget {
   const _BootScreen();
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
+      backgroundColor: Colors.transparent,
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('正在初始化 MANYOYO Flutter…'),
-          ],
+        child: Container(
+          width: 280,
+          padding: const EdgeInsets.all(24),
+          decoration: _paneDecoration(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const SizedBox(
+                width: 32,
+                height: 32,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.6,
+                  color: _WebColors.accent,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '正在初始化 MANYOYO Flutter…',
+                style: Theme.of(context).textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -101,81 +531,141 @@ class _LoginScreenState extends State<_LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
-    final textTheme = Theme.of(context).textTheme;
+    final ManyoyoAppController controller = widget.controller;
+    final TextTheme textTheme = Theme.of(context).textTheme;
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'MANYOYO 原生工作台',
-                      style: textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(24, 26, 24, 20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: <Color>[
+                    Colors.white.withValues(alpha: 0.97),
+                    const Color(0xFFF9F1E6).withValues(alpha: 0.97),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _WebColors.line),
+                boxShadow: const <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x332C1F0F),
+                    blurRadius: 58,
+                    offset: Offset(0, 24),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: <Widget>[
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: -26,
+                    child: Container(
+                      height: 4,
+                      decoration: const BoxDecoration(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(18),
+                        ),
+                        gradient: LinearGradient(
+                          colors: <Color>[
+                            _WebColors.accent,
+                            _WebColors.subaccent,
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '纯 Flutter UI，直接对接 MANYOYO 服务端接口，不再依赖网页壳。',
-                      style: textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 24),
-                    TextField(
-                      controller: _baseUrlController,
-                      decoration: const InputDecoration(
-                        labelText: '服务地址',
-                        hintText: 'http://127.0.0.1:3000',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _usernameController,
-                      decoration: const InputDecoration(
-                        labelText: '用户名',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: '密码',
-                        border: OutlineInputBorder(),
-                      ),
-                      onSubmitted: (_) => _submit(),
-                    ),
-                    const SizedBox(height: 16),
-                    if (controller.loginError.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 11,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE8DB),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
                         child: Text(
-                          controller.loginError,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                            fontWeight: FontWeight.w600,
+                          'MANYOYO',
+                          style: textTheme.labelSmall?.copyWith(
+                            color: const Color(0xFF8B3713),
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.95,
                           ),
                         ),
                       ),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: controller.loggingIn ? null : _submit,
-                        child: Text(
-                          controller.loggingIn ? '登录中…' : '登录 MANYOYO',
+                      const SizedBox(height: 10),
+                      Text(
+                        'Web 登录',
+                        style: _displayStyle(
+                          textTheme.headlineSmall,
+                          fontSize: 30,
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '登录后可访问容器会话与对话管理。',
+                        style: textTheme.bodySmall?.copyWith(fontSize: 13),
+                      ),
+                      const SizedBox(height: 16),
+                      _LabeledField(
+                        label: '服务地址',
+                        child: TextField(
+                          controller: _baseUrlController,
+                          decoration: const InputDecoration(
+                            hintText: 'http://127.0.0.1:3000',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 11),
+                      _LabeledField(
+                        label: '用户名',
+                        child: TextField(controller: _usernameController),
+                      ),
+                      const SizedBox(height: 11),
+                      _LabeledField(
+                        label: '密码',
+                        child: TextField(
+                          controller: _passwordController,
+                          obscureText: true,
+                          onSubmitted: (_) => _submit(),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          style: _buttonStyle(_ButtonTone.primary),
+                          onPressed: controller.loggingIn ? null : _submit,
+                          child: Text(controller.loggingIn ? '登录中…' : '登录'),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 20,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            controller.loginError,
+                            style: textTheme.bodySmall?.copyWith(
+                              color: _WebColors.danger,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
@@ -203,112 +693,70 @@ class _WorkspaceScreen extends StatefulWidget {
 }
 
 class _WorkspaceScreenState extends State<_WorkspaceScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
+    final ManyoyoAppController controller = widget.controller;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final wide = constraints.maxWidth >= 980;
-        final sessionPanel = _SessionList(controller: controller);
+        final bool wide = constraints.maxWidth >= 980;
+        final double drawerWidth = constraints.maxWidth * 0.86 < 346
+            ? constraints.maxWidth * 0.86
+            : 346;
+        final Widget sidebar = _SidebarPanel(
+          controller: controller,
+          onOpenConfig: () async {
+            final NavigatorState? navigator = !wide
+                ? Navigator.of(context)
+                : null;
+            await controller.setPane(WorkspacePane.config);
+            if (!wide && mounted) {
+              navigator?.maybePop();
+            }
+          },
+          onOpenCreate: _openCreateDialog,
+          onSelectSession: !wide
+              ? () {
+                  Navigator.of(context).maybePop();
+                }
+              : null,
+        );
+
         return Scaffold(
-          drawer: wide ? null : Drawer(child: SafeArea(child: sessionPanel)),
-          appBar: AppBar(
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(controller.activeSessionName.isEmpty
-                    ? 'MANYOYO Flutter'
-                    : controller.activeSessionName),
-                Text(
-                  controller.session?.baseUrl ?? '',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w400),
+          key: _scaffoldKey,
+          backgroundColor: Colors.transparent,
+          drawerScrimColor: const Color(0x7A17110B),
+          drawerEnableOpenDragGesture: !wide,
+          drawer: wide
+              ? null
+              : Drawer(
+                  width: drawerWidth,
+                  elevation: 0,
+                  backgroundColor: Colors.transparent,
+                  child: SafeArea(child: sidebar),
                 ),
-              ],
-            ),
-            actions: [
-              IconButton(
-                tooltip: '刷新',
-                onPressed: controller.loadingSessions
-                    ? null
-                    : controller.refreshSessions,
-                icon: const Icon(Icons.refresh),
-              ),
-              IconButton(
-                tooltip: '新建会话',
-                onPressed: controller.creatingSession ? null : _openCreateDialog,
-                icon: const Icon(Icons.add_box_outlined),
-              ),
-              IconButton(
-                tooltip: '退出登录',
-                onPressed: controller.logout,
-                icon: const Icon(Icons.logout),
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: SegmentedButton<WorkspacePane>(
-                        segments: const [
-                          ButtonSegment<WorkspacePane>(
-                            value: WorkspacePane.conversation,
-                            label: Text('会话'),
-                            icon: Icon(Icons.chat_bubble_outline),
-                          ),
-                          ButtonSegment<WorkspacePane>(
-                            value: WorkspacePane.files,
-                            label: Text('文件'),
-                            icon: Icon(Icons.folder_open_outlined),
-                          ),
-                          ButtonSegment<WorkspacePane>(
-                            value: WorkspacePane.terminal,
-                            label: Text('终端'),
-                            icon: Icon(Icons.terminal),
-                          ),
-                          ButtonSegment<WorkspacePane>(
-                            value: WorkspacePane.config,
-                            label: Text('配置'),
-                            icon: Icon(Icons.settings_outlined),
-                          ),
-                        ],
-                        selected: <WorkspacePane>{controller.pane},
-                        onSelectionChanged: (Set<WorkspacePane> value) {
-                          controller.setPane(value.first);
-                        },
+          body: SafeArea(
+            child: wide
+                ? Row(
+                    children: <Widget>[
+                      SizedBox(width: 320, child: sidebar),
+                      Expanded(
+                        child: _MainPanel(
+                          controller: controller,
+                          onOpenSidebar: null,
+                          onOpenCreate: _openCreateDialog,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              if (controller.workspaceError.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _Banner(
-                    color: const Color(0xFFFCE8E6),
-                    textColor: const Color(0xFFB42318),
-                    text: controller.workspaceError,
+                    ],
+                  )
+                : _MainPanel(
+                    controller: controller,
+                    onOpenSidebar: () {
+                      _scaffoldKey.currentState?.openDrawer();
+                    },
+                    onOpenCreate: _openCreateDialog,
                   ),
-                ),
-              Expanded(
-                child: wide
-                    ? Row(
-                        children: [
-                          SizedBox(width: 320, child: sessionPanel),
-                          const VerticalDivider(width: 1),
-                          Expanded(
-                            child: _WorkspacePane(controller: controller),
-                          ),
-                        ],
-                      )
-                    : _WorkspacePane(controller: controller),
-              ),
-            ],
           ),
         );
       },
@@ -316,10 +764,10 @@ class _WorkspaceScreenState extends State<_WorkspaceScreen> {
   }
 
   Future<void> _openCreateDialog() async {
-    final controller = widget.controller;
-    final messenger = ScaffoldMessenger.of(context);
+    final ManyoyoAppController controller = widget.controller;
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     try {
-      final seed = await controller.loadCreateSessionSeed();
+      final CreateSessionSeed seed = await controller.loadCreateSessionSeed();
       if (!mounted) {
         return;
       }
@@ -330,12 +778,473 @@ class _WorkspaceScreenState extends State<_WorkspaceScreen> {
         },
       );
     } catch (error) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('加载创建表单失败：$error')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('加载创建表单失败：$error')));
     }
   }
 }
+
+class _SidebarPanel extends StatelessWidget {
+  const _SidebarPanel({
+    required this.controller,
+    required this.onOpenConfig,
+    required this.onOpenCreate,
+    this.onSelectSession,
+  });
+
+  final ManyoyoAppController controller;
+  final Future<void> Function() onOpenConfig;
+  final Future<void> Function() onOpenCreate;
+  final VoidCallback? onSelectSession;
+
+  @override
+  Widget build(BuildContext context) {
+    final int count = controller.sessions.length;
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[Color(0xFFFFFEFD), Color(0xFFF8F1E7)],
+        ),
+        border: Border(right: BorderSide(color: _WebColors.line)),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Container(
+            padding: const EdgeInsets.only(bottom: 8),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0x73B59263))),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'MANYOYO Web',
+                        style: _displayStyle(
+                          Theme.of(context).textTheme.titleLarge,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Container Session Console',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          fontSize: 11,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  children: <Widget>[
+                    FilledButton(
+                      style: _buttonStyle(_ButtonTone.secondary),
+                      onPressed: () async {
+                        await onOpenConfig();
+                      },
+                      child: const Text('配置'),
+                    ),
+                    FilledButton(
+                      style: _buttonStyle(_ButtonTone.primary),
+                      onPressed: () async {
+                        await onOpenCreate();
+                      },
+                      child: const Text('新建'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              Text(
+                '工作台',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: _WebColors.muted,
+                  fontSize: 12,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$count 个',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: _WebColors.muted,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: controller.loadingSessions && controller.sessions.isEmpty
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      color: _WebColors.accent,
+                    ),
+                  )
+                : controller.sessions.isEmpty
+                ? Center(
+                    child: Text(
+                      '当前没有可用会话',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: controller.sessions.length,
+                    padding: EdgeInsets.zero,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (BuildContext context, int index) {
+                      final SessionSummary session = controller.sessions[index];
+                      return _SessionTile(
+                        session: session,
+                        selected: session.name == controller.activeSessionName,
+                        onTap: () async {
+                          await controller.selectSession(session.name);
+                          onSelectSession?.call();
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SessionTile extends StatelessWidget {
+  const _SessionTile({
+    required this.session,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final SessionSummary session;
+  final bool selected;
+  final Future<void> Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final _StatusTheme tone = _statusTheme(session.status);
+    final bool subdued =
+        !selected &&
+        (session.status == 'history' ||
+            session.status == 'stopped' ||
+            session.status == 'unknown');
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () async {
+          await onTap();
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.fromLTRB(10, 11, 11, 11),
+          decoration: BoxDecoration(
+            color: selected
+                ? const Color(0xFFFFF3E8)
+                : subdued
+                ? Colors.white.withValues(alpha: 0.72)
+                : _WebColors.panelStrong,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFFC68D5A)
+                  : subdued
+                  ? const Color(0x38B59263)
+                  : _WebColors.line,
+            ),
+            boxShadow: selected
+                ? const <BoxShadow>[
+                    BoxShadow(
+                      color: Color(0x24C4551F),
+                      blurRadius: 0,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Opacity(
+            opacity: subdued ? 0.25 : 1,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  session.name,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: <Widget>[
+                    _StatusPill(
+                      label: session.status,
+                      backgroundColor: tone.background,
+                      foregroundColor: tone.foreground,
+                      borderColor: tone.border,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        '${session.agentName} · ${session.messageCount} 条',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelMedium?.copyWith(fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  session.updatedAt.isEmpty
+                      ? session.createdAt
+                      : session.updatedAt,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    fontSize: 11,
+                    color: const Color(0xFF7B6D5D),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MainPanel extends StatelessWidget {
+  const _MainPanel({
+    required this.controller,
+    required this.onOpenCreate,
+    this.onOpenSidebar,
+  });
+
+  final ManyoyoAppController controller;
+  final Future<void> Function() onOpenCreate;
+  final VoidCallback? onOpenSidebar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[Color(0xFFFDFBF3), Color(0xFFF7EDDF)],
+        ),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _WorkspaceHeader(
+            controller: controller,
+            onOpenSidebar: onOpenSidebar,
+            onOpenCreate: onOpenCreate,
+          ),
+          if (controller.workspaceError.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 8),
+            _Banner(
+              backgroundColor: _WebColors.dangerSoft,
+              borderColor: const Color(0xFFEDC1BC),
+              textColor: _WebColors.danger,
+              text: controller.workspaceError,
+            ),
+          ],
+          const SizedBox(height: 10),
+          Expanded(child: _WorkspacePane(controller: controller)),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkspaceHeader extends StatelessWidget {
+  const _WorkspaceHeader({
+    required this.controller,
+    required this.onOpenCreate,
+    this.onOpenSidebar,
+  });
+
+  final ManyoyoAppController controller;
+  final Future<void> Function() onOpenCreate;
+  final VoidCallback? onOpenSidebar;
+
+  @override
+  Widget build(BuildContext context) {
+    final SessionDetail? detail = controller.activeSessionDetail;
+    final String meta = detail == null
+        ? '请选择左侧会话'
+        : '${detail.agentName} · ${detail.status} · ${detail.messageCount} 条消息';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0x7AB59263))),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              if (onOpenSidebar != null) ...<Widget>[
+                FilledButton(
+                  style: _buttonStyle(_ButtonTone.secondary),
+                  onPressed: onOpenSidebar,
+                  child: const Text('会话'),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  controller.activeSessionName.isEmpty
+                      ? '未选择会话'
+                      : controller.activeSessionName,
+                  style: _displayStyle(
+                    Theme.of(context).textTheme.titleLarge,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              _HeaderActions(
+                controller: controller,
+                onOpenCreate: onOpenCreate,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            meta,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _workspaceTabs.map(((_WorkspaceTab tab) {
+              final bool active = controller.pane == tab.pane;
+              return FilledButton(
+                style: _buttonStyle(
+                  active ? _ButtonTone.primary : _ButtonTone.secondary,
+                ),
+                onPressed: () async {
+                  await controller.setPane(tab.pane);
+                },
+                child: Text(tab.label),
+              );
+            })).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderActions extends StatelessWidget {
+  const _HeaderActions({required this.controller, required this.onOpenCreate});
+
+  final ManyoyoAppController controller;
+  final Future<void> Function() onOpenCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_HeaderAction>(
+      tooltip: '更多',
+      color: const Color(0xFFFFFAF2),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: _WebColors.line),
+      ),
+      onSelected: (_HeaderAction action) async {
+        switch (action) {
+          case _HeaderAction.refresh:
+            await controller.refreshSessions();
+            break;
+          case _HeaderAction.create:
+            await onOpenCreate();
+            break;
+          case _HeaderAction.config:
+            await controller.setPane(WorkspacePane.config);
+            break;
+          case _HeaderAction.logout:
+            await controller.logout();
+            break;
+        }
+      },
+      itemBuilder: (BuildContext context) {
+        return const <PopupMenuEntry<_HeaderAction>>[
+          PopupMenuItem<_HeaderAction>(
+            value: _HeaderAction.refresh,
+            child: Text('刷新'),
+          ),
+          PopupMenuItem<_HeaderAction>(
+            value: _HeaderAction.create,
+            child: Text('新建容器'),
+          ),
+          PopupMenuItem<_HeaderAction>(
+            value: _HeaderAction.config,
+            child: Text('配置'),
+          ),
+          PopupMenuDivider(height: 8),
+          PopupMenuItem<_HeaderAction>(
+            value: _HeaderAction.logout,
+            child: Text('退出登录'),
+          ),
+        ];
+      },
+      child: IgnorePointer(
+        child: FilledButton(
+          style: _buttonStyle(_ButtonTone.secondary),
+          onPressed: () {},
+          child: const Text('更多'),
+        ),
+      ),
+    );
+  }
+}
+
+enum _HeaderAction { refresh, create, config, logout }
+
+class _WorkspaceTab {
+  const _WorkspaceTab(this.pane, this.label);
+
+  final WorkspacePane pane;
+  final String label;
+}
+
+const List<_WorkspaceTab> _workspaceTabs = <_WorkspaceTab>[
+  _WorkspaceTab(WorkspacePane.conversation, '活动'),
+  _WorkspaceTab(WorkspacePane.terminal, '终端'),
+  _WorkspaceTab(WorkspacePane.files, '文件'),
+  _WorkspaceTab(WorkspacePane.detail, '详情'),
+  _WorkspaceTab(WorkspacePane.config, '配置'),
+  _WorkspaceTab(WorkspacePane.check, '检查'),
+];
 
 class _WorkspacePane extends StatelessWidget {
   const _WorkspacePane({required this.controller});
@@ -344,60 +1253,18 @@ class _WorkspacePane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-      child: switch (controller.pane) {
-        WorkspacePane.conversation => _ConversationPane(controller: controller),
-        WorkspacePane.files => _FilesPane(controller: controller),
-        WorkspacePane.terminal => _TerminalPane(controller: controller),
-        WorkspacePane.config => _ConfigPane(controller: controller),
-      },
-    );
+    return switch (controller.pane) {
+      WorkspacePane.conversation => _ConversationPane(controller: controller),
+      WorkspacePane.terminal => _TerminalPane(controller: controller),
+      WorkspacePane.files => _FilesPane(controller: controller),
+      WorkspacePane.detail => _DetailPane(controller: controller),
+      WorkspacePane.config => _ConfigPane(controller: controller),
+      WorkspacePane.check => _CheckPane(controller: controller),
+    };
   }
 }
 
-class _SessionList extends StatelessWidget {
-  const _SessionList({required this.controller});
-
-  final ManyoyoAppController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    if (controller.loadingSessions && controller.sessions.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (controller.sessions.isEmpty) {
-      return const Center(child: Text('当前没有可用会话'));
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.all(12),
-      itemCount: controller.sessions.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (BuildContext context, int index) {
-        final session = controller.sessions[index];
-        final selected = session.name == controller.activeSessionName;
-        return Card(
-          color: selected
-              ? Theme.of(context).colorScheme.primaryContainer
-              : null,
-          child: ListTile(
-            selected: selected,
-            leading: Icon(
-              session.status == 'running'
-                  ? Icons.play_circle_outline
-                  : Icons.history,
-            ),
-            title: Text(session.name),
-            subtitle: Text(
-              '${session.agentName} · ${session.status} · ${session.messageCount} 条消息',
-            ),
-            onTap: () => controller.selectSession(session.name),
-          ),
-        );
-      },
-    );
-  }
-}
+enum _ComposerMode { agent, command }
 
 class _ConversationPane extends StatefulWidget {
   const _ConversationPane({required this.controller});
@@ -410,6 +1277,7 @@ class _ConversationPane extends StatefulWidget {
 
 class _ConversationPaneState extends State<_ConversationPane> {
   late final TextEditingController _promptController;
+  _ComposerMode _mode = _ComposerMode.agent;
 
   @override
   void initState() {
@@ -425,82 +1293,266 @@ class _ConversationPaneState extends State<_ConversationPane> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
+    final ManyoyoAppController controller = widget.controller;
+    final String agentProgram =
+        controller.activeSessionDetail?.agentProgram.trim().isNotEmpty == true
+        ? controller.activeSessionDetail!.agentProgram
+        : '—';
     if (controller.activeSessionName.isEmpty) {
-      return const Center(child: Text('先创建或选择一个会话'));
+      return const _EmptyPane(message: '先创建或选择一个会话');
     }
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _DetailHeader(detail: controller.activeSessionDetail),
-            const SizedBox(height: 12),
-            Expanded(
-              child: controller.loadingSessionContent
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView.separated(
-                      itemCount: controller.messages.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (BuildContext context, int index) {
-                        final message = controller.messages[index];
-                        return _MessageCard(message: message);
-                      },
-                    ),
+    return Container(
+      decoration: _paneDecoration(),
+      child: Column(
+        children: <Widget>[
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                children: <Widget>[
+                  _ConversationSummary(detail: controller.activeSessionDetail),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: controller.loadingSessionContent
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              color: _WebColors.accent,
+                            ),
+                          )
+                        : controller.messages.isEmpty
+                        ? const _EmptyPanelBody(message: '当前还没有消息，输入任务后即可开始。')
+                        : Scrollbar(
+                            child: ListView.separated(
+                              itemCount: controller.messages.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 14),
+                              itemBuilder: (BuildContext context, int index) {
+                                final MessageItem message =
+                                    controller.messages[index];
+                                return _MessageBubble(message: message);
+                              },
+                            ),
+                          ),
+                  ),
+                ],
+              ),
             ),
-            if (controller.liveTrace.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _Banner(
-                color: const Color(0xFFEAF3FF),
+          ),
+          if (controller.liveTrace.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              child: _Banner(
+                backgroundColor: const Color(0xFFEAF3FF),
+                borderColor: const Color(0xFFBBD4FF),
                 textColor: const Color(0xFF175CD3),
                 text: controller.liveTrace,
               ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: _promptController,
-              minLines: 3,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                labelText: '发送给 AGENT',
-                hintText: '输入任务描述，客户端会直接走 /agent/stream。',
-                border: OutlineInputBorder(),
+            ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: const Color(0x73B59263))),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[
+                  Colors.white.withValues(alpha: 0.32),
+                  const Color(0xFFFFF9F0).withValues(alpha: 0.78),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton(
-                    onPressed: controller.streamingAgent
-                        ? null
-                        : () async {
-                            final prompt = _promptController.text;
-                            _promptController.clear();
-                            await controller.sendPrompt(prompt);
+            child: Column(
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        FilledButton(
+                          style: _buttonStyle(
+                            _mode == _ComposerMode.agent
+                                ? _ButtonTone.primary
+                                : _ButtonTone.secondary,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _mode = _ComposerMode.agent;
+                            });
                           },
-                    child: Text(
-                      controller.streamingAgent ? '运行中…' : '发送',
+                          child: const Text('Agent'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          style: _buttonStyle(
+                            _mode == _ComposerMode.command
+                                ? _ButtonTone.primary
+                                : _ButtonTone.secondary,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _mode = _ComposerMode.command;
+                            });
+                          },
+                          child: const Text('命令'),
+                        ),
+                      ],
                     ),
-                  ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _WebColors.panelSoft,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: _WebColors.line),
+                      ),
+                      child: Text(
+                        '模型 · $agentProgram',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelMedium?.copyWith(fontSize: 12),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: controller.stoppingAgent || !controller.streamingAgent
-                        ? null
-                        : controller.stopAgent,
-                    child: Text(
-                      controller.stoppingAgent ? '停止中…' : '停止',
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    Expanded(
+                      child: TextField(
+                        controller: _promptController,
+                        minLines: 4,
+                        maxLines: 8,
+                        style: _monoStyle(
+                          Theme.of(context).textTheme.bodyMedium,
+                          fontSize: 13,
+                          height: 1.5,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: _mode == _ComposerMode.agent
+                              ? '输入任务描述，直接走 /agent/stream'
+                              : '输入容器命令，例如: ls -la',
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    Column(
+                      children: <Widget>[
+                        FilledButton(
+                          style: _buttonStyle(_ButtonTone.primary),
+                          onPressed: controller.streamingAgent ? null : _submit,
+                          child: Text(
+                            controller.streamingAgent ? '运行中…' : '发送',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton(
+                          style: _buttonStyle(_ButtonTone.dangerOutline),
+                          onPressed:
+                              controller.stoppingAgent ||
+                                  !controller.streamingAgent
+                              ? null
+                              : controller.stopAgent,
+                          child: Text(controller.stoppingAgent ? '停止中…' : '停止'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: <Widget>[
+                    Text(
+                      'Enter 发送 · Shift/Alt + Enter 换行',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(fontSize: 12),
+                    ),
+                    const Spacer(),
+                    Text(
+                      controller.activeSessionName.isEmpty
+                          ? '未选择会话'
+                          : controller.streamingAgent
+                          ? '发送中'
+                          : _mode == _ComposerMode.command
+                          ? '命令模式待接入'
+                          : '已就绪',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontSize: 12,
+                        color: controller.streamingAgent
+                            ? _WebColors.accent
+                            : _WebColors.muted,
+                        fontWeight: controller.streamingAgent
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Future<void> _submit() async {
+    if (_mode == _ComposerMode.command) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Flutter 端命令模式还未接入。')));
+      return;
+    }
+    final String prompt = _promptController.text;
+    _promptController.clear();
+    await widget.controller.sendPrompt(prompt);
+  }
+}
+
+class _ConversationSummary extends StatelessWidget {
+  const _ConversationSummary({required this.detail});
+
+  final SessionDetail? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    if (detail == null) {
+      return const SizedBox.shrink();
+    }
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: <Widget>[
+        _InfoChip(label: detail!.status, tone: _statusTheme(detail!.status)),
+        if (detail!.agentProgram.isNotEmpty)
+          _InfoChip(
+            label: detail!.agentProgram,
+            backgroundColor: _WebColors.panelSoft,
+            foregroundColor: _WebColors.text,
+            borderColor: _WebColors.line,
+          ),
+        if (detail!.hostPath.isNotEmpty)
+          _InfoChip(
+            label: detail!.hostPath,
+            backgroundColor: Colors.white,
+            foregroundColor: _WebColors.text,
+            borderColor: _WebColors.line,
+            monospace: true,
+          ),
+        if (detail!.containerPath.isNotEmpty)
+          _InfoChip(
+            label: detail!.containerPath,
+            backgroundColor: Colors.white,
+            foregroundColor: _WebColors.text,
+            borderColor: _WebColors.line,
+            monospace: true,
+          ),
+      ],
     );
   }
 }
@@ -527,7 +1579,7 @@ class _FilesPaneState extends State<_FilesPane> {
   @override
   void didUpdateWidget(covariant _FilesPane oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final currentPath = widget.controller.fileRead?.path ?? '';
+    final String currentPath = widget.controller.fileRead?.path ?? '';
     if (currentPath != _lastPath) {
       _lastPath = currentPath;
       _editorController.text = widget.controller.fileRead?.content ?? '';
@@ -542,58 +1594,63 @@ class _FilesPaneState extends State<_FilesPane> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
+    final ManyoyoAppController controller = widget.controller;
     if (controller.activeSessionName.isEmpty) {
-      return const Center(child: Text('先选择会话再浏览文件'));
+      return const _EmptyPane(message: '先选择会话再浏览文件');
     }
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final wide = constraints.maxWidth >= 900;
-        final browser = _FileBrowser(controller: controller, onCreateDir: _createDir);
-        final editor = _FileEditor(
-          controller: controller,
-          editorController: _editorController,
-        );
-        return wide
-            ? Row(
-                children: [
-                  SizedBox(width: 320, child: browser),
-                  const SizedBox(width: 12),
-                  Expanded(child: editor),
-                ],
-              )
-            : Column(
-                children: [
-                  SizedBox(height: 280, child: browser),
-                  const SizedBox(height: 12),
-                  Expanded(child: editor),
-                ],
-              );
-      },
+    return Container(
+      decoration: _paneDecoration(),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final bool wide = constraints.maxWidth >= 900;
+          final Widget browser = _FileBrowser(
+            controller: controller,
+            onCreateDir: _createDir,
+          );
+          final Widget editor = _FileEditor(
+            controller: controller,
+            editorController: _editorController,
+          );
+          return wide
+              ? Row(
+                  children: <Widget>[
+                    SizedBox(width: 300, child: browser),
+                    Container(width: 1, color: _WebColors.line),
+                    Expanded(child: editor),
+                  ],
+                )
+              : Column(
+                  children: <Widget>[
+                    SizedBox(height: 280, child: browser),
+                    Container(height: 1, color: _WebColors.line),
+                    Expanded(child: editor),
+                  ],
+                );
+        },
+      ),
     );
   }
 
   Future<void> _createDir() async {
-    final controller = widget.controller;
-    final nameController = TextEditingController();
-    final result = await showDialog<String>(
+    final ManyoyoAppController controller = widget.controller;
+    final TextEditingController nameController = TextEditingController();
+    final String? result = await showDialog<String>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('创建目录'),
           content: TextField(
             controller: nameController,
-            decoration: const InputDecoration(
-              labelText: '目录名',
-              border: OutlineInputBorder(),
-            ),
+            decoration: const InputDecoration(labelText: '目录名'),
           ),
-          actions: [
-            TextButton(
+          actions: <Widget>[
+            FilledButton(
+              style: _buttonStyle(_ButtonTone.secondary),
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('取消'),
             ),
             FilledButton(
+              style: _buttonStyle(_ButtonTone.primary),
               onPressed: () =>
                   Navigator.of(context).pop(nameController.text.trim()),
               child: const Text('创建'),
@@ -602,103 +1659,251 @@ class _FilesPaneState extends State<_FilesPane> {
         );
       },
     );
+    nameController.dispose();
     if (result == null || result.isEmpty) {
       return;
     }
-    final basePath = controller.fileList?.path ?? '/';
-    final targetPath = basePath == '/' ? '/$result' : '$basePath/$result';
+    final String basePath = controller.fileList?.path ?? '/';
+    final String targetPath = basePath == '/'
+        ? '/$result'
+        : '$basePath/$result';
     await controller.createDirectory(targetPath);
   }
 }
 
-class _FileBrowser extends StatelessWidget {
+class _FileBrowser extends StatefulWidget {
   const _FileBrowser({required this.controller, required this.onCreateDir});
 
   final ManyoyoAppController controller;
   final Future<void> Function() onCreateDir;
 
   @override
+  State<_FileBrowser> createState() => _FileBrowserState();
+}
+
+class _FileBrowserState extends State<_FileBrowser> {
+  late final TextEditingController _pathController;
+  String _lastListedPath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _pathController = TextEditingController(
+      text: widget.controller.fileList?.path ?? '/',
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _FileBrowser oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final String nextPath = widget.controller.fileList?.path ?? '/';
+    if (nextPath != _lastListedPath) {
+      _lastListedPath = nextPath;
+      _pathController.text = nextPath;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pathController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    controller.fileList?.path ?? '/',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: '刷新目录',
-                  onPressed: controller.loadingFiles
-                      ? null
-                      : () => controller.openDirectory(
-                          controller.fileList?.path ?? '/',
-                        ),
-                  icon: const Icon(Icons.refresh),
-                ),
-                IconButton(
-                  tooltip: '新建目录',
-                  onPressed: controller.loadingFiles ? null : onCreateDir,
-                  icon: const Icon(Icons.create_new_folder_outlined),
-                ),
-              ],
-            ),
-            if (controller.fileError.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  controller.fileError,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            Expanded(
-              child: controller.loadingFiles && controller.fileList == null
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView.builder(
-                      itemCount:
-                          (controller.fileList?.entries.length ?? 0) +
-                          ((controller.fileList?.parentPath ?? '').isEmpty
-                              ? 0
-                              : 1),
-                      itemBuilder: (BuildContext context, int index) {
-                        final parentPath = controller.fileList?.parentPath ?? '';
-                        if (parentPath.isNotEmpty && index == 0) {
-                          return ListTile(
-                            leading: const Icon(Icons.arrow_upward),
-                            title: const Text('..'),
-                            onTap: () => controller.openDirectory(parentPath),
-                          );
-                        }
-                        final offset = parentPath.isNotEmpty ? 1 : 0;
-                        final entry = controller.fileList!.entries[index - offset];
-                        final isDir = entry.kind == 'directory';
-                        return ListTile(
-                          leading: Icon(
-                            isDir
-                                ? Icons.folder_outlined
-                                : Icons.insert_drive_file_outlined,
-                          ),
-                          title: Text(entry.name),
-                          subtitle: Text(entry.path),
-                          onTap: () => isDir
-                              ? controller.openDirectory(entry.path)
-                              : controller.openFile(entry.path),
+    final ManyoyoAppController controller = widget.controller;
+    final FileListResult? list = controller.fileList;
+    final String parentPath = list?.parentPath ?? '';
+    final List<FileNode> entries = list?.entries ?? const <FileNode>[];
+
+    return Column(
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.96),
+            border: const Border(bottom: BorderSide(color: _WebColors.line)),
+          ),
+          child: Column(
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: _pathController,
+                      style: _monoStyle(
+                        Theme.of(context).textTheme.bodySmall,
+                        fontSize: 12,
+                      ),
+                      decoration: const InputDecoration(
+                        hintText: '/',
+                        isDense: true,
+                      ),
+                      onSubmitted: (String value) async {
+                        await controller.openDirectory(
+                          value.trim().isEmpty ? '/' : value.trim(),
                         );
                       },
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    style: _buttonStyle(_ButtonTone.secondary),
+                    onPressed: () async {
+                      await controller.openDirectory(
+                        _pathController.text.trim().isEmpty
+                            ? '/'
+                            : _pathController.text.trim(),
+                      );
+                    },
+                    child: const Text('访问'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      controller.loadingFiles ? '加载中' : '已就绪',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(fontSize: 12),
+                    ),
+                  ),
+                  FilledButton(
+                    style: _buttonStyle(_ButtonTone.secondary),
+                    onPressed: controller.loadingFiles
+                        ? null
+                        : widget.onCreateDir,
+                    child: const Text('新建目录'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        if (controller.fileError.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: _Banner(
+              backgroundColor: _WebColors.dangerSoft,
+              borderColor: const Color(0xFFEDC1BC),
+              textColor: _WebColors.danger,
+              text: controller.fileError,
             ),
-          ],
+          ),
+        Expanded(
+          child: controller.loadingFiles && list == null
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: _WebColors.accent,
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: entries.length + (parentPath.isEmpty ? 0 : 1),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemBuilder: (BuildContext context, int index) {
+                    if (parentPath.isNotEmpty && index == 0) {
+                      return _FileNodeTile(
+                        icon: Icons.arrow_upward,
+                        title: '..',
+                        subtitle: parentPath,
+                        selected: false,
+                        onTap: () async {
+                          await controller.openDirectory(parentPath);
+                        },
+                      );
+                    }
+                    final int offset = parentPath.isNotEmpty ? 1 : 0;
+                    final FileNode entry = entries[index - offset];
+                    final bool isDir = entry.kind == 'directory';
+                    return _FileNodeTile(
+                      icon: isDir
+                          ? Icons.folder_outlined
+                          : Icons.insert_drive_file_outlined,
+                      title: entry.name,
+                      subtitle: entry.path,
+                      selected: controller.fileRead?.path == entry.path,
+                      onTap: () async {
+                        if (isDir) {
+                          await controller.openDirectory(entry.path);
+                        } else {
+                          await controller.openFile(entry.path);
+                        }
+                      },
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FileNodeTile extends StatelessWidget {
+  const _FileNodeTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final Future<void> Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          await onTap();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0x15C4551F) : Colors.transparent,
+            border: Border(
+              left: BorderSide(
+                color: selected ? _WebColors.accent : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(icon, size: 18, color: _WebColors.muted),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -706,62 +1911,65 @@ class _FileBrowser extends StatelessWidget {
 }
 
 class _FileEditor extends StatelessWidget {
-  const _FileEditor({
-    required this.controller,
-    required this.editorController,
-  });
+  const _FileEditor({required this.controller, required this.editorController});
 
   final ManyoyoAppController controller;
   final TextEditingController editorController;
 
   @override
   Widget build(BuildContext context) {
-    final file = controller.fileRead;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: file == null
-            ? const Center(child: Text('从左侧选择一个文件'))
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    file.path,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    file.isText
-                        ? '语言：${file.language} · ${file.size} bytes'
-                        : '当前文件不是可编辑文本文件',
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: file.isText
-                        ? TextField(
-                            controller: editorController,
-                            expands: true,
-                            maxLines: null,
-                            minLines: null,
-                            style: const TextStyle(fontFamily: 'monospace'),
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                            ),
-                          )
-                        : const Center(child: Text('暂不支持二进制文件预览')),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: !file.editable || controller.savingFile
-                        ? null
-                        : () => controller.saveOpenedFile(editorController.text),
-                    child: Text(controller.savingFile ? '保存中…' : '保存文件'),
+    final FileReadResult? file = controller.fileRead;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: file == null
+          ? const _EmptyPanelBody(message: '从左侧选择一个文件')
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(file.path, style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 6),
+                Text(
+                  file.isText
+                      ? '语言：${file.language} · ${file.size} bytes'
+                      : '当前文件不是可编辑文本文件',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (file.truncated) ...<Widget>[
+                  const SizedBox(height: 8),
+                  const _Banner(
+                    backgroundColor: Color(0xFFFFF0DD),
+                    borderColor: Color(0xFFEDC98E),
+                    textColor: Color(0xFF9A5A09),
+                    text: '当前文件内容已截断显示。',
                   ),
                 ],
-              ),
-      ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: file.isText
+                      ? TextField(
+                          controller: editorController,
+                          expands: true,
+                          maxLines: null,
+                          minLines: null,
+                          style: _monoStyle(
+                            Theme.of(context).textTheme.bodyMedium,
+                            fontSize: 13,
+                            height: 1.5,
+                          ),
+                          decoration: const InputDecoration(),
+                        )
+                      : const _EmptyPanelBody(message: '暂不支持二进制文件预览'),
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  style: _buttonStyle(_ButtonTone.primary),
+                  onPressed: !file.editable || controller.savingFile
+                      ? null
+                      : () => controller.saveOpenedFile(editorController.text),
+                  child: Text(controller.savingFile ? '保存中…' : '保存文件'),
+                ),
+              ],
+            ),
     );
   }
 }
@@ -792,96 +2000,292 @@ class _TerminalPaneState extends State<_TerminalPane> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
+    final ManyoyoAppController controller = widget.controller;
     if (controller.activeSessionName.isEmpty) {
-      return const Center(child: Text('先选择会话再连接终端'));
+      return const _EmptyPane(message: '先选择会话再连接终端');
     }
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text('状态：${controller.terminalStatus}')),
-                IconButton(
-                  tooltip: '重连终端',
-                  onPressed: controller.connectingTerminal
-                      ? null
-                      : controller.connectTerminal,
-                  icon: const Icon(Icons.refresh),
+    return Container(
+      decoration: _paneDecoration(dark: true),
+      child: Column(
+        children: <Widget>[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: const BoxDecoration(
+              color: Color(0xFF1A1A1A),
+              border: Border(bottom: BorderSide(color: Color(0x14FFFFFF))),
+            ),
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: <Widget>[
+                _TermKeyButton(
+                  label: 'esc',
+                  onPressed: () {
+                    controller.sendTerminalInput('\u001b');
+                  },
                 ),
-                IconButton(
-                  tooltip: '发送 Ctrl+C',
-                  onPressed: controller.sendTerminalControlC,
-                  icon: const Icon(Icons.cancel_presentation_outlined),
+                _TermKeyButton(
+                  label: 'tab',
+                  onPressed: () {
+                    controller.sendTerminalInput('\t');
+                  },
+                ),
+                _TermKeyButton(
+                  label: 'ctrl+c',
+                  active: true,
+                  onPressed: () {
+                    controller.sendTerminalControlC();
+                  },
+                ),
+                _TermKeyButton(
+                  label: '◀',
+                  onPressed: () {
+                    controller.sendTerminalInput('\u001b[D');
+                  },
+                ),
+                _TermKeyButton(
+                  label: '▲',
+                  onPressed: () {
+                    controller.sendTerminalInput('\u001b[A');
+                  },
+                ),
+                _TermKeyButton(
+                  label: '▼',
+                  onPressed: () {
+                    controller.sendTerminalInput('\u001b[B');
+                  },
+                ),
+                _TermKeyButton(
+                  label: '▶',
+                  onPressed: () {
+                    controller.sendTerminalInput('\u001b[C');
+                  },
+                ),
+                _TermKeyButton(
+                  label: '刷新',
+                  onPressed: () async {
+                    await controller.connectTerminal();
+                  },
                 ),
               ],
             ),
-            if (controller.terminalError.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  controller.terminalError,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+          ),
+          if (controller.terminalError.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              child: _Banner(
+                backgroundColor: const Color(0xFF2A1617),
+                borderColor: const Color(0xFF74363B),
+                textColor: const Color(0xFFFFBAB0),
+                text: controller.terminalError,
               ),
-            Expanded(
+            ),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0E1A17),
-                  borderRadius: BorderRadius.circular(16),
+                  color: _WebColors.terminalBg,
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: SingleChildScrollView(
                   child: SelectableText(
                     controller.terminalOutput.isEmpty
                         ? '终端输出会显示在这里。'
                         : controller.terminalOutput,
-                    style: const TextStyle(
-                      color: Color(0xFFE4FFF3),
-                      fontFamily: 'monospace',
+                    style: _monoStyle(
+                      Theme.of(context).textTheme.bodyMedium,
+                      color: _WebColors.terminalFg,
                       height: 1.35,
                     ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Row(
+              children: <Widget>[
                 Expanded(
                   child: TextField(
                     controller: _inputController,
-                    decoration: const InputDecoration(
-                      labelText: '终端输入',
-                      border: OutlineInputBorder(),
+                    style: _monoStyle(
+                      Theme.of(context).textTheme.bodyMedium,
+                      color: _WebColors.text,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '终端输入 · 当前状态 ${controller.terminalStatus}',
+                      fillColor: const Color(0xFFFFFCF7),
                     ),
                     onSubmitted: (_) => _submit(),
                   ),
                 ),
                 const SizedBox(width: 12),
-                FilledButton(onPressed: _submit, child: const Text('发送')),
+                FilledButton(
+                  style: _buttonStyle(_ButtonTone.primary),
+                  onPressed: _submit,
+                  child: const Text('发送'),
+                ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   void _submit() {
-    final text = _inputController.text;
+    final String text = _inputController.text;
     if (text.trim().isEmpty) {
       return;
     }
     widget.controller.sendTerminalLine(text);
     _inputController.clear();
+  }
+}
+
+class _TermKeyButton extends StatelessWidget {
+  const _TermKeyButton({
+    required this.label,
+    required this.onPressed,
+    this.active = false,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+        minimumSize: const Size(0, 28),
+        backgroundColor: active
+            ? _WebColors.accent
+            : Colors.white.withValues(alpha: 0.07),
+        foregroundColor: active ? Colors.white : const Color(0xFFBBBBBB),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(
+            color: active
+                ? _WebColors.accentStrong
+                : Colors.white.withValues(alpha: 0.13),
+          ),
+        ),
+      ),
+      onPressed: onPressed,
+      child: Text(label, style: _monoStyle(const TextStyle(fontSize: 12))),
+    );
+  }
+}
+
+class _DetailPane extends StatelessWidget {
+  const _DetailPane({required this.controller});
+
+  final ManyoyoAppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final SessionDetail? detail = controller.activeSessionDetail;
+    if (controller.activeSessionName.isEmpty) {
+      return const _EmptyPane(message: '先选择会话再查看详情');
+    }
+    if (detail == null && controller.loadingSessionContent) {
+      return Container(
+        decoration: _paneDecoration(),
+        child: const Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: _WebColors.accent,
+          ),
+        ),
+      );
+    }
+    if (detail == null) {
+      return const _EmptyPane(message: '当前会话详情暂不可用');
+    }
+    return _InspectorPane(
+      cards: <Widget>[
+        _InfoCard(
+          title: '会话概览',
+          description: '当前容器会话的运行状态、镜像和时间信息。',
+          child: Column(
+            children: <Widget>[
+              _KvRow(label: '名称', value: detail.name),
+              _KvRow(label: '容器', value: detail.containerName),
+              _KvRow(
+                label: '状态',
+                value: detail.status,
+                tone: _statusToneLabel(detail.status),
+              ),
+              _KvRow(label: '镜像', value: detail.image),
+              _KvRow(label: '创建时间', value: detail.createdAt),
+              _KvRow(label: '更新时间', value: detail.updatedAt),
+            ],
+          ),
+        ),
+        _InfoCard(
+          title: 'Agent',
+          description: 'Agent 识别、resume 能力与提示词命令来源。',
+          child: Column(
+            children: <Widget>[
+              _KvRow(label: 'Agent 名称', value: detail.agentName),
+              _KvRow(label: 'Agent ID', value: detail.agentId),
+              _KvRow(
+                label: '启用',
+                value: detail.agentEnabled ? 'yes' : 'no',
+                tone: detail.agentEnabled ? _KvTone.ok : _KvTone.warn,
+              ),
+              _KvRow(
+                label: 'Resume',
+                value: detail.resumeSupported ? 'supported' : 'unsupported',
+                tone: detail.resumeSupported ? _KvTone.ok : _KvTone.warn,
+              ),
+              _KvRow(label: 'CLI', value: detail.agentProgram),
+              _KvRow(label: '来源', value: detail.agentPromptSource),
+              _KvRow(
+                label: '命令',
+                value: _firstNonEmpty(<String>[
+                  detail.containerAgentPromptCommand,
+                  detail.agentPromptCommandOverride,
+                  detail.inferredAgentPromptCommand,
+                  detail.agentPromptCommand,
+                ]),
+              ),
+            ],
+          ),
+        ),
+        _InfoCard(
+          title: '挂载路径',
+          description: '宿主机与容器内工作目录路径。',
+          child: Column(
+            children: <Widget>[
+              _KvRow(label: '宿主路径', value: detail.hostPath),
+              _KvRow(label: '容器路径', value: detail.containerPath),
+              _KvRow(label: '最近角色', value: detail.latestRole),
+              _KvRow(label: '最近时间', value: detail.latestTimestamp),
+            ],
+          ),
+        ),
+        _InfoCard(
+          title: 'Applied',
+          description: '当前会话合并后的关键配置快照。',
+          child: SelectableText(
+            _prettyJson.convert(detail.applied),
+            style: _monoStyle(
+              Theme.of(context).textTheme.bodySmall,
+              color: _WebColors.text,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -907,7 +2311,7 @@ class _ConfigPaneState extends State<_ConfigPane> {
   @override
   void didUpdateWidget(covariant _ConfigPane oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final path = widget.controller.configSnapshot?.path ?? '';
+    final String path = widget.controller.configSnapshot?.path ?? '';
     if (path != _lastConfigPath) {
       _lastConfigPath = path;
       _configController.text = widget.controller.configSnapshot?.raw ?? '';
@@ -922,62 +2326,83 @@ class _ConfigPaneState extends State<_ConfigPane> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
-    return Card(
+    final ManyoyoAppController controller = widget.controller;
+    final ConfigSnapshot? snapshot = controller.configSnapshot;
+    return Container(
+      decoration: _paneDecoration(),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          children: <Widget>[
             Row(
-              children: [
+              children: <Widget>[
                 Expanded(
                   child: Text(
-                    controller.configSnapshot?.path ?? '~/.manyoyo/manyoyo.json',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                    snapshot?.path ?? '~/.manyoyo/manyoyo.json',
+                    style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
-                IconButton(
-                  tooltip: '刷新配置',
-                  onPressed: controller.loadingConfig ? null : controller.loadConfig,
-                  icon: const Icon(Icons.refresh),
+                FilledButton(
+                  style: _buttonStyle(_ButtonTone.secondary),
+                  onPressed: controller.loadingConfig
+                      ? null
+                      : controller.loadConfig,
+                  child: const Text('刷新'),
                 ),
               ],
             ),
-            if ((controller.configSnapshot?.notice ?? '').isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(controller.configSnapshot!.notice),
+            const SizedBox(height: 10),
+            if ((snapshot?.notice ?? '').isNotEmpty)
+              _Banner(
+                backgroundColor: _WebColors.panelSoft,
+                borderColor: _WebColors.line,
+                textColor: _WebColors.text,
+                text: snapshot!.notice,
               ),
-            if (controller.configError.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  controller.configError,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+            if ((snapshot?.parseError ?? '').isNotEmpty) ...<Widget>[
+              const SizedBox(height: 8),
+              _Banner(
+                backgroundColor: _WebColors.dangerSoft,
+                borderColor: const Color(0xFFEDC1BC),
+                textColor: _WebColors.danger,
+                text: snapshot!.parseError,
               ),
+            ],
+            if (controller.configError.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 8),
+              _Banner(
+                backgroundColor: _WebColors.dangerSoft,
+                borderColor: const Color(0xFFEDC1BC),
+                textColor: _WebColors.danger,
+                text: controller.configError,
+              ),
+            ],
+            const SizedBox(height: 12),
             Expanded(
-              child: controller.loadingConfig && controller.configSnapshot == null
-                  ? const Center(child: CircularProgressIndicator())
+              child: controller.loadingConfig && snapshot == null
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.4,
+                        color: _WebColors.accent,
+                      ),
+                    )
                   : TextField(
                       controller: _configController,
                       expands: true,
                       maxLines: null,
                       minLines: null,
-                      style: const TextStyle(fontFamily: 'monospace'),
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
+                      style: _monoStyle(
+                        Theme.of(context).textTheme.bodyMedium,
+                        fontSize: 13,
+                        height: 1.5,
                       ),
+                      decoration: const InputDecoration(),
                     ),
             ),
             const SizedBox(height: 12),
             FilledButton(
+              style: _buttonStyle(_ButtonTone.primary),
               onPressed: controller.savingConfig
                   ? null
                   : () => controller.saveConfig(_configController.text),
@@ -990,11 +2415,311 @@ class _ConfigPaneState extends State<_ConfigPane> {
   }
 }
 
-class _CreateSessionDialog extends StatefulWidget {
-  const _CreateSessionDialog({
-    required this.controller,
-    required this.seed,
+class _CheckPane extends StatelessWidget {
+  const _CheckPane({required this.controller});
+
+  final ManyoyoAppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final SessionDetail? detail = controller.activeSessionDetail;
+    final ConfigSnapshot? config = controller.configSnapshot;
+    if (controller.activeSessionName.isEmpty) {
+      return const _EmptyPane(message: '先选择会话再查看检查项');
+    }
+    return _InspectorPane(
+      cards: <Widget>[
+        _InfoCard(
+          title: '运行检查',
+          description: '当前会话最核心的状态健康项。',
+          child: Column(
+            children: <Widget>[
+              _CheckItem(
+                label: '容器状态',
+                value: detail?.status.isNotEmpty == true
+                    ? detail!.status
+                    : 'unknown',
+                detail: detail == null ? '尚未加载详情。' : '会话当前容器运行状态。',
+                tone: detail?.status == 'running'
+                    ? _KvTone.ok
+                    : detail == null
+                    ? _KvTone.warn
+                    : _KvTone.warn,
+              ),
+              _CheckItem(
+                label: 'Agent 支持 resume',
+                value: detail?.resumeSupported == true ? 'yes' : 'no',
+                detail: '决定是否可以安全走 resume 与提示词模板推断链路。',
+                tone: detail?.resumeSupported == true
+                    ? _KvTone.ok
+                    : _KvTone.warn,
+              ),
+              _CheckItem(
+                label: '消息流',
+                value: controller.streamingAgent ? 'running' : 'idle',
+                detail: controller.liveTrace.isEmpty
+                    ? '当前没有进行中的 Agent 流式输出。'
+                    : controller.liveTrace,
+                tone: controller.streamingAgent ? _KvTone.ok : _KvTone.warn,
+              ),
+            ],
+          ),
+        ),
+        _InfoCard(
+          title: '配置检查',
+          description: '全局配置文件加载和解析状态。',
+          child: Column(
+            children: <Widget>[
+              _CheckItem(
+                label: '配置已加载',
+                value: config == null ? 'no' : 'yes',
+                detail: config?.path ?? '尚未拉取配置文件。',
+                tone: config == null ? _KvTone.warn : _KvTone.ok,
+              ),
+              _CheckItem(
+                label: '配置可编辑',
+                value: config?.editable == true ? 'yes' : 'no',
+                detail: config?.notice.isNotEmpty == true
+                    ? config!.notice
+                    : '当前是否允许直接保存配置文件。',
+                tone: config?.editable == true ? _KvTone.ok : _KvTone.warn,
+              ),
+              _CheckItem(
+                label: '解析错误',
+                value: (config?.parseError ?? '').isEmpty ? 'none' : 'found',
+                detail: (config?.parseError ?? '').isEmpty
+                    ? '配置 JSON5 解析正常。'
+                    : config!.parseError,
+                tone: (config?.parseError ?? '').isEmpty
+                    ? _KvTone.ok
+                    : _KvTone.danger,
+              ),
+            ],
+          ),
+        ),
+        _InfoCard(
+          title: '路径与挂载',
+          description: '工作目录路径与容器路径是否明确。',
+          child: Column(
+            children: <Widget>[
+              _KvRow(
+                label: '宿主路径',
+                value: detail?.hostPath ?? '',
+                tone: (detail?.hostPath ?? '').isEmpty
+                    ? _KvTone.warn
+                    : _KvTone.ok,
+              ),
+              _KvRow(
+                label: '容器路径',
+                value: detail?.containerPath ?? '',
+                tone: (detail?.containerPath ?? '').isEmpty
+                    ? _KvTone.warn
+                    : _KvTone.ok,
+              ),
+              _KvRow(
+                label: 'CLI',
+                value: detail?.agentProgram ?? '',
+                tone: (detail?.agentProgram ?? '').isEmpty
+                    ? _KvTone.warn
+                    : _KvTone.ok,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InspectorPane extends StatelessWidget {
+  const _InspectorPane({required this.cards});
+
+  final List<Widget> cards;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: _paneDecoration(),
+      child: ListView.separated(
+        padding: const EdgeInsets.all(14),
+        itemCount: cards.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (BuildContext context, int index) => cards[index],
+      ),
+    );
+  }
+}
+
+class _InfoCard extends StatelessWidget {
+  const _InfoCard({
+    required this.title,
+    required this.description,
+    required this.child,
   });
+
+  final String title;
+  final String description;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0x66B59263)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            title,
+            style: _displayStyle(
+              Theme.of(context).textTheme.titleMedium,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontSize: 13),
+          ),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+enum _KvTone { normal, ok, warn, danger }
+
+class _KvRow extends StatelessWidget {
+  const _KvRow({
+    required this.label,
+    required this.value,
+    this.tone = _KvTone.normal,
+  });
+
+  final String label;
+  final String value;
+  final _KvTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = switch (tone) {
+      _KvTone.ok => _WebColors.subaccentStrong,
+      _KvTone.warn => const Color(0xFF9A5A09),
+      _KvTone.danger => _WebColors.danger,
+      _KvTone.normal => _WebColors.text,
+    };
+    return Container(
+      padding: const EdgeInsets.only(top: 8),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Color(0x57B59263))),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: 108,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: SelectableText(
+              value.isEmpty ? '—' : value,
+              style: _monoStyle(
+                Theme.of(context).textTheme.bodySmall,
+                color: color,
+                fontSize: 12,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CheckItem extends StatelessWidget {
+  const _CheckItem({
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.tone,
+  });
+
+  final String label;
+  final String value;
+  final String detail;
+  final _KvTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = switch (tone) {
+      _KvTone.ok => _WebColors.subaccentStrong,
+      _KvTone.warn => const Color(0xFF9A5A09),
+      _KvTone.danger => _WebColors.danger,
+      _KvTone.normal => _WebColors.text,
+    };
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xDBFFFDF6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0x47B59263)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            detail,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CreateSessionDialog extends StatefulWidget {
+  const _CreateSessionDialog({required this.controller, required this.seed});
 
   final ManyoyoAppController controller;
   final CreateSessionSeed seed;
@@ -1052,21 +2777,17 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final runNames = widget.seed.runs.keys.toList()..sort();
+    final List<String> runNames = widget.seed.runs.keys.toList()..sort();
     return AlertDialog(
       title: const Text('新建会话'),
       content: SizedBox(
-        width: 560,
+        width: 720,
         child: SingleChildScrollView(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+            children: <Widget>[
               DropdownButtonFormField<String>(
                 initialValue: _run,
-                decoration: const InputDecoration(
-                  labelText: 'run',
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(labelText: 'run'),
                 items: <DropdownMenuItem<String>>[
                   const DropdownMenuItem<String>(
                     value: '',
@@ -1087,39 +2808,41 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
                 },
               ),
               const SizedBox(height: 12),
-              _field(_containerNameController, 'containerName'),
+              _dialogField(_containerNameController, 'containerName'),
               const SizedBox(height: 12),
-              _field(_hostPathController, 'hostPath'),
+              _dialogField(_hostPathController, 'hostPath'),
               const SizedBox(height: 12),
-              _field(_containerPathController, 'containerPath'),
+              _dialogField(_containerPathController, 'containerPath'),
               const SizedBox(height: 12),
-              _field(_imageNameController, 'imageName'),
+              _dialogField(_imageNameController, 'imageName'),
               const SizedBox(height: 12),
-              _field(_imageVersionController, 'imageVersion'),
+              _dialogField(_imageVersionController, 'imageVersion'),
               const SizedBox(height: 12),
-              _field(_containerModeController, 'containerMode'),
+              _dialogField(_containerModeController, 'containerMode'),
               const SizedBox(height: 12),
-              _field(_shellPrefixController, 'shellPrefix'),
+              _dialogField(_shellPrefixController, 'shellPrefix'),
               const SizedBox(height: 12),
-              _field(_shellController, 'shell'),
+              _dialogField(_shellController, 'shell'),
               const SizedBox(height: 12),
-              _field(_shellSuffixController, 'shellSuffix'),
+              _dialogField(_shellSuffixController, 'shellSuffix'),
               const SizedBox(height: 12),
-              _field(_agentPromptCommandController, 'agentPromptCommand'),
+              _dialogField(_agentPromptCommandController, 'agentPromptCommand'),
               const SizedBox(height: 12),
-              _field(_yoloController, 'yolo'),
+              _dialogField(_yoloController, 'yolo'),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
+      actions: <Widget>[
+        FilledButton(
+          style: _buttonStyle(_ButtonTone.secondary),
           onPressed: widget.controller.creatingSession
               ? null
               : () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
         FilledButton(
+          style: _buttonStyle(_ButtonTone.primary),
           onPressed: widget.controller.creatingSession ? null : _submit,
           child: Text(widget.controller.creatingSession ? '创建中…' : '创建'),
         ),
@@ -1127,19 +2850,19 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
     );
   }
 
-  TextField _field(TextEditingController controller, String label) {
+  Widget _dialogField(TextEditingController controller, String label) {
     return TextField(
       controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-      ),
+      decoration: InputDecoration(labelText: label),
     );
   }
 
   void _applyDefaults() {
-    final defaults = Map<String, dynamic>.from(widget.seed.defaults);
-    final runConfig = widget.seed.runs[_run] ?? const <String, dynamic>{};
+    final Map<String, dynamic> defaults = Map<String, dynamic>.from(
+      widget.seed.defaults,
+    );
+    final Map<String, dynamic> runConfig =
+        widget.seed.runs[_run] ?? const <String, dynamic>{};
     defaults.addAll(runConfig);
     _containerNameController.text = asString(defaults['containerName']);
     _hostPathController.text = asString(defaults['hostPath']);
@@ -1150,7 +2873,9 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
     _shellPrefixController.text = asString(defaults['shellPrefix']);
     _shellController.text = asString(defaults['shell']);
     _shellSuffixController.text = asString(defaults['shellSuffix']);
-    _agentPromptCommandController.text = asString(defaults['agentPromptCommand']);
+    _agentPromptCommandController.text = asString(
+      defaults['agentPromptCommand'],
+    );
     _yoloController.text = asString(defaults['yolo']);
   }
 
@@ -1177,75 +2902,239 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
   }
 }
 
-class _DetailHeader extends StatelessWidget {
-  const _DetailHeader({required this.detail});
+class _LabeledField extends StatelessWidget {
+  const _LabeledField({required this.label, required this.child});
 
-  final SessionDetail? detail;
+  final String label;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    if (detail == null) {
-      return const SizedBox.shrink();
-    }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        _InfoChip(label: detail!.status),
-        if (detail!.agentProgram.isNotEmpty) _InfoChip(label: detail!.agentProgram),
-        if (detail!.hostPath.isNotEmpty) _InfoChip(label: detail!.hostPath),
-        if (detail!.containerPath.isNotEmpty) _InfoChip(label: detail!.containerPath),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+        ),
+        const SizedBox(height: 6),
+        child,
       ],
     );
   }
 }
 
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.label});
+class _StatusTheme {
+  const _StatusTheme({
+    required this.background,
+    required this.foreground,
+    required this.border,
+  });
+
+  final Color background;
+  final Color foreground;
+  final Color border;
+}
+
+_StatusTheme _statusTheme(String status) {
+  return switch (status) {
+    'running' => const _StatusTheme(
+      background: _WebColors.statusRunningBg,
+      foreground: _WebColors.statusRunningText,
+      border: Color(0xFFA9DACF),
+    ),
+    'stopped' => const _StatusTheme(
+      background: _WebColors.statusStoppedBg,
+      foreground: _WebColors.statusStoppedText,
+      border: Color(0xFFEDC98E),
+    ),
+    'history' => const _StatusTheme(
+      background: _WebColors.statusHistoryBg,
+      foreground: _WebColors.statusHistoryText,
+      border: Color(0xFFD8CEBE),
+    ),
+    _ => const _StatusTheme(
+      background: _WebColors.statusUnknownBg,
+      foreground: _WebColors.statusUnknownText,
+      border: Color(0xFFCAC1FB),
+    ),
+  };
+}
+
+_KvTone _statusToneLabel(String status) {
+  return switch (status) {
+    'running' => _KvTone.ok,
+    'stopped' => _KvTone.warn,
+    'history' => _KvTone.warn,
+    _ => _KvTone.warn,
+  };
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({
+    required this.label,
+    required this.backgroundColor,
+    required this.foregroundColor,
+    required this.borderColor,
+  });
 
   final String label;
+  final Color backgroundColor;
+  final Color foregroundColor;
+  final Color borderColor;
 
   @override
   Widget build(BuildContext context) {
-    return Chip(label: Text(label));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: borderColor),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: foregroundColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
   }
 }
 
-class _MessageCard extends StatelessWidget {
-  const _MessageCard({required this.message});
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({
+    required this.label,
+    this.tone,
+    this.backgroundColor,
+    this.foregroundColor,
+    this.borderColor,
+    this.monospace = false,
+  });
+
+  final String label;
+  final _StatusTheme? tone;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
+  final Color? borderColor;
+  final bool monospace;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg =
+        tone?.background ?? backgroundColor ?? _WebColors.panelSoft;
+    final Color fg = tone?.foreground ?? foregroundColor ?? _WebColors.text;
+    final Color border = tone?.border ?? borderColor ?? _WebColors.line;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: border),
+      ),
+      child: Text(
+        label,
+        style: monospace
+            ? _monoStyle(
+                Theme.of(context).textTheme.labelMedium,
+                color: fg,
+                fontSize: 12,
+              )
+            : Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(color: fg, fontSize: 12),
+      ),
+    );
+  }
+}
+
+class _MessageBubble extends StatelessWidget {
+  const _MessageBubble({required this.message});
 
   final MessageItem message;
 
   @override
   Widget build(BuildContext context) {
-    final tone = switch (message.role) {
-      'user' => const Color(0xFFE7F1FF),
-      'assistant' => const Color(0xFFE9F8EF),
-      'system' => const Color(0xFFF5F2E8),
-      _ => const Color(0xFFF2F4F7),
-    };
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: tone,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
+    final bool isUser = message.role == 'user';
+    final bool isSystem = message.role == 'system';
+    final Color background = isUser
+        ? _WebColors.userBubble
+        : isSystem
+        ? _WebColors.systemBubble
+        : _WebColors.assistantBubble;
+    final Color border = isUser
+        ? const Color(0xFFE9B994)
+        : isSystem
+        ? const Color(0xFFB8E3DD)
+        : _WebColors.line;
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 920),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          crossAxisAlignment: isUser
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          children: <Widget>[
             Text(
-              '${message.role.toUpperCase()} ${message.pending ? '· pending' : ''}',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              '${message.role}${message.pending ? ' · pending' : ''}',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 6),
-            SelectableText(message.content.isEmpty ? '…' : message.content),
-            if (message.timestamp.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(message.timestamp, style: Theme.of(context).textTheme.labelSmall),
+            if (message.timestamp.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 2),
+              Text(
+                message.timestamp,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ],
+            if (message.exitCode != null) ...<Widget>[
+              const SizedBox(height: 2),
+              Text(
+                'exitCode ${message.exitCode}',
+                style: _monoStyle(
+                  Theme.of(context).textTheme.labelSmall,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+            const SizedBox(height: 6),
+            Opacity(
+              opacity: message.pending ? 0.78 : 1,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: background,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: border),
+                  boxShadow: const <BoxShadow>[
+                    BoxShadow(
+                      color: Color(0x142E1F0D),
+                      blurRadius: 16,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: SelectableText(
+                  message.content.isEmpty ? '…' : message.content,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1255,12 +3144,14 @@ class _MessageCard extends StatelessWidget {
 
 class _Banner extends StatelessWidget {
   const _Banner({
-    required this.color,
+    required this.backgroundColor,
+    required this.borderColor,
     required this.textColor,
     required this.text,
   });
 
-  final Color color;
+  final Color backgroundColor;
+  final Color borderColor;
   final Color textColor;
   final String text;
 
@@ -1268,16 +3159,61 @@ class _Banner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color,
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
       ),
       child: SelectableText(
         text,
-        style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: textColor,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
+}
+
+class _EmptyPane extends StatelessWidget {
+  const _EmptyPane({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: _paneDecoration(),
+      child: Center(
+        child: Text(message, style: Theme.of(context).textTheme.bodyLarge),
+      ),
+    );
+  }
+}
+
+class _EmptyPanelBody extends StatelessWidget {
+  const _EmptyPanelBody({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        message,
+        style: Theme.of(context).textTheme.bodyLarge,
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+}
+
+String _firstNonEmpty(List<String> values) {
+  for (final String value in values) {
+    if (value.trim().isNotEmpty) {
+      return value;
+    }
+  }
+  return '—';
 }
