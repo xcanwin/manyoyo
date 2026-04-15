@@ -67,7 +67,23 @@ abstract class ManyoyoRepository {
 
   Future<String> createSession(StoredSession session, CreateSessionDraft draft);
 
+  Future<String> createAgentSession(StoredSession session, String sessionName);
+
   Future<CreateSessionSeed> loadCreateSessionSeed(StoredSession session);
+
+  Future<SessionDetail> saveAgentTemplate(
+    StoredSession session,
+    String sessionName, {
+    String? containerAgentPromptCommand,
+    String? agentPromptCommandOverride,
+  });
+
+  Future<void> removeSession(StoredSession session, String sessionName);
+
+  Future<void> removeSessionWithHistory(
+    StoredSession session,
+    String sessionName,
+  );
 
   Future<TerminalConnection> openTerminal(
     StoredSession session,
@@ -105,6 +121,20 @@ class HttpManyoyoRepository implements ManyoyoRepository {
       'POST',
       '/api/sessions',
       body: draft.toJson(),
+    );
+    return asString(payload['name']);
+  }
+
+  @override
+  Future<String> createAgentSession(
+    StoredSession session,
+    String sessionName,
+  ) async {
+    final payload = await _sendJson(
+      session,
+      'POST',
+      '/api/sessions/${Uri.encodeComponent(sessionName)}/agents',
+      body: <String, dynamic>{},
     );
     return asString(payload['name']);
   }
@@ -223,6 +253,27 @@ class HttpManyoyoRepository implements ManyoyoRepository {
   }
 
   @override
+  Future<void> removeSession(StoredSession session, String sessionName) async {
+    await _sendJson(
+      session,
+      'POST',
+      '/api/sessions/${Uri.encodeComponent(sessionName)}/remove',
+    );
+  }
+
+  @override
+  Future<void> removeSessionWithHistory(
+    StoredSession session,
+    String sessionName,
+  ) async {
+    await _sendJson(
+      session,
+      'POST',
+      '/api/sessions/${Uri.encodeComponent(sessionName)}/remove-with-history',
+    );
+  }
+
+  @override
   Future<TerminalConnection> openTerminal(
     StoredSession session,
     String sessionName, {
@@ -275,6 +326,29 @@ class HttpManyoyoRepository implements ManyoyoRepository {
       '/api/config',
       body: <String, dynamic>{'raw': raw},
     );
+  }
+
+  @override
+  Future<SessionDetail> saveAgentTemplate(
+    StoredSession session,
+    String sessionName, {
+    String? containerAgentPromptCommand,
+    String? agentPromptCommandOverride,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (containerAgentPromptCommand != null) {
+      payload['containerAgentPromptCommand'] = containerAgentPromptCommand;
+    }
+    if (agentPromptCommandOverride != null) {
+      payload['agentPromptCommandOverride'] = agentPromptCommandOverride;
+    }
+    final data = await _sendJson(
+      session,
+      'PUT',
+      '/api/sessions/${Uri.encodeComponent(sessionName)}/agent-template',
+      body: payload,
+    );
+    return SessionDetail.fromJson(asJsonMap(data['detail']));
   }
 
   @override

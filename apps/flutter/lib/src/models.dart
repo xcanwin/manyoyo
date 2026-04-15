@@ -398,6 +398,9 @@ class CreateSessionDraft {
     required this.shellSuffix,
     required this.agentPromptCommand,
     required this.yolo,
+    required this.env,
+    required this.envFile,
+    required this.volumes,
   });
 
   final String run;
@@ -412,6 +415,9 @@ class CreateSessionDraft {
   final String shellSuffix;
   final String agentPromptCommand;
   final String yolo;
+  final Map<String, String> env;
+  final List<String> envFile;
+  final List<String> volumes;
 
   Map<String, dynamic> toJson() {
     final options = <String, dynamic>{
@@ -426,9 +432,17 @@ class CreateSessionDraft {
       'shellSuffix': shellSuffix.trim(),
       'agentPromptCommand': agentPromptCommand.trim(),
       'yolo': yolo.trim(),
+      'env': env.map(
+        (String key, String value) => MapEntry(key.trim(), value.trim()),
+      ),
+      'envFile': envFile.map((String item) => item.trim()).toList(),
+      'volumes': volumes.map((String item) => item.trim()).toList(),
     };
     options.removeWhere(
-      (String key, dynamic value) => value is String && value.isEmpty,
+      (String key, dynamic value) =>
+          (value is String && value.isEmpty) ||
+          (value is Map && value.isEmpty) ||
+          (value is List && value.isEmpty),
     );
     return <String, dynamic>{
       if (run.trim().isNotEmpty) 'run': run.trim(),

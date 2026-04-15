@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -506,16 +507,12 @@ class _LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<_LoginScreen> {
-  late final TextEditingController _baseUrlController;
   late final TextEditingController _usernameController;
   late final TextEditingController _passwordController;
 
   @override
   void initState() {
     super.initState();
-    _baseUrlController = TextEditingController(
-      text: widget.controller.draftBaseUrl,
-    );
     _usernameController = TextEditingController(
       text: widget.controller.draftUsername,
     );
@@ -524,7 +521,6 @@ class _LoginScreenState extends State<_LoginScreen> {
 
   @override
   void dispose() {
-    _baseUrlController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -619,16 +615,6 @@ class _LoginScreenState extends State<_LoginScreen> {
                       ),
                       const SizedBox(height: 16),
                       _LabeledField(
-                        label: '服务地址',
-                        child: TextField(
-                          controller: _baseUrlController,
-                          decoration: const InputDecoration(
-                            hintText: 'http://127.0.0.1:3000',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 11),
-                      _LabeledField(
                         label: '用户名',
                         child: TextField(controller: _usernameController),
                       ),
@@ -677,7 +663,7 @@ class _LoginScreenState extends State<_LoginScreen> {
 
   void _submit() {
     widget.controller.login(
-      baseUrl: _baseUrlController.text,
+      baseUrl: widget.controller.draftBaseUrl,
       username: _usernameController.text,
       password: _passwordController.text,
     );
@@ -707,16 +693,9 @@ class _WorkspaceScreenState extends State<_WorkspaceScreen> {
             : 346;
         final Widget sidebar = _SidebarPanel(
           controller: controller,
-          onOpenConfig: () async {
-            final NavigatorState? navigator = !wide
-                ? Navigator.of(context)
-                : null;
-            await controller.setPane(WorkspacePane.config);
-            if (!wide && mounted) {
-              navigator?.maybePop();
-            }
-          },
+          onOpenConfig: _openConfigDialog,
           onOpenCreate: _openCreateDialog,
+          onCreateAgent: _createAgentForContainer,
           compact: !wide,
           onCloseSidebar: !wide
               ? () {
@@ -753,6 +732,11 @@ class _WorkspaceScreenState extends State<_WorkspaceScreen> {
                           controller: controller,
                           onOpenSidebar: null,
                           onOpenCreate: _openCreateDialog,
+                          onOpenConfig: _openConfigDialog,
+                          onOpenAgentTemplate: _openAgentTemplateDialog,
+                          onCreateAgent: _createAgentForActiveContainer,
+                          onRemoveSession: _removeActiveContainer,
+                          onRemoveSessionHistory: _removeActiveSessionHistory,
                         ),
                       ),
                     ],
@@ -763,6 +747,11 @@ class _WorkspaceScreenState extends State<_WorkspaceScreen> {
                       _scaffoldKey.currentState?.openDrawer();
                     },
                     onOpenCreate: _openCreateDialog,
+                    onOpenConfig: _openConfigDialog,
+                    onOpenAgentTemplate: _openAgentTemplateDialog,
+                    onCreateAgent: _createAgentForActiveContainer,
+                    onRemoveSession: _removeActiveContainer,
+                    onRemoveSessionHistory: _removeActiveSessionHistory,
                   ),
           ),
         );
@@ -788,6 +777,131 @@ class _WorkspaceScreenState extends State<_WorkspaceScreen> {
       messenger.showSnackBar(SnackBar(content: Text('加载创建表单失败：$error')));
     }
   }
+
+  Future<void> _openConfigDialog() async {
+    final ManyoyoAppController controller = widget.controller;
+    if (controller.configSnapshot == null && !controller.loadingConfig) {
+      await controller.loadConfig();
+    }
+    if (!mounted) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return _ConfigEditorDialog(controller: controller);
+      },
+    );
+  }
+
+  Future<void> _openAgentTemplateDialog() async {
+    final ManyoyoAppController controller = widget.controller;
+    if (controller.activeSessionName.isEmpty) {
+      return;
+    }
+    if (controller.activeSessionDetail == null) {
+      await controller.loadActiveSession();
+    }
+    if (!mounted || controller.activeSessionDetail == null) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return _AgentTemplateDialog(controller: controller);
+      },
+    );
+  }
+
+  Future<void> _createAgentForContainer(String containerName) async {
+    final ManyoyoAppController controller = widget.controller;
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    await controller.createAgentSession(containerName);
+    if (!mounted) {
+      return;
+    }
+    if (controller.workspaceError.isNotEmpty) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('新建 AGENT 失败：${controller.workspaceError}')),
+      );
+    }
+  }
+
+  Future<void> _createAgentForActiveContainer() async {
+    final SessionSummary? activeSummary = widget.controller.sessions
+        .cast<SessionSummary?>()
+        .firstWhere(
+          (SessionSummary? item) =>
+              item != null &&
+              item.name == widget.controller.activeSessionName,
+          orElse: () => null,
+        );
+    final String containerName =
+        widget.controller.activeSessionDetail?.containerName ??
+        activeSummary?.containerName ??
+        '';
+    await _createAgentForContainer(containerName);
+  }
+
+  Future<void> _removeActiveContainer() async {
+    final ManyoyoAppController controller = widget.controller;
+    final SessionDetail? detail = controller.activeSessionDetail;
+    if (controller.activeSessionName.isEmpty || detail == null) {
+      return;
+    }
+    final bool confirmed = await _confirmDanger(
+      title: '删除容器',
+      message: '确认删除容器 ${detail.containerName} ?',
+    );
+    if (!confirmed) {
+      return;
+    }
+    await controller.removeActiveSessionContainer();
+  }
+
+  Future<void> _removeActiveSessionHistory() async {
+    final ManyoyoAppController controller = widget.controller;
+    final SessionDetail? detail = controller.activeSessionDetail;
+    if (controller.activeSessionName.isEmpty || detail == null) {
+      return;
+    }
+    final bool confirmed = await _confirmDanger(
+      title: '删除 AGENT',
+      message: '确认删除 AGENT ${detail.agentName} ?',
+    );
+    if (!confirmed) {
+      return;
+    }
+    await controller.removeActiveSessionWithHistory();
+  }
+
+  Future<bool> _confirmDanger({
+    required String title,
+    required String message,
+  }) async {
+    final bool? result = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: <Widget>[
+            FilledButton(
+              style: _buttonStyle(_ButtonTone.secondary),
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: _buttonStyle(_ButtonTone.danger),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('确认'),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
+  }
 }
 
 class _SidebarPanel extends StatefulWidget {
@@ -795,6 +909,7 @@ class _SidebarPanel extends StatefulWidget {
     required this.controller,
     required this.onOpenConfig,
     required this.onOpenCreate,
+    required this.onCreateAgent,
     this.compact = false,
     this.onCloseSidebar,
     this.onSelectSession,
@@ -803,6 +918,7 @@ class _SidebarPanel extends StatefulWidget {
   final ManyoyoAppController controller;
   final Future<void> Function() onOpenConfig;
   final Future<void> Function() onOpenCreate;
+  final Future<void> Function(String containerName) onCreateAgent;
   final bool compact;
   final VoidCallback? onCloseSidebar;
   final VoidCallback? onSelectSession;
@@ -1039,6 +1155,7 @@ class _SidebarPanelState extends State<_SidebarPanel> {
                             await controller.selectSession(sessionName);
                             widget.onSelectSession?.call();
                           },
+                          onCreateAgent: widget.onCreateAgent,
                         );
                       },
                     ),
@@ -1060,6 +1177,7 @@ class _SidebarDirectoryBlock extends StatelessWidget {
     required this.onToggleContainer,
     required this.isContainerExpanded,
     required this.onSelectSession,
+    required this.onCreateAgent,
   });
 
   final _SidebarDirectoryGroup group;
@@ -1070,6 +1188,7 @@ class _SidebarDirectoryBlock extends StatelessWidget {
   final void Function(_SidebarContainerGroup group) onToggleContainer;
   final bool Function(_SidebarContainerGroup group) isContainerExpanded;
   final Future<void> Function(String sessionName) onSelectSession;
+  final Future<void> Function(String containerName) onCreateAgent;
 
   @override
   Widget build(BuildContext context) {
@@ -1110,6 +1229,7 @@ class _SidebarDirectoryBlock extends StatelessWidget {
                   onToggleContainer(group.containers[index]);
                 },
                 onSelectSession: onSelectSession,
+                onCreateAgent: onCreateAgent,
               ),
               if (index != group.containers.length - 1)
                 const SizedBox(height: 8),
@@ -1134,6 +1254,7 @@ class _SidebarContainerBlock extends StatelessWidget {
     required this.activeSessionName,
     required this.onToggle,
     required this.onSelectSession,
+    required this.onCreateAgent,
   });
 
   final _SidebarContainerGroup group;
@@ -1143,6 +1264,7 @@ class _SidebarContainerBlock extends StatelessWidget {
   final String activeSessionName;
   final VoidCallback onToggle;
   final Future<void> Function(String sessionName) onSelectSession;
+  final Future<void> Function(String containerName) onCreateAgent;
 
   @override
   Widget build(BuildContext context) {
@@ -1162,6 +1284,16 @@ class _SidebarContainerBlock extends StatelessWidget {
         expanded: expanded,
         emphasized: hasActive,
         historyTone: status.tone == 'history',
+        trailing: Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: FilledButton(
+            style: _buttonStyle(_ButtonTone.secondary),
+            onPressed: () async {
+              await onCreateAgent(group.container);
+            },
+            child: const Text('新建 AGENT'),
+          ),
+        ),
         onPressed: onToggle,
       ),
     ];
@@ -1211,6 +1343,7 @@ class _SidebarTreeItem extends StatefulWidget {
     required this.kind,
     required this.title,
     required this.onPressed,
+    this.trailing,
     this.meta,
     this.metaColor,
     this.expandable = false,
@@ -1224,6 +1357,7 @@ class _SidebarTreeItem extends StatefulWidget {
   final bool isLastSibling;
   final _SidebarTreeItemKind kind;
   final String title;
+  final Widget? trailing;
   final String? meta;
   final Color? metaColor;
   final VoidCallback onPressed;
@@ -1395,6 +1529,7 @@ class _SidebarTreeItemState extends State<_SidebarTreeItem> {
                           ],
                         ),
                       ),
+                      if (widget.trailing != null) widget.trailing!,
                     ],
                   ),
                 ),
@@ -1505,11 +1640,21 @@ class _MainPanel extends StatelessWidget {
   const _MainPanel({
     required this.controller,
     required this.onOpenCreate,
+    required this.onOpenConfig,
+    required this.onOpenAgentTemplate,
+    required this.onCreateAgent,
+    required this.onRemoveSession,
+    required this.onRemoveSessionHistory,
     this.onOpenSidebar,
   });
 
   final ManyoyoAppController controller;
   final Future<void> Function() onOpenCreate;
+  final Future<void> Function() onOpenConfig;
+  final Future<void> Function() onOpenAgentTemplate;
+  final Future<void> Function() onCreateAgent;
+  final Future<void> Function() onRemoveSession;
+  final Future<void> Function() onRemoveSessionHistory;
   final VoidCallback? onOpenSidebar;
 
   @override
@@ -1530,6 +1675,9 @@ class _MainPanel extends StatelessWidget {
             controller: controller,
             onOpenSidebar: onOpenSidebar,
             onOpenCreate: onOpenCreate,
+            onCreateAgent: onCreateAgent,
+            onRemoveSession: onRemoveSession,
+            onRemoveSessionHistory: onRemoveSessionHistory,
           ),
           if (controller.workspaceError.isNotEmpty) ...<Widget>[
             const SizedBox(height: 8),
@@ -1541,7 +1689,12 @@ class _MainPanel extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 10),
-          Expanded(child: _WorkspacePane(controller: controller)),
+          Expanded(
+            child: _WorkspacePane(
+              controller: controller,
+              onOpenAgentTemplate: onOpenAgentTemplate,
+            ),
+          ),
         ],
       ),
     );
@@ -1552,11 +1705,17 @@ class _WorkspaceHeader extends StatelessWidget {
   const _WorkspaceHeader({
     required this.controller,
     required this.onOpenCreate,
+    required this.onCreateAgent,
+    required this.onRemoveSession,
+    required this.onRemoveSessionHistory,
     this.onOpenSidebar,
   });
 
   final ManyoyoAppController controller;
   final Future<void> Function() onOpenCreate;
+  final Future<void> Function() onCreateAgent;
+  final Future<void> Function() onRemoveSession;
+  final Future<void> Function() onRemoveSessionHistory;
   final VoidCallback? onOpenSidebar;
 
   @override
@@ -1598,6 +1757,9 @@ class _WorkspaceHeader extends StatelessWidget {
               _HeaderActions(
                 controller: controller,
                 onOpenCreate: onOpenCreate,
+                onCreateAgent: onCreateAgent,
+                onRemoveSession: onRemoveSession,
+                onRemoveSessionHistory: onRemoveSessionHistory,
               ),
             ],
           ),
@@ -1632,10 +1794,19 @@ class _WorkspaceHeader extends StatelessWidget {
 }
 
 class _HeaderActions extends StatelessWidget {
-  const _HeaderActions({required this.controller, required this.onOpenCreate});
+  const _HeaderActions({
+    required this.controller,
+    required this.onOpenCreate,
+    required this.onCreateAgent,
+    required this.onRemoveSession,
+    required this.onRemoveSessionHistory,
+  });
 
   final ManyoyoAppController controller;
   final Future<void> Function() onOpenCreate;
+  final Future<void> Function() onCreateAgent;
+  final Future<void> Function() onRemoveSession;
+  final Future<void> Function() onRemoveSessionHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -1654,16 +1825,24 @@ class _HeaderActions extends StatelessWidget {
           case _HeaderAction.create:
             await onOpenCreate();
             break;
-          case _HeaderAction.config:
-            await controller.setPane(WorkspacePane.config);
+          case _HeaderAction.removeSession:
+            await onRemoveSession();
             break;
-          case _HeaderAction.logout:
-            await controller.logout();
+          case _HeaderAction.createAgent:
+            await onCreateAgent();
+            break;
+          case _HeaderAction.removeSessionHistory:
+            await onRemoveSessionHistory();
             break;
         }
       },
       itemBuilder: (BuildContext context) {
-        return const <PopupMenuEntry<_HeaderAction>>[
+        final bool busy =
+            controller.creatingAgent ||
+            controller.creatingSession ||
+            controller.removingSession ||
+            controller.removingSessionHistory;
+        return <PopupMenuEntry<_HeaderAction>>[
           PopupMenuItem<_HeaderAction>(
             value: _HeaderAction.refresh,
             child: Text('刷新'),
@@ -1673,16 +1852,19 @@ class _HeaderActions extends StatelessWidget {
             child: Text('新建容器'),
           ),
           PopupMenuItem<_HeaderAction>(
-            value: _HeaderAction.config,
-            child: Text('配置'),
+            enabled: controller.activeSessionName.isNotEmpty && !busy,
+            value: _HeaderAction.removeSession,
+            child: const Text('删除容器'),
           ),
-          PopupMenuItem<_HeaderAction>(enabled: false, child: Text('删除容器')),
-          PopupMenuItem<_HeaderAction>(enabled: false, child: Text('新建 AGENT')),
-          PopupMenuItem<_HeaderAction>(enabled: false, child: Text('删除 AGENT')),
-          PopupMenuDivider(height: 8),
           PopupMenuItem<_HeaderAction>(
-            value: _HeaderAction.logout,
-            child: Text('退出登录'),
+            enabled: controller.activeSessionName.isNotEmpty && !busy,
+            value: _HeaderAction.createAgent,
+            child: const Text('新建 AGENT'),
+          ),
+          PopupMenuItem<_HeaderAction>(
+            enabled: controller.activeSessionName.isNotEmpty && !busy,
+            value: _HeaderAction.removeSessionHistory,
+            child: const Text('删除 AGENT'),
           ),
         ];
       },
@@ -1697,7 +1879,13 @@ class _HeaderActions extends StatelessWidget {
   }
 }
 
-enum _HeaderAction { refresh, create, config, logout }
+enum _HeaderAction {
+  refresh,
+  create,
+  removeSession,
+  createAgent,
+  removeSessionHistory,
+}
 
 class _WorkspaceTab {
   const _WorkspaceTab(this.pane, this.label);
@@ -1716,14 +1904,21 @@ const List<_WorkspaceTab> _workspaceTabs = <_WorkspaceTab>[
 ];
 
 class _WorkspacePane extends StatelessWidget {
-  const _WorkspacePane({required this.controller});
+  const _WorkspacePane({
+    required this.controller,
+    required this.onOpenAgentTemplate,
+  });
 
   final ManyoyoAppController controller;
+  final Future<void> Function() onOpenAgentTemplate;
 
   @override
   Widget build(BuildContext context) {
     return switch (controller.pane) {
-      WorkspacePane.conversation => _ConversationPane(controller: controller),
+      WorkspacePane.conversation => _ConversationPane(
+        controller: controller,
+        onOpenAgentTemplate: onOpenAgentTemplate,
+      ),
       WorkspacePane.terminal => _TerminalPane(controller: controller),
       WorkspacePane.files => _FilesPane(controller: controller),
       WorkspacePane.detail => _DetailPane(controller: controller),
@@ -1740,9 +1935,13 @@ extension on _ComposerMode {
 }
 
 class _ConversationPane extends StatefulWidget {
-  const _ConversationPane({required this.controller});
+  const _ConversationPane({
+    required this.controller,
+    required this.onOpenAgentTemplate,
+  });
 
   final ManyoyoAppController controller;
+  final Future<void> Function() onOpenAgentTemplate;
 
   @override
   State<_ConversationPane> createState() => _ConversationPaneState();
@@ -1879,9 +2078,12 @@ class _ConversationPaneState extends State<_ConversationPane> {
                       spacing: 10,
                       runSpacing: 8,
                       children: <Widget>[
-                        _ToolbarChip(
+                        _ToolbarButtonChip(
                           label:
                               'CLI · ${_summarizeCli(detail: controller.activeSessionDetail)}',
+                          onPressed: controller.activeSessionName.isEmpty
+                              ? null
+                              : widget.onOpenAgentTemplate,
                         ),
                         _ToolbarChip(label: '模型 · $agentProgram'),
                       ],
@@ -3020,6 +3222,283 @@ class _ConfigPaneState extends State<_ConfigPane> {
   }
 }
 
+class _ConfigEditorDialog extends StatefulWidget {
+  const _ConfigEditorDialog({required this.controller});
+
+  final ManyoyoAppController controller;
+
+  @override
+  State<_ConfigEditorDialog> createState() => _ConfigEditorDialogState();
+}
+
+class _ConfigEditorDialogState extends State<_ConfigEditorDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.controller.configSnapshot?.raw ?? '',
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _ConfigEditorDialog oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller.text = widget.controller.configSnapshot?.raw ?? '';
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ManyoyoAppController controller = widget.controller;
+    final ConfigSnapshot? snapshot = controller.configSnapshot;
+    return AlertDialog(
+      title: Text('编辑配置 (${snapshot?.path ?? '~/.manyoyo/manyoyo.json'})'),
+      content: SizedBox(
+        width: 960,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            if ((snapshot?.notice ?? '').isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  snapshot!.notice,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            if ((snapshot?.parseError ?? '').isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  snapshot!.parseError,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: _WebColors.danger,
+                  ),
+                ),
+              ),
+            if (controller.configError.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  controller.configError,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: _WebColors.danger,
+                  ),
+                ),
+              ),
+            Flexible(
+              child: TextField(
+                controller: _controller,
+                expands: true,
+                maxLines: null,
+                minLines: null,
+                style: _monoStyle(
+                  Theme.of(context).textTheme.bodyMedium,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+                decoration: const InputDecoration(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: <Widget>[
+        FilledButton(
+          style: _buttonStyle(_ButtonTone.secondary),
+          onPressed: controller.loadingConfig ? null : controller.loadConfig,
+          child: const Text('重新加载'),
+        ),
+        FilledButton(
+          style: _buttonStyle(_ButtonTone.secondary),
+          onPressed: controller.savingConfig
+              ? null
+              : () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+        FilledButton(
+          style: _buttonStyle(_ButtonTone.primary),
+          onPressed: controller.savingConfig
+              ? null
+              : () async {
+                  await controller.saveConfig(_controller.text);
+                  if (!mounted || controller.configError.isNotEmpty) {
+                    return;
+                  }
+                  setState(() {
+                    _controller.text = controller.configSnapshot?.raw ?? '';
+                  });
+                },
+          child: Text(controller.savingConfig ? '保存中…' : '保存'),
+        ),
+      ],
+    );
+  }
+}
+
+class _AgentTemplateDialog extends StatefulWidget {
+  const _AgentTemplateDialog({required this.controller});
+
+  final ManyoyoAppController controller;
+
+  @override
+  State<_AgentTemplateDialog> createState() => _AgentTemplateDialogState();
+}
+
+class _AgentTemplateDialogState extends State<_AgentTemplateDialog> {
+  late final TextEditingController _commandController;
+  late String _cli;
+
+  SessionDetail get _detail => widget.controller.activeSessionDetail!;
+
+  bool get _overrideEditable => _detail.agentId != 'default';
+
+  @override
+  void initState() {
+    super.initState();
+    final String initialText = _overrideEditable
+        ? (_detail.agentPromptCommandOverride.isNotEmpty
+              ? _detail.agentPromptCommandOverride
+              : _detail.containerAgentPromptCommand)
+        : (_detail.containerAgentPromptCommand.isNotEmpty
+              ? _detail.containerAgentPromptCommand
+              : _detail.agentPromptCommand);
+    _commandController = TextEditingController(text: initialText);
+    _cli = _inferTemplateCliValue(initialText);
+  }
+
+  @override
+  void dispose() {
+    _commandController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ManyoyoAppController controller = widget.controller;
+    return AlertDialog(
+      title: const Text('设置 CLI / Agent 模板'),
+      content: SizedBox(
+        width: 720,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            DropdownButtonFormField<String>(
+              initialValue: _cli,
+              decoration: const InputDecoration(labelText: 'CLI'),
+              items: const <DropdownMenuItem<String>>[
+                DropdownMenuItem<String>(value: '', child: Text('自定义')),
+                DropdownMenuItem<String>(
+                  value: 'claude',
+                  child: Text('claude'),
+                ),
+                DropdownMenuItem<String>(value: 'codex', child: Text('codex')),
+                DropdownMenuItem<String>(
+                  value: 'gemini',
+                  child: Text('gemini'),
+                ),
+                DropdownMenuItem<String>(
+                  value: 'opencode',
+                  child: Text('opencode'),
+                ),
+              ],
+              onChanged: (String? value) {
+                setState(() {
+                  _cli = value ?? '';
+                  final String nextTemplate = _templateForCli(_cli);
+                  if (nextTemplate.isNotEmpty) {
+                    _commandController.text = nextTemplate;
+                  }
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _commandController,
+              minLines: 3,
+              maxLines: 5,
+              style: _monoStyle(
+                Theme.of(context).textTheme.bodyMedium,
+                fontSize: 13,
+                height: 1.5,
+              ),
+              decoration: InputDecoration(
+                labelText: _overrideEditable
+                    ? '高级编辑 agentPromptCommandOverride'
+                    : '高级编辑 agentPromptCommand',
+                hintText: '例如 codex exec --skip-git-repo-check {prompt}',
+              ),
+            ),
+            if (controller.workspaceError.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 10),
+              Text(
+                controller.workspaceError,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: _WebColors.danger,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: <Widget>[
+        FilledButton(
+          style: _buttonStyle(_ButtonTone.secondary),
+          onPressed: controller.savingAgentTemplate
+              ? null
+              : () {
+                  final String resetText = _overrideEditable
+                      ? (_detail.agentPromptCommandOverride.isNotEmpty
+                            ? _detail.agentPromptCommandOverride
+                            : _detail.containerAgentPromptCommand)
+                      : (_detail.containerAgentPromptCommand.isNotEmpty
+                            ? _detail.containerAgentPromptCommand
+                            : _detail.agentPromptCommand);
+                  setState(() {
+                    _commandController.text = resetText;
+                    _cli = _inferTemplateCliValue(resetText);
+                  });
+                },
+          child: const Text('恢复当前值'),
+        ),
+        FilledButton(
+          style: _buttonStyle(_ButtonTone.secondary),
+          onPressed: controller.savingAgentTemplate
+              ? null
+              : () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+        FilledButton(
+          style: _buttonStyle(_ButtonTone.primary),
+          onPressed: controller.savingAgentTemplate
+              ? null
+              : () async {
+                  final String value = _commandController.text.trim();
+                  await controller.saveAgentTemplate(
+                    containerAgentPromptCommand: _overrideEditable ? null : value,
+                    agentPromptCommandOverride: _overrideEditable ? value : null,
+                  );
+                  if (!context.mounted || controller.workspaceError.isNotEmpty) {
+                    return;
+                  }
+                  Navigator.of(context).pop();
+                },
+          child: Text(controller.savingAgentTemplate ? '保存中…' : '保存'),
+        ),
+      ],
+    );
+  }
+}
+
 class _CheckPane extends StatelessWidget {
   const _CheckPane({required this.controller});
 
@@ -3346,13 +3825,16 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
   late final TextEditingController _containerPathController;
   late final TextEditingController _imageNameController;
   late final TextEditingController _imageVersionController;
-  late final TextEditingController _containerModeController;
   late final TextEditingController _shellPrefixController;
   late final TextEditingController _shellController;
   late final TextEditingController _shellSuffixController;
   late final TextEditingController _agentPromptCommandController;
-  late final TextEditingController _yoloController;
+  late final TextEditingController _envController;
+  late final TextEditingController _envFileController;
+  late final TextEditingController _volumesController;
   String _run = '';
+  String _containerMode = '';
+  String _yolo = '';
 
   @override
   void initState() {
@@ -3362,12 +3844,13 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
     _containerPathController = TextEditingController();
     _imageNameController = TextEditingController();
     _imageVersionController = TextEditingController();
-    _containerModeController = TextEditingController();
     _shellPrefixController = TextEditingController();
     _shellController = TextEditingController();
     _shellSuffixController = TextEditingController();
     _agentPromptCommandController = TextEditingController();
-    _yoloController = TextEditingController();
+    _envController = TextEditingController();
+    _envFileController = TextEditingController();
+    _volumesController = TextEditingController();
     _applyDefaults();
   }
 
@@ -3378,12 +3861,13 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
     _containerPathController.dispose();
     _imageNameController.dispose();
     _imageVersionController.dispose();
-    _containerModeController.dispose();
     _shellPrefixController.dispose();
     _shellController.dispose();
     _shellSuffixController.dispose();
     _agentPromptCommandController.dispose();
-    _yoloController.dispose();
+    _envController.dispose();
+    _envFileController.dispose();
+    _volumesController.dispose();
     super.dispose();
   }
 
@@ -3391,56 +3875,204 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
   Widget build(BuildContext context) {
     final List<String> runNames = widget.seed.runs.keys.toList()..sort();
     return AlertDialog(
-      title: const Text('新建会话'),
+      title: const Text('新建容器会话'),
       content: SizedBox(
-        width: 720,
+        width: 880,
         child: SingleChildScrollView(
           child: Column(
             children: <Widget>[
-              DropdownButtonFormField<String>(
-                initialValue: _run,
-                decoration: const InputDecoration(labelText: 'run'),
-                items: <DropdownMenuItem<String>>[
-                  const DropdownMenuItem<String>(
-                    value: '',
-                    child: Text('(不使用 run)'),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: <Widget>[
+                  SizedBox(
+                    width: 400,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _run,
+                      decoration: const InputDecoration(labelText: 'run'),
+                      items: <DropdownMenuItem<String>>[
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('(不使用 run)'),
+                        ),
+                        ...runNames.map(
+                          (String item) => DropdownMenuItem<String>(
+                            value: item,
+                            child: Text(item),
+                          ),
+                        ),
+                      ],
+                      onChanged: (String? value) {
+                        setState(() {
+                          _run = value ?? '';
+                          _applyDefaults();
+                        });
+                      },
+                    ),
                   ),
-                  ...runNames.map(
-                    (String item) => DropdownMenuItem<String>(
-                      value: item,
-                      child: Text(item),
+                  SizedBox(
+                    width: 400,
+                    child: _dialogPathField(
+                      controller: _hostPathController,
+                      label: 'hostPath',
+                      hintText: '/abs/path/project',
+                    ),
+                  ),
+                  SizedBox(
+                    width: 400,
+                    child: _dialogField(
+                      _containerNameController,
+                      'containerName',
+                      hintText: 'my-dev 或 my-{now}',
+                    ),
+                  ),
+                  SizedBox(
+                    width: 400,
+                    child: _dialogField(
+                      _containerPathController,
+                      'containerPath',
+                      hintText: '/workspace',
+                    ),
+                  ),
+                  SizedBox(
+                    width: 400,
+                    child: _dialogField(
+                      _imageNameController,
+                      'imageName',
+                      hintText: 'localhost/xcanwin/manyoyo',
+                    ),
+                  ),
+                  SizedBox(
+                    width: 400,
+                    child: _dialogField(
+                      _imageVersionController,
+                      'imageVersion',
+                      hintText: '1.7.4-common',
+                    ),
+                  ),
+                  SizedBox(
+                    width: 400,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _containerMode,
+                      decoration: const InputDecoration(
+                        labelText: 'containerMode',
+                      ),
+                      items: const <DropdownMenuItem<String>>[
+                        DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('(跟随默认)'),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'common',
+                          child: Text('common'),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'dind',
+                          child: Text('dind'),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'sock',
+                          child: Text('sock'),
+                        ),
+                      ],
+                      onChanged: (String? value) {
+                        setState(() {
+                          _containerMode = value ?? '';
+                        });
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 400,
+                    child: _dialogField(
+                      _shellPrefixController,
+                      'shellPrefix',
+                      hintText: '例如 IS_SANDBOX=1',
+                    ),
+                  ),
+                  SizedBox(
+                    width: 400,
+                    child: _dialogField(
+                      _shellController,
+                      'shell',
+                      hintText: '例如 claude / codex',
+                    ),
+                  ),
+                  SizedBox(
+                    width: 400,
+                    child: _dialogField(
+                      _shellSuffixController,
+                      'shellSuffix',
+                      hintText: '例如 --dangerously-skip-permissions',
+                    ),
+                  ),
+                  SizedBox(
+                    width: 400,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _yolo,
+                      decoration: const InputDecoration(labelText: 'CLI'),
+                      items: const <DropdownMenuItem<String>>[
+                        DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('(不使用)'),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'claude',
+                          child: Text('claude'),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'codex',
+                          child: Text('codex'),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'gemini',
+                          child: Text('gemini'),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'opencode',
+                          child: Text('opencode'),
+                        ),
+                      ],
+                      onChanged: (String? value) {
+                        setState(() {
+                          _yolo = value ?? '';
+                        });
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 812,
+                    child: _dialogField(
+                      _agentPromptCommandController,
+                      'agentPromptCommand',
+                      hintText: '例如 codex exec --plain-text {prompt}',
+                    ),
+                  ),
+                  SizedBox(
+                    width: 812,
+                    child: _dialogMultilineField(
+                      controller: _envController,
+                      label: 'env (KEY=VALUE，每行一项)',
+                    ),
+                  ),
+                  SizedBox(
+                    width: 812,
+                    child: _dialogMultilineField(
+                      controller: _envFileController,
+                      label: 'envFile (绝对路径，每行一项)',
+                      hintText: '/abs/path/.env',
+                    ),
+                  ),
+                  SizedBox(
+                    width: 812,
+                    child: _dialogMultilineField(
+                      controller: _volumesController,
+                      label: 'volumes (每行一项)',
+                      hintText: '/host/path:/container/path',
                     ),
                   ),
                 ],
-                onChanged: (String? value) {
-                  setState(() {
-                    _run = value ?? '';
-                    _applyDefaults();
-                  });
-                },
               ),
-              const SizedBox(height: 12),
-              _dialogField(_containerNameController, 'containerName'),
-              const SizedBox(height: 12),
-              _dialogField(_hostPathController, 'hostPath'),
-              const SizedBox(height: 12),
-              _dialogField(_containerPathController, 'containerPath'),
-              const SizedBox(height: 12),
-              _dialogField(_imageNameController, 'imageName'),
-              const SizedBox(height: 12),
-              _dialogField(_imageVersionController, 'imageVersion'),
-              const SizedBox(height: 12),
-              _dialogField(_containerModeController, 'containerMode'),
-              const SizedBox(height: 12),
-              _dialogField(_shellPrefixController, 'shellPrefix'),
-              const SizedBox(height: 12),
-              _dialogField(_shellController, 'shell'),
-              const SizedBox(height: 12),
-              _dialogField(_shellSuffixController, 'shellSuffix'),
-              const SizedBox(height: 12),
-              _dialogField(_agentPromptCommandController, 'agentPromptCommand'),
-              const SizedBox(height: 12),
-              _dialogField(_yoloController, 'yolo'),
             ],
           ),
         ),
@@ -3462,10 +4094,47 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
     );
   }
 
-  Widget _dialogField(TextEditingController controller, String label) {
+  Widget _dialogField(
+    TextEditingController controller,
+    String label, {
+    String? hintText,
+  }) {
     return TextField(
       controller: controller,
-      decoration: InputDecoration(labelText: label),
+      decoration: InputDecoration(labelText: label, hintText: hintText),
+    );
+  }
+
+  Widget _dialogMultilineField({
+    required TextEditingController controller,
+    required String label,
+    String? hintText,
+  }) {
+    return TextField(
+      controller: controller,
+      minLines: 3,
+      maxLines: 5,
+      style: _monoStyle(const TextStyle(fontSize: 13, height: 1.5)),
+      decoration: InputDecoration(labelText: label, hintText: hintText),
+    );
+  }
+
+  Widget _dialogPathField({
+    required TextEditingController controller,
+    required String label,
+    String? hintText,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: <Widget>[
+        Expanded(child: _dialogField(controller, label, hintText: hintText)),
+        const SizedBox(width: 8),
+        FilledButton(
+          style: _buttonStyle(_ButtonTone.secondary),
+          onPressed: _pickHostPath,
+          child: const Text('选择'),
+        ),
+      ],
     );
   }
 
@@ -3481,14 +4150,17 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
     _containerPathController.text = asString(defaults['containerPath']);
     _imageNameController.text = asString(defaults['imageName']);
     _imageVersionController.text = asString(defaults['imageVersion']);
-    _containerModeController.text = asString(defaults['containerMode']);
+    _containerMode = asString(defaults['containerMode']);
     _shellPrefixController.text = asString(defaults['shellPrefix']);
     _shellController.text = asString(defaults['shell']);
     _shellSuffixController.text = asString(defaults['shellSuffix']);
     _agentPromptCommandController.text = asString(
       defaults['agentPromptCommand'],
     );
-    _yoloController.text = asString(defaults['yolo']);
+    _yolo = asString(defaults['yolo']);
+    _envController.text = _formatEnvMap(defaults['env']);
+    _envFileController.text = _formatStringList(defaults['envFile']);
+    _volumesController.text = _formatStringList(defaults['volumes']);
   }
 
   Future<void> _submit() async {
@@ -3500,17 +4172,35 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
         containerPath: _containerPathController.text,
         imageName: _imageNameController.text,
         imageVersion: _imageVersionController.text,
-        containerMode: _containerModeController.text,
+        containerMode: _containerMode,
         shellPrefix: _shellPrefixController.text,
         shell: _shellController.text,
         shellSuffix: _shellSuffixController.text,
         agentPromptCommand: _agentPromptCommandController.text,
-        yolo: _yoloController.text,
+        yolo: _yolo,
+        env: _parseEnvMap(_envController.text),
+        envFile: _parseMultilineList(_envFileController.text),
+        volumes: _parseMultilineList(_volumesController.text),
       ),
     );
     if (mounted && widget.controller.workspaceError.isEmpty) {
       Navigator.of(context).pop();
     }
+  }
+
+  Future<void> _pickHostPath() async {
+    final String? path = await getDirectoryPath(
+      initialDirectory: _hostPathController.text.trim().isEmpty
+          ? null
+          : _hostPathController.text.trim(),
+      confirmButtonText: '选择',
+    );
+    if (path == null || path.trim().isEmpty || !mounted) {
+      return;
+    }
+    setState(() {
+      _hostPathController.text = path;
+    });
   }
 }
 
@@ -3538,6 +4228,50 @@ class _LabeledField extends StatelessWidget {
       ],
     );
   }
+}
+
+String _formatEnvMap(Object? value) {
+  final Map<String, dynamic> env = asJsonMap(value);
+  if (env.isEmpty) {
+    return '';
+  }
+  return env.entries
+      .map((MapEntry<String, dynamic> entry) => '${entry.key}=${entry.value}')
+      .join('\n');
+}
+
+String _formatStringList(Object? value) {
+  final List<dynamic> items = asJsonList(value);
+  if (items.isEmpty) {
+    return '';
+  }
+  return items.map((dynamic item) => '$item').join('\n');
+}
+
+Map<String, String> _parseEnvMap(String text) {
+  final Map<String, String> env = <String, String>{};
+  for (final String rawLine in text.split('\n')) {
+    final String line = rawLine.trim();
+    if (line.isEmpty) {
+      continue;
+    }
+    final int separator = line.indexOf('=');
+    if (separator <= 0) {
+      continue;
+    }
+    env[line.substring(0, separator).trim()] = line
+        .substring(separator + 1)
+        .trim();
+  }
+  return env;
+}
+
+List<String> _parseMultilineList(String text) {
+  return text
+      .split('\n')
+      .map((String line) => line.trim())
+      .where((String line) => line.isNotEmpty)
+      .toList();
 }
 
 class _SidebarDirectoryGroup {
@@ -3842,6 +4576,26 @@ class _ToolbarChip extends StatelessWidget {
   }
 }
 
+class _ToolbarButtonChip extends StatelessWidget {
+  const _ToolbarButtonChip({required this.label, required this.onPressed});
+
+  final String label;
+  final Future<void> Function()? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton(
+      style: _buttonStyle(_ButtonTone.secondary),
+      onPressed: onPressed == null
+          ? null
+          : () async {
+              await onPressed!.call();
+            },
+      child: Text(label),
+    );
+  }
+}
+
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({required this.message, required this.activeMode});
 
@@ -4135,6 +4889,36 @@ String _summarizeCli({required SessionDetail? detail}) {
   }
   final String first = raw.split(RegExp(r'\s+')).first.trim();
   return first.isEmpty ? raw : first;
+}
+
+String _inferTemplateCliValue(String raw) {
+  final String text = raw.trim();
+  if (text.isEmpty) {
+    return '';
+  }
+  if (text.contains('claude')) {
+    return 'claude';
+  }
+  if (text.contains('codex')) {
+    return 'codex';
+  }
+  if (text.contains('gemini')) {
+    return 'gemini';
+  }
+  if (text.contains('opencode')) {
+    return 'opencode';
+  }
+  return '';
+}
+
+String _templateForCli(String cli) {
+  return switch (cli) {
+    'claude' => 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}',
+    'codex' => 'codex exec --skip-git-repo-check {prompt}',
+    'gemini' => 'gemini -p {prompt}',
+    'opencode' => 'opencode run {prompt}',
+    _ => '',
+  };
 }
 
 String _formatFileNodeMeta(FileNode entry) {

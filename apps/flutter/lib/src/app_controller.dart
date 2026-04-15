@@ -8,6 +8,8 @@ import 'session_storage.dart';
 
 enum WorkspacePane { conversation, terminal, files, detail, config, check }
 
+const String defaultManyoyoBaseUrl = 'http://127.0.0.1:3000';
+
 class ManyoyoAppController extends ChangeNotifier {
   ManyoyoAppController({
     required ManyoyoRepository repository,
@@ -30,6 +32,10 @@ class ManyoyoAppController extends ChangeNotifier {
   bool loadingConfig = false;
   bool savingConfig = false;
   bool creatingSession = false;
+  bool creatingAgent = false;
+  bool removingSession = false;
+  bool removingSessionHistory = false;
+  bool savingAgentTemplate = false;
   bool connectingTerminal = false;
 
   String loginError = '';
@@ -83,6 +89,9 @@ class ManyoyoAppController extends ChangeNotifier {
         }
       }
     }
+    if (draftBaseUrl.trim().isEmpty) {
+      draftBaseUrl = defaultManyoyoBaseUrl;
+    }
     booting = false;
     notifyListeners();
   }
@@ -97,7 +106,7 @@ class ManyoyoAppController extends ChangeNotifier {
     notifyListeners();
     try {
       final nextSession = await _repository.login(
-        baseUrl: baseUrl,
+        baseUrl: baseUrl.trim().isEmpty ? defaultManyoyoBaseUrl : baseUrl,
         username: username,
         password: password,
       );
@@ -526,6 +535,111 @@ class ManyoyoAppController extends ChangeNotifier {
     }
   }
 
+  Future<void> createAgentSession(String containerName) async {
+    final current = _requireSession();
+    final targetContainerName = containerName.trim();
+    if (targetContainerName.isEmpty) {
+      return;
+    }
+    creatingAgent = true;
+    workspaceError = '';
+    notifyListeners();
+    try {
+      final name = await _repository.createAgentSession(
+        current,
+        targetContainerName,
+      );
+      pane = WorkspacePane.conversation;
+      await refreshSessions(preferredSessionName: name);
+    } on ManyoyoApiException catch (error) {
+      workspaceError = error.message;
+    } catch (error) {
+      workspaceError = error.toString();
+    } finally {
+      creatingAgent = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeActiveSessionContainer() async {
+    final current = _requireSession();
+    final targetSession = activeSessionName.trim();
+    if (targetSession.isEmpty) {
+      return;
+    }
+    removingSession = true;
+    workspaceError = '';
+    notifyListeners();
+    try {
+      await _closeTerminal();
+      final fallback = _fallbackSessionAfterRemoval(targetSession);
+      await _repository.removeSession(current, targetSession);
+      await refreshSessions(preferredSessionName: fallback);
+    } on ManyoyoApiException catch (error) {
+      workspaceError = error.message;
+    } catch (error) {
+      workspaceError = error.toString();
+    } finally {
+      removingSession = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeActiveSessionWithHistory() async {
+    final current = _requireSession();
+    final targetSession = activeSessionName.trim();
+    if (targetSession.isEmpty) {
+      return;
+    }
+    removingSessionHistory = true;
+    workspaceError = '';
+    notifyListeners();
+    try {
+      await _closeTerminal();
+      final fallback = _fallbackSessionAfterRemoval(targetSession);
+      await _repository.removeSessionWithHistory(current, targetSession);
+      await refreshSessions(preferredSessionName: fallback);
+    } on ManyoyoApiException catch (error) {
+      workspaceError = error.message;
+    } catch (error) {
+      workspaceError = error.toString();
+    } finally {
+      removingSessionHistory = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> saveAgentTemplate({
+    String? containerAgentPromptCommand,
+    String? agentPromptCommandOverride,
+  }) async {
+    final current = _requireSession();
+    final targetSession = activeSessionName.trim();
+    if (targetSession.isEmpty) {
+      return;
+    }
+    savingAgentTemplate = true;
+    workspaceError = '';
+    notifyListeners();
+    try {
+      final detail = await _repository.saveAgentTemplate(
+        current,
+        targetSession,
+        containerAgentPromptCommand: containerAgentPromptCommand,
+        agentPromptCommandOverride: agentPromptCommandOverride,
+      );
+      activeSessionDetail = detail;
+      await refreshSessions(preferredSessionName: targetSession);
+    } on ManyoyoApiException catch (error) {
+      workspaceError = error.message;
+    } catch (error) {
+      workspaceError = error.toString();
+    } finally {
+      savingAgentTemplate = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> connectTerminal() async {
     final current = _requireSession();
     if (activeSessionName.isEmpty) {
@@ -592,6 +706,54 @@ class ManyoyoAppController extends ChangeNotifier {
       throw ManyoyoApiException('当前未登录');
     }
     return current;
+  }
+
+  String _fallbackSessionAfterRemoval(String removedSessionName) {
+    final removed = sessions.where(
+      (SessionSummary item) => item.name == removedSessionName,
+    );
+    if (removed.isEmpty) {
+      return '';
+    }
+    final SessionSummary removedSession = removed.first;
+    final List<SessionSummary> remaining = sessions
+        .where(
+          (SessionSummary item) =>
+              item.name != removedSessionName &&
+              item.containerName == removedSession.containerName,
+        )
+        .toList();
+    if (remaining.isEmpty) {
+      return '';
+    }
+    remaining.sort((SessionSummary a, SessionSummary b) {
+      final int rankDiff = _agentCreationRank(a.agentId).compareTo(
+        _agentCreationRank(b.agentId),
+      );
+      if (rankDiff != 0) {
+        return rankDiff;
+      }
+      return a.name.compareTo(b.name);
+    });
+    final int removedRank = _agentCreationRank(removedSession.agentId);
+    final Iterable<SessionSummary> lowerRanked = remaining.where(
+      (SessionSummary item) => _agentCreationRank(item.agentId) < removedRank,
+    );
+    if (removedSession.agentId != 'default' && lowerRanked.isNotEmpty) {
+      return lowerRanked.last.name;
+    }
+    return remaining.first.name;
+  }
+
+  int _agentCreationRank(String agentId) {
+    final String normalized = agentId.trim();
+    if (normalized.isEmpty || normalized == 'default') {
+      return 1;
+    }
+    final RegExpMatch? matched = RegExp(r'^agent-(\d+)$').firstMatch(
+      normalized,
+    );
+    return matched == null ? 0 : int.tryParse(matched.group(1) ?? '0') ?? 0;
   }
 
   Future<void> _closeTerminal() async {

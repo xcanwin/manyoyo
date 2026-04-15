@@ -95,6 +95,14 @@ class _ControllerFakeRepository implements ManyoyoRepository {
   }
 
   @override
+  Future<String> createAgentSession(
+    StoredSession session,
+    String sessionName,
+  ) async {
+    return 'demo~agent-2';
+  }
+
+  @override
   Future<ConfigSnapshot> fetchConfig(StoredSession session) async {
     return const ConfigSnapshot(
       path: '/tmp/manyoyo.json',
@@ -202,6 +210,15 @@ class _ControllerFakeRepository implements ManyoyoRepository {
   Future<void> logout(StoredSession session) async {}
 
   @override
+  Future<void> removeSession(StoredSession session, String sessionName) async {}
+
+  @override
+  Future<void> removeSessionWithHistory(
+    StoredSession session,
+    String sessionName,
+  ) async {}
+
+  @override
   Future<void> mkdir(
     StoredSession session,
     String sessionName,
@@ -238,6 +255,16 @@ class _ControllerFakeRepository implements ManyoyoRepository {
 
   @override
   Future<void> saveConfig(StoredSession session, String raw) async {}
+
+  @override
+  Future<SessionDetail> saveAgentTemplate(
+    StoredSession session,
+    String sessionName, {
+    String? containerAgentPromptCommand,
+    String? agentPromptCommandOverride,
+  }) async {
+    return fetchSessionDetail(session, sessionName);
+  }
 
   @override
   Future<RunCommandResult> runCommand(
