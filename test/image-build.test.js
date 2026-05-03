@@ -285,6 +285,8 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(script).toContain('skipped (command not found)');
         expect(script).toContain('npm install -g npm@latest "${update_packages[@]}"');
         expect(script).toContain('npm cache clean --force --loglevel=error');
+        expect(script).toContain('/tmp/.[!.]*');
+        expect(script).toContain('/var/tmp/.[!.]*');
     });
 
     test('should restore default cmd when flattening an image previously committed with update command', async () => {
