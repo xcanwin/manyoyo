@@ -173,6 +173,127 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(options.pruneDanglingImages).toHaveBeenCalledTimes(1);
     });
 
+    test('should update agents in existing image without rebuilding when updateAgents is enabled', async () => {
+        const options = createBaseOptions({
+            dockerCmd: 'docker',
+            updateAgents: true,
+            agentUpdateContainerName: 'manyoyo-update-test',
+            runCmd: jest.fn((cmd, args) => {
+                if (cmd === 'docker' && Array.isArray(args) && args[0] === 'image') {
+                    return JSON.stringify({
+                        Env: ['PATH=/usr/local/bin:/usr/bin:/bin', 'LANG=C.UTF-8'],
+                        Cmd: ['supervisord', '-n', '-c', '/etc/supervisor/supervisord.conf'],
+                        WorkingDir: '/tmp',
+                        Labels: { 'org.opencontainers.image.version': '24.04' }
+                    });
+                }
+                return '';
+            })
+        });
+
+        await buildImage(options);
+
+        expect(options.runCmd.mock.calls.some(([cmd, args]) => (
+            cmd === 'docker' && Array.isArray(args) && args[0] === 'build'
+        ))).toBe(false);
+        expect(options.runCmd).toHaveBeenNthCalledWith(1, 'docker', [
+            'image',
+            'inspect',
+            'localhost/xcanwin/manyoyo:1.8.0-common',
+            '--format',
+            '{{json .Config}}'
+        ], { stdio: 'pipe' });
+        expect(options.runCmd).toHaveBeenNthCalledWith(2, 'docker', expect.arrayContaining([
+            'run',
+            '--name',
+            'manyoyo-update-test',
+            '--network',
+            'host',
+            'localhost/xcanwin/manyoyo:1.8.0-common',
+            '/bin/bash',
+            '-lc',
+            expect.stringContaining('@anthropic-ai/claude-code@latest')
+        ]), { stdio: 'inherit' });
+        const runArgs = options.runCmd.mock.calls[1][1];
+        const updateScript = runArgs[runArgs.length - 1];
+        const versionCheck = 'printf "claude: " && claude --version && printf "codex: " && codex --version && printf "gemini: " && gemini --version && printf "opencode: " && opencode --version && printf "npm: " && npm --version';
+        expect(updateScript).toContain('[manyoyo] Agent CLI versions before update:');
+        expect(updateScript).toContain('[manyoyo] Agent CLI versions after update:');
+        expect(updateScript.indexOf(versionCheck)).toBeLessThan(updateScript.indexOf('npm install -g'));
+        expect(updateScript.lastIndexOf(versionCheck)).toBeGreaterThan(updateScript.indexOf('npm install -g'));
+        expect(updateScript).toContain('npm_config_update_notifier=false npm install -g npm@latest');
+        expect(updateScript).toContain('@openai/codex@latest');
+        expect(updateScript).toContain('@google/gemini-cli@latest');
+        expect(updateScript).toContain('opencode-ai@latest');
+        expect(updateScript).toContain('npm_config_update_notifier=false npm cache clean --force --loglevel=error');
+        expect(updateScript).toContain('rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/.cache/node-gyp ~/.claude/plugins/cache ~/go/pkg/mod/cache');
+        expect(updateScript).toContain('rm -f /var/log/dpkg.log /var/log/bootstrap.log /var/lib/dpkg/status-old /var/cache/debconf/templates.dat-old');
+        expect(options.runCmdPipeline).toHaveBeenCalledWith(
+            'docker',
+            ['export', 'manyoyo-update-test'],
+            'docker',
+            expect.arrayContaining([
+                'import',
+                '--change',
+                'ENV PATH=/usr/local/bin:/usr/bin:/bin',
+                '--change',
+                'CMD ["supervisord","-n","-c","/etc/supervisor/supervisord.conf"]',
+                '--change',
+                'WORKDIR /tmp',
+                '-',
+                'localhost/xcanwin/manyoyo:1.8.0-common'
+            ]),
+            { stdio: 'inherit' }
+        );
+        const importArgs = options.runCmdPipeline.mock.calls[0][3];
+        expect(importArgs).toContain('LABEL org.opencontainers.image.version=24.04');
+        expect(options.runCmd).toHaveBeenNthCalledWith(3, 'docker', [
+            'rm',
+            '-f',
+            'manyoyo-update-test'
+        ], { stdio: 'inherit', ignoreError: true });
+    });
+
+    test('should restore default cmd when flattening an image previously committed with update command', async () => {
+        const options = createBaseOptions({
+            updateAgents: true,
+            agentUpdateContainerName: 'manyoyo-update-test',
+            runCmd: jest.fn((cmd, args) => {
+                if (cmd === 'docker' && Array.isArray(args) && args[0] === 'image') {
+                    return JSON.stringify({
+                        Cmd: ['/bin/bash', '-lc', 'npm install -g @openai/codex@latest'],
+                        WorkingDir: '/tmp'
+                    });
+                }
+                return '';
+            })
+        });
+
+        await buildImage(options);
+
+        const importArgs = options.runCmdPipeline.mock.calls[0][3];
+        expect(importArgs).toEqual(expect.arrayContaining([
+            '--change',
+            'CMD ["supervisord","-n","-c","/etc/supervisor/supervisord.conf"]'
+        ]));
+    });
+
+    test('should fail updateAgents when target image does not exist', async () => {
+        const options = createBaseOptions({
+            updateAgents: true,
+            runCmd: jest.fn((cmd, args) => {
+                if (cmd === 'docker' && Array.isArray(args) && args[0] === 'image') {
+                    throw createCommandError('No such image');
+                }
+                return '';
+            })
+        });
+
+        await expect(buildImage(options)).rejects.toThrow('exit:1');
+        expect(options.runCmd).toHaveBeenCalledTimes(1);
+        expect(options.error).toHaveBeenCalledWith(expect.stringContaining('找不到本地镜像'));
+    });
+
     test('docker should fallback to buildkit when native build hits capability error', async () => {
         const options = createBaseOptions({
             dockerCmd: 'docker',
@@ -341,4 +462,5 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(dockerfile).toContain('COPY --from=cache-stage /opt/gopls /usr/local/share/manyoyo-gopls');
         expect(dockerfile).not.toContain('COPY --from=cache-stage /opt/gopls /tmp/gopls-cache');
     });
+
 });

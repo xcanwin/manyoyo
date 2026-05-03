@@ -153,6 +153,9 @@ manyoyo build --iv 1.9.0-common
 # full 版本
 manyoyo build --iv 1.9.0-full
 
+# 仅更新已有镜像内 Agent CLI 到 latest，不重建 Dockerfile
+manyoyo build --iv 1.9.0-full --update-agents --yes
+
 # 自定义工具集
 manyoyo build --iba TOOL=go,codex,java,gemini
 ```

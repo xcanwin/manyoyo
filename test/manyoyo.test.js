@@ -1652,6 +1652,14 @@ exit 0
             expect(output).toContain('--yes');
         });
 
+        test('build --update-agents option should be accepted', () => {
+            const output = execSync(
+                `node ${BIN_PATH} build --help`,
+                { encoding: 'utf-8' }
+            );
+            expect(output).toContain('--update-agents');
+        });
+
         test('run should not expose --yes option', () => {
             const output = execSync(
                 `node ${BIN_PATH} run --help`,

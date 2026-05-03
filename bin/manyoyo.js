@@ -1175,6 +1175,7 @@ Notes:
         .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
         .option('--in, --image-name <name>', '指定镜像名称')
         .option('--iv, --image-ver <version>', '指定镜像版本 (格式: x.y.z-后缀，如 1.7.4-common)')
+        .option('--update-agents', '仅更新已有镜像内 Agent CLI 到 latest (Claude/Codex/Gemini/OpenCode)')
         .option('--yes', '所有提示自动确认 (用于CI/脚本)');
     appendArrayOption(buildCommand, '--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)');
     buildCommand.action(options => selectAction('build', options));
@@ -1507,6 +1508,7 @@ Notes:
         isServerRestart: isServerRestartMode,
         isServerDetach: Boolean(selectedAction === 'serve' && options.detach),
         isServerListenSpecified: Boolean(isServerMode && options.server !== true),
+        updateAgents: Boolean(options.updateAgents),
         isPluginMode: false
     };
 }
@@ -2132,6 +2134,7 @@ async function main() {
                 parseImageVersionTag,
                 manyoyoName: MANYOYO_NAME,
                 yesMode: Boolean(modeState.yesMode),
+                updateAgents: Boolean(modeState.updateAgents),
                 dockerCmd: DOCKER_CMD,
                 rootDir: path.join(__dirname, '..'),
                 loadConfig,
@@ -2140,7 +2143,9 @@ async function main() {
                 pruneDanglingImages,
                 colors: { RED, GREEN, YELLOW, BLUE, CYAN, NC }
             });
-            syncBuiltImageVersionToGlobalConfig(runtime.imageVersion);
+            if (!modeState.updateAgents) {
+                syncBuiltImageVersionToGlobalConfig(runtime.imageVersion);
+            }
             process.exit(0);
         }
 

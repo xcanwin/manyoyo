@@ -75,6 +75,7 @@ These commands share the same core runtime options:
 | `--in, --image-name <name>` | Set image name |
 | `--iv, --image-ver <version>` | Set image version |
 | `--iba, --image-build-arg <arg>` | Pass Dockerfile build args, repeatable |
+| `--update-agents` | Update Agent CLIs in an existing image to latest (Claude/Codex/Gemini/OpenCode), without rebuilding the Dockerfile |
 | `--yes` | Auto-confirm prompts |
 
 ### `playwright`
