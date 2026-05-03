@@ -20,11 +20,14 @@ function createCommandError(message, stderr = '', stdout = '') {
 function createTestRoot() {
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-image-build-'));
     const dockerDir = path.join(rootDir, 'docker');
+    const dockerResDir = path.join(dockerDir, 'res');
     const cacheDir = path.join(dockerDir, 'cache');
     const nodeCacheDir = path.join(cacheDir, 'node');
     fs.mkdirSync(nodeCacheDir, { recursive: true });
+    fs.mkdirSync(dockerResDir, { recursive: true });
 
     fs.writeFileSync(path.join(dockerDir, 'manyoyo.Dockerfile'), 'FROM scratch\n');
+    fs.writeFileSync(path.join(dockerResDir, 'update-agents.sh'), '#!/usr/bin/env bash\n');
     fs.writeFileSync(path.join(nodeCacheDir, 'node-v24.0.0-linux-x64.tar.gz'), 'cache');
     fs.writeFileSync(path.join(cacheDir, '.timestamps.json'), JSON.stringify({
         'node/': new Date().toISOString()
@@ -209,25 +212,20 @@ describe('image-build with unified build and buildkit fallback', () => {
             'manyoyo-update-test',
             '--network',
             'host',
+            '--volume',
+            path.join(options.rootDir, 'docker', 'res', 'update-agents.sh') + ':/usr/local/bin/manyoyo-update-agents.sh:ro',
+            '--env',
+            'MANYOYO_AGENT_UPDATE_TARGETS=claude=@anthropic-ai/claude-code@latest codex=@openai/codex@latest',
             'localhost/xcanwin/manyoyo:1.8.0-common',
             '/bin/bash',
-            '-lc',
-            expect.stringContaining('@anthropic-ai/claude-code@latest')
+            '/usr/local/bin/manyoyo-update-agents.sh'
         ]), { stdio: 'inherit' });
         const runArgs = options.runCmd.mock.calls[1][1];
-        const updateScript = runArgs[runArgs.length - 1];
-        const versionCheck = 'printf "claude: " && claude --version && printf "codex: " && codex --version && printf "gemini: " && gemini --version && printf "opencode: " && opencode --version && printf "npm: " && npm --version';
-        expect(updateScript).toContain('[manyoyo] Agent CLI versions before update:');
-        expect(updateScript).toContain('[manyoyo] Agent CLI versions after update:');
-        expect(updateScript.indexOf(versionCheck)).toBeLessThan(updateScript.indexOf('npm install -g'));
-        expect(updateScript.lastIndexOf(versionCheck)).toBeGreaterThan(updateScript.indexOf('npm install -g'));
-        expect(updateScript).toContain('npm_config_update_notifier=false npm install -g npm@latest');
-        expect(updateScript).toContain('@openai/codex@latest');
-        expect(updateScript).toContain('@google/gemini-cli@latest');
-        expect(updateScript).toContain('opencode-ai@latest');
-        expect(updateScript).toContain('npm_config_update_notifier=false npm cache clean --force --loglevel=error');
-        expect(updateScript).toContain('rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/.cache/node-gyp ~/.claude/plugins/cache ~/go/pkg/mod/cache');
-        expect(updateScript).toContain('rm -f /var/log/dpkg.log /var/log/bootstrap.log /var/lib/dpkg/status-old /var/cache/debconf/templates.dat-old');
+        const targetEnv = runArgs[runArgs.indexOf('--env') + 1];
+        expect(targetEnv).toContain('claude=@anthropic-ai/claude-code@latest');
+        expect(targetEnv).toContain('codex=@openai/codex@latest');
+        expect(targetEnv).not.toContain('gemini=');
+        expect(targetEnv).not.toContain('opencode=');
         expect(options.runCmdPipeline).toHaveBeenCalledWith(
             'docker',
             ['export', 'manyoyo-update-test'],
@@ -252,6 +250,41 @@ describe('image-build with unified build and buildkit fallback', () => {
             '-f',
             'manyoyo-update-test'
         ], { stdio: 'inherit', ignoreError: true });
+    });
+
+    test('should pass full agent targets to mounted update script for full image', async () => {
+        const options = createBaseOptions({
+            updateAgents: true,
+            imageVersionTag: '1.8.0-full',
+            agentUpdateContainerName: 'manyoyo-update-test',
+            runCmd: jest.fn((cmd, args) => {
+                if (cmd === 'docker' && Array.isArray(args) && args[0] === 'image') {
+                    return JSON.stringify({ Cmd: ['supervisord'], WorkingDir: '/tmp' });
+                }
+                return '';
+            })
+        });
+
+        await buildImage(options);
+
+        const runArgs = options.runCmd.mock.calls[1][1];
+        const targetEnv = runArgs[runArgs.indexOf('--env') + 1];
+        expect(targetEnv).toContain('claude=@anthropic-ai/claude-code@latest');
+        expect(targetEnv).toContain('codex=@openai/codex@latest');
+        expect(targetEnv).toContain('gemini=@google/gemini-cli@latest');
+        expect(targetEnv).toContain('opencode=opencode-ai@latest');
+    });
+
+    test('update-agents resource script should skip missing commands and clean caches', () => {
+        const rootDir = path.resolve(__dirname, '..');
+        const scriptPath = path.join(rootDir, 'docker', 'res', 'update-agents.sh');
+        const script = fs.readFileSync(scriptPath, 'utf8');
+
+        expect(script).toContain('MANYOYO_AGENT_UPDATE_TARGETS');
+        expect(script).toContain('command -v "$agent"');
+        expect(script).toContain('skipped (command not found)');
+        expect(script).toContain('npm install -g npm@latest "${update_packages[@]}"');
+        expect(script).toContain('npm cache clean --force --loglevel=error');
     });
 
     test('should restore default cmd when flattening an image previously committed with update command', async () => {

@@ -116,6 +116,7 @@ describe('MANYOYO CLI', () => {
             expect(output).toContain('--help');
             expect(output).toContain('--version');
             expect(output).toContain('serve 127.0.0.1:3000 -d');
+            expect(output).toContain('build --update-agents --yes');
         });
 
         test('serve --help should include detach stop and restart option', () => {
