@@ -20,7 +20,7 @@ function createCommandError(message, stderr = '', stdout = '') {
 function createTestRoot() {
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-image-build-'));
     const dockerDir = path.join(rootDir, 'docker');
-    const dockerResDir = path.join(dockerDir, 'res');
+    const dockerResDir = path.join(dockerDir, 'res', 'agent');
     const cacheDir = path.join(dockerDir, 'cache');
     const nodeCacheDir = path.join(cacheDir, 'node');
     fs.mkdirSync(nodeCacheDir, { recursive: true });
@@ -213,7 +213,7 @@ describe('image-build with unified build and buildkit fallback', () => {
             '--network',
             'host',
             '--volume',
-            path.join(options.rootDir, 'docker', 'res', 'update-agents.sh') + ':/usr/local/bin/manyoyo-update-agents.sh:ro',
+            path.join(options.rootDir, 'docker', 'res', 'agent', 'update-agents.sh') + ':/usr/local/bin/manyoyo-update-agents.sh:ro',
             '--env',
             'MANYOYO_AGENT_UPDATE_TARGETS=claude=@anthropic-ai/claude-code@latest codex=@openai/codex@latest',
             'localhost/xcanwin/manyoyo:1.8.0-common',
@@ -277,7 +277,7 @@ describe('image-build with unified build and buildkit fallback', () => {
 
     test('update-agents resource script should skip missing commands and clean caches', () => {
         const rootDir = path.resolve(__dirname, '..');
-        const scriptPath = path.join(rootDir, 'docker', 'res', 'update-agents.sh');
+        const scriptPath = path.join(rootDir, 'docker', 'res', 'agent', 'update-agents.sh');
         const script = fs.readFileSync(scriptPath, 'utf8');
 
         expect(script).toContain('MANYOYO_AGENT_UPDATE_TARGETS');
