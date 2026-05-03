@@ -713,6 +713,32 @@ function showImagePullHint(err) {
     console.log(`${YELLOW}   你可以: (1) 更新 ~/.manyoyo/manyoyo.json 的 imageVersion。 (2) 或先执行 ${MANYOYO_NAME} build --iv <x.y.z-后缀> 构建镜像。${NC}`);
 }
 
+function getCommandFailureText(err) {
+    const stderr = err && err.stderr ? err.stderr.toString() : '';
+    const stdout = err && err.stdout ? err.stdout.toString() : '';
+    const message = err && err.message ? err.message : '';
+    return `${message}\n${stderr}\n${stdout}`;
+}
+
+function getContainerRuntimeUnavailableHint(command, err) {
+    const text = getCommandFailureText(err);
+    if (/Cannot connect to Podman|unable to connect to Podman socket|podman machine start|podman system connection/i.test(text)) {
+        return [
+            '',
+            `提示: 当前 ${command} 命令正在连接 Podman machine，但连接不可用。`,
+            '请先在宿主机执行: podman machine start'
+        ].join('\n');
+    }
+    if (/Cannot connect to the Docker daemon|docker daemon is not running|Is the docker daemon running/i.test(text)) {
+        return [
+            '',
+            `提示: 当前 ${command} 命令无法连接容器运行时。`,
+            '请先启动 Docker Desktop / Docker daemon，或确认 Podman machine 已启动。'
+        ].join('\n');
+    }
+    return '';
+}
+
 function runCmd(cmd, args, options = {}) {
     const result = spawnSync(cmd, args, { encoding: 'utf-8', ...options });
     if (result.error) {
@@ -732,7 +758,15 @@ function runCmd(cmd, args, options = {}) {
 }
 
 function dockerExecArgs(args, options = {}) {
-    return runCmd(DOCKER_CMD, args, options);
+    try {
+        return runCmd(DOCKER_CMD, args, options);
+    } catch (e) {
+        const hint = getContainerRuntimeUnavailableHint(DOCKER_CMD, e);
+        if (hint && e && e.message && !e.message.includes(hint)) {
+            e.message = `${e.message}${hint}`;
+        }
+        throw e;
+    }
 }
 
 function containerExists(name) {

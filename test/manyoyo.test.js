@@ -1641,6 +1641,51 @@ exit 0
     });
 
     // ==============================================================================
+    // 容器运行时诊断测试
+    // ==============================================================================
+
+    describe('Container Runtime Diagnostics', () => {
+        test('run should suggest podman machine start when Podman socket is unavailable through docker command', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-runtime-diag-'));
+            const fakeDockerPath = path.join(tempDir, 'docker');
+
+            writeExecutable(fakeDockerPath, `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "docker version 5.8.0"
+  exit 0
+fi
+if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
+  echo 'Cannot connect to Podman. Please verify your connection to the Linux system using \`podman system connection list\`, or try \`podman machine init\` and \`podman machine start\` to manage a new Linux VM' >&2
+  echo 'Error: unable to connect to Podman socket: failed to connect: dial tcp 127.0.0.1:58474: connect: connection refused' >&2
+  exit 125
+fi
+exit 0
+`);
+
+            try {
+                let stderr = '';
+                try {
+                    execSync(`node ${BIN_PATH} run -n runtime-diag -x true`, {
+                        encoding: 'utf-8',
+                        stdio: 'pipe',
+                        env: {
+                            ...process.env,
+                            PATH: `${tempDir}:${process.env.PATH}`
+                        }
+                    });
+                } catch (e) {
+                    stderr = e.stderr;
+                }
+                expect(stderr).toContain('Command failed: docker ps -a --format {{.Names}}');
+                expect(stderr).toContain('当前 docker 命令正在连接 Podman machine，但连接不可用');
+                expect(stderr).toContain('podman machine start');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+    });
+
+    // ==============================================================================
     // 选项测试
     // ==============================================================================
 
