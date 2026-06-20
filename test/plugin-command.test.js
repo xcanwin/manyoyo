@@ -422,9 +422,13 @@ describe('PlaywrightPlugin runtime filtering', () => {
                 `${plugin.sceneCliAttachConfigPath('cli-host-headless')}:/tmp/manyoyo-playwright/cli-host-headless.cli-attach.json:ro`
             ]);
             const attachConfig = JSON.parse(fs.readFileSync(plugin.sceneCliAttachConfigPath('cli-host-headless'), 'utf8'));
+            // isolated 必须为 true：launch-server（非 shared）不预创建 context，
+            // remoteEndpoint 存在时 playwright-cli 默认 isolated=false 会走 contexts()[0] 并报
+            // "unable to connect to a browser that does not have any contexts"。
             expect(attachConfig).toEqual({
                 browser: {
-                    remoteEndpoint: 'ws://host.docker.internal:8935/manyoyo-test'
+                    remoteEndpoint: 'ws://host.docker.internal:8935/manyoyo-test',
+                    isolated: true
                 }
             });
         } finally {
