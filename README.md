@@ -61,7 +61,7 @@ AI Agent CLI 往往需要：
 ```bash
 npm install -g @xcanwin/manyoyo
 podman pull ubuntu:24.04                        # 仅 Podman 需要
-manyoyo build --iv 1.9.0-common
+manyoyo build --iv 1.9.1-common
 manyoyo init all
 manyoyo run -r claude
 manyoyo serve 127.0.0.1:3000 -U admin -P 123456 # Web UI 模式
@@ -148,13 +148,13 @@ manyoyo config command
 
 ```bash
 # common 版本
-manyoyo build --iv 1.9.0-common
+manyoyo build --iv 1.9.1-common
 
 # full 版本
-manyoyo build --iv 1.9.0-full
+manyoyo build --iv 1.9.1-full
 
 # 仅更新已有镜像内 Agent CLI 到 latest，不重建 Dockerfile
-manyoyo build --iv 1.9.0-full --update-agents --yes
+manyoyo build --iv 1.9.1-full --update-agents --yes
 
 # 自定义工具集
 manyoyo build --iba TOOL=go,codex,java,gemini
