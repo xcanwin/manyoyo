@@ -245,7 +245,17 @@ async function maybeRunChecks(rl, autoYes = false) {
     }
 
     console.log('');
-    runRepoCommand(getNpmCommand(), ['audit'], { stdio: 'inherit' });
+    const auditResult = spawnSync(getNpmCommand(), ['audit'], {
+        cwd: REPO_ROOT,
+        encoding: 'utf-8',
+        stdio: 'inherit'
+    });
+    if (auditResult.error) {
+        throw auditResult.error;
+    }
+    if (auditResult.status !== 0) {
+        console.log(`(npm audit 退出码 ${auditResult.status}：以上为漏洞报告，仅作提示不阻塞发布)`);
+    }
     if (choice.value === 'full') {
         runRepoCommand(getNpmCommand(), ['test', '--', '--runInBand'], { stdio: 'inherit' });
         runRepoCommand(getNpmCommand(), ['run', 'docs:build'], { stdio: 'inherit' });

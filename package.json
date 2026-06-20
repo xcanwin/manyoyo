@@ -1,8 +1,8 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "5.10.7",
-    "imageVersion": "1.9.0-common",
-    "playwrightCliVersion": "0.1.1",
+    "version": "5.11.1",
+    "imageVersion": "1.9.1-common",
+    "playwrightCliVersion": "0.1.14",
     "description": "AI Agent CLI Security Sandbox for Docker and Podman",
     "keywords": [
         "manyoyo",
@@ -57,14 +57,14 @@
         "manyoyo.example.json"
     ],
     "dependencies": {
-        "@playwright/mcp": "0.0.68",
+        "@playwright/mcp": "0.0.76",
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/xterm": "^6.0.0",
-        "commander": "^14.0.3",
+        "commander": "^15.0.0",
         "json5": "^2.2.3",
-        "marked": "^17.0.5",
-        "playwright": "1.58.2",
-        "ws": "^8.20.0"
+        "marked": "^18.0.5",
+        "playwright": "1.61.0",
+        "ws": "^8.21.0"
     },
     "devDependencies": {
         "@codemirror/commands": "^6.10.3",
@@ -76,20 +76,20 @@
         "@codemirror/lang-python": "^6.2.1",
         "@codemirror/lang-yaml": "^6.1.3",
         "@codemirror/language": "^6.12.3",
-        "@codemirror/search": "^6.6.0",
+        "@codemirror/search": "^6.7.1",
         "@codemirror/state": "^6.6.0",
-        "@codemirror/view": "^6.41.0",
+        "@codemirror/view": "^6.43.1",
         "codemirror": "^6.0.2",
-        "jest": "^30.3.0",
+        "jest": "^30.4.2",
         "vitepress": "^1.6.4"
     },
     "overrides": {
         "esbuild": "^0.25.12",
         "glob": "^13.0.6",
-        "minimatch": "^10.2.2",
-        "postcss": "^8.5.10",
+        "minimatch": "^10.2.5",
+        "postcss": "^8.5.15",
         "test-exclude": "^8.0.0",
-        "vite": "^6.4.2"
+        "vite": "^6.4.3"
     },
     "jest": {
         "testMatch": [

@@ -4,6 +4,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { buildImage } = require('../lib/image-build');
 
+const archNode = process.arch === 'arm64' ? 'arm64' : 'x64';
+
 function parseImageVersionTag(tag) {
     const match = String(tag || '').match(/^(\d+\.\d+\.\d+)-([A-Za-z0-9][A-Za-z0-9_.-]*)$/);
     if (!match) return null;
@@ -28,7 +30,7 @@ function createTestRoot() {
 
     fs.writeFileSync(path.join(dockerDir, 'manyoyo.Dockerfile'), 'FROM scratch\n');
     fs.writeFileSync(path.join(dockerResDir, 'update-agents.sh'), '#!/usr/bin/env bash\n');
-    fs.writeFileSync(path.join(nodeCacheDir, 'node-v24.0.0-linux-x64.tar.gz'), 'cache');
+    fs.writeFileSync(path.join(nodeCacheDir, `node-v24.0.0-linux-${archNode}.tar.gz`), 'cache');
     fs.writeFileSync(path.join(cacheDir, '.timestamps.json'), JSON.stringify({
         'node/': new Date().toISOString()
     }));
@@ -411,7 +413,7 @@ describe('image-build with unified build and buildkit fallback', () => {
             runCmd: jest.fn((cmd, args) => {
                 if (cmd === 'curl') {
                     if (Array.isArray(args) && args.some(arg => String(arg).includes('SHASUMS256.txt'))) {
-                        return `${cacheHash} node-v24.0.0-linux-x64.tar.gz\n`;
+                        return `${cacheHash} node-v24.0.0-linux-${archNode}.tar.gz\n`;
                     }
                     return '';
                 }
@@ -449,6 +451,30 @@ describe('image-build with unified build and buildkit fallback', () => {
         ));
         expect(buildCall).toBeTruthy();
         expect(options.log).toHaveBeenCalledWith(expect.stringContaining('跳过 gopls 本地缓存预下载'));
+    });
+
+    test('jdtls 下载 URL 应使用与架构匹配的 alpine 目录', async () => {
+        const options = createBaseOptions({
+            imageVersionTag: '1.8.0-full',
+            runCmd: jest.fn((cmd) => {
+                if (cmd === 'go') {
+                    const err = new Error('spawnSync go ENOENT');
+                    err.code = 'ENOENT';
+                    throw err;
+                }
+                return '';
+            })
+        });
+
+        await buildImage(options);
+
+        const jdtlsCurl = options.runCmd.mock.calls.find(([cmd, args]) => (
+            cmd === 'curl' && Array.isArray(args) && args.some(arg => String(arg).includes('jdtls-'))
+        ));
+        expect(jdtlsCurl).toBeTruthy();
+        const url = jdtlsCurl[1].join(' ');
+        const expectedAlpineArch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
+        expect(url).toContain(`community/${expectedAlpineArch}/`);
     });
 
     test('docker image should include built-in playwright cli headless config assets', () => {
