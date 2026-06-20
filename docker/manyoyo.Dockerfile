@@ -11,6 +11,7 @@ COPY ./docker/cache/ /cache/
 
 RUN <<EOX
     # 确定架构
+    set -eu
     case "$TARGETARCH" in
         amd64) ARCH_NODE="x64"; ARCH_GO="amd64" ;;
         arm64) ARCH_NODE="arm64"; ARCH_GO="arm64" ;;
@@ -81,6 +82,7 @@ ENV LANG=C.UTF-8 \
 # 合并系统依赖与 Python 安装为单层，减少镜像体积
 RUN <<EOX
     # 配置 APT 镜像源
+    set -eu
     sed -i "s|http://[^/]*\.ubuntu\.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
     ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
@@ -135,6 +137,7 @@ ARG GIT_SSL_NO_VERIFY=false
 
 RUN <<EOX
     # 配置 node.js
+    set -eu
     npm config set registry=${NPM_REGISTRY}
 
     export GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY
@@ -143,6 +146,7 @@ RUN <<EOX
     npm install -g pyright typescript-language-server typescript
 
     # 安装 Claude CLI
+    # npm install -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli opencode-ai
     npm install -g @anthropic-ai/claude-code
     mkdir -p ~/.claude/plugins/marketplaces/
     cp /tmp/docker-res/claude/claude.json ~/.claude.json
@@ -172,13 +176,13 @@ RUN <<EOX
     rm -rf /tmp/openai-skills
     CODEX_INSTALLER="$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py"
     python3 "$CODEX_INSTALLER" --repo openai/skills --path \
-        skills/.curated/doc \
-        skills/.curated/spreadsheet \
-        skills/.curated/pdf \
         skills/.curated/security-best-practices \
         skills/.curated/security-threat-model
     python3 "$CODEX_INSTALLER" --repo anthropics/skills --path \
+        skills/docx \
+        skills/xlsx \
         skills/pptx \
+        skills/pdf \
         skills/theme-factory \
         skills/frontend-design \
         skills/canvas-design \
@@ -205,11 +209,10 @@ RUN <<EOX
     # 安装 Playwright CLI skills（不在镜像构建阶段下载浏览器）
     PLAYWRIGHT_CLI_INSTALL_DIR=/tmp/playwright-cli-install
     mkdir -p "$PLAYWRIGHT_CLI_INSTALL_DIR/.playwright"
-    echo '{"browser":{"browserName":"chromium","launchOptions":{"channel":"chromium"}}}' > "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json"
     cd "$PLAYWRIGHT_CLI_INSTALL_DIR"
     PLAYWRIGHT_CLI_VERSION=$(node -p "const pkg = require('/tmp/manyoyo-package.json'); const value = String(pkg.playwrightCliVersion || '').trim(); if (!value) { throw new Error('package.json.playwrightCliVersion is required'); } value")
     npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"
-    playwright-cli --config="${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json" install --skills
+    playwright-cli install --skills
     PLAYWRIGHT_CLI_SKILL_SOURCE="$PLAYWRIGHT_CLI_INSTALL_DIR/.claude/skills/playwright-cli"
     for target in ~/.claude/skills/playwright-cli ~/.codex/skills/playwright-cli ~/.gemini/skills/playwright-cli; do
         mkdir -p "$target"
@@ -225,14 +228,12 @@ RUN <<EOX
     rm -f /var/log/dpkg.log /var/log/bootstrap.log /var/lib/dpkg/status-old /var/cache/debconf/templates.dat-old
 EOX
 
-COPY ./docker/res/playwright/playwright-cli-wrapper.sh /usr/local/bin/playwright-cli
-RUN chmod +x /usr/local/bin/playwright-cli
-
 # 从 cache-stage 复制 JDT LSP 到最终位置，避免中转层残留
 COPY --from=cache-stage /opt/jdtls /root/.local/share/jdtls
 
 RUN <<EOX
     # 安装 java
+    set -eu
     case ",$TOOL," in *,full,*|*,java,*)
         apt-get update -y
         apt-get install -y --no-install-recommends openjdk-21-jdk maven
@@ -251,6 +252,7 @@ COPY --from=cache-stage /opt/gopls /usr/local/share/manyoyo-gopls
 
 RUN <<EOX
     # 安装 go
+    set -eu
     case ",$TOOL," in *,full,*|*,go,*)
         apt-get update -y
         apt-get install -y --no-install-recommends golang gcc
@@ -279,6 +281,7 @@ COPY ./docker/res/supervisor/s.conf /etc/supervisor/conf.d/s.conf
 
 RUN <<EOX
     # 清理
+    set -eu
     rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/go/pkg/mod/cache
 EOX
 

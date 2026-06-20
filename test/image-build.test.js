@@ -507,19 +507,16 @@ describe('image-build with unified build and buildkit fallback', () => {
         const dockerfile = fs.readFileSync(path.join(rootDir, 'docker', 'manyoyo.Dockerfile'), 'utf8');
         const configPath = path.join(rootDir, 'docker', 'res', 'playwright', 'cli-cont-headless.json');
         const initScriptPath = path.join(rootDir, 'docker', 'res', 'playwright', 'cli-cont-headless.init.js');
-        const wrapperPath = path.join(rootDir, 'docker', 'res', 'playwright', 'playwright-cli-wrapper.sh');
 
         expect(dockerfile).toContain('COPY ./docker/res/playwright/cli-cont-headless.init.js /app/config/cli-cont-headless.init.js');
         expect(dockerfile).toContain('COPY ./docker/res/playwright/cli-cont-headless.json /app/config/cli-cont-headless.json');
-        expect(dockerfile).toContain('COPY ./docker/res/playwright/playwright-cli-wrapper.sh /usr/local/bin/playwright-cli');
+        expect(dockerfile).not.toContain('playwright-cli-wrapper.sh');
         expect(fs.existsSync(configPath)).toBe(true);
         expect(fs.existsSync(initScriptPath)).toBe(true);
-        expect(fs.existsSync(wrapperPath)).toBe(true);
         expect(dockerfile).toContain('COPY ./package.json /tmp/manyoyo-package.json');
         expect(dockerfile).toContain('playwrightCliVersion');
         expect(dockerfile).toContain('npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"');
-        expect(dockerfile).toContain('echo \'{"browser":{"browserName":"chromium","launchOptions":{"channel":"chromium"}}}\' > "${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json"');
-        expect(dockerfile).toContain('playwright-cli --config="${PLAYWRIGHT_CLI_INSTALL_DIR}/.playwright/cli.config.json" install --skills');
+        expect(dockerfile).toContain('playwright-cli install --skills');
         expect(dockerfile).not.toContain('playwright install --with-deps chromium');
 
         const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -531,10 +528,6 @@ describe('image-build with unified build and buildkit fallback', () => {
         const initScript = fs.readFileSync(initScriptPath, 'utf8');
         expect(initScript).toContain("Object.defineProperty(navProto, 'platform'");
         expect(initScript).toContain('MacIntel');
-
-        const wrapper = fs.readFileSync(wrapperPath, 'utf8');
-        expect(wrapper).toContain('install-browser');
-        expect(wrapper).toContain('/cli.js');
     });
 
     test('docker image should clean known build caches and avoid tmp relay layers for language servers', () => {
