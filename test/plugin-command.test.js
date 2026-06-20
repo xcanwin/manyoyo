@@ -42,10 +42,10 @@ describe('manyoyo plugin commands', () => {
 
     test('playwright cli-add prints playwright-cli skill install commands', () => {
         const output = execSync(`node ${BIN_PATH} playwright cli-add`, { encoding: 'utf-8' });
-        expect(output).toContain('echo \'{"browser":{"browserName":"chromium","launchOptions":{"channel":"chromium"}}}\' > "$PLAYWRIGHT_CLI_INSTALL_DIR/.playwright/cli.config.json"');
+        expect(output).not.toContain('cli.config.json');
         expect(output).toContain(`npm install -g @playwright/cli@${PACKAGE_PLAYWRIGHT_CLI_VERSION}`);
         expect(output).toContain('playwright-cli install --skills');
-        expect(output).toContain('"channel":"chromium"');
+        expect(output).not.toContain('"channel":"chromium"');
         expect(output).toContain('~/.codex/skills/playwright-cli');
         expect(output).toContain('~/.gemini/skills/playwright-cli');
         expect(output).toContain('for target in ~/.claude/skills/playwright-cli ~/.codex/skills/playwright-cli ~/.gemini/skills/playwright-cli; do');
