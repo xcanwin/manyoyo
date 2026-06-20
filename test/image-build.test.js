@@ -477,6 +477,31 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(url).toContain(`community/${expectedAlpineArch}/`);
     });
 
+    test('jdtls 重打包时应剥离 macOS 扩展属性，避免 GNU tar 警告', async () => {
+        const options = createBaseOptions({
+            imageVersionTag: '1.8.0-full',
+            runCmd: jest.fn((cmd) => {
+                if (cmd === 'go') {
+                    const err = new Error('spawnSync go ENOENT');
+                    err.code = 'ENOENT';
+                    throw err;
+                }
+                return '';
+            })
+        });
+
+        await buildImage(options);
+
+        const repackCall = options.runCmd.mock.calls.find(([cmd, args]) => (
+            cmd === 'tar'
+            && Array.isArray(args)
+            && args.includes('-czf')
+            && args.some(arg => String(arg).includes('jdt-language-server-latest.tar.gz'))
+        ));
+        expect(repackCall).toBeTruthy();
+        expect(repackCall[1]).toContain('--no-xattrs');
+    });
+
     test('docker image should include built-in playwright cli headless config assets', () => {
         const rootDir = path.resolve(__dirname, '..');
         const dockerfile = fs.readFileSync(path.join(rootDir, 'docker', 'manyoyo.Dockerfile'), 'utf8');
