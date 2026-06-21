@@ -121,6 +121,11 @@ describe('manyoyo plugin commands', () => {
         expect(output).not.toContain('plugin playwright up mcp-host-headless');
         expect(output).not.toContain('playwright up host-headless');
     });
+
+    test('playwright ls includes dev-host-headed scene', () => {
+        const output = execSync(`node ${BIN_PATH} playwright ls`, { encoding: 'utf-8' });
+        expect(output).toContain('dev-host-headed');
+    });
 });
 
 describe('PlaywrightPlugin runtime filtering', () => {
@@ -171,7 +176,7 @@ describe('PlaywrightPlugin runtime filtering', () => {
             }
         });
 
-        expect(plugin.resolveTargets('all')).toEqual(['mcp-host-headless', 'mcp-host-headed', 'cli-host-headless', 'cli-host-headed']);
+        expect(plugin.resolveTargets('all')).toEqual(['mcp-host-headless', 'mcp-host-headed', 'cli-host-headless', 'cli-host-headed', 'dev-host-headed']);
     });
 
     test('enabled scenes works with runtime mixed', () => {
@@ -183,6 +188,16 @@ describe('PlaywrightPlugin runtime filtering', () => {
         });
 
         expect(plugin.resolveTargets('all')).toEqual(['mcp-cont-headless', 'cli-host-headed']);
+    });
+
+    test('cliSessionScene accepts dev-host-headed', () => {
+        const plugin = new PlaywrightPlugin({
+            globalConfig: {
+                cliSessionScene: 'dev-host-headed'
+            }
+        });
+
+        expect(plugin.config.cliSessionScene).toBe('dev-host-headed');
     });
 
     test('cont-headed non-up env should not require vnc password', () => {
@@ -432,6 +447,97 @@ describe('PlaywrightPlugin runtime filtering', () => {
                 }
             });
         } finally {
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('dev-host-headed cli session integration should read DevToolsActivePort for docker', () => {
+        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
+        try {
+            const activePortPath = path.join(tempHome, 'Library', 'Application Support', 'Google', 'Chrome', 'DevToolsActivePort');
+            fs.mkdirSync(path.dirname(activePortPath), { recursive: true });
+            fs.writeFileSync(activePortPath, '9222\n/devtools/browser/test-browser-id\n', 'utf8');
+
+            const plugin = new PlaywrightPlugin({
+                globalConfig: {
+                    homeDir: tempHome,
+                    runDir: tempRunDir,
+                    cliSessionScene: 'dev-host-headed'
+                }
+            });
+
+            const integration = plugin.buildCliSessionIntegration('docker');
+            expect(integration.envEntries).toContain('PLAYWRIGHT_MCP_CONFIG=/tmp/manyoyo-playwright/dev-host-headed.cli-attach.json');
+            expect(integration.envEntries).toContain('PW_CHROMIUM_ATTACH_TO_OTHER=1');
+            expect(integration.extraArgs).toEqual(['--add-host', 'host.docker.internal:host-gateway']);
+            expect(integration.volumeEntries).toEqual([
+                '--volume',
+                `${plugin.sceneCliAttachConfigPath('dev-host-headed')}:/tmp/manyoyo-playwright/dev-host-headed.cli-attach.json:ro`
+            ]);
+
+            const attachConfig = JSON.parse(fs.readFileSync(plugin.sceneCliAttachConfigPath('dev-host-headed'), 'utf8'));
+            expect(attachConfig).toEqual({
+                browser: {
+                    cdpEndpoint: 'ws://host.docker.internal:9222/devtools/browser/test-browser-id',
+                    cdpHeaders: {
+                        Host: '127.0.0.1:9222'
+                    },
+                    cdpTimeout: 60000
+                }
+            });
+        } finally {
+            fs.rmSync(tempHome, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('dev-host-headed cli session integration should use podman host alias', () => {
+        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
+        try {
+            const activePortPath = path.join(tempHome, 'Library', 'Application Support', 'Google', 'Chrome', 'DevToolsActivePort');
+            fs.mkdirSync(path.dirname(activePortPath), { recursive: true });
+            fs.writeFileSync(activePortPath, '9223\n/devtools/browser/podman-browser-id\n', 'utf8');
+
+            const plugin = new PlaywrightPlugin({
+                globalConfig: {
+                    homeDir: tempHome,
+                    runDir: tempRunDir,
+                    cliSessionScene: 'dev-host-headed'
+                }
+            });
+
+            const integration = plugin.buildCliSessionIntegration('podman');
+            const attachConfig = JSON.parse(fs.readFileSync(plugin.sceneCliAttachConfigPath('dev-host-headed'), 'utf8'));
+            expect(integration.extraArgs).toEqual([]);
+            expect(attachConfig.browser.cdpEndpoint).toBe('ws://host.containers.internal:9223/devtools/browser/podman-browser-id');
+            expect(attachConfig.browser.cdpHeaders).toEqual({ Host: '127.0.0.1:9223' });
+        } finally {
+            fs.rmSync(tempHome, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('dev-host-headed cli session integration should reject invalid DevToolsActivePort', () => {
+        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
+        try {
+            const activePortPath = path.join(tempHome, 'Library', 'Application Support', 'Google', 'Chrome', 'DevToolsActivePort');
+            fs.mkdirSync(path.dirname(activePortPath), { recursive: true });
+            fs.writeFileSync(activePortPath, '9222\n/devtools/page/not-browser\n', 'utf8');
+
+            const plugin = new PlaywrightPlugin({
+                globalConfig: {
+                    homeDir: tempHome,
+                    runDir: tempRunDir,
+                    cliSessionScene: 'dev-host-headed'
+                }
+            });
+
+            expect(() => plugin.buildCliSessionIntegration('docker')).toThrow(/DevToolsActivePort/);
+        } finally {
+            fs.rmSync(tempHome, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });
         }
     });
@@ -762,6 +868,38 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             expect(output).not.toContain('[tip] 如果希望容器内 manyoyo run 自动附着到当前 CLI 宿主场景');
         } finally {
             fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('dev-host-headed up should validate DevToolsActivePort without launching a host process', async () => {
+        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
+        const stdout = { write: jest.fn() };
+        const plugin = new PlaywrightPlugin({
+            stdout,
+            globalConfig: {
+                homeDir: tempHome,
+                runDir: tempRunDir,
+                runtime: 'host'
+            }
+        });
+
+        const activePortPath = path.join(tempHome, 'Library', 'Application Support', 'Google', 'Chrome', 'DevToolsActivePort');
+        fs.mkdirSync(path.dirname(activePortPath), { recursive: true });
+        fs.writeFileSync(activePortPath, '9222\n/devtools/browser/up-browser-id\n', 'utf8');
+        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
+        plugin.spawnHostProcess = jest.fn();
+
+        try {
+            const rc = await plugin.runOnScene('up', 'dev-host-headed');
+            expect(rc).toBe(0);
+            expect(plugin.runCmd).not.toHaveBeenCalled();
+            expect(plugin.spawnHostProcess).not.toHaveBeenCalled();
+            const output = stdout.write.mock.calls.map(args => args[0]).join('');
+            expect(output).toContain('[up] dev-host-headed ready via DevToolsActivePort');
+        } finally {
+            fs.rmSync(tempHome, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });
         }
     });

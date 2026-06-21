@@ -229,13 +229,15 @@ MANYOYO 支持两种配置文件：
     "plugins": {
         "playwright": {
             "runtime": "mixed",  // mixed | container | host
-            "enabledScenes": ["mcp-cont-headless", "mcp-cont-headed", "mcp-host-headless", "mcp-host-headed", "cli-host-headless", "cli-host-headed"],
+            "enabledScenes": ["mcp-cont-headless", "mcp-cont-headed", "mcp-host-headless", "mcp-host-headed", "cli-host-headless", "cli-host-headed", "dev-host-headed"],
             "cliSessionScene": "cli-host-headless",
             "mcpDefaultHost": "host.docker.internal",
             "vncPasswordEnvKey": "VNC_PASSWORD",
             "extensionProdversion": "132.0.0.0",
             "navigatorPlatform": "MacIntel",
             "disableWebRTC": false,
+            "devtoolsActivePortPath": "",
+            "devtoolsCdpTimeout": 60000,
             "ports": {
                 "mcpContHeadless": 8931,
                 "mcpContHeaded": 8932,
@@ -255,6 +257,9 @@ MANYOYO 支持两种配置文件：
 - `manyoyo playwright ext-download` 会下载扩展到 `~/.manyoyo/plugin/playwright/extensions/`（临时目录会自动清理）。
 - `manyoyo playwright up <scene> --ext-path <path> --ext-name <name>` 可为任意场景追加扩展目录（两者均可多次使用，最终都会转为 Playwright 的扩展加载参数）。
 - `cliSessionScene` 用于指定 `my run` 默认注入的 `playwright-cli` 宿主场景；启动对应 `cli-host-*` 场景后，容器内的 `playwright-cli open` 会自动附着到宿主浏览器。
+- `cliSessionScene` 也可设为 `dev-host-headed`，用于附着宿主机正在运行的正式 Chrome。需先在 Chrome 的 `chrome://inspect/#remote-debugging` 启用远程调试，并确保运行 manyoyo 的环境能读取 `DevToolsActivePort`。
+- `devtoolsActivePortPath` 留空时会自动查找常见 Chrome/Chromium/Brave 路径；如果 manyoyo 在容器内运行，可把宿主文件挂载到 `/root/Library/Application Support/Google/Chrome/DevToolsActivePort` 或显式配置该路径。
+- `dev-host-headed` 会控制真实浏览器实例，可能访问已有登录态、Cookie 与打开页面；仅在可信本机环境使用。
 - 启动 `cli-host-headed` 时会自动创建 `~/.manyoyo/.cache/ms-playwright`；如需让容器内 `playwright-cli` 复用宿主缓存，可把 `~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright` 加入 `volumes`。
 - `navigatorPlatform` 用于注入 `navigator.platform`（默认 `MacIntel`，与内置 UA 保持一致）。
 - `disableWebRTC` 设为 `true` 时会附加禁用 WebRTC 的启动参数并注入脚本屏蔽相关 API。

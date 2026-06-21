@@ -229,13 +229,15 @@ Mode descriptions:
     "plugins": {
         "playwright": {
             "runtime": "mixed",  // mixed | container | host
-            "enabledScenes": ["mcp-cont-headless", "mcp-cont-headed", "mcp-host-headless", "mcp-host-headed", "cli-host-headless", "cli-host-headed"],
+            "enabledScenes": ["mcp-cont-headless", "mcp-cont-headed", "mcp-host-headless", "mcp-host-headed", "cli-host-headless", "cli-host-headed", "dev-host-headed"],
             "cliSessionScene": "cli-host-headless",
             "mcpDefaultHost": "host.docker.internal",
             "vncPasswordEnvKey": "VNC_PASSWORD",
             "extensionProdversion": "132.0.0.0",
             "navigatorPlatform": "MacIntel",
             "disableWebRTC": false,
+            "devtoolsActivePortPath": "",
+            "devtoolsCdpTimeout": 60000,
             "ports": {
                 "mcpContHeadless": 8931,
                 "mcpContHeaded": 8932,
@@ -255,6 +257,9 @@ Mode descriptions:
 - `manyoyo playwright ext-download` downloads extensions into `~/.manyoyo/plugin/playwright/extensions/` (temp files are auto-cleaned).
 - `manyoyo playwright up <scene> --ext-path <path> --ext-name <name>` appends extension directories for any scene (both options can be repeated and are converted to Playwright extension launch args).
 - `cliSessionScene` selects the default host `playwright-cli` scene injected into `my run`; once the matching `cli-host-*` scene is started, `playwright-cli open` inside the container attaches to the host browser automatically.
+- `cliSessionScene` can also be `dev-host-headed` to attach to the host machine's running stable Chrome. Enable remote debugging in Chrome at `chrome://inspect/#remote-debugging` first, and make sure the environment running manyoyo can read `DevToolsActivePort`.
+- When `devtoolsActivePortPath` is empty, manyoyo checks common Chrome/Chromium/Brave locations. If manyoyo runs inside a container, mount the host file to `/root/Library/Application Support/Google/Chrome/DevToolsActivePort` or set this path explicitly.
+- `dev-host-headed` controls the real browser instance and may access existing login state, cookies, and open pages. Use it only in a trusted local environment.
 - Starting `cli-host-headed` now auto-creates `~/.manyoyo/.cache/ms-playwright`; if you want container-side `playwright-cli` to reuse the host cache, mount `~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright` in `volumes`.
 - `navigatorPlatform` injects `navigator.platform` (default `MacIntel` to match the built-in UA profile).
 - Set `disableWebRTC` to `true` to append WebRTC-disable launch args and inject a script that blocks WebRTC APIs.

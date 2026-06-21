@@ -129,6 +129,7 @@ manyoyo playwright ls
 manyoyo playwright up mcp-host-headless
 manyoyo plugin playwright up mcp-host-headless
 manyoyo playwright up cli-host-headless
+manyoyo playwright up dev-host-headed
 manyoyo playwright mcp-add --host localhost
 ```
 

@@ -50,7 +50,7 @@
             // mixed: 支持容器+宿主机；container: 仅容器；host: 仅宿主机
             "runtime": "mixed",
             // 启用场景（可按需裁剪）
-            "enabledScenes": ["mcp-cont-headless", "mcp-cont-headed", "mcp-host-headless", "mcp-host-headed", "cli-host-headless", "cli-host-headed"],
+            "enabledScenes": ["mcp-cont-headless", "mcp-cont-headed", "mcp-host-headless", "mcp-host-headed", "cli-host-headless", "cli-host-headed", "dev-host-headed"],
             // my run 默认注入的 playwright-cli 宿主场景
             "cliSessionScene": "cli-host-headless",
             // mcp-add 默认 host（可改为 localhost / 127.0.0.1）
@@ -63,6 +63,10 @@
             "navigatorPlatform": "MacIntel",
             // 是否禁用 WebRTC（默认 false）
             "disableWebRTC": false,
+            // dev-host-headed 读取的 Chrome DevToolsActivePort 文件；留空时自动探测常见路径
+            "devtoolsActivePortPath": "",
+            // dev-host-headed 连接 Chrome CDP 的超时时间（毫秒）
+            "devtoolsCdpTimeout": 60000,
             "ports": {
                 "mcpContHeadless": 8931,
                 "mcpContHeaded": 8932,

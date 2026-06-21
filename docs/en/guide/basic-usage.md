@@ -130,9 +130,12 @@ manyoyo playwright logs mcp-host-headless
 manyoyo playwright mcp-add --host localhost
 manyoyo playwright cli-add
 manyoyo playwright up cli-host-headless
+manyoyo playwright up dev-host-headed
 manyoyo run -r codex
 ```
 
 Starting `cli-host-headed` auto-creates `~/.manyoyo/.cache/ms-playwright`; if you want container-side `playwright-cli` to reuse the host cache, mount `~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright` in the config.
+
+To let container-side `playwright-cli` control the host machine's running stable Chrome, set `plugins.playwright.cliSessionScene` to `dev-host-headed` and enable remote debugging in Chrome at `chrome://inspect/#remote-debugging` first. This mode controls the real browser instance and may access existing login state and cookies, so use it only in a trusted local environment.
 
 For deeper details, see [Configuration](../configuration/README.md) and [CLI Reference](../reference/cli-options.md).

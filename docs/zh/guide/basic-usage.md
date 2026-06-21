@@ -130,9 +130,12 @@ manyoyo playwright logs mcp-host-headless
 manyoyo playwright mcp-add --host localhost
 manyoyo playwright cli-add
 manyoyo playwright up cli-host-headless
+manyoyo playwright up dev-host-headed
 manyoyo run -r codex
 ```
 
 启动 `cli-host-headed` 时会自动创建 `~/.manyoyo/.cache/ms-playwright`；如需让容器内 `playwright-cli` 复用宿主缓存，可在配置里挂载 `~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright`。
+
+如需让容器内 `playwright-cli` 控制宿主机正在运行的正式 Chrome，可将 `plugins.playwright.cliSessionScene` 设为 `dev-host-headed`，并先在 Chrome 的 `chrome://inspect/#remote-debugging` 启用远程调试。该模式会控制真实浏览器实例，可能访问已有登录态与 Cookie，仅建议在可信本机环境使用。
 
 更多配置细节见[配置系统](../configuration/README.md)与[命令参考](../reference/cli-options.md)。
