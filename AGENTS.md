@@ -26,12 +26,14 @@
 - `lib/agent-resume.js`: Agent 程序识别、resume 参数推断与提示词命令模板生成。
 - `lib/codex-output.js`: Codex JSONL 输出解析与最终消息提取，供 Web 与发布脚本复用。
 - `lib/global-config.js` + `lib/init-config.js`: 全局配置读写、imageVersion 同步与 `init` 初始化配置逻辑。
+- `lib/runtime-resolver.js` + `lib/runtime-normalizers.js` + `lib/worktrees.js`: 运行配置合并、参数归一化与 Git worktrees 挂载推导。
+- `lib/json5-text-edit.js`: JSON5 配置文本的局部定位与替换，供全局配置与 Web 配置编辑复用。
 - `lib/log-path.js` + `lib/serve-log.js`: 日志路径分目录规则、`serve` 日志脱敏与进程快照工具。
 - `lib/dev-release.js` + `scripts/dev-release.js`: 维护者发布向导与版本建议、提交文案清洗、标签选择等辅助逻辑。
 - `lib/plugin/index.js` + `lib/plugin/playwright.js`: 插件命令分发与 Playwright 插件主逻辑（场景配置、容器/宿主启动链路）。
 - `lib/plugin/playwright-assets/`: Playwright 容器场景 compose 与镜像资源模板。
 - `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
-- `lib/web/frontend/`: 网页前端静态资源（`app/login/markdown` 的 `html/css/js`）。
+- `lib/web/frontend/`: 网页前端静态资源（`app/login/markdown/file-browser/CodeMirror` 的 `html/css/js`）。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docker/res/`: 各 Agent 默认配置、Playwright 资源与 supervisor 模板。
@@ -54,13 +56,14 @@
 - `npm test` 也会执行入口文档示例版本检查（当前覆盖 `README.md`、`quick-start`、`basic-usage`、`cli-options`），要求其示例版本与 `package.json.imageVersion` 保持同一主版本号。
 - `npm run test:unit`: 仅跑 `test/` 下的单元测试。
 - `npm run lint`: 占位的 lint 检查（不做风格约束）。
+- `npm run build:web-editor`: 从 `lib/web/frontend/codemirror-entry.js` 打包生成 `lib/web/frontend/codemirror.bundle.js`；修改 CodeMirror 编辑器入口后需执行并提交 bundle。
 - `npm run docs:dev|build|preview`: 启动/构建/预览文档站点。提交前或文档校验时先执行 `npm ci --include=optional`，再执行 `npm run docs:build`（不要并行）。
 - `npm install -g .` / `npm link` / `npm run install-link`: 本地全局安装或软链 CLI。
 
 ## 编码风格与命名约定
 - Node.js >= 22，CommonJS `require`/`module.exports`，四空格缩进，分号结尾。
 - 不使用 ES Modules（`import` / `export`）。
-- 选项与默认值集中在 `bin/manyoyo.js`；新增功能靠近相关分区。
+- CLI 选项声明靠近 `bin/manyoyo.js`；运行配置合并与归一化优先维护 `lib/runtime-resolver.js`、`lib/runtime-normalizers.js`，worktrees 逻辑维护 `lib/worktrees.js`。
 - 命名清晰简短；测试文件遵循 `*.test.js`。
 - 优先小步改动，避免无关重构，保持改动小、范围清晰。
 

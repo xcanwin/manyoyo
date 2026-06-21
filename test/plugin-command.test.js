@@ -441,6 +441,7 @@ describe('PlaywrightPlugin runtime filtering', () => {
             // remoteEndpoint 存在时 playwright-cli 默认 isolated=false 会走 contexts()[0] 并报
             // "unable to connect to a browser that does not have any contexts"。
             expect(attachConfig).toEqual({
+                outputDir: '/tmp/.playwright-cli',
                 browser: {
                     remoteEndpoint: 'ws://host.docker.internal:8935/manyoyo-test',
                     isolated: true
@@ -478,6 +479,7 @@ describe('PlaywrightPlugin runtime filtering', () => {
 
             const attachConfig = JSON.parse(fs.readFileSync(plugin.sceneCliAttachConfigPath('dev-host-headed'), 'utf8'));
             expect(attachConfig).toEqual({
+                outputDir: '/tmp/.playwright-cli',
                 browser: {
                     cdpEndpoint: 'ws://host.docker.internal:9222/devtools/browser/test-browser-id',
                     cdpHeaders: {
@@ -511,6 +513,7 @@ describe('PlaywrightPlugin runtime filtering', () => {
             const integration = plugin.buildCliSessionIntegration('podman');
             const attachConfig = JSON.parse(fs.readFileSync(plugin.sceneCliAttachConfigPath('dev-host-headed'), 'utf8'));
             expect(integration.extraArgs).toEqual([]);
+            expect(attachConfig.outputDir).toBe('/tmp/.playwright-cli');
             expect(attachConfig.browser.cdpEndpoint).toBe('ws://host.containers.internal:9223/devtools/browser/podman-browser-id');
             expect(attachConfig.browser.cdpHeaders).toEqual({ Host: '127.0.0.1:9223' });
         } finally {
