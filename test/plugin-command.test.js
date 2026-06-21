@@ -27,6 +27,7 @@ function withTempHome(configObj, runner) {
 describe('manyoyo plugin commands', () => {
     test('playwright mcp-add prints scene endpoints', () => {
         const output = execSync(`node ${BIN_PATH} playwright mcp-add --host localhost`, { encoding: 'utf-8' });
+        expect(output.startsWith('# 在容器中执行\n')).toBe(true);
         expect(output).toContain('http://localhost:8931/mcp');
         expect(output).toContain('http://localhost:8932/mcp');
         expect(output).toContain('http://localhost:8933/mcp');
@@ -42,6 +43,7 @@ describe('manyoyo plugin commands', () => {
 
     test('playwright cli-add prints playwright-cli skill install commands', () => {
         const output = execSync(`node ${BIN_PATH} playwright cli-add`, { encoding: 'utf-8' });
+        expect(output.startsWith('# 在宿主机中执行\n')).toBe(true);
         expect(output).not.toContain('cli.config.json');
         expect(output).toContain(`npm install -g @playwright/cli@${PACKAGE_PLAYWRIGHT_CLI_VERSION}`);
         expect(output).toContain('playwright-cli install --skills');
@@ -875,7 +877,7 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         }
     });
 
-    test('dev-host-headed up should validate DevToolsActivePort without launching a host process', async () => {
+    test('dev-host-headed up should open Chrome debugging page and print setup tip', async () => {
         const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
         const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
         const stdout = { write: jest.fn() };
@@ -892,15 +894,58 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         fs.mkdirSync(path.dirname(activePortPath), { recursive: true });
         fs.writeFileSync(activePortPath, '9222\n/devtools/browser/up-browser-id\n', 'utf8');
         plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
+        plugin.portReady = jest.fn(async () => true);
         plugin.spawnHostProcess = jest.fn();
 
         try {
             const rc = await plugin.runOnScene('up', 'dev-host-headed');
             expect(rc).toBe(0);
-            expect(plugin.runCmd).not.toHaveBeenCalled();
+            expect(plugin.runCmd).toHaveBeenCalledWith(
+                expect.arrayContaining(['chrome://inspect/#remote-debugging']),
+                expect.objectContaining({ check: false, captureOutput: true })
+            );
             expect(plugin.spawnHostProcess).not.toHaveBeenCalled();
             const output = stdout.write.mock.calls.map(args => args[0]).join('');
+            expect(output.indexOf('[up] dev-host-headed ready via DevToolsActivePort')).toBeLessThan(output.indexOf('[tip] 已尝试用 Chrome 打开 chrome://inspect/#remote-debugging'));
+            expect(output).toContain('[tip] 已尝试用 Chrome 打开 chrome://inspect/#remote-debugging');
+            expect(output).toContain('请在页面中确认 remote debugging 相关勾选项已启用');
+            expect(output).toContain('[tip] 如果希望容器内 manyoyo run 自动附着到宿主机正在运行的 Chrome');
+            expect(output).toContain('~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright');
+            expect(output).toContain('~/Library/Application Support/Google/Chrome/DevToolsActivePort:/root/Library/Application Support/Google/Chrome/DevToolsActivePort');
+            expect(output).toContain('"cliSessionScene": "dev-host-headed"');
             expect(output).toContain('[up] dev-host-headed ready via DevToolsActivePort');
+        } finally {
+            fs.rmSync(tempHome, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('dev-host-headed up should fail when DevToolsActivePort port is not reachable', async () => {
+        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
+        const stdout = { write: jest.fn() };
+        const stderr = { write: jest.fn() };
+        const plugin = new PlaywrightPlugin({
+            stdout,
+            stderr,
+            globalConfig: {
+                homeDir: tempHome,
+                runDir: tempRunDir,
+                runtime: 'host'
+            }
+        });
+
+        const activePortPath = path.join(tempHome, 'Library', 'Application Support', 'Google', 'Chrome', 'DevToolsActivePort');
+        fs.mkdirSync(path.dirname(activePortPath), { recursive: true });
+        fs.writeFileSync(activePortPath, '9222\n/devtools/browser/stale-browser-id\n', 'utf8');
+        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
+        plugin.portReady = jest.fn(async () => false);
+
+        try {
+            const rc = await plugin.runOnScene('up', 'dev-host-headed');
+            expect(rc).toBe(1);
+            const output = stderr.write.mock.calls.map(args => args[0]).join('');
+            expect(output).toContain('DevToolsActivePort 指向 127.0.0.1:9222，但该端口不可连接');
         } finally {
             fs.rmSync(tempHome, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });
