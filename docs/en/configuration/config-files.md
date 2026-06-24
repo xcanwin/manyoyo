@@ -257,7 +257,8 @@ Mode descriptions:
 - `manyoyo playwright ext-download` downloads extensions into `~/.manyoyo/plugin/playwright/extensions/` (temp files are auto-cleaned).
 - `manyoyo playwright up <scene> --ext-path <path> --ext-name <name>` appends extension directories for any scene (both options can be repeated and are converted to Playwright extension launch args).
 - `cliSessionScene` selects the default host `playwright-cli` scene injected into `my run`; once the matching `cli-host-*` scene is started, `playwright-cli open` inside the container attaches to the host browser automatically.
-- `cliSessionScene` can also be `dev-host-headed` to attach to the host machine's running stable Chrome. Enable remote debugging in Chrome at `chrome://inspect/#remote-debugging` first, and make sure the environment running manyoyo can read `DevToolsActivePort`.
+- Host-side agents controlling host Chrome: enable remote debugging in Chrome at `chrome://inspect/#remote-debugging`, then run `manyoyo playwright up dev-host-headed`; the command writes a host-side `PLAYWRIGHT_MCP_CONFIG` and prints host launch examples.
+- Container-side agents controlling host Chrome: set `cliSessionScene` to `dev-host-headed` and mount `DevToolsActivePort`; `my run` injects the container-side attach configuration automatically.
 - When `devtoolsActivePortPath` is empty, manyoyo checks common Chrome/Chromium/Brave locations. If manyoyo runs inside a container, mount the host file to `/root/Library/Application Support/Google/Chrome/DevToolsActivePort` or set this path explicitly.
 - `dev-host-headed` controls the real browser instance and may access existing login state, cookies, and open pages. Use it only in a trusted local environment.
 - Starting `cli-host-headed` now auto-creates `~/.manyoyo/.cache/ms-playwright`; if you want container-side `playwright-cli` to reuse the host cache, mount `~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright` in `volumes`.

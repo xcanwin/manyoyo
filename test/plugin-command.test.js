@@ -471,8 +471,9 @@ describe('PlaywrightPlugin runtime filtering', () => {
             });
 
             const integration = plugin.buildCliSessionIntegration('docker');
-            expect(integration.envEntries).toContain('PLAYWRIGHT_MCP_CONFIG=/tmp/manyoyo-playwright/dev-host-headed.cli-attach.json');
-            expect(integration.envEntries).toContain('PW_CHROMIUM_ATTACH_TO_OTHER=1');
+            expect(integration.envEntries).toEqual([
+                'PLAYWRIGHT_MCP_CONFIG=/tmp/manyoyo-playwright/dev-host-headed.cli-attach.json'
+            ]);
             expect(integration.extraArgs).toEqual(['--add-host', 'host.docker.internal:host-gateway']);
             expect(integration.volumeEntries).toEqual([
                 '--volume',
@@ -843,13 +844,15 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
         }
     });
 
-    test('cli-host-headed should not remind cliSessionScene when config already aligned', async () => {
+    test('cli-host-headed should remind when cliSessionScene aligned but cache volume is missing', async () => {
+        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-home-'));
         const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
         const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
         const stdout = { write: jest.fn() };
         const plugin = new PlaywrightPlugin({
             stdout,
             globalConfig: {
+                homeDir: tempHome,
                 configDir: tempConfigDir,
                 runDir: tempRunDir,
                 runtime: 'host',
@@ -870,8 +873,52 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             const rc = await plugin.startHost('cli-host-headed');
             expect(rc).toBe(0);
             const output = stdout.write.mock.calls.map(args => args[0]).join('');
+            expect(output).toContain('[tip] 如果希望容器内 manyoyo run 自动附着到当前 CLI 宿主场景');
+            expect(output).toContain('~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright');
+        } finally {
+            fs.rmSync(tempHome, { recursive: true, force: true });
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('cli-host-headed should not remind cliSessionScene when config already aligned', async () => {
+        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-home-'));
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const stdout = { write: jest.fn() };
+        const plugin = new PlaywrightPlugin({
+            stdout,
+            globalConfig: {
+                homeDir: tempHome,
+                configDir: tempConfigDir,
+                runDir: tempRunDir,
+                runtime: 'host',
+                cliSessionScene: 'cli-host-headed'
+            },
+            rootGlobalConfig: {
+                volumes: [
+                    '~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright'
+                ]
+            }
+        });
+
+        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
+        plugin.hostScenePids = jest.fn(() => []);
+        plugin.portReady = jest.fn(async () => false);
+        plugin.waitForPort = jest.fn(async () => true);
+        plugin.waitForHostPids = jest.fn(async () => [12345]);
+        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
+        plugin.playwrightBinPath = jest.fn(() => '/mock/bin/playwright-cli-host');
+        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
+
+        try {
+            const rc = await plugin.startHost('cli-host-headed');
+            expect(rc).toBe(0);
+            const output = stdout.write.mock.calls.map(args => args[0]).join('');
             expect(output).not.toContain('[tip] 如果希望容器内 manyoyo run 自动附着到当前 CLI 宿主场景');
         } finally {
+            fs.rmSync(tempHome, { recursive: true, force: true });
             fs.rmSync(tempConfigDir, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });
         }
@@ -879,12 +926,14 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
 
     test('dev-host-headed up should open Chrome debugging page and print setup tip', async () => {
         const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
+        const tempConfigDir = path.join(tempHome, '.manyoyo', 'plugin', 'playwright', 'config');
         const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
         const stdout = { write: jest.fn() };
         const plugin = new PlaywrightPlugin({
             stdout,
             globalConfig: {
                 homeDir: tempHome,
+                configDir: tempConfigDir,
                 runDir: tempRunDir,
                 runtime: 'host'
             }
@@ -906,14 +955,33 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             );
             expect(plugin.spawnHostProcess).not.toHaveBeenCalled();
             const output = stdout.write.mock.calls.map(args => args[0]).join('');
-            expect(output.indexOf('[up] dev-host-headed ready via DevToolsActivePort')).toBeLessThan(output.indexOf('[tip] 已尝试用 Chrome 打开 chrome://inspect/#remote-debugging'));
-            expect(output).toContain('[tip] 已尝试用 Chrome 打开 chrome://inspect/#remote-debugging');
-            expect(output).toContain('请在页面中确认 remote debugging 相关勾选项已启用');
-            expect(output).toContain('[tip] 如果希望容器内 manyoyo run 自动附着到宿主机正在运行的 Chrome');
-            expect(output).toContain('~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright');
-            expect(output).toContain('~/Library/Application Support/Google/Chrome/DevToolsActivePort:/root/Library/Application Support/Google/Chrome/DevToolsActivePort');
-            expect(output).toContain('"cliSessionScene": "dev-host-headed"');
+            expect(output.indexOf('[up] dev-host-headed ready via DevToolsActivePort')).toBeLessThan(output.indexOf('[tip] 已尝试打开 chrome://inspect/#remote-debugging'));
+            expect(output.indexOf('[tip] 已尝试打开 chrome://inspect/#remote-debugging')).toBeLessThan(output.indexOf('若用容器 Agent 操作宿主机浏览器，在宿主机执行:'));
+            expect(output.indexOf('若用容器 Agent 操作宿主机浏览器，在宿主机执行:')).toBeLessThan(output.indexOf('若用宿主机 Agent 操作宿主机浏览器，在宿主机执行:'));
+            expect(output).toContain('[tip] 已尝试打开 chrome://inspect/#remote-debugging');
+            expect(output).toContain('请确认 remote debugging 已启用');
+            expect(output).toContain('\n\n若用容器 Agent 操作宿主机浏览器，在宿主机执行:\n');
+            expect(output).toContain('my run -r claude');
+            expect(output).toContain('my run -r codex');
+            expect(output).toContain('my run -r gemini');
+            expect(output).toContain('\n\n若用宿主机 Agent 操作宿主机浏览器，在宿主机执行:\n');
+            expect(output).toContain('PLAYWRIGHT_MCP_CONFIG=~/.manyoyo/plugin/playwright/config/dev-host-headed.json claude');
+            expect(output).toContain('PLAYWRIGHT_MCP_CONFIG=~/.manyoyo/plugin/playwright/config/dev-host-headed.json codex');
+            expect(output).toContain('PLAYWRIGHT_MCP_CONFIG=~/.manyoyo/plugin/playwright/config/dev-host-headed.json gemini');
+            expect(output).not.toContain('"volumes": [');
+            expect(output).not.toContain('"cliSessionScene": "dev-host-headed"');
             expect(output).toContain('[up] dev-host-headed ready via DevToolsActivePort');
+            const hostConfig = JSON.parse(fs.readFileSync(plugin.sceneConfigPath('dev-host-headed'), 'utf8'));
+            expect(hostConfig).toEqual({
+                outputDir: '/tmp/.playwright-cli',
+                browser: {
+                    cdpEndpoint: 'ws://127.0.0.1:9222/devtools/browser/up-browser-id',
+                    cdpHeaders: {
+                        Host: '127.0.0.1:9222'
+                    },
+                    cdpTimeout: 60000
+                }
+            });
         } finally {
             fs.rmSync(tempHome, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });
@@ -948,6 +1016,31 @@ describe('PlaywrightPlugin first-run bootstrap', () => {
             expect(output).toContain('DevToolsActivePort 指向 127.0.0.1:9222，但该端口不可连接');
         } finally {
             fs.rmSync(tempHome, { recursive: true, force: true });
+            fs.rmSync(tempRunDir, { recursive: true, force: true });
+        }
+    });
+
+    test('stopDevHost should remove generated host attach config', () => {
+        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
+        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
+        const plugin = new PlaywrightPlugin({
+            globalConfig: {
+                configDir: tempConfigDir,
+                runDir: tempRunDir,
+                runtime: 'host'
+            }
+        });
+
+        fs.writeFileSync(plugin.sceneConfigPath('dev-host-headed'), '{"browser":{"cdpEndpoint":"ws://127.0.0.1:9222/x"}}\n', 'utf8');
+        fs.writeFileSync(plugin.sceneCliAttachConfigPath('dev-host-headed'), '{"browser":{"cdpEndpoint":"ws://host.docker.internal:9222/x"}}\n', 'utf8');
+
+        try {
+            const rc = plugin.stopDevHost('dev-host-headed');
+            expect(rc).toBe(0);
+            expect(fs.existsSync(plugin.sceneConfigPath('dev-host-headed'))).toBe(false);
+            expect(fs.existsSync(plugin.sceneCliAttachConfigPath('dev-host-headed'))).toBe(false);
+        } finally {
+            fs.rmSync(tempConfigDir, { recursive: true, force: true });
             fs.rmSync(tempRunDir, { recursive: true, force: true });
         }
     });
