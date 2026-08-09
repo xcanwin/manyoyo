@@ -32,6 +32,7 @@ echo "[manyoyo] Agent CLI versions before update:"
 print_agent_versions
 
 if [ "${#update_packages[@]}" -gt 0 ]; then
+    npm config set allow-scripts=@anthropic-ai/claude-code,@openai/codex,@google/gemini-cli,opencode-ai,@playwright/cli,pyright,typescript-language-server,typescript --location=user
     npm_config_update_notifier=false npm install -g npm@latest "${update_packages[@]}"
 else
     echo "[manyoyo] No existing Agent CLI found; skip npm install."
