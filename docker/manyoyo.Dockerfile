@@ -139,6 +139,7 @@ RUN <<EOX
     # 配置 node.js
     set -eu
     npm config set registry=${NPM_REGISTRY}
+    npm install -g npm
     npm config set allow-scripts=@anthropic-ai/claude-code,@openai/codex,@google/gemini-cli,opencode-ai,@playwright/cli,pyright,typescript-language-server,typescript --location=user
 
     export GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY
