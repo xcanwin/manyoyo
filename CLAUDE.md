@@ -25,16 +25,27 @@ lib/
   image-build.js        # prepareBuildCache / buildImage（含缓存管理）
   agent-resume.js       # 各 agent 会话恢复参数与 prompt 命令模板
   init-config.js        # AI agent 初始化配置
+  global-config.js      # ~/.manyoyo/manyoyo.json 读写与 imageVersion 同步
+  runtime-resolver.js   # 运行配置四层合并（CLI > runs > 全局 > 默认）
+  runtime-normalizers.js# parseEnvEntry / normalizeVolume / 路径归一
+  worktrees.js          # Git worktrees 检测与挂载推导（--wt / --wtr）
+  json5-text-edit.js    # JSON5 局部定位替换，供全局配置与 Web 配置编辑复用
+  serve-log.js          # serve 日志脱敏、进程快照
+  log-path.js           # 日志分目录规则
+  codex-output.js       # Codex JSONL 输出解析
+  dev-release.js        # 发布向导版本建议与提交文案清洗
   plugin/
     index.js            # 插件路由（当前支持 playwright）
     playwright.js       # PlaywrightPlugin：场景管理、MCP 集成、扩展下载
     playwright-assets/  # Docker Compose 及 Dockerfile 场景模板
   web/
     server.js           # HTTP + WebSocket 服务器（终端、agent 对话、登录鉴权）
-    frontend/           # 前端静态文件（app.html/js/css、login、markdown 渲染）
+    frontend/           # app / login / markdown-renderer / file-browser / codemirror
 docker/
   manyoyo.Dockerfile    # 多阶段镜像构建
   cache/                # 构建缓存（Node.js、JDT LSP、gopls），有效期 2 天
+  res/                  # 各 Agent 默认配置、Playwright 资源、supervisor 模板
+scripts/                # dev-release.js（发布向导）、build-web-code-editor.js
 docs/zh/                # 中文文档（主维护），docs/en/ 为翻译，结构需保持一致
 test/                   # *.test.js，Jest 框架
 manyoyo.example.json     # 配置文件模板
@@ -51,6 +62,10 @@ npm ci --include=optional
 npm run docs:build       # 检查 dead links
 
 npm install -g .         # 本地安装调试
+
+npm run build:web-editor # 改 lib/web/frontend/codemirror-entry.js 后必须执行，
+                         # 并一并提交生成的 codemirror.bundle.js
+npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
 
 # 运行单个测试文件
 npx jest test/manyoyo.test.js
@@ -77,12 +92,14 @@ npx jest --testNamePattern="关键词"
 
 ## 核心架构
 
-### bin/manyoyo.js 分区
+### bin/manyoyo.js（2200+ 行单文件）
 
-文件内用 `// SECTION:` 标记分区，定位代码时用 `Grep` 搜索该标记。
+无分区注释，靠函数名定位：`Grep "^function <名>"`。主流程编排在此，
+配置合并/归一化改动优先落到 `lib/runtime-resolver.js`、`lib/runtime-normalizers.js`。
 
-**配置管理**（SECTION: Configuration Management）
-- 三层优先级：命令行 > `runs.<name>` > 全局配置
+**配置管理**
+- 全局配置：`~/.manyoyo/manyoyo.json`（JSON5，支持注释），模板见 `manyoyo.example.json`
+- 四层优先级：命令行 > `runs.<name>` > 全局配置 > 默认值
 - 覆盖模式（标量）：`containerName`、`imageName`、`yolo`、`containerMode` 等
 - 合并模式：`env`（Object，按 key 覆盖）；`envFile`、`volumes`、`ports`、`imageBuildArgs`（数组，追加）
 - `envFile` **仅支持绝对路径**；`containerName` 支持 `{now}` 模板（→ `MMDD-HHmm`）
@@ -111,7 +128,7 @@ npx jest --testNamePattern="关键词"
 ### lib/web/frontend/
 
 - `.main` 三行 grid：`grid-template-rows: auto minmax(0, 1fr) auto`（header / 内容区 / composer）。增删 `.main` 直接子元素时必须同步调整行数，否则内容区高度失效
-- `connectTerminal()` 前须加 `isActiveSessionHistoryOnly()` 守卫（三处：`handleSessionItemClick`、`refreshSessions`、`modeTerminalBtn` 点击），否则点击「仅历史」会话会触发后端新建容器
+- `connectTerminal()` 前须加 `isActiveSessionHistoryOnly()` 守卫（三处：`setActiveTab`、`handleSessionItemClick`、`refreshSessions`），否则点击「仅历史」会话会触发后端新建容器
 
 ### Dockerfile
 
@@ -121,10 +138,11 @@ npx jest --testNamePattern="关键词"
 
 ### 安全约束
 
-- 名称验证：容器/镜像 `^[A-Za-z0-9][A-Za-z0-9_.-]*$`；env key `^[A-Za-z_][A-Za-z0-9_]*$`；env value 阻止 `[\r\n\0;&|` $<>]`
+- 名称验证：容器/镜像 `^[A-Za-z0-9][A-Za-z0-9_.-]*$`；env key/value 校验在 `lib/runtime-normalizers.js` 的 `parseEnvEntry()`，key 须匹配 `^[A-Za-z_][A-Za-z0-9_]*$`，value 阻止 `[\r\n\0;&|` $<>]`
 - 路径：`validateHostPath()` 阻止挂载 `/`、`/home`、`$HOME`，用 `fs.realpathSync()` 解析符号链接后验证
 - 命令执行：`spawnSync()` + 参数数组，禁止 shell 字符串拼接
-- 敏感数据：`sanitizeSensitiveData()` 掩码含 KEY/TOKEN/SECRET/PASSWORD/AUTH/CREDENTIAL 的值（前4+后4位）
+- 敏感数据：`lib/serve-log.js` 的 `sanitizeSensitiveData()` 掩码含 KEY/TOKEN/SECRET/PASSWORD/AUTH/CREDENTIAL 的值（前4+后4位）
+- 日志：新增 `~/.manyoyo/logs/` 文件必须按子命令分目录（`serve/`、`build/`、`run/`），勿堆根目录
 
 ## 常用模式
 
@@ -146,7 +164,8 @@ npx jest --testNamePattern="关键词"
 
 - `manyoyo` 和 `my` 指向同一入口 `bin/manyoyo.js`
 - 镜像版本读取 `package.json` 的 `imageVersion` 字段（格式 `x.y.z-variant`），与 `version` 字段独立
-- 发布前：`package.json` 版本、文档示例版本、`README.md` 版本三处保持一致
+- `playwrightCliVersion` 是 Playwright CLI 的单一来源，镜像内禁止改回 `@latest`
+- `test/doc-example-version.test.js` 强制 `README.md`、`docs/{zh,en}/guide/quick-start.md`、`basic-usage.md`、`reference/cli-options.md` 的镜像版本与 `package.json.imageVersion` 同主版本，改 `imageVersion` 后不同步这 7 个文件会导致 `npm test` 失败
 
 ## 提交规范
 
