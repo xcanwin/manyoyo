@@ -16,7 +16,7 @@
 - 文档栈：VitePress（`npm run docs:dev|build|preview`）。
 - 文档语言策略：中文主维护 `docs/zh/`，英文 `docs/en/`。
 - 根目录兼容页与历史页按需保留，兼顾旧链接跳转与当前文档导航。
-- 配置合并规则：标量配置按“命令行参数 > runs.<name> > 全局配置 > 默认值”覆盖；数组配置（`envFile`/`volumes`/`imageBuildArgs`）按“全局配置 → runs.<name> → 命令行参数”追加合并；`env` 使用 map，按 key 合并覆盖（命令行参数 > runs.<name> > 全局配置）。
+- 配置合并规则：标量配置按“命令行参数 > runs.<name> > 全局配置 > 默认值”覆盖；数组配置（`envFile`/`volumes`/`ports`/`imageBuildArgs`）按“全局配置 → runs.<name> → 命令行参数”追加合并；`env` 使用 map，按 key 合并覆盖（命令行参数 > runs.<name> > 全局配置）；`first.env` 与 `first.envFile` 分别沿用相同的 map 覆盖和数组追加规则。
 - `serve` 网页模式采用全局认证网关；除登录路由外默认所有页面与接口都需认证。
 
 ## 项目结构与模块组织
@@ -71,7 +71,7 @@
 - 框架为 Jest（见 `package.json` 的 `jest` 配置）。
 - 新增功能优先补充对应领域测试文件的关键分支与异常路径（CLI 优先 `test/manyoyo.test.js`，Web 优先 `test/web-server-auth.test.js`）。
 - 插件相关改动优先补充 `test/plugin-command.test.js`，至少覆盖 host/container 两类场景的关键分支（配置生成、参数透传、挂载或启动路径）。
-- 修复 bug 时建议加入回归测试，并注明 case。
+- 修复 bug 时必须至少加入一个回归测试，并注明 case；若无法先写失败测试，需在变更说明中写明原因与替代验证步骤。
 - 涉及网页服务认证时，至少验证未登录 `401`、登录成功可访问、登出后失效。
 
 ## TDD 模式
