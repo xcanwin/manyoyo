@@ -2149,8 +2149,9 @@ process.exit(0);
             });
             expect(claudeRes.response.status).toBe(200);
             expect(String(claudeRes.json.output || '')).toMatch(
-                /claude --verbose --output-format stream-json --session-id [0-9a-f-]{36} --dangerously-skip-permissions -p/
+                /claude --verbose --output-format stream-json --dangerously-skip-permissions -p/
             );
+            expect(String(claudeRes.json.output || '')).not.toContain('--session-id');
             expect(String(claudeRes.json.output || '')).toContain("'hello'");
 
             const geminiRes = await request(`${baseUrl}/api/sessions/gemini-demo/agent`, {
@@ -3158,10 +3159,12 @@ process.exit(0);
         }
     });
 
-    test('should assign a native --session-id on the first turn and resume via -r on the next turn without probing', async () => {
+    test('should extract the native session id claude assigns on the first turn and resume via -r on the next turn without probing', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-native-resume-'));
         const port = await getFreePort();
         const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        const sessionId = 'aaaaaaaa-1111-4111-8111-abcdefabcdef';
+        // 首轮不传任何会话参数，假 docker 模拟真实 claude 在 stream-json 首行自带 session_id；
         // 裸 `-r`（不带 session id）在 --print 模式下真实 claude CLI 会直接报错退出，
         // 这里让假 docker 模拟同样的行为，一旦实现退回旧的探测方式测试就会失败。
         fs.writeFileSync(
@@ -3170,11 +3173,17 @@ process.exit(0);
 const args = process.argv.slice(2);
 if (args[0] === 'exec') {
   const command = String(args[4] || '');
-  if (/(^|\\s)-r(\\s|$)/.test(command) && !/-r [0-9a-f-]{36}/.test(command)) {
-    process.stderr.write('Error: --resume requires a valid session ID or session title when used with --print.\\n');
-    process.exit(1);
+  if (/(^|\\s)-r(\\s|$)/.test(command)) {
+    if (!/-r [0-9a-f-]{36}/.test(command)) {
+      process.stderr.write('Error: --resume requires a valid session ID or session title when used with --print.\\n');
+      process.exit(1);
+      return;
+    }
+    process.stdout.write(command + '\\n');
+    process.exit(0);
     return;
   }
+  process.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: '${sessionId}' }) + '\\n');
   process.stdout.write(command + '\\n');
   process.exit(0);
   return;
@@ -3223,9 +3232,8 @@ process.exit(0);
                 resumeAttempted: false,
                 resumeSucceeded: false
             }));
-            const sessionIdMatch = String(turn1.json.output || '').match(/--session-id ([0-9a-f-]{36})/);
-            expect(sessionIdMatch).toBeTruthy();
-            const sessionId = sessionIdMatch[1];
+            expect(String(turn1.json.output || '')).not.toContain('--session-id');
+            expect(String(turn1.json.output || '')).not.toContain('-r ');
 
             const persistedAfterTurn1 = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
             expect(persistedAfterTurn1.agents.default.engineSessionId).toBe(sessionId);
@@ -3370,12 +3378,14 @@ process.exit(0);
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-native-resume-bootstrap-'));
         const port = await getFreePort();
         const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        const sessionId = 'bbbbbbbb-2222-4222-8222-abcdefabcdef';
         fs.writeFileSync(
             fakeDockerPath,
             `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === 'exec') {
   const command = String(args[4] || '');
+  process.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: '${sessionId}' }) + '\\n');
   process.stdout.write(command + '\\n');
   process.exit(0);
   return;
@@ -3430,11 +3440,10 @@ process.exit(0);
             }));
             expect(String(turn.json.output || '')).toContain('用户: first question');
             expect(String(turn.json.output || '')).toContain('当前问题: second question');
-            const sessionIdMatch = String(turn.json.output || '').match(/--session-id ([0-9a-f-]{36})/);
-            expect(sessionIdMatch).toBeTruthy();
+            expect(String(turn.json.output || '')).not.toContain('--session-id');
 
             const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
-            expect(persisted.agents.default.engineSessionId).toBe(sessionIdMatch[1]);
+            expect(persisted.agents.default.engineSessionId).toBe(sessionId);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
