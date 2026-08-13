@@ -3374,6 +3374,116 @@ process.exit(0);
         }
     });
 
+    test('should persist the opencode session id and resume it through run without an interactive probe', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-opencode-native-resume-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        const commandLogPath = path.join(tempHost, 'commands.log');
+        const sessionId = 'ses_opencode_native_resume';
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const fs = require('fs');
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  fs.appendFileSync('${commandLogPath}', command + '\\n');
+  if (command.trim().endsWith('opencode -c')) {
+    process.stderr.write('interactive opencode probe must not run\\n');
+    process.exit(1);
+    return;
+  }
+  process.stdout.write(JSON.stringify({
+    type: 'text',
+    sessionID: '${sessionId}',
+    part: { type: 'text', text: command, time: { end: Date.now() } }
+  }) + '\\n');
+  process.exit(0);
+  return;
+}
+if (args[0] === 'inspect') {
+  process.stdout.write(JSON.stringify({ State: { Status: 'running' } }));
+  process.exit(0);
+  return;
+}
+if (args[0] === 'ps') {
+  process.stdout.write('demo|Up 1 minute|manyoyo:test|opencode\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode --model opencode/big-pickle run {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const turn1 = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: 'remember opencode context' })
+            });
+            expect(turn1.response.status).toBe(200);
+            expect(turn1.json).toEqual(expect.objectContaining({
+                contextMode: 'first-turn',
+                resumeAttempted: false,
+                resumeSucceeded: false
+            }));
+            expect(turn1.json.output).toBe(
+                "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode --model opencode/big-pickle run --format json 'remember opencode context'"
+            );
+            let persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            expect(persisted.agents.default.engineSessionId).toBe(sessionId);
+
+            const turn2 = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: 'what did I ask' })
+            });
+            expect(turn2.response.status).toBe(200);
+            expect(turn2.json).toEqual(expect.objectContaining({
+                contextMode: 'resume',
+                resumeAttempted: true,
+                resumeSucceeded: true
+            }));
+            expect(turn2.json.output).toBe(
+                `OPENCODE_PERMISSION='{"*":"allow"}' opencode --model opencode/big-pickle run --format json --session '${sessionId}' 'what did I ask'`
+            );
+            expect(turn2.json.output).not.toContain('以下是当前会话最近对话历史');
+            persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            expect(persisted.agents.default.engineSessionId).toBe(sessionId);
+            expect(fs.readFileSync(commandLogPath, 'utf-8')).not.toContain('opencode -c');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should inject history once to bootstrap a native session id for pre-existing claude sessions', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-native-resume-bootstrap-'));
         const port = await getFreePort();
