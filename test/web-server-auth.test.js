@@ -2148,7 +2148,9 @@ process.exit(0);
                 body: JSON.stringify({ prompt: 'hello' })
             });
             expect(claudeRes.response.status).toBe(200);
-            expect(String(claudeRes.json.output || '')).toContain('claude --verbose --output-format stream-json --dangerously-skip-permissions -p');
+            expect(String(claudeRes.json.output || '')).toMatch(
+                /claude --verbose --output-format stream-json --session-id [0-9a-f-]{36} --dangerously-skip-permissions -p/
+            );
             expect(String(claudeRes.json.output || '')).toContain("'hello'");
 
             const geminiRes = await request(`${baseUrl}/api/sessions/gemini-demo/agent`, {
@@ -3156,18 +3158,20 @@ process.exit(0);
         }
     });
 
-    test('should fallback to history injection when resume fails', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-resume-fallback-'));
+    test('should assign a native --session-id on the first turn and resume via -r on the next turn without probing', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-native-resume-'));
         const port = await getFreePort();
         const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        // 裸 `-r`（不带 session id）在 --print 模式下真实 claude CLI 会直接报错退出，
+        // 这里让假 docker 模拟同样的行为，一旦实现退回旧的探测方式测试就会失败。
         fs.writeFileSync(
             fakeDockerPath,
             `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === 'exec') {
   const command = String(args[4] || '');
-  if (command.trim() === 'claude -r') {
-    process.stderr.write('resume failed\\n');
+  if (/(^|\\s)-r(\\s|$)/.test(command) && !/-r [0-9a-f-]{36}/.test(command)) {
+    process.stderr.write('Error: --resume requires a valid session ID or session title when used with --print.\\n');
     process.exit(1);
     return;
   }
@@ -3214,6 +3218,17 @@ process.exit(0);
                 body: JSON.stringify({ prompt: 'hello' })
             });
             expect(turn1.response.status).toBe(200);
+            expect(turn1.json).toEqual(expect.objectContaining({
+                contextMode: 'first-turn',
+                resumeAttempted: false,
+                resumeSucceeded: false
+            }));
+            const sessionIdMatch = String(turn1.json.output || '').match(/--session-id ([0-9a-f-]{36})/);
+            expect(sessionIdMatch).toBeTruthy();
+            const sessionId = sessionIdMatch[1];
+
+            const persistedAfterTurn1 = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            expect(persistedAfterTurn1.agents.default.engineSessionId).toBe(sessionId);
 
             const turn2 = await request(`${baseUrl}/api/sessions/demo/agent`, {
                 method: 'POST',
@@ -3225,19 +3240,23 @@ process.exit(0);
             });
             expect(turn2.response.status).toBe(200);
             expect(turn2.json).toEqual(expect.objectContaining({
-                contextMode: 'history-injected',
+                contextMode: 'resume',
                 resumeAttempted: true,
-                resumeSucceeded: false
+                resumeSucceeded: true
             }));
-            expect(String(turn2.json.output || '')).toContain('当前问题: who am i');
+            expect(String(turn2.json.output || '')).toContain(
+                `claude --verbose --output-format stream-json -r ${sessionId} -p 'who am i'`
+            );
+            expect(String(turn2.json.output || '')).not.toContain('以下是当前会话最近对话历史');
+            expect(String(turn2.json.output || '')).not.toContain('--session-id');
 
-            const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
-            expect(persisted).toEqual(expect.objectContaining({
+            const persistedAfterTurn2 = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            expect(persistedAfterTurn2.agents.default.engineSessionId).toBe(sessionId);
+            expect(persistedAfterTurn2).toEqual(expect.objectContaining({
                 agentProgram: 'claude',
                 resumeSupported: true,
-                lastResumeOk: false
+                lastResumeOk: true
             }));
-            expect(String(persisted.lastResumeError || '')).toContain('resume failed');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -3246,8 +3265,8 @@ process.exit(0);
         }
     });
 
-    test('should skip history injection when resume succeeds', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-resume-ok-'));
+    test('should inject history once to bootstrap a native session id for pre-existing claude sessions', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-native-resume-bootstrap-'));
         const port = await getFreePort();
         const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
         fs.writeFileSync(
@@ -3256,11 +3275,6 @@ process.exit(0);
 const args = process.argv.slice(2);
 if (args[0] === 'exec') {
   const command = String(args[4] || '');
-  if (command.trim() === 'claude -r') {
-    process.stdout.write('resume ok\\n');
-    process.exit(0);
-    return;
-  }
   process.stdout.write(command + '\\n');
   process.exit(0);
   return;
@@ -3278,7 +3292,11 @@ process.exit(0);
             JSON.stringify({
                 containerName: 'demo',
                 updatedAt: null,
-                messages: [],
+                // 模拟升级前遗留的会话：已有历史消息，但尚未记录 engineSessionId
+                messages: [
+                    { role: 'user', content: 'first question', mode: 'agent' },
+                    { role: 'assistant', content: 'first answer', mode: 'agent' }
+                ],
                 agentPromptCommand: 'claude -p {prompt}'
             }, null, 4),
             'utf-8'
@@ -3295,39 +3313,27 @@ process.exit(0);
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
-            const turn1 = await request(`${baseUrl}/api/sessions/demo/agent`, {
+            const turn = await request(`${baseUrl}/api/sessions/demo/agent`, {
                 method: 'POST',
                 headers: {
                     Cookie: authCookie,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ prompt: 'hello' })
+                body: JSON.stringify({ prompt: 'second question' })
             });
-            expect(turn1.response.status).toBe(200);
-
-            const turn2 = await request(`${baseUrl}/api/sessions/demo/agent`, {
-                method: 'POST',
-                headers: {
-                    Cookie: authCookie,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ prompt: 'who am i' })
-            });
-            expect(turn2.response.status).toBe(200);
-            expect(turn2.json).toEqual(expect.objectContaining({
-                contextMode: 'resume',
-                resumeAttempted: true,
-                resumeSucceeded: true
+            expect(turn.response.status).toBe(200);
+            expect(turn.json).toEqual(expect.objectContaining({
+                contextMode: 'history-injected',
+                resumeAttempted: false,
+                resumeSucceeded: false
             }));
-            expect(String(turn2.json.output || '')).toContain("claude --verbose --output-format stream-json -p 'who am i'");
-            expect(String(turn2.json.output || '')).not.toContain('以下是当前会话最近对话历史');
+            expect(String(turn.json.output || '')).toContain('用户: first question');
+            expect(String(turn.json.output || '')).toContain('当前问题: second question');
+            const sessionIdMatch = String(turn.json.output || '').match(/--session-id ([0-9a-f-]{36})/);
+            expect(sessionIdMatch).toBeTruthy();
 
             const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
-            expect(persisted).toEqual(expect.objectContaining({
-                agentProgram: 'claude',
-                resumeSupported: true,
-                lastResumeOk: true
-            }));
+            expect(persisted.agents.default.engineSessionId).toBe(sessionIdMatch[1]);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
