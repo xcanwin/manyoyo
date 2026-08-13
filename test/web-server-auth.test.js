@@ -772,6 +772,9 @@ process.exit(2);
             expect(appScript.text).toContain("card.className = 'trace-card trace-tone-' + resolveResidualTraceTone(line) + ' trace-card-residual';");
             expect(appScript.text).toContain("bodyParts.push({ label: '命令', value: event.command });");
             expect(appScript.text).toContain("bodyParts.push({ label: '退出码', value: String(event.exitCode) });");
+            expect(appScript.text).toContain("bodyParts.push({ label: '结果', value: event.result });");
+            expect(appScript.text).toContain("bodyParts.push({ label: '错误', value: event.error });");
+            expect(appScript.text).toContain("event.kind === 'tool' && (event.provider === 'codex' || event.provider === 'opencode')");
             expect(appScript.text).toContain("bodyParts.push({ label: '工具', value: [event.server, event.tool].filter(Boolean).join('.') });");
             expect(appScript.text).not.toContain('function shouldCompactTraceEvent(traceEvent)');
             expect(appScript.text).not.toContain('trace-card-compact');
@@ -2292,12 +2295,10 @@ if (args[0] === 'exec') {
     return;
   }
   if (command.includes('opencode ')) {
-    process.stdout.write('{"type":"session.start","session_id":"opencode-session"}\\n');
-    process.stdout.write('{"type":"message","role":"assistant","content":"我先看看目录。"}\\n');
-    process.stdout.write('{"type":"tool_use","tool_name":"bash","tool_id":"tool_1","parameters":{"command":"ls -la"}}\\n');
-    process.stdout.write('{"type":"tool_result","tool_id":"tool_1","status":"success","output":"ok"}\\n');
-    process.stdout.write('{"type":"message","role":"assistant","content":"这是 OpenCode 最终答案。"}\\n');
-    process.stdout.write('{"type":"result","status":"success"}\\n');
+    process.stdout.write('{"type":"step_start","sessionID":"opencode-session","part":{"id":"part_1","sessionID":"opencode-session","messageID":"message_1","type":"step-start"}}\\n');
+    process.stdout.write('{"type":"tool_use","sessionID":"opencode-session","part":{"id":"part_2","sessionID":"opencode-session","messageID":"message_1","type":"tool","callID":"call_1","tool":"bash","state":{"status":"completed","input":{"command":"ls -la"},"output":"ok","title":"List files","metadata":{},"time":{"start":1,"end":2}}}}\\n');
+    process.stdout.write('{"type":"text","sessionID":"opencode-session","part":{"id":"part_3","sessionID":"opencode-session","messageID":"message_1","type":"text","text":"这是 OpenCode 最终答案。","time":{"start":2,"end":3}}}\\n');
+    process.stdout.write('{"type":"step_finish","sessionID":"opencode-session","part":{"id":"part_4","sessionID":"opencode-session","messageID":"message_1","type":"step-finish","reason":"stop","cost":0,"tokens":{"input":1,"output":1,"reasoning":0,"cache":{"read":0,"write":0}}}}\\n');
     process.exit(0);
     return;
   }
@@ -2316,6 +2317,7 @@ process.exit(0);
                 template: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}',
                 provider: 'claude',
                 expectedResult: '这是 Claude 最终答案。',
+                expectedAgentTrace: '[说明] 我先看看目录。',
                 expectedToolStartTrace: '[工具开始] Bash (command=ls -la)',
                 expectedToolCompleteTrace: '[工具完成] Bash (success)'
             },
@@ -2324,6 +2326,7 @@ process.exit(0);
                 template: 'gemini --yolo -p {prompt}',
                 provider: 'gemini',
                 expectedResult: '这是 Gemini 最终答案。',
+                expectedAgentTrace: '[说明] 我先看看目录。',
                 expectedToolStartTrace: '[工具开始] run_shell_command (command=ls -la)',
                 expectedToolCompleteTrace: '[工具完成] run_shell_command (success)'
             },
@@ -2332,8 +2335,8 @@ process.exit(0);
                 template: 'OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode run {prompt}',
                 provider: 'opencode',
                 expectedResult: '这是 OpenCode 最终答案。',
-                expectedToolStartTrace: '[工具开始] bash (command=ls -la)',
-                expectedToolCompleteTrace: '[工具完成] bash (success)'
+                expectedAgentTrace: '[说明] 这是 OpenCode 最终答案。',
+                expectedToolCompleteTrace: '[工具完成] bash (completed)'
             }
         ];
         for (const item of cases) {
@@ -2370,13 +2373,34 @@ process.exit(0);
                     body: JSON.stringify({ prompt: '帮我看看当前目录' })
                 });
                 expect(streamRes.response.status).toBe(200);
-                expect(streamRes.events).toEqual(expect.arrayContaining([
+                const expectedEvents = [
                     expect.objectContaining({ type: 'meta', agentProgram: item.provider }),
-                    expect.objectContaining({ type: 'trace', text: '[说明] 我先看看目录。' }),
-                    expect.objectContaining({ type: 'trace', text: item.expectedToolStartTrace }),
+                    expect.objectContaining({ type: 'trace', text: item.expectedAgentTrace }),
                     expect.objectContaining({ type: 'trace', text: item.expectedToolCompleteTrace }),
                     expect.objectContaining({ type: 'result', output: item.expectedResult })
-                ]));
+                ];
+                if (item.expectedToolStartTrace) {
+                    expectedEvents.push(expect.objectContaining({ type: 'trace', text: item.expectedToolStartTrace }));
+                }
+                expect(streamRes.events).toEqual(expect.arrayContaining(expectedEvents));
+
+                if (item.provider === 'opencode') {
+                    expect(streamRes.events).toEqual(expect.arrayContaining([
+                        expect.objectContaining({ type: 'trace', text: '[回合] 开始生成响应' }),
+                        expect.objectContaining({
+                            type: 'trace',
+                            text: '[工具完成] bash (completed)',
+                            traceEvent: expect.objectContaining({
+                                provider: 'opencode',
+                                kind: 'tool',
+                                toolName: 'bash',
+                                arguments: { command: 'ls -la' },
+                                result: 'ok'
+                            })
+                        }),
+                        expect.objectContaining({ type: 'trace', text: '[回合] 响应完成' })
+                    ]));
+                }
 
                 const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, `${item.sessionName}.json`), 'utf-8'));
                 const traceMessage = (persisted.messages || []).find(message => message && message.streamTrace === true);
@@ -2385,7 +2409,7 @@ process.exit(0);
                     mode: 'agent',
                     streamTrace: true
                 }));
-                expect(String(traceMessage.content || '')).toContain(item.expectedToolStartTrace);
+                expect(String(traceMessage.content || '')).toContain(item.expectedToolStartTrace || item.expectedToolCompleteTrace);
                 const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
                 expect(assistantMessage).toEqual(expect.objectContaining({
                     content: item.expectedResult
@@ -2412,7 +2436,7 @@ if (args[0] === 'exec') {
   process.stdout.write('{"type":"turn.started"}\\n');
   process.stdout.write('{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"我先看看当前目录。"}}\\n');
   process.stdout.write('{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc ls -la","status":"in_progress"}}\\n');
-  process.stdout.write('{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc ls -la","status":"completed","exit_code":0}}\\n');
+  process.stdout.write('{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc ls -la","status":"completed","exit_code":0,"aggregated_output":"command output"}}\\n');
   process.stdout.write('{"type":"item.started","item":{"id":"item_2","type":"mcp_tool_call","server":"jina-mcp-server","tool":"search_web","arguments":{"query":"OpenAI latest news","num":5},"status":"in_progress"}}\\n');
   process.stdout.write('{"type":"item.completed","item":{"id":"item_2","type":"mcp_tool_call","server":"jina-mcp-server","tool":"search_web","arguments":{"query":"OpenAI latest news","num":5},"status":"completed"}}\\n');
   process.stdout.write('{"type":"item.completed","item":{"type":"agent_message","text":"这是最终答案。"}}\\n');
@@ -2484,7 +2508,8 @@ process.exit(0);
                         itemType: 'command_execution',
                         phase: 'completed',
                         command: '/bin/bash -lc ls -la',
-                        exitCode: 0
+                        exitCode: 0,
+                        result: 'command output'
                     })
                 }),
                 expect.objectContaining({
