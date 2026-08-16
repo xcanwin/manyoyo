@@ -12,6 +12,7 @@ async function main() {
         entryPoints: [entry],
         outfile,
         bundle: true,
+        minify: true,
         format: 'iife',
         platform: 'browser',
         target: ['es2020'],

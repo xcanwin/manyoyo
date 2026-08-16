@@ -32,6 +32,8 @@
     "scripts": {
         "dev:release": "node scripts/dev-release.js",
         "build:web-editor": "node scripts/build-web-code-editor.js",
+        "prepack": "npm run build:web-editor",
+        "prepare": "npm run build:web-editor",
         "install-link": "npm link",
         "test": "jest --coverage",
         "test:unit": "jest test/",

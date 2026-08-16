@@ -63,8 +63,8 @@ npm run docs:build       # 检查 dead links
 
 npm install -g .         # 本地安装调试
 
-npm run build:web-editor # 改 lib/web/frontend/codemirror-entry.js 后必须执行，
-                         # 并一并提交生成的 codemirror.bundle.js
+npm run build:web-editor # codemirror.bundle.js 已加入 .gitignore，由 npm install 的
+                         # prepare 钩子自动生成，本地调试可手动重跑此命令
 npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
 
 # 运行单个测试文件

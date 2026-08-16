@@ -20,3 +20,4 @@ coverage/
 nohup.out
 libpod/
 .playwright-cli/
+lib/web/frontend/codemirror.bundle.js
