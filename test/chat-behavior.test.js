@@ -37,3 +37,35 @@ describe('ManyoyoChatBehavior.isNearBottom', () => {
         expect(isNearBottom(100, 200, 40)).toBe(false);
     });
 });
+
+describe('ManyoyoChatBehavior.summarizeTraceFlow', () => {
+    const { summarizeTraceFlow } = loadChatBehavior();
+
+    test('空数组：返回暂无步骤', () => {
+        expect(summarizeTraceFlow([])).toEqual({ count: 0, label: '暂无步骤' });
+    });
+
+    test('包含错误事件：标记为有错误（优先级最高）', () => {
+        const events = [
+            { kind: 'command' },
+            { kind: 'error' },
+            { kind: 'tool' }
+        ];
+        expect(summarizeTraceFlow(events, { pending: true })).toEqual({ count: 3, label: '3 步 · 有错误' });
+    });
+
+    test('仍在执行且无错误：标记为进行中', () => {
+        const events = [{ kind: 'command' }, { kind: 'tool' }];
+        expect(summarizeTraceFlow(events, { pending: true })).toEqual({ count: 2, label: '2 步 · 进行中' });
+    });
+
+    test('已结束且无错误：标记为已完成', () => {
+        const events = [{ kind: 'command' }];
+        expect(summarizeTraceFlow(events, { pending: false })).toEqual({ count: 1, label: '1 步 · 已完成' });
+    });
+
+    test('未传 options 时按已完成处理', () => {
+        const events = [{ kind: 'command' }];
+        expect(summarizeTraceFlow(events)).toEqual({ count: 1, label: '1 步 · 已完成' });
+    });
+});

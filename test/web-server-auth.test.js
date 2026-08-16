@@ -708,6 +708,43 @@ process.exit(2);
         }
     });
 
+    test('should collapse the whole trace flow by default with a manual expand toggle', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-flow-toggle-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const chatBehaviorScript = await request(`${baseUrl}/app/frontend/chat-behavior.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(chatBehaviorScript.text).toContain('function summarizeTraceFlow(');
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).toContain('const traceFlowExpandedState = new Map();');
+            expect(appScript.text).toContain("toggle.className = 'trace-flow-toggle';");
+            expect(appScript.text).toContain('window.ManyoyoChatBehavior.summarizeTraceFlow(traceEvents, { pending });');
+            expect(appScript.text).toContain("toggle.addEventListener('toggle', function () {");
+            expect(appScript.text).toContain('traceFlowExpandedState.set(messageId, toggle.open);');
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.text).toContain('.trace-flow-toggle {');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should sync containerPath to selected hostPath and remove container picker button', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-path-sync-'));
         const port = await getFreePort();

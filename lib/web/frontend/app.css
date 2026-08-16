@@ -1739,6 +1739,52 @@ body.command-mode .msg.origin-agent .bubble {
     gap: 8px;
 }
 
+.trace-flow-toggle {
+    border: 1px solid rgba(181, 146, 99, 0.26);
+    border-radius: 10px;
+    background: rgba(255, 250, 242, 0.7);
+    overflow: hidden;
+}
+
+.trace-flow-toggle[open] {
+    background: transparent;
+    border-color: transparent;
+}
+
+.trace-flow-toggle-summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.trace-flow-toggle-summary::-webkit-details-marker {
+    display: none;
+}
+
+.trace-flow-toggle-summary::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-right: 1.6px solid currentColor;
+    border-bottom: 1.6px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 140ms ease;
+}
+
+.trace-flow-toggle[open] > .trace-flow-toggle-summary::before {
+    transform: rotate(45deg);
+}
+
+.trace-flow-toggle > .trace-flow {
+    padding: 0 10px 10px;
+}
+
 .trace-card {
     border: 1px solid rgba(181, 146, 99, 0.32);
     border-left-width: 3px;
