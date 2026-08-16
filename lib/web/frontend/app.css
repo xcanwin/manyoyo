@@ -1907,107 +1907,39 @@ body.command-mode .msg.origin-agent .bubble {
     padding: 0 10px 10px;
 }
 
-.trace-card {
-    border: 1px solid rgba(181, 146, 99, 0.32);
-    border-left-width: 3px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.88);
-    overflow: hidden;
-}
-
-.trace-card.trace-tone-command {
-    border-left-color: var(--subaccent);
-}
-
-.trace-card.trace-tone-mcp {
-    border-left-color: var(--accent);
-}
-
-.trace-card.trace-tone-note {
-    border-left-color: #6f62b5;
-}
-
-.trace-card.trace-tone-status {
-    border-left-color: #7d8aa1;
-}
-
-.trace-card.trace-tone-error {
-    border-left-color: var(--danger);
-    background: rgba(255, 239, 236, 0.92);
-}
-
-.trace-card.trace-tone-neutral {
-    border-left-color: var(--line-strong);
-}
-
-.trace-card.trace-card-residual {
-    background: rgba(255, 250, 242, 0.86);
-    box-shadow: none;
-}
-
-.trace-card-summary {
-    list-style: none;
+.trace-narrative {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 10px;
-    cursor: default;
+    flex-direction: column;
+    gap: 6px;
 }
 
-details.trace-card > .trace-card-summary {
-    cursor: pointer;
-}
-
-.trace-card-summary::-webkit-details-marker {
-    display: none;
-}
-
-.trace-card-badge {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 42px;
-    padding: 2px 7px;
-    border-radius: 999px;
-    background: rgba(31, 26, 20, 0.08);
+.trace-narrative-text {
+    margin: 0;
     color: var(--text);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.2px;
-}
-
-.trace-card-title {
-    min-width: 0;
-    flex: 1;
-    color: var(--text);
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 1.45;
+    font-size: 12.5px;
+    line-height: 1.55;
     word-break: break-word;
 }
 
-.trace-card-phase {
-    flex: 0 0 auto;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 700;
+.trace-narrative.is-error .trace-narrative-text {
+    color: var(--danger);
+    font-weight: 600;
 }
 
-.trace-card-body {
-    padding: 0 10px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.trace-card-body-section {
+.trace-narrative-code-block {
     display: flex;
     flex-direction: column;
     gap: 4px;
 }
 
-.trace-card-body-label {
+.trace-narrative-code-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.trace-narrative-code-label {
     color: var(--muted);
     font-size: 11px;
     font-weight: 700;
@@ -2015,9 +1947,34 @@ details.trace-card > .trace-card-summary {
     text-transform: uppercase;
 }
 
-.trace-card-body-pre {
+.trace-narrative-copy-btn {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel-soft);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 7px;
+    cursor: pointer;
+    transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+
+.trace-narrative-copy-btn:hover {
+    color: var(--accent-strong);
+    border-color: var(--line-strong);
+}
+
+.trace-narrative-copy-btn.is-copied {
+    color: var(--subaccent-strong);
+    border-color: var(--subaccent);
+    background: var(--subaccent-soft);
+}
+
+.trace-narrative-code {
     margin: 0;
     padding: 8px 9px;
+    max-height: 260px;
+    overflow-y: auto;
     border-radius: 8px;
     background: rgba(31, 26, 20, 0.05);
     color: var(--text);
@@ -2026,6 +1983,10 @@ details.trace-card > .trace-card-summary {
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.5;
+}
+
+.trace-narrative.is-error .trace-narrative-code {
+    background: rgba(255, 239, 236, 0.7);
 }
 
 .composer {

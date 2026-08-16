@@ -908,15 +908,13 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(appStyle.response.status).toBe(200);
-            // 容器语言：消息气泡 / 执行过程整体折叠 / 单条 trace 卡片 / 复制按钮统一为 10px
+            // 容器语言：消息气泡 / 执行过程整体折叠 / 复制按钮统一为 10px
             expect(appStyle.text).toMatch(/\.bubble\s*\{[^}]*border-radius:\s*10px/);
             expect(appStyle.text).toMatch(/\.trace-flow-toggle\s*\{[^}]*border-radius:\s*10px/);
-            expect(appStyle.text).toMatch(/\.trace-card\s*\{[^}]*border-radius:\s*10px/);
             expect(appStyle.text).toMatch(/\.msg-copy-btn\s*\{[^}]*border-radius:\s*10px/);
-            // 徽标语言：会话状态 / 执行过程徽标统一为 999px 全圆 pill
-            // （会话树的"更多操作"已改造成下拉菜单，不再是 pill 按钮，见阶段6.2）
+            // 徽标语言：会话状态统一为 999px 全圆 pill
+            // （会话树的"更多操作"已改造成下拉菜单、执行过程已改叙述句，不再是 pill 按钮/徽标，见阶段6.2、阶段七）
             expect(appStyle.text).toMatch(/\.session-status\s*\{[^}]*border-radius:\s*999px/);
-            expect(appStyle.text).toMatch(/\.trace-card-badge\s*\{[^}]*border-radius:\s*999px/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -1123,8 +1121,8 @@ process.exit(2);
         }
     });
 
-    test('should ship unified trace card rendering for toolchain events', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-card-assets-'));
+    test('should render toolchain events as narrative sentences with scrollable code blocks, not per-item collapsible cards', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-narrative-assets-'));
         const port = await getFreePort();
         let handle = null;
 
@@ -1137,25 +1135,25 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(appScript.response.status).toBe(200);
-            expect(appScript.text).toContain("card.className = 'trace-card trace-tone-' + resolveTraceTone(event);");
-            expect(appScript.text).toContain("card.className = 'trace-card trace-tone-' + resolveResidualTraceTone(line) + ' trace-card-residual';");
-            expect(appScript.text).toContain("bodyParts.push({ label: '命令', value: event.command });");
-            expect(appScript.text).toContain("bodyParts.push({ label: '退出码', value: String(event.exitCode) });");
-            expect(appScript.text).toContain("bodyParts.push({ label: '结果', value: event.result });");
-            expect(appScript.text).toContain("bodyParts.push({ label: '错误', value: event.error });");
-            expect(appScript.text).toContain("if (event.kind === 'tool') {");
-            expect(appScript.text).not.toContain("event.kind === 'tool' && (event.provider === 'codex' || event.provider === 'opencode')");
-            expect(appScript.text).toContain("bodyParts.push({ label: '工具', value: [event.server, event.tool].filter(Boolean).join('.') });");
-            expect(appScript.text).not.toContain('function shouldCompactTraceEvent(traceEvent)');
-            expect(appScript.text).not.toContain('trace-card-compact');
+            expect(appScript.text).toContain('function createTraceCodeBlock(label, text) {');
+            expect(appScript.text).toContain('window.ManyoyoChatBehavior.buildTraceNarrative(traceEvent)');
+            expect(appScript.text).toContain("wrap.className = 'trace-narrative' + (narrative.tone === 'error' ? ' is-error' : '');");
+            expect(appScript.text).not.toContain('function humanizeTraceKind(');
+            expect(appScript.text).not.toContain('function humanizeTracePhase(');
+            expect(appScript.text).not.toContain('function resolveTraceTone(');
+            expect(appScript.text).not.toContain('function appendTraceCardBody(');
+            expect(appScript.text).not.toContain('function resolveResidualTraceTone(');
+            expect(appScript.text).not.toContain("'trace-card");
 
             const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
                 headers: { Cookie: authCookie }
             });
             expect(appStyle.response.status).toBe(200);
-            expect(appStyle.text).toContain('details.trace-card > .trace-card-summary');
-            expect(appStyle.text).toContain('.trace-card.trace-card-residual');
-            expect(appStyle.text).not.toContain('.trace-card.trace-card-compact');
+            expect(appStyle.text).toContain('.trace-narrative {');
+            expect(appStyle.text).toContain('.trace-narrative.is-error');
+            expect(appStyle.text).toMatch(/\.trace-narrative-code\s*\{[^}]*max-height:\s*260px/);
+            expect(appStyle.text).toMatch(/\.trace-narrative-code\s*\{[^}]*overflow-y:\s*auto/);
+            expect(appStyle.text).not.toContain('.trace-card');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
