@@ -22,13 +22,17 @@
 ## 项目结构与模块组织
 - `bin/manyoyo.js`: CLI 入口与主流程编排（CommonJS）；参数解析、容器主流程优先就近维护。
 - `lib/container-run.js`: CLI/Web 共享的容器运行参数构造与命令展示。
+- `lib/container-modes.js`: `resolveContainerMode`，common/dind/sock 别名与运行参数，供 `bin/manyoyo.js` 与 `lib/doctor.js` 复用。
 - `lib/image-build.js`: 镜像构建、构建缓存准备与 build args 解析。
 - `lib/agent-resume.js`: Agent 程序识别、resume 参数推断与提示词命令模板生成。
+- `lib/agent-adapters/`: `resolveYoloCommand` 单一数据源，`bin/manyoyo.js` 与 `lib/web/server.js` 共用，新增 YOLO 智能体只需改这里。
+- `lib/doctor.js`: `runDoctorChecks`，`manyoyo doctor` 命令的运行时/镜像/配置/Agent/模式/插件/端口诊断逻辑。
 - `lib/codex-output.js`: Codex JSONL 输出解析与最终消息提取，供 Web 与发布脚本复用。
 - `lib/global-config.js` + `lib/init-config.js`: 全局配置读写、imageVersion 同步与 `init` 初始化配置逻辑。
 - `lib/runtime-resolver.js` + `lib/runtime-normalizers.js` + `lib/worktrees.js`: 运行配置合并、参数归一化与 Git worktrees 挂载推导。
 - `lib/json5-text-edit.js`: JSON5 配置文本的局部定位与替换，供全局配置与 Web 配置编辑复用。
 - `lib/log-path.js` + `lib/serve-log.js`: 日志路径分目录规则、`serve` 日志脱敏与进程快照工具。
+- `lib/core/events.js` + `lib/core/event-store.js`: 会话控制事件的创建/校验/投影与 `FileEventStore`（JSONL 追加日志），供 `lib/web/server.js` 的会话审计导出复用；`lib/core/app-error.js` 暂未接入现有 `sendJson` 错误响应。
 - `lib/dev-release.js` + `scripts/dev-release.js`: 维护者发布向导与版本建议、提交文案清洗、标签选择等辅助逻辑。
 - `lib/plugin/index.js` + `lib/plugin/playwright.js`: 插件命令分发与 Playwright 插件主逻辑（场景配置、容器/宿主启动链路）。
 - `lib/plugin/playwright-assets/`: Playwright 容器场景 compose 与镜像资源模板。
@@ -56,7 +60,7 @@
 - `npm test` 也会执行入口文档示例版本检查（当前覆盖 `README.md`、`quick-start`、`basic-usage`、`cli-options`），要求其示例版本与 `package.json.imageVersion` 保持同一主版本号。
 - `npm run test:unit`: 仅跑 `test/` 下的单元测试。
 - `npm run lint`: 占位的 lint 检查（不做风格约束）。
-- `npm run build:web-editor`: 从 `lib/web/frontend/codemirror-entry.js` 打包生成 `lib/web/frontend/codemirror.bundle.js`；修改 CodeMirror 编辑器入口后需执行并提交 bundle。
+- `npm run build:web-editor`: 从 `lib/web/frontend/codemirror-entry.js` 打包生成 `lib/web/frontend/codemirror.bundle.js`（已加入 `.gitignore`，`npm install` 的 `prepare` 钩子会自动执行，无需手动提交产物）。
 - `npm run docs:dev|build|preview`: 启动/构建/预览文档站点。提交前或文档校验时先执行 `npm ci --include=optional`，再执行 `npm run docs:build`（不要并行）。
 - `npm install -g .` / `npm link` / `npm run install-link`: 本地全局安装或软链 CLI。
 
@@ -94,12 +98,14 @@
 - 动态容器名验证（`{now}`）：在运行配置写 `containerName: "my-<agent>-{now}"`，执行 `manyoyo config show -r <name>` 查看解析结果。
 - 环境文件解析：`manyoyo config show --ef /abs/path/myenv.env`。
 - 容器调试：`manyoyo run -n <name> -x /bin/bash`。
+- 环境诊断：`manyoyo doctor`（人类可读）或 `manyoyo doctor --json`（脚本消费），可加 `--port <port>` 检查监听端口。
 - 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.4-common`），可加 `--iba TOOL=common`。
 - 维护者发布：`npm run dev:release`；自动确认可用 `npm run dev:release -- --yes`，指定版本可用 `npm run dev:release -- --version <x.y.z>`。
 - 局域网监听网页服务：`manyoyo serve 0.0.0.0:3000 -U <user> -P <pass>`。
 - 网页认证登录：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`（需与启动参数/配置一致）。
 - 若未显式设置 `-P/--pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`），系统会在启动时生成随机密码并打印到终端。
 - 带认证访问接口：`curl --noproxy '*' -b /tmp/manyoyo.cookie http://127.0.0.1:3000/api/sessions`。
+- 导出会话操作审计记录：`curl --noproxy '*' -b /tmp/manyoyo.cookie http://127.0.0.1:3000/api/sessions/<name>/audit`。
 - 删除对话历史（保留容器）：`curl --noproxy '*' -b /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/api/sessions/<name>/remove-with-history`。
 
 ## 配置与路径提示

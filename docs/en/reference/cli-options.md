@@ -25,6 +25,7 @@ This page follows the current `manyoyo --help` and subcommand `--help` output. I
 | `manyoyo update` | Update MANYOYO; skipped for local file installs |
 | `manyoyo install <name>` | Install the `manyoyo` command as a docker-cli-plugin |
 | `manyoyo prune` | Clean dangling and `<none>` images |
+| `manyoyo doctor` | Diagnose container runtime, image, config, agent, mode, plugin and port state |
 
 ## Option ownership
 
@@ -78,6 +79,14 @@ These commands share the same core runtime options:
 | `--update-agents` | Update Agent CLIs in an existing image to latest (Claude/Codex/Gemini/OpenCode), without rebuilding the Dockerfile |
 | `--yes` | Auto-confirm prompts |
 
+### `doctor`
+
+| Option | Description |
+| --- | --- |
+| `-r, --run <name>` | Load run configuration before diagnosing |
+| `--port <port>` | Also check whether the given listening port is available |
+| `--json` | Print a stable JSON report (`ok` + `checks[]`) for scripting |
+
 ### `playwright`
 
 | Command | Purpose |
@@ -115,6 +124,10 @@ manyoyo run -r codex --ss "resume --last"
 # Inspect config and generated command
 manyoyo config show -r claude
 manyoyo config command -r claude
+
+# Diagnose the runtime environment
+manyoyo doctor
+manyoyo doctor --json
 
 # Custom commands
 manyoyo run --rm-on-exit -x /bin/bash

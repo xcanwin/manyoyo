@@ -25,6 +25,7 @@ description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频�
 | `manyoyo update` | 更新 MANYOYO；本地 file 安装场景会跳过 |
 | `manyoyo install <name>` | 安装 manyoyo 命令（docker-cli-plugin） |
 | `manyoyo prune` | 清理悬空镜像和 `<none>` 镜像 |
+| `manyoyo doctor` | 诊断容器运行时、镜像、配置、Agent、模式、插件和端口 |
 
 ## 参数归属
 
@@ -78,6 +79,14 @@ description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频�
 | `--update-agents` | 仅更新已有镜像内 Agent CLI 到 latest（Claude/Codex/Gemini/OpenCode），不重建 Dockerfile |
 | `--yes` | 自动确认所有提示 |
 
+### `doctor`
+
+| 参数 | 说明 |
+| --- | --- |
+| `-r, --run <name>` | 读取运行配置后再诊断 |
+| `--port <port>` | 额外检查指定监听端口是否可用 |
+| `--json` | 以 JSON 输出稳定诊断结果（`ok` + `checks[]`），便于脚本消费 |
+
 ### `playwright`
 
 | 命令 | 用途 |
@@ -115,6 +124,10 @@ manyoyo run -r codex --ss "resume --last"
 # 调试配置和命令拼装
 manyoyo config show -r claude
 manyoyo config command -r claude
+
+# 诊断运行环境
+manyoyo doctor
+manyoyo doctor --json
 
 # 自定义命令
 manyoyo run --rm-on-exit -x /bin/bash

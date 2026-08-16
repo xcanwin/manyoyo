@@ -22,8 +22,11 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 bin/manyoyo.js          # CLI 入口：配置加载、容器生命周期、Commander.js 路由
 lib/
   container-run.js      # buildContainerRunArgs / buildContainerRunCommand
+  container-modes.js    # resolveContainerMode（common/dind/sock 别名与参数）
   image-build.js        # prepareBuildCache / buildImage（含缓存管理）
   agent-resume.js       # 各 agent 会话恢复参数与 prompt 命令模板
+  agent-adapters/       # resolveYoloCommand 单一数据源，bin 与 web/server 共用
+  doctor.js             # runDoctorChecks：运行时/镜像/配置/Agent/模式/插件/端口诊断
   init-config.js        # AI agent 初始化配置
   global-config.js      # ~/.manyoyo/manyoyo.json 读写与 imageVersion 同步
   runtime-resolver.js   # 运行配置四层合并（CLI > runs > 全局 > 默认）
@@ -34,6 +37,10 @@ lib/
   log-path.js           # 日志分目录规则
   codex-output.js       # Codex JSONL 输出解析
   dev-release.js        # 发布向导版本建议与提交文案清洗
+  core/
+    events.js           # 会话控制事件的创建/校验/投影
+    event-store.js       # FileEventStore：JSONL 追加日志 + 快照
+    app-error.js         # AppError（暂未接入 web/server.js 的 sendJson）
   plugin/
     index.js            # 插件路由（当前支持 playwright）
     playwright.js       # PlaywrightPlugin：场景管理、MCP 集成、扩展下载
@@ -124,6 +131,7 @@ npx jest --testNamePattern="关键词"
 - `resolveYoloCommand()` 委托到 `lib/agent-adapters/index.js`，与 `bin/manyoyo.js` 共用同一份映射，无需分别维护
 - Web 鉴权：所有路由默认认证，匿名白名单仅限 `/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`；新增接口必须走全局认证网关
 - Agent 会话恢复参数：Claude/Gemini → `-r`，Codex → `resume`，OpenCode → `-c`
+- 会话控制事件：`/agent/stream`、`/agent/stop` 通过 `createWebStreamEmitter()`/`appendWebSessionControlEvent()` 写入 `lib/core/event-store.js`（`FileEventStore`），`GET /api/sessions/:name/audit` 导出该会话的事件与投影
 
 ### lib/web/frontend/
 
