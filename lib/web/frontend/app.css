@@ -13,7 +13,6 @@
 
     --line: #d9c7ad;
     --line-strong: #b59263;
-    --line-medium: rgba(181, 146, 99, 0.4);
     --tree-guide: rgba(181, 146, 99, 0.44);
     --tree-guide-soft: rgba(181, 146, 99, 0.44);
     --tree-active: #ecdfc8;
@@ -2126,7 +2125,6 @@ body.composer-options-open .composer-options-panel {
 
     .header {
         padding: 4px 12px;
-        border-bottom: none;
     }
 
     .workbench-tabs {

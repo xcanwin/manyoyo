@@ -882,7 +882,7 @@ process.exit(2);
         }
     });
 
-    test('should shrink the mobile header (no divider, tight padding) while leaving the desktop header untouched', async () => {
+    test('should keep the header divider-free with tight padding on both desktop and mobile', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-mobile-header-trim-'));
         const port = await getFreePort();
         let handle = null;
@@ -896,14 +896,14 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(appStyle.response.status).toBe(200);
-            // 桌面端 header 保持不变：留白 + 底部分割线都不动
-            expect(appStyle.text).toMatch(/\.header\s*\{[^}]*padding:\s*6px 8px 12px;/);
-            expect(appStyle.text).toMatch(/\.header\s*\{[^}]*border-bottom:\s*1px solid var\(--line-medium\);/);
-            // 移动端只保留"会话"和"···"两个小按钮，之前的留白量级明显偏多，这里收紧并去掉分割线
+            // 桌面端 header 无分割线、留白收紧
+            expect(appStyle.text).toMatch(/\.header\s*\{[^}]*padding:\s*0 8px 4px;/);
+            expect(appStyle.text).not.toMatch(/\.header\s*\{[^}]*border-bottom:/);
+            // 移动端只保留"会话"和"···"两个小按钮，同样收紧留白、不带分割线
             const mobileHeaderMatch = appStyle.text.match(/@media \(max-width: 640px\) \{[\s\S]*?\.header\s*\{([^}]*)\}/);
             expect(mobileHeaderMatch).not.toBeNull();
             expect(mobileHeaderMatch[1]).toMatch(/padding:\s*4px 12px;/);
-            expect(mobileHeaderMatch[1]).toMatch(/border-bottom:\s*none;/);
+            expect(mobileHeaderMatch[1]).not.toMatch(/border-bottom:/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -927,14 +927,13 @@ process.exit(2);
             });
             expect(appStyle.response.status).toBe(200);
             expect(appStyle.text).toContain('--surface-panel: linear-gradient(');
-            expect(appStyle.text).toContain('--line-medium: rgba(181, 146, 99, 0.4);');
 
             const panelBgUsages = appStyle.text.split('background: var(--surface-panel);').length - 1;
             expect(panelBgUsages).toBe(4);
 
-            // 右侧聊天列只保留顶栏下方这一条分割线；#messages 的包围边框、composer 的顶部分割线均已去除，
+            // 右侧聊天列不再保留顶栏分割线：#messages 的包围边框、header/composer 的分割线均已去除，
             // 靠背景色差异区分内容区与输入区，减少视觉上的线条堆叠
-            expect(appStyle.text).toContain('border-bottom: 1px solid var(--line-medium);');
+            expect(appStyle.text).not.toContain('--line-medium');
             expect(appStyle.text).not.toContain('border-top: 1px solid var(--line-medium);');
         } finally {
             if (handle && typeof handle.close === 'function') {
