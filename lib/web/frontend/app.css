@@ -1156,7 +1156,6 @@ body.workspace-switcher-open .workspace-switcher-panel {
     overflow-y: auto;
     margin: 0;
     padding: 14px;
-    border: 1px solid var(--line);
     border-radius: 14px;
     display: flex;
     flex-direction: column;
@@ -1987,7 +1986,6 @@ details.trace-card > .trace-card-summary {
 }
 
 .composer {
-    border-top: 1px solid var(--line-medium);
     margin-top: 12px;
     padding: 12px 8px 4px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 249, 240, 0.78) 100%);
@@ -2306,6 +2304,10 @@ details.trace-card > .trace-card-summary {
         width: 100%;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .composer-inner {
+        align-items: stretch;
     }
 
     #commandInput {

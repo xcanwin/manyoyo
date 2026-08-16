@@ -864,7 +864,7 @@ process.exit(2);
         }
     });
 
-    test('should consolidate repeated panel background gradients and header/composer dividers into shared tokens', async () => {
+    test('should consolidate repeated panel background gradients into a shared token', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-surface-tokens-'));
         const port = await getFreePort();
         let handle = null;
@@ -884,8 +884,39 @@ process.exit(2);
             const panelBgUsages = appStyle.text.split('background: var(--surface-panel);').length - 1;
             expect(panelBgUsages).toBe(3);
 
+            // 右侧聊天列只保留顶栏下方这一条分割线；#messages 的包围边框、composer 的顶部分割线均已去除，
+            // 靠背景色差异区分内容区与输入区，减少视觉上的线条堆叠
             expect(appStyle.text).toContain('border-bottom: 1px solid var(--line-medium);');
-            expect(appStyle.text).toContain('border-top: 1px solid var(--line-medium);');
+            expect(appStyle.text).not.toContain('border-top: 1px solid var(--line-medium);');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should not wrap #messages with a full border box (only the header keeps a divider line)', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-messages-no-border-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            expect(appStyle.text).toMatch(/#messages\s*\{(?:(?!\})[\s\S])*\}/);
+            const messagesRule = appStyle.text.match(/#messages\s*\{((?:(?!\})[\s\S])*)\}/)[1];
+            expect(messagesRule).not.toContain('border:');
+            expect(messagesRule).toContain('border-radius: 14px;');
+
+            const composerRule = appStyle.text.match(/\.composer\s*\{((?:(?!\})[\s\S])*)\}/)[1];
+            expect(composerRule).not.toContain('border-top');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
