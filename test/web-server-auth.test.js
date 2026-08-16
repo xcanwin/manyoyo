@@ -1239,6 +1239,45 @@ process.exit(2);
         }
     });
 
+    test('should expose session control event audit via GET /api/sessions/:name/audit', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-session-audit-'));
+        const port = await getFreePort();
+
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: name => name === 'demo',
+                dockerExecArgs: args => {
+                    if (Array.isArray(args) && args[0] === 'ps') {
+                        return 'demo\tUp 2 minutes\tlocalhost/xcanwin/manyoyo:1.0.0-full\n';
+                    }
+                    return '';
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const auditRes = await request(`${baseUrl}/api/sessions/demo/audit`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(auditRes.response.status).toBe(200);
+            expect(auditRes.json).toEqual(expect.objectContaining({
+                name: 'demo',
+                audit: expect.objectContaining({
+                    runSpec: null,
+                    events: expect.any(Array),
+                    projection: expect.any(Object)
+                })
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should list host directories for web directory picker', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-dir-picker-'));
         const port = await getFreePort();
