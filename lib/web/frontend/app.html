@@ -17,7 +17,6 @@
             <div class="sidebar-top">
                 <div class="brand-wrap">
                     <div class="brand">MANYOYO Web</div>
-                    <div class="brand-sub">Container Session Console</div>
                 </div>
                 <div class="sidebar-actions">
                     <button type="button" id="openConfigBtn" class="secondary">配置</button>
@@ -39,7 +38,7 @@
         <main class="main">
             <header class="header">
                 <div class="header-main">
-                    <div class="header-main-top">
+                    <div class="workbench-tabs" id="workbenchTabs" aria-label="工作台视图">
                         <button
                             type="button"
                             id="mobileSessionToggle"
@@ -47,22 +46,6 @@
                             aria-expanded="false"
                             aria-controls="sessionList"
                         >会话</button>
-                        <div class="header-menu">
-                            <button
-                                type="button"
-                                id="mobileActionsToggle"
-                                class="secondary mobile-actions-toggle"
-                                aria-expanded="false"
-                                aria-controls="headerActions"
-                            >更多</button>
-                            <div class="header-actions" id="headerActions">
-                                <button type="button" id="refreshBtn" class="secondary">刷新</button>
-                                <button type="button" id="openCreateMenuBtn" class="secondary">新建容器</button>
-                                <button type="button" id="addAgentBtn" class="secondary">新建 AGENT</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="workbench-tabs" id="workbenchTabs" aria-label="工作台视图">
                         <button type="button" id="viewActivityBtn" class="secondary is-active">活动</button>
                         <div class="workspace-switcher">
                             <button

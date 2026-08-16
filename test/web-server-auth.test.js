@@ -963,6 +963,46 @@ process.exit(2);
         }
     });
 
+    test('should collapse the chat header into a single row (会话/活动/··· only, no title bar or "更多" menu)', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-header-single-row-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appHtml = await request(`${baseUrl}/`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appHtml.response.status).toBe(200);
+            // 会话（移动端）、活动、···（workspace-switcher）同属一个 .workbench-tabs 行
+            expect(appHtml.text).toMatch(
+                /<div class="workbench-tabs" id="workbenchTabs"[^>]*>\s*<button[^>]*id="mobileSessionToggle"[^>]*>会话<\/button>\s*<button type="button" id="viewActivityBtn"/
+            );
+            expect(appHtml.text).not.toContain('header-main-top');
+            expect(appHtml.text).not.toContain('id="mobileActionsToggle"');
+            expect(appHtml.text).not.toContain('id="headerActions"');
+            expect(appHtml.text).not.toContain('Container Session Console');
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            expect(appStyle.text).not.toContain('.header-main-top');
+            expect(appStyle.text).not.toContain('.header-menu');
+            expect(appStyle.text).not.toContain('.header-actions');
+            expect(appStyle.text).not.toContain('.mobile-actions-toggle');
+            expect(appStyle.text).not.toContain('.brand-sub');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should flatten session tree items (no card border/gradient, flat selected state)', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-tree-flat-'));
         const port = await getFreePort();
@@ -1499,21 +1539,27 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
-            expect(appHtml.text).toContain('id="openCreateMenuBtn" class="secondary">新建容器</button>');
-            expect(appHtml.text.indexOf('id="openCreateMenuBtn"')).toBeLessThan(appHtml.text.indexOf('id="addAgentBtn"'));
-            expect(appHtml.text).toContain('id="addAgentBtn" class="secondary">新建 AGENT</button>');
+            expect(appHtml.text).toContain('id="openCreateBtn"');
             expect(appHtml.text).not.toContain('id="removeBtn"');
             expect(appHtml.text).not.toContain('id="removeAllBtn"');
+            // 顶部"更多"菜单（刷新/新建容器/新建 AGENT）已删除，二者均有替代入口
+            // （侧边栏"新建"按钮、会话行的"···"菜单），见阶段五后续收敛
+            expect(appHtml.text).not.toContain('id="openCreateMenuBtn"');
+            expect(appHtml.text).not.toContain('id="addAgentBtn"');
+            expect(appHtml.text).not.toContain('id="refreshBtn"');
+            expect(appHtml.text).not.toContain('id="mobileActionsToggle"');
+            expect(appHtml.text).not.toContain('id="headerActions"');
 
             const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
                 headers: { Cookie: authCookie }
             });
             expect(appScript.response.status).toBe(200);
             expect(appScript.text).toContain('creatingAgent: false');
-            expect(appScript.text).toContain("addAgentBtn.textContent = state.creatingAgent ? '新建中...' : '新建 AGENT';");
-            expect(appScript.text).toContain("const openCreateMenuBtn = document.getElementById('openCreateMenuBtn');");
-            expect(appScript.text).toContain('openCreateMenuBtn.disabled = state.createLoading || state.createSubmitting;');
-            expect(appScript.text).toContain("openCreateMenuBtn.addEventListener('click', function () {");
+            expect(appScript.text).not.toContain("getElementById('addAgentBtn')");
+            expect(appScript.text).not.toContain("getElementById('openCreateMenuBtn')");
+            expect(appScript.text).not.toContain("getElementById('refreshBtn')");
+            expect(appScript.text).not.toContain("getElementById('mobileActionsToggle')");
+            expect(appScript.text).not.toContain("getElementById('headerActions')");
             expect(appScript.text).toContain('function findLatestCreatedSessionName(sessions, preferredContainerName) {');
             expect(appScript.text).toContain('function findPreferredSessionNameAfterRemoval(sessions, removedName) {');
             expect(appScript.text).toContain('const fallbackSessionName = isActive');
