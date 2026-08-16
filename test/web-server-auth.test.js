@@ -1138,6 +1138,13 @@ process.exit(2);
             expect(appScript.text).toContain('const messages = window.ManyoyoChatBehavior.mergeTraceIntoReply(rawMessages);');
             // trace 内容渲染在回复气泡内部、回复正文之前，不再单独起一行 "AGENT 过程"
             expect(appScript.text).toContain('if (msg && msg.pairedTrace) {\n            appendStructuredTraceContent(bubble, msg.pairedTrace);\n        }');
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            // trace 抽屉和紧跟其后的回复正文之间留一点间隔，避免两者几乎贴在一起
+            expect(appStyle.text).toMatch(/\.trace-structured\s*\{[^}]*margin-bottom:\s*10px;/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -1171,6 +1178,15 @@ process.exit(2);
             // z-index 再高也救不回被裁掉的像素。最后一条消息的浮层会伸到气泡下方，
             // 必须给 #messages 留够 padding-bottom，滚到底部时浮层才有地方完整显示，不被裁掉
             expect(appStyle.text).toMatch(/#messages\s*\{[^}]*padding:\s*14px 14px 44px;/);
+            // 触屏设备没有真正的 :hover，.msg:hover 提升 z-index 的规则永远不会触发，
+            // 必须在 @media (hover: none) 里常驻给 .msg 提升 z-index，否则浮层仍会被
+            // 移动端吸底的 composer（position: sticky, z-index: 3）盖住
+            expect(appStyle.text).toMatch(/@media \(hover: none\) \{\s*\.msg-actions \{[^}]*\}\s*\n\s*[\s\S]*?\.msg \{\s*\n\s*z-index:\s*4;/);
+            // margin 会在气泡底部和浮层之间留一段"死区"（不属于任何元素，无法被 :hover 命中），
+            // 鼠标快速下移穿过这段空隙时会先丢失 .msg:hover，浮层还没碰到就先淡出消失；
+            // 改成 padding-top，让留白仍属于 .msg-actions 自身的可命中范围
+            expect(appStyle.text).toMatch(/\.msg-actions\s*\{[^}]*padding-top:\s*4px;/);
+            expect(appStyle.text).not.toMatch(/\.msg-actions\s*\{[^}]*margin-top:\s*4px;/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
