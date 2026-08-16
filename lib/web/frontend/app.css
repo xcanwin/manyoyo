@@ -1029,27 +1029,7 @@ button.tree-toggle:active {
 .header-menu {
     position: relative;
     flex: none;
-}
-
-#activeTitle {
-    margin: 0;
-    font-family: var(--font-display);
-    font-size: 22px;
-    font-weight: 700;
-    line-height: 1.12;
-    letter-spacing: 0.4px;
-    word-break: break-all;
-}
-
-.header-main-top #activeTitle {
-    flex: 1;
-    min-width: 0;
-}
-
-#activeMeta {
-    margin-top: 2px;
-    font-size: 12px;
-    color: var(--muted);
+    margin-left: auto;
 }
 
 .workbench-tabs {
@@ -2270,14 +2250,6 @@ details.trace-card > .trace-card-summary {
 
     .header {
         padding: 10px 12px 16px;
-    }
-
-    #activeTitle {
-        font-size: 20px;
-    }
-
-    #activeMeta {
-        display: none;
     }
 
     .workbench-tabs {

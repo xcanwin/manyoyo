@@ -89,3 +89,20 @@ describe('ManyoyoChatBehavior.shouldExpandComposer', () => {
         expect(shouldExpandComposer()).toBe(false);
     });
 });
+
+describe('ManyoyoChatBehavior.buildDocumentTitle', () => {
+    const { buildDocumentTitle } = loadChatBehavior();
+
+    test('有 agent 名时拼接标题', () => {
+        expect(buildDocumentTitle('AGENT 1')).toBe('AGENT 1 · MANYOYO Web');
+    });
+
+    test('未传/空字符串时回退默认标题', () => {
+        expect(buildDocumentTitle('')).toBe('MANYOYO Web');
+        expect(buildDocumentTitle()).toBe('MANYOYO Web');
+    });
+
+    test('仅空白字符时回退默认标题', () => {
+        expect(buildDocumentTitle('   ')).toBe('MANYOYO Web');
+    });
+});

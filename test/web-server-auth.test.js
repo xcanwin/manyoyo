@@ -925,6 +925,44 @@ process.exit(2);
         }
     });
 
+    test('should remove the persistent header title/meta and sync document.title to the active agent instead', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-header-title-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appHtml = await request(`${baseUrl}/`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appHtml.response.status).toBe(200);
+            expect(appHtml.text).not.toContain('id="activeTitle"');
+            expect(appHtml.text).not.toContain('id="activeMeta"');
+
+            const chatBehaviorScript = await request(`${baseUrl}/app/frontend/chat-behavior.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(chatBehaviorScript.text).toContain('function buildDocumentTitle(');
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).not.toContain("document.getElementById('activeTitle')");
+            expect(appScript.text).not.toContain("document.getElementById('activeMeta')");
+            expect(appScript.text).not.toContain('function buildActiveMeta(');
+            expect(appScript.text).toContain('document.title = window.ManyoyoChatBehavior.buildDocumentTitle(');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should sync containerPath to selected hostPath and remove container picker button', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-path-sync-'));
         const port = await getFreePort();
