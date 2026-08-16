@@ -663,6 +663,51 @@ process.exit(2);
         }
     });
 
+    test('should only stick chat scroll to bottom on user-initiated sends, not on passive streaming updates', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-chat-scroll-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const chatBehaviorScript = await request(`${baseUrl}/app/frontend/chat-behavior.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(chatBehaviorScript.response.status).toBe(200);
+            expect(chatBehaviorScript.response.headers.get('content-type')).toContain('application/javascript');
+            expect(chatBehaviorScript.text).toContain('window.ManyoyoChatBehavior');
+            expect(chatBehaviorScript.text).toContain('function isNearBottom(');
+
+            const appHtml = await request(`${baseUrl}/`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appHtml.text).toContain('<script src="/app/frontend/chat-behavior.js"></script>');
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).toContain('window.ManyoyoChatBehavior.isNearBottom(');
+
+            // 用户主动发送（推流开始、命令/AGENT 消息入队）仍强制滚到底部
+            expect(appScript.text).toContain('clearAgentRecoveryPoll();\n        renderMessages(state.messages, { stickToBottom: true });');
+            expect(appScript.text).toContain('state.messages.push(pendingMessage);\n        renderMessages(state.messages, { stickToBottom: true });');
+
+            // 被动/流式更新（trace 行、增量、结果、失败回滚）不再强制滚动，改为遵循是否已在底部
+            expect(appScript.text).not.toContain("updateAgentTraceMessageLocal(sessionName, traceMessageId, traceLines.join('\\n'), traceEvent);\n            if (state.active === sessionName) {\n                renderMessages(state.messages, { stickToBottom: true });");
+            expect(appScript.text).not.toContain("updateStreamingReplyLocal(sessionName, streamingReplyId, content);\n                        if (state.active === sessionName) {\n                            renderMessages(state.messages, { stickToBottom: true });");
+            expect(appScript.text).not.toContain("appendAssistantMessageLocal(sessionName, finalResult, 'agent');\n        if (state.active === sessionName) {\n            renderMessages(state.messages, { stickToBottom: true });");
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should sync containerPath to selected hostPath and remove container picker button', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-path-sync-'));
         const port = await getFreePort();
