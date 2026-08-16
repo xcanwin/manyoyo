@@ -888,7 +888,7 @@ process.exit(2);
             expect(appStyle.text).toContain('--line-medium: rgba(181, 146, 99, 0.4);');
 
             const panelBgUsages = appStyle.text.split('background: var(--surface-panel);').length - 1;
-            expect(panelBgUsages).toBe(3);
+            expect(panelBgUsages).toBe(4);
 
             // 右侧聊天列只保留顶栏下方这一条分割线；#messages 的包围边框、composer 的顶部分割线均已去除，
             // 靠背景色差异区分内容区与输入区，减少视觉上的线条堆叠
@@ -1189,6 +1189,48 @@ process.exit(2);
             expect(appStyle.response.status).toBe(200);
             // trace 抽屉和紧跟其后的回复正文之间留一点间隔，避免两者几乎贴在一起
             expect(appStyle.text).toMatch(/\.trace-structured\s*\{[^}]*margin-bottom:\s*10px;/);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should show "AGENT 回复" from the start (not "AGENT 过程"), default the trace drawer to collapsed, and fix copy-button hover contrast/rounding/panel background', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-polish-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            // 独立的 trace 消息（还没有配对的回复）也直接显示 "AGENT 回复"，不再有单独的
+            // "AGENT 过程" 标签在合并后才变成 "AGENT 回复"（避免标签闪一下变化）
+            expect(appScript.text).not.toContain("return 'AGENT 过程';");
+            // 执行过程默认收纳；只有出现错误时才默认展开，不再因为"还没有 trace 事件"就默认展开
+            expect(appScript.text).toContain('const defaultOpen = hasError;');
+            expect(appScript.text).not.toContain('const defaultOpen = hasError || traceEvents.length === 0;');
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            // 复制按钮悬浮态必须显式声明背景色，否则会被通用的 button:hover（深色背景）
+            // 盖过去，导致和同样变色的文字撞色看不清
+            expect(appStyle.text).toMatch(/\.msg-copy-btn:hover\s*\{[^}]*background:\s*#f0e6d3;/);
+            // composer 的父级 <form> 补上圆角，和 #messages 统一成同一套"外层容器"语言
+            expect(appStyle.text).toMatch(/\.composer\s*\{[^}]*border-radius:\s*14px;/);
+            // .main 包裹 #messages / .composer 的这一层背景改用同一个 --surface-panel token，
+            // 不再单独定义一个偏深的渐变，消除缝隙处的颜色断层
+            expect(appStyle.text).toMatch(/\.main\s*\{[^}]*background:\s*var\(--surface-panel\);/);
+            expect(appStyle.text).not.toContain('linear-gradient(165deg, rgba(255, 251, 243, 0.95) 0%, rgba(247, 237, 223, 0.95) 100%)');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();

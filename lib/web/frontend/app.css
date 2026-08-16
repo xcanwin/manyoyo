@@ -1040,8 +1040,9 @@ button.tree-toggle:active {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 0;
-    background:
-        linear-gradient(165deg, rgba(255, 251, 243, 0.95) 0%, rgba(247, 237, 223, 0.95) 100%);
+    /* 和 #messages / .composer 用同一个 --surface-panel，避免包裹它们的这层
+       在缝隙处显得比内容区更深一截 */
+    background: var(--surface-panel);
     animation: panelIn 360ms ease 60ms both;
 }
 
@@ -1768,6 +1769,9 @@ body.terminal-mode .composer {
 
 .msg-copy-btn:hover {
     color: var(--accent-strong);
+    /* 不显式设置背景色的话，通用 button:hover 规则的深色背景会覆盖进来，
+       和同色系的文字撞色看不清，这里只需要比默认背景微微变深 */
+    background: #f0e6d3;
     border-color: var(--line-strong);
 }
 
@@ -2031,6 +2035,7 @@ details.trace-card > .trace-card-summary {
 .composer {
     margin-top: 12px;
     padding: 12px 8px 4px;
+    border-radius: 14px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 249, 240, 0.78) 100%);
 }
 
