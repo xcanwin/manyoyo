@@ -95,19 +95,25 @@
                         <div id="checkSummary" class="inspector-stack"></div>
                     </section>
                     <form class="composer" id="composer">
-                        <div class="composer-toolbar">
-                            <div class="composer-mode-switch" aria-label="活动输入模式">
-                                <button type="button" id="activityAgentBtn" class="secondary is-active">Agent</button>
-                                <button type="button" id="activityCommandBtn" class="secondary">命令</button>
-                            </div>
-                            <div class="composer-toolbar-meta">
-                                <button type="button" id="agentTemplateBtn" class="secondary toolbar-mini-btn">CLI · —</button>
-                                <span id="activityModelChip" class="toolbar-chip" aria-live="polite">模型 · —</span>
-                            </div>
-                        </div>
                         <div class="composer-inner">
                             <textarea id="commandInput" placeholder="输入容器命令，例如: ls -la"></textarea>
                             <div class="composer-actions">
+                                <div class="composer-options">
+                                    <button
+                                        type="button"
+                                        id="composerOptionsToggle"
+                                        class="secondary"
+                                        aria-haspopup="true"
+                                        aria-expanded="false"
+                                        aria-controls="composerOptionsPanel"
+                                    >选项</button>
+                                    <div class="composer-options-panel" id="composerOptionsPanel" hidden>
+                                        <button type="button" id="activityAgentBtn" class="secondary is-active">Agent对话</button>
+                                        <button type="button" id="activityCommandBtn" class="secondary">系统命令</button>
+                                        <button type="button" id="agentTemplateBtn" class="secondary">CLI · —</button>
+                                        <span id="activityModelChip" class="composer-options-info" aria-live="polite">模型 · —</span>
+                                    </div>
+                                </div>
                                 <button type="submit" id="sendBtn">发送</button>
                             </div>
                         </div>

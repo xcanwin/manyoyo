@@ -70,25 +70,6 @@ describe('ManyoyoChatBehavior.summarizeTraceFlow', () => {
     });
 });
 
-describe('ManyoyoChatBehavior.shouldExpandComposer', () => {
-    const { shouldExpandComposer } = loadChatBehavior();
-
-    test('聚焦输入框时展开', () => {
-        expect(shouldExpandComposer({ focused: true, hasDraft: false })).toBe(true);
-    });
-
-    test('有草稿内容时展开（即使未聚焦，例如刚失焦但还没清空）', () => {
-        expect(shouldExpandComposer({ focused: false, hasDraft: true })).toBe(true);
-    });
-
-    test('未聚焦且无草稿时收起', () => {
-        expect(shouldExpandComposer({ focused: false, hasDraft: false })).toBe(false);
-    });
-
-    test('未传参数时按收起处理', () => {
-        expect(shouldExpandComposer()).toBe(false);
-    });
-});
 
 describe('ManyoyoChatBehavior.buildDocumentTitle', () => {
     const { buildDocumentTitle } = loadChatBehavior();

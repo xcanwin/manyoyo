@@ -828,8 +828,8 @@ process.exit(2);
         }
     });
 
-    test('should collapse the composer Agent/CLI meta row by default and expand it on focus', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-composer-expand-'));
+    test('should collapse Agent/命令/CLI/模型 into a single "选项" dropdown above "发送", opening upward and closed by default', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-composer-options-'));
         const port = await getFreePort();
         let handle = null;
 
@@ -838,30 +838,72 @@ process.exit(2);
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
-            const chatBehaviorScript = await request(`${baseUrl}/app/frontend/chat-behavior.js`, {
+            const appHtml = await request(`${baseUrl}/`, {
                 headers: { Cookie: authCookie }
             });
-            expect(chatBehaviorScript.text).toContain('function shouldExpandComposer(');
+            expect(appHtml.response.status).toBe(200);
+            expect(appHtml.text).not.toContain('composer-toolbar');
+            expect(appHtml.text).toMatch(
+                /<button[^>]*id="composerOptionsToggle"[^>]*>选项<\/button>\s*<div class="composer-options-panel" id="composerOptionsPanel" hidden>\s*<button type="button" id="activityAgentBtn" class="secondary is-active">Agent对话<\/button>\s*<button type="button" id="activityCommandBtn" class="secondary">系统命令<\/button>\s*<button type="button" id="agentTemplateBtn" class="secondary">CLI · —<\/button>\s*<span id="activityModelChip" class="composer-options-info"[^>]*>模型 · —<\/span>/
+            );
+            // "选项"必须在"发送"之前（DOM 序），对应视觉上"选项在发送上方"
+            expect(appHtml.text.indexOf('id="composerOptionsToggle"')).toBeLessThan(appHtml.text.indexOf('id="sendBtn"'));
 
             const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
                 headers: { Cookie: authCookie }
             });
             expect(appScript.response.status).toBe(200);
-            expect(appScript.text).toContain('function syncComposerExpanded() {');
-            expect(appScript.text).toContain('window.ManyoyoChatBehavior.shouldExpandComposer({ focused, hasDraft });');
-            // 焦点判定必须基于"焦点是否仍在 composer 容器内"，而不是仅仅等于 commandInput，
-            // 否则点击 composer 内的 Agent/命令/CLI 按钮时，commandInput 一 blur 就会把工具栏收起，
-            // 导致按钮的点击因布局收缩而落空（回归用例，对应用户反馈"点击没生效"）。
-            expect(appScript.text).toContain('const focused = composer.contains(document.activeElement);');
-            expect(appScript.text).toContain("composer.addEventListener('focusin', syncComposerExpanded);");
-            expect(appScript.text).toContain("composer.addEventListener('focusout', function () {");
-            expect(appScript.text).toContain('window.setTimeout(syncComposerExpanded, 0);');
-            expect(appScript.text).toContain("commandInput.addEventListener('input', syncComposerExpanded);");
+            expect(appScript.text).not.toContain('function syncComposerExpanded()');
+            expect(appScript.text).not.toContain('shouldExpandComposer');
+            expect(appScript.text).toContain('function setComposerOptionsMenu(open) {');
+            expect(appScript.text).toContain('function closeComposerOptionsMenu() {');
+            expect(appScript.text).toContain("composerOptionsToggle.addEventListener('click', function () {");
+            // 选中 Agent对话/系统命令、点击 CLI 之后都要收起下拉框
+            expect(appScript.text).toContain('closeComposerOptionsMenu();\n            syncUi();\n            commandInput.focus();');
+
+            const chatBehaviorScript = await request(`${baseUrl}/app/frontend/chat-behavior.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(chatBehaviorScript.text).not.toContain('shouldExpandComposer');
 
             const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
                 headers: { Cookie: authCookie }
             });
-            expect(appStyle.text).toContain('.composer.is-expanded .composer-toolbar {');
+            expect(appStyle.response.status).toBe(200);
+            expect(appStyle.text).not.toContain('.composer-toolbar');
+            expect(appStyle.text).not.toContain('.composer-mode-switch');
+            // 触发按钮贴在 composer 底部，下拉框必须往上展开，不能往下超出视口
+            expect(appStyle.text).toMatch(/\.composer-options-panel\s*\{[^}]*bottom:\s*calc\(100% \+ 8px\);/);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should shrink the mobile header (no divider, tight padding) while leaving the desktop header untouched', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-mobile-header-trim-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            // 桌面端 header 保持不变：留白 + 底部分割线都不动
+            expect(appStyle.text).toMatch(/\.header\s*\{[^}]*padding:\s*6px 8px 12px;/);
+            expect(appStyle.text).toMatch(/\.header\s*\{[^}]*border-bottom:\s*1px solid var\(--line-medium\);/);
+            // 移动端只保留"会话"和"···"两个小按钮，之前的留白量级明显偏多，这里收紧并去掉分割线
+            const mobileHeaderMatch = appStyle.text.match(/@media \(max-width: 640px\) \{[\s\S]*?\.header\s*\{([^}]*)\}/);
+            expect(mobileHeaderMatch).not.toBeNull();
+            expect(mobileHeaderMatch[1]).toMatch(/padding:\s*4px 12px;/);
+            expect(mobileHeaderMatch[1]).toMatch(/border-bottom:\s*none;/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -1070,7 +1112,7 @@ process.exit(2);
             expect(appScript.text).not.toContain("getElementById('composerHint')");
             expect(appScript.text).not.toContain("getElementById('sendState')");
             // 发送/agent 回复完成后的 finally 块不应再抢焦点回输入框
-            expect(appScript.text).toMatch(/state\.sending = false;\s*\n\s*syncUi\(\);\s*\n\s*\}\s*\n\s*\}\);\s*\n\s*\n\s*if \(composer\)/);
+            expect(appScript.text).toMatch(/state\.sending = false;\s*\n\s*syncUi\(\);\s*\n\s*\}\s*\n\s*\}\);\s*\n\s*\n\s*commandInput\.addEventListener\('keydown'/);
 
             const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
                 headers: { Cookie: authCookie }
