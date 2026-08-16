@@ -651,7 +651,7 @@ process.exit(2);
             expect(appScript.response.headers.get('content-type')).toContain('application/javascript');
             expect(appScript.text).toContain('function createTreePrefixSegment() {');
             expect(appScript.text).toContain('function setDisclosureExpanded(control, expanded) {');
-            expect(appScript.text).toContain('function renderSessionTreeNodes(nodes, parentNode, ancestorHasNext, itemCounter) {');
+            expect(appScript.text).toContain('function renderSessionTreeNodes(nodes, parentNode, ancestorHasNext) {');
             expect(appScript.text).toContain('const nextExpanded = childrenNode.hidden;');
             expect(appScript.text).toContain('setDisclosureExpanded(item, nextExpanded);');
             expect(appScript.text).toContain('childrenNode.hidden = !nextExpanded;');
@@ -992,9 +992,9 @@ process.exit(2);
             expect(appStyle.text).toMatch(/\.trace-flow-toggle\s*\{[^}]*border-radius:\s*10px/);
             expect(appStyle.text).toMatch(/\.trace-card\s*\{[^}]*border-radius:\s*10px/);
             expect(appStyle.text).toMatch(/\.msg-copy-btn\s*\{[^}]*border-radius:\s*10px/);
-            // 徽标语言：会话状态 / 执行过程徽标统一为 999px 全圆 pill
-            // （会话树的"更多操作"已改造成下拉菜单，不再是 pill 按钮，见阶段6.2）
-            expect(appStyle.text).toMatch(/\.session-status\s*\{[^}]*border-radius:\s*999px/);
+            // 徽标语言：执行过程徽标统一为 999px 全圆 pill
+            // （旧版会话列表的 .session-status 徽标已随树形侧边栏改造整体移除，
+            // 会话状态现在是 .tree-node-status 纯色文字，不是 pill 背景块，见阶段6.1）
             expect(appStyle.text).toMatch(/\.trace-card-badge\s*\{[^}]*border-radius:\s*999px/);
         } finally {
             if (handle && typeof handle.close === 'function') {
