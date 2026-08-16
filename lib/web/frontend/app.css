@@ -1657,6 +1657,47 @@ body.terminal-mode .composer {
     font-weight: 700;
 }
 
+.msg-actions {
+    display: flex;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 140ms ease;
+}
+
+.msg:hover .msg-actions,
+.msg:focus-within .msg-actions {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    .msg-actions {
+        opacity: 1;
+    }
+}
+
+.msg-copy-btn {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel-soft);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+
+.msg-copy-btn:hover {
+    color: var(--accent-strong);
+    border-color: var(--line-strong);
+}
+
+.msg-copy-btn.is-copied {
+    color: var(--subaccent-strong);
+    border-color: var(--subaccent);
+    background: var(--subaccent-soft);
+}
+
 .msg-exit {
     font-family: var(--font-mono);
     font-size: 11px;

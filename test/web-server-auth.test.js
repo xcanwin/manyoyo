@@ -745,6 +745,39 @@ process.exit(2);
         }
     });
 
+    test('should expose copy-to-clipboard actions for user messages and agent markdown replies', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-copy-actions-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).toContain('function copyTextToClipboard(text) {');
+            expect(appScript.text).toContain('function appendMessageCopyActions(meta, items) {');
+            expect(appScript.text).toContain("navigator.clipboard.writeText(text);");
+            expect(appScript.text).toContain("{ label: '复制', getText: function () { return msg.content; } }");
+            expect(appScript.text).toContain("{ label: '复制文本', getText: function () { return markdownNode.innerText || markdownNode.textContent || ''; } }");
+            expect(appScript.text).toContain("{ label: '复制 Markdown', getText: function () { return msg.content; } }");
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.text).toContain('.msg-copy-btn {');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should sync containerPath to selected hostPath and remove container picker button', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-path-sync-'));
         const port = await getFreePort();
