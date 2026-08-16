@@ -106,3 +106,53 @@ describe('ManyoyoChatBehavior.buildDocumentTitle', () => {
         expect(buildDocumentTitle('   ')).toBe('MANYOYO Web');
     });
 });
+
+describe('ManyoyoChatBehavior.reorderMessagesForDisplay', () => {
+    const { reorderMessagesForDisplay } = loadChatBehavior();
+
+    test('trace 紧跟着最终回复：显示时把回复挪到 trace 前面', () => {
+        const user = { id: 'u1', role: 'user' };
+        const trace = { id: 't1', role: 'assistant', streamTrace: true };
+        const reply = { id: 'r1', role: 'assistant', mode: 'agent' };
+        expect(reorderMessagesForDisplay([user, trace, reply])).toEqual([user, reply, trace]);
+    });
+
+    test('trace 紧跟着流式回复（streamingReply）：同样挪到前面', () => {
+        const trace = { id: 't1', role: 'assistant', streamTrace: true };
+        const streamingReply = { id: 'r1', role: 'assistant', streamingReply: true };
+        expect(reorderMessagesForDisplay([trace, streamingReply])).toEqual([streamingReply, trace]);
+    });
+
+    test('trace 后面还没有回复（仍在等待）：保持原样', () => {
+        const trace = { id: 't1', role: 'assistant', streamTrace: true };
+        expect(reorderMessagesForDisplay([trace])).toEqual([trace]);
+    });
+
+    test('trace 后面跟着的不是 assistant 回复：不误swap', () => {
+        const trace = { id: 't1', role: 'assistant', streamTrace: true };
+        const user = { id: 'u2', role: 'user' };
+        expect(reorderMessagesForDisplay([trace, user])).toEqual([trace, user]);
+    });
+
+    test('trace 后面跟着另一个 trace：不误swap', () => {
+        const trace1 = { id: 't1', role: 'assistant', streamTrace: true };
+        const trace2 = { id: 't2', role: 'assistant', streamTrace: true };
+        expect(reorderMessagesForDisplay([trace1, trace2])).toEqual([trace1, trace2]);
+    });
+
+    test('多轮对话：每一对 trace+回复独立换序，互不影响', () => {
+        const u1 = { id: 'u1', role: 'user' };
+        const t1 = { id: 't1', role: 'assistant', streamTrace: true };
+        const r1 = { id: 'r1', role: 'assistant', mode: 'agent' };
+        const u2 = { id: 'u2', role: 'user' };
+        const t2 = { id: 't2', role: 'assistant', streamTrace: true };
+        const r2 = { id: 'r2', role: 'assistant', mode: 'agent' };
+        expect(reorderMessagesForDisplay([u1, t1, r1, u2, t2, r2])).toEqual([u1, r1, t1, u2, r2, t2]);
+    });
+
+    test('非数组/空输入不抛异常', () => {
+        expect(reorderMessagesForDisplay(null)).toEqual([]);
+        expect(reorderMessagesForDisplay(undefined)).toEqual([]);
+        expect(reorderMessagesForDisplay([])).toEqual([]);
+    });
+});

@@ -760,16 +760,22 @@ process.exit(2);
             });
             expect(appScript.response.status).toBe(200);
             expect(appScript.text).toContain('function copyTextToClipboard(text) {');
-            expect(appScript.text).toContain('function appendMessageCopyActions(meta, items) {');
+            expect(appScript.text).toContain('function appendMessageCopyActions(container, items) {');
             expect(appScript.text).toContain("navigator.clipboard.writeText(text);");
             expect(appScript.text).toContain("{ label: '复制', getText: function () { return msg.content; } }");
             expect(appScript.text).toContain("{ label: '复制文本', getText: function () { return markdownNode.innerText || markdownNode.textContent || ''; } }");
             expect(appScript.text).toContain("{ label: '复制 Markdown', getText: function () { return msg.content; } }");
+            // 复制按钮挂在气泡（bubble）上，用悬浮浮层展示，而不是常驻在时间戳那一行（meta）
+            expect(appScript.text).toContain('appendMessageCopyActions(bubble, [');
+            expect(appScript.text).not.toContain('appendMessageCopyActions(meta, [');
 
             const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
                 headers: { Cookie: authCookie }
             });
             expect(appStyle.text).toContain('.msg-copy-btn {');
+            // 默认不占用布局空间，只在悬浮聊天块时才浮现在下方
+            expect(appStyle.text).toMatch(/\.msg-actions\s*\{[^}]*position:\s*absolute;/);
+            expect(appStyle.text).toMatch(/\.msg-actions\s*\{[^}]*top:\s*100%;/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -1008,9 +1014,13 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
-            // 会话（移动端）、活动、···（workspace-switcher）同属一个 .workbench-tabs 行
+            // 会话（移动端）、···（workspace-switcher）同属一个 .workbench-tabs 行；
+            // "活动"已收进 workspace-switcher-panel，作为下拉里的第一个选项，不再单独占用顶栏
             expect(appHtml.text).toMatch(
-                /<div class="workbench-tabs" id="workbenchTabs"[^>]*>\s*<button[^>]*id="mobileSessionToggle"[^>]*>会话<\/button>\s*<button type="button" id="viewActivityBtn"/
+                /<div class="workbench-tabs" id="workbenchTabs"[^>]*>\s*<button[^>]*id="mobileSessionToggle"[^>]*>会话<\/button>\s*<div class="workspace-switcher">/
+            );
+            expect(appHtml.text).toMatch(
+                /<div class="workspace-switcher-panel" id="workspaceSwitcherPanel" hidden>\s*<button type="button" id="viewActivityBtn"/
             );
             expect(appHtml.text).not.toContain('header-main-top');
             expect(appHtml.text).not.toContain('id="mobileActionsToggle"');
@@ -1026,6 +1036,104 @@ process.exit(2);
             expect(appStyle.text).not.toContain('.header-actions');
             expect(appStyle.text).not.toContain('.mobile-actions-toggle');
             expect(appStyle.text).not.toContain('.brand-sub');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should remove the composer hint/status footer and stop stealing input focus after a reply finishes', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-composer-foot-focus-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appHtml = await request(`${baseUrl}/`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appHtml.response.status).toBe(200);
+            // "发送"按钮的禁用/灰色状态已经能表达是否发送中，不再需要单独的提示文案/状态标签
+            expect(appHtml.text).not.toContain('id="composerHint"');
+            expect(appHtml.text).not.toContain('id="sendState"');
+            expect(appHtml.text).not.toContain('composer-foot');
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).not.toContain("getElementById('composerHint')");
+            expect(appScript.text).not.toContain("getElementById('sendState')");
+            // 发送/agent 回复完成后的 finally 块不应再抢焦点回输入框
+            expect(appScript.text).toMatch(/state\.sending = false;\s*\n\s*syncUi\(\);\s*\n\s*\}\s*\n\s*\}\);\s*\n\s*\n\s*if \(stopBtn\)/);
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            expect(appStyle.text).not.toContain('.composer-foot');
+            expect(appStyle.text).not.toContain('.send-state');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should render the trace message as a structured drawer immediately (no raw-text flash before the first trace event arrives)', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-no-flash-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            // 之前要求 traceEvents.length 才走结构化渲染，导致 traceEvents 还是空数组时
+            // （刚创建 trace 消息、第一条 status 事件还没到）落回 <pre> 纯文本渲染，产生短暂的样式闪烁
+            expect(appScript.text).toContain('const shouldRenderStructuredTrace = Boolean(msg && msg.streamTrace);');
+            expect(appScript.text).not.toContain('&& Array.isArray(msg.traceEvents)\n            && msg.traceEvents.length');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should move "AGENT 过程" below "AGENT 回复" for display via reorderMessagesForDisplay', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-reorder-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const chatBehaviorScript = await request(`${baseUrl}/app/frontend/chat-behavior.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(chatBehaviorScript.response.status).toBe(200);
+            expect(chatBehaviorScript.text).toContain('function reorderMessagesForDisplay(messages) {');
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).toContain('function renderMessages(rawMessages, options) {');
+            expect(appScript.text).toContain('const messages = window.ManyoyoChatBehavior.reorderMessagesForDisplay(rawMessages);');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -1597,7 +1705,6 @@ process.exit(2);
             expect(appScript.text).toContain("const directoryCount = new Set(state.sessions.map(function (session) {");
             expect(appScript.text).toContain("`${directoryCount} 个 目录 / ${containerCount} 个容器 / ${state.sessions.length} 个 AGENT`");
             expect(appScript.text).toContain('state.active = findLatestCreatedSessionName(state.sessions, preferredContainerName) || state.sessions[0].name;');
-            expect(appScript.text).toContain("sendState.textContent = '正在新建 AGENT…';");
             expect(appScript.text).toContain("function removeContainerByName(containerName) {");
             expect(appScript.text).toContain("function removeAgentSessionByName(sessionName, agentLabel) {");
             expect(appScript.text).toContain("const yes = confirm('确认删除 AGENT ' + (agentLabel || target) + ' ?');");

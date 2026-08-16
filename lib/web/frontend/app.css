@@ -1696,20 +1696,36 @@ body.terminal-mode .composer {
 }
 
 .msg-actions {
+    position: absolute;
+    top: 100%;
+    margin-top: 4px;
     display: flex;
     gap: 6px;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 140ms ease;
+    z-index: 1;
+}
+
+.msg.user .msg-actions {
+    right: 0;
+}
+
+.msg.assistant .msg-actions,
+.msg.system .msg-actions {
+    left: 0;
 }
 
 .msg:hover .msg-actions,
 .msg:focus-within .msg-actions {
     opacity: 1;
+    pointer-events: auto;
 }
 
 @media (hover: none) {
     .msg-actions {
         opacity: 1;
+        pointer-events: auto;
     }
 }
 
@@ -1755,6 +1771,7 @@ body.terminal-mode .composer {
 }
 
 .bubble {
+    position: relative;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--assistant-bubble);
@@ -2077,25 +2094,6 @@ details.trace-card > .trace-card-summary {
     min-width: 92px;
 }
 
-.composer-foot {
-    margin-top: 8px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    color: var(--muted);
-    font-size: 12px;
-}
-
-.send-state {
-    white-space: nowrap;
-}
-
-.send-state.is-active {
-    color: var(--accent);
-    font-weight: 700;
-}
-
 @keyframes panelIn {
     from {
         opacity: 0;
@@ -2264,12 +2262,6 @@ details.trace-card > .trace-card-summary {
         gap: 6px;
     }
 
-    .workbench-tabs > #viewActivityBtn {
-        flex: 1;
-        padding: 8px 10px;
-        font-size: 12px;
-    }
-
     .workspace-switcher-panel {
         left: auto;
         right: 0;
@@ -2319,10 +2311,6 @@ details.trace-card > .trace-card-summary {
         width: auto;
         min-width: 74px;
         align-self: stretch;
-    }
-
-    .composer-foot {
-        display: none;
     }
 
     .composer {
