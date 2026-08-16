@@ -68,11 +68,24 @@
                     <div id="activeMeta">请选择左侧会话</div>
                     <div class="workbench-tabs" id="workbenchTabs" aria-label="工作台视图">
                         <button type="button" id="viewActivityBtn" class="secondary is-active">活动</button>
-                        <button type="button" id="viewTerminalBtn" class="secondary">终端</button>
-                        <button type="button" id="viewFilesBtn" class="secondary">文件</button>
-                        <button type="button" id="viewDetailBtn" class="secondary">详情</button>
-                        <button type="button" id="viewConfigBtn" class="secondary">配置</button>
-                        <button type="button" id="viewCheckBtn" class="secondary">检查</button>
+                        <div class="workspace-switcher">
+                            <button
+                                type="button"
+                                id="workspaceSwitcherToggle"
+                                class="secondary workspace-switcher-btn"
+                                aria-haspopup="true"
+                                aria-expanded="false"
+                                aria-controls="workspaceSwitcherPanel"
+                                aria-label="更多视图：终端、文件、详情、配置、检查"
+                            ><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="3" cy="8" r="1.4"></circle><circle cx="8" cy="8" r="1.4"></circle><circle cx="13" cy="8" r="1.4"></circle></svg></button>
+                            <div class="workspace-switcher-panel" id="workspaceSwitcherPanel" hidden>
+                                <button type="button" id="viewTerminalBtn" class="secondary">终端</button>
+                                <button type="button" id="viewFilesBtn" class="secondary">文件</button>
+                                <button type="button" id="viewDetailBtn" class="secondary">详情</button>
+                                <button type="button" id="viewConfigBtn" class="secondary">配置</button>
+                                <button type="button" id="viewCheckBtn" class="secondary">检查</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </header>

@@ -1062,6 +1062,56 @@ button.tree-toggle:active {
     border-color: var(--accent-strong);
 }
 
+.workspace-switcher {
+    position: relative;
+    display: inline-flex;
+}
+
+.workspace-switcher-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.workspace-switcher-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+.workspace-switcher-btn.is-active {
+    color: #ffffff;
+    background: var(--accent);
+    border-color: var(--accent-strong);
+}
+
+.workspace-switcher-panel {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 8;
+    width: max-content;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fffaf2;
+    box-shadow: var(--shadow-strong);
+    flex-direction: column;
+    gap: 6px;
+}
+
+body.workspace-switcher-open .workspace-switcher-panel {
+    display: flex;
+}
+
+.workspace-switcher-panel button {
+    text-align: left;
+}
+
 .header-actions {
     display: none;
     position: absolute;
@@ -2221,14 +2271,19 @@ details.trace-card > .trace-card-summary {
     }
 
     .workbench-tabs {
-        display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+        display: flex;
         gap: 6px;
     }
 
-    .workbench-tabs button {
+    .workbench-tabs > #viewActivityBtn {
+        flex: 1;
         padding: 8px 10px;
         font-size: 12px;
+    }
+
+    .workspace-switcher-panel {
+        left: auto;
+        right: 0;
     }
 
     .composer-toolbar {

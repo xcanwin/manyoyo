@@ -778,6 +778,50 @@ process.exit(2);
         }
     });
 
+    test('should collapse terminal/files/detail/config/check tabs into a workspace switcher popover', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-workspace-switcher-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appHtml = await request(`${baseUrl}/`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appHtml.response.status).toBe(200);
+            expect(appHtml.text).toContain('id="workspaceSwitcherToggle"');
+            expect(appHtml.text).toContain('id="workspaceSwitcherPanel"');
+            expect(appHtml.text).toContain('id="viewActivityBtn"');
+            // 5 个非活动目的地都挪进了弹出面板，不再直接铺在 header 里
+            expect(appHtml.text).toMatch(/id="workspaceSwitcherPanel"[^>]*>[\s\S]*id="viewTerminalBtn"/);
+            expect(appHtml.text).toMatch(/id="workspaceSwitcherPanel"[^>]*>[\s\S]*id="viewCheckBtn"/);
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            // setActiveTab 与 isActiveSessionHistoryOnly 守卫逻辑本身完全未改动
+            expect(appScript.text).toContain('function setActiveTab(tab) {');
+            expect(appScript.text).toContain('if (!state.terminal.connected && !state.terminal.connecting && !isActiveSessionHistoryOnly()) {');
+            expect(appScript.text).toContain('function setWorkspaceSwitcherMenu(open) {');
+            expect(appScript.text).toContain("workspaceSwitcherToggle.addEventListener('click', function () {");
+            expect(appScript.text).toContain('closeWorkspaceSwitcherMenu();\n            setActiveTab(\'terminal\');');
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.text).toContain('.workspace-switcher-panel {');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should sync containerPath to selected hostPath and remove container picker button', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-path-sync-'));
         const port = await getFreePort();
