@@ -104,7 +104,7 @@ npx jest --testNamePattern="关键词"
 - 合并模式：`env`（Object，按 key 覆盖）；`envFile`、`volumes`、`ports`、`imageBuildArgs`（数组，追加）
 - `envFile` **仅支持绝对路径**；`containerName` 支持 `{now}` 模板（→ `MMDD-HHmm`）
 
-**YOLO 模式映射**（`setYolo()`）
+**YOLO 模式映射**（`lib/agent-adapters/index.js` 的 `AGENT_ADAPTERS`，`setYolo()` 与 `lib/web/server.js` 的 `resolveYoloCommand()` 均委托到这里，单一数据源）
 - `c`/`cc`/`claude` → `IS_SANDBOX=1 claude --dangerously-skip-permissions`
 - `gm`/`g`/`gemini` → `gemini --yolo`
 - `cx`/`codex` → `codex --dangerously-bypass-approvals-and-sandbox`
@@ -121,7 +121,7 @@ npx jest --testNamePattern="关键词"
 
 ### lib/web/server.js
 
-- `YOLO_COMMAND_MAP` 与 `bin/manyoyo.js` 的 `setYolo()` 保持一致，**修改时需同步两处**
+- `resolveYoloCommand()` 委托到 `lib/agent-adapters/index.js`，与 `bin/manyoyo.js` 共用同一份映射，无需分别维护
 - Web 鉴权：所有路由默认认证，匿名白名单仅限 `/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`；新增接口必须走全局认证网关
 - Agent 会话恢复参数：Claude/Gemini → `-r`，Codex → `resume`，OpenCode → `-c`
 
@@ -148,9 +148,8 @@ npx jest --testNamePattern="关键词"
 
 ### 添加新的 YOLO 智能体
 
-1. 更新 `bin/manyoyo.js` 的 `setYolo()`
-2. 同步更新 `lib/web/server.js` 的 `YOLO_COMMAND_MAP`
-3. 更新 `docs/zh/reference/agents.md` 和 `docs/en/reference/agents.md`
+1. 在 `lib/agent-adapters/index.js` 的 `AGENT_ADAPTERS` 中新增条目（`bin/manyoyo.js` 与 `lib/web/server.js` 会自动生效，无需分别修改）
+2. 更新 `docs/zh/reference/agents.md` 和 `docs/en/reference/agents.md`
 
 ### 添加新的配置选项
 

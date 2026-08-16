@@ -14,6 +14,7 @@ const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = requ
 const { initAgentConfigs } = require('../lib/init-config');
 const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
+const { resolveYoloCommand } = require('../lib/agent-adapters');
 const { runPluginCommand, createPlugin } = require('../lib/plugin');
 const { buildManyoyoLogPath } = require('../lib/log-path');
 const { resolveRuntimeConfig } = require('../lib/runtime-resolver');
@@ -635,27 +636,13 @@ function addImageBuildArg(value) {
     IMAGE_BUILD_ARGS.push("--build-arg", value);
 }
 
-const YOLO_COMMAND_MAP = {
-    claude: "IS_SANDBOX=1 claude --dangerously-skip-permissions",
-    cc: "IS_SANDBOX=1 claude --dangerously-skip-permissions",
-    c: "IS_SANDBOX=1 claude --dangerously-skip-permissions",
-    gemini: "gemini --yolo",
-    gm: "gemini --yolo",
-    g: "gemini --yolo",
-    codex: "codex --dangerously-bypass-approvals-and-sandbox",
-    cx: "codex --dangerously-bypass-approvals-and-sandbox",
-    opencode: "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode",
-    oc: "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
-};
-
 function setYolo(cli) {
-    const key = String(cli || '').trim().toLowerCase();
-    const mappedCommand = YOLO_COMMAND_MAP[key];
-    if (!mappedCommand) {
+    try {
+        EXEC_COMMAND = resolveYoloCommand(cli);
+    } catch (error) {
         console.log(`${RED}⚠️  未知LLM CLI: ${cli}${NC}`);
         process.exit(0);
     }
-    EXEC_COMMAND = mappedCommand;
 }
 
 /**
