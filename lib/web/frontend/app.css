@@ -682,9 +682,9 @@ button.tree-toggle:active {
     column-gap: 8px;
 }
 
-.tree-node-row.tree-node-row-container {
+.tree-node-row.tree-node-row-container,
+.tree-node-row.tree-node-row-agent {
     position: relative;
-    grid-template-columns: auto minmax(0, 1fr);
 }
 
 .tree-prefix {

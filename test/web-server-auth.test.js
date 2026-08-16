@@ -1111,6 +1111,9 @@ process.exit(2);
             expect(appStyle.text).toContain('.disclosure-toggle svg');
             expect(appStyle.text).toContain('.tree-node-menu {');
             expect(appStyle.text).toContain('.tree-node-row:hover .tree-node-menu,');
+            // AGENT 行也须是定位上下文，否则 .tree-node-menu（position: absolute）会脱离本行、
+            // 相对不相关的祖先定位，导致"···"触发按钮错位并遮挡侧边栏滚动条
+            expect(appStyle.text).toMatch(/\.tree-node-row\.tree-node-row-container,\s*\n\s*\.tree-node-row\.tree-node-row-agent\s*\{\s*\n\s*position:\s*relative;/);
             expect(appStyle.text).not.toContain('.tree-node-action');
             expect(appStyle.text).not.toContain('animation-delay: calc(var(--item-index, 0) * 24ms);');
             expect(appStyle.text).not.toContain('.tree-prefix-toggle.is-expanded::after');
