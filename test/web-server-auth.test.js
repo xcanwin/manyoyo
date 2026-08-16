@@ -1070,7 +1070,7 @@ process.exit(2);
             expect(appScript.text).not.toContain("getElementById('composerHint')");
             expect(appScript.text).not.toContain("getElementById('sendState')");
             // 发送/agent 回复完成后的 finally 块不应再抢焦点回输入框
-            expect(appScript.text).toMatch(/state\.sending = false;\s*\n\s*syncUi\(\);\s*\n\s*\}\s*\n\s*\}\);\s*\n\s*\n\s*if \(stopBtn\)/);
+            expect(appScript.text).toMatch(/state\.sending = false;\s*\n\s*syncUi\(\);\s*\n\s*\}\s*\n\s*\}\);\s*\n\s*\n\s*if \(composer\)/);
 
             const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
                 headers: { Cookie: authCookie }
@@ -1078,6 +1078,50 @@ process.exit(2);
             expect(appStyle.response.status).toBe(200);
             expect(appStyle.text).not.toContain('.composer-foot');
             expect(appStyle.text).not.toContain('.send-state');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should merge the standalone "停止" button into "发送" (single button that relabels/turns danger-outline while an agent run is active)', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-send-stop-merge-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appHtml = await request(`${baseUrl}/`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appHtml.response.status).toBe(200);
+            expect(appHtml.text).toContain('type="submit" id="sendBtn"');
+            expect(appHtml.text).not.toContain('id="stopBtn"');
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).not.toContain("getElementById('stopBtn')");
+            // 提交事件里先判断"当前是否正在跑 agent"，是的话把这次提交当成停止指令，
+            // 而不是走发送逻辑；停止指令复用同一个 /agent/stop 接口
+            expect(appScript.text).toContain("if (mode === 'agent' && activeAgentRunning) {");
+            expect(appScript.text).toContain("'/api/sessions/' + encodeURIComponent(state.active) + '/agent/stop'");
+            // 运行期间按钮重新打上标签、切换成危险色描边样式，而不是维持两个按钮各自禁用/启用
+            expect(appScript.text).toContain("sendBtn.textContent = state.agentRun.stopping ? '停止中…' : '停止';");
+            expect(appScript.text).toContain("sendBtn.classList.add('danger-outline');");
+            expect(appScript.text).toContain("sendBtn.classList.remove('danger-outline');");
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            expect(appStyle.text).not.toContain('#stopBtn');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -1213,6 +1257,9 @@ process.exit(2);
             // 无论前面有没有"会话"按钮（移动端才有），都始终贴右；"会话"保持默认贴左
             expect(appStyle.text).toMatch(/\.workbench-tabs\s*\{[^}]*flex:\s*1;/);
             expect(appStyle.text).toMatch(/\.workspace-switcher\s*\{[^}]*margin-left:\s*auto;/);
+            // 触发按钮贴右后，弹出面板也必须锚定在按钮右边缘向左展开，否则宽屏下会超出视口右侧
+            expect(appStyle.text).toMatch(/\.workspace-switcher-panel\s*\{[^}]*right:\s*0;/);
+            expect(appStyle.text).not.toMatch(/\.workspace-switcher-panel\s*\{[^}]*left:\s*0;/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
