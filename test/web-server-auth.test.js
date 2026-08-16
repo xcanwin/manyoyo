@@ -963,6 +963,32 @@ process.exit(2);
         }
     });
 
+    test('should flatten session tree items (no card border/gradient, flat selected state)', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-tree-flat-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            expect(appStyle.text).toMatch(/\.tree-node-button\s*\{[^}]*border:\s*1px solid transparent;/);
+            expect(appStyle.text).toMatch(/\.tree-node-button\s*\{[^}]*background:\s*transparent;/);
+            expect(appStyle.text).toMatch(/\.tree-node-button\.active\s*\{\s*background:\s*var\(--accent-soft\);\s*\}/);
+            expect(appStyle.text).not.toContain('.tree-node-button-directory,');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should sync containerPath to selected hostPath and remove container picker button', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-path-sync-'));
         const port = await getFreePort();

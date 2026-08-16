@@ -802,17 +802,17 @@ button.tree-toggle:active {
 .tree-node-button {
     width: 100%;
     text-align: left;
-    border: 1px solid rgba(181, 146, 99, 0.38);
-    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid transparent;
+    background: transparent;
     color: var(--text);
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 10px 11px;
+    transition: background-color 120ms ease;
 }
 
 .tree-node-button:hover {
     transform: none;
-    border-color: #d1aa7f;
-    background: #fff8ef;
+    background: var(--panel-soft);
 }
 
 .tree-node-button:active {
@@ -825,9 +825,7 @@ button.tree-toggle:active {
 }
 
 .tree-node-button.active {
-    border-color: #c68d5a;
-    background: #fff3e8;
-    box-shadow: inset 3px 0 0 var(--accent), 0 0 0 2px rgba(196, 85, 31, 0.14);
+    background: var(--accent-soft);
 }
 
 .tree-node-button.tree-node-tone-history .tree-node-title,
@@ -836,13 +834,7 @@ button.tree-toggle:active {
 }
 
 .tree-node-block.has-active > .tree-node-row > .tree-node-button:not(.active) {
-    border-color: #c68d5a;
-    box-shadow: 0 0 0 2px rgba(196, 85, 31, 0.08);
-}
-
-.tree-node-button-directory,
-.tree-node-button-container {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(249, 242, 232, 0.98) 100%);
+    background: var(--panel-soft);
 }
 
 .tree-node-row-container .tree-node-button-container {
