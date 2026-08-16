@@ -843,8 +843,13 @@ process.exit(2);
             expect(appScript.response.status).toBe(200);
             expect(appScript.text).toContain('function syncComposerExpanded() {');
             expect(appScript.text).toContain('window.ManyoyoChatBehavior.shouldExpandComposer({ focused, hasDraft });');
-            expect(appScript.text).toContain("commandInput.addEventListener('focus', syncComposerExpanded);");
-            expect(appScript.text).toContain("commandInput.addEventListener('blur', syncComposerExpanded);");
+            // 焦点判定必须基于"焦点是否仍在 composer 容器内"，而不是仅仅等于 commandInput，
+            // 否则点击 composer 内的 Agent/命令/CLI 按钮时，commandInput 一 blur 就会把工具栏收起，
+            // 导致按钮的点击因布局收缩而落空（回归用例，对应用户反馈"点击没生效"）。
+            expect(appScript.text).toContain('const focused = composer.contains(document.activeElement);');
+            expect(appScript.text).toContain("composer.addEventListener('focusin', syncComposerExpanded);");
+            expect(appScript.text).toContain("composer.addEventListener('focusout', function () {");
+            expect(appScript.text).toContain('window.setTimeout(syncComposerExpanded, 0);');
             expect(appScript.text).toContain("commandInput.addEventListener('input', syncComposerExpanded);");
 
             const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
