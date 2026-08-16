@@ -1281,7 +1281,7 @@ process.exit(2);
         }
     });
 
-    test('should raise a hovered message above later siblings and the sticky mobile composer so its copy-action overlay is never covered', async () => {
+    test('should reserve layout space for the copy-action overlay (instead of fighting z-index wars with the next sibling) and only elevate the last message above the sticky mobile composer', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-msg-actions-zindex-'));
         const port = await getFreePort();
         let handle = null;
@@ -1295,21 +1295,23 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(appStyle.response.status).toBe(200);
-            // .msg 的入场 animation 会让每条消息各自建立独立层叠上下文，悬浮浮层的 z-index
-            // 只在本条消息内部有效，会被 DOM 序更靠后的兄弟消息整体盖住；显式给 .msg 一个
-            // z-index 基线，悬浮/聚焦时再抬高，才能让浮层穿透到兄弟消息之上
-            expect(appStyle.text).toMatch(/\.msg\s*\{[^}]*z-index:\s*0;/);
-            expect(appStyle.text).toMatch(/\.msg:hover,\s*\n\.msg:focus-within\s*\{\s*[^}]*z-index:\s*4;/);
-            // 移动端 .composer 是 position: sticky 且 z-index: 3，悬浮态必须盖过它
+            // 触屏设备一次性显示所有消息的浮层（没有 :hover 概念），如果靠"悬浮时统一提升
+            // z-index"，同时被抬到同一个值的消息会按 DOM 序打平——后一条盖住前一条，
+            // 早消息的浮层反而被下一条消息的时间戳挡住。改成给带浮层的消息本身留够
+            // margin-bottom，让浮层完整落在消息间的空白里，从根源上不再需要抢层级
+            expect(appStyle.text).toMatch(/\.msg:has\(\.msg-actions\)\s*\{\s*\n\s*margin-bottom:\s*20px;/);
+            // 唯一还需要抢层级的是"最后一条消息 vs 吸底 composer"：composer 在移动端是
+            // position: sticky + z-index: 3，只有最后一条消息的浮层可能伸进它的区域
+            expect(appStyle.text).toMatch(/\.msg:last-child\s*\{[^}]*z-index:\s*4;/);
             expect(appStyle.text).toMatch(/\.composer\s*\{[^}]*z-index:\s*3;/);
             // 仅靠 z-index 不够：#messages 用 overflow-y: auto 裁切超出自身盒子的内容，
             // z-index 再高也救不回被裁掉的像素。最后一条消息的浮层会伸到气泡下方，
             // 必须给 #messages 留够 padding-bottom，滚到底部时浮层才有地方完整显示，不被裁掉
             expect(appStyle.text).toMatch(/#messages\s*\{[^}]*padding:\s*14px 14px 44px;/);
-            // 触屏设备没有真正的 :hover，.msg:hover 提升 z-index 的规则永远不会触发，
-            // 必须在 @media (hover: none) 里常驻给 .msg 提升 z-index，否则浮层仍会被
-            // 移动端吸底的 composer（position: sticky, z-index: 3）盖住
-            expect(appStyle.text).toMatch(/@media \(hover: none\) \{\s*\.msg-actions \{[^}]*\}\s*\n\s*[\s\S]*?\.msg \{\s*\n\s*z-index:\s*4;/);
+            // "选项"下拉面板同样会被覆盖：移动端 .composer 自身的 position: sticky + z-index: 3
+            // 会建立一个新的层叠上下文，把面板的 z-index: 8 困在内部，从外部看仍然只等同于 3，
+            // 打开下拉时需要把 composer 本身的层级也一起抬到明显更高
+            expect(appStyle.text).toMatch(/body\.composer-options-open \.composer\s*\{\s*\n[\s\S]*?z-index:\s*20;/);
             // margin 会在气泡底部和浮层之间留一段"死区"（不属于任何元素，无法被 :hover 命中），
             // 鼠标快速下移穿过这段空隙时会先丢失 .msg:hover，浮层还没碰到就先淡出消失；
             // 改成 padding-top，让留白仍属于 .msg-actions 自身的可命中范围
