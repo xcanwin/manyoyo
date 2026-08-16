@@ -37,7 +37,7 @@
 - `lib/plugin/index.js` + `lib/plugin/playwright.js`: 插件命令分发与 Playwright 插件主逻辑（场景配置、容器/宿主启动链路）。
 - `lib/plugin/playwright-assets/`: Playwright 容器场景 compose 与镜像资源模板。
 - `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
-- `lib/web/frontend/`: 网页前端静态资源（`app/login/markdown/file-browser/CodeMirror` 的 `html/css/js`）。
+- `lib/web/frontend/`: 网页前端静态资源（`app/login/markdown/file-browser/CodeMirror` 的 `html/css/js`）；`chat-behavior.js` 是抽出的纯函数模块（滚动跟随判定、执行过程摘要、composer 展开判定），仿 `markdown-renderer.js` 的 `window.Manyoyo*` + Node `vm` 单测模式。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docker/res/`: 各 Agent 默认配置、Playwright 资源与 supervisor 模板。

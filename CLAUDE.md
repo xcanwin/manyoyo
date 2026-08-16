@@ -135,7 +135,8 @@ npx jest --testNamePattern="关键词"
 
 ### lib/web/frontend/
 
-- `.main` 三行 grid：`grid-template-rows: auto minmax(0, 1fr) auto`（header / 内容区 / composer）。增删 `.main` 直接子元素时必须同步调整行数，否则内容区高度失效
+- 布局是两层 grid 嵌套：`.main`（`header` + `.workspace-shell` 两个直接子元素）套着内层 `.workspace-main`（`grid-template-rows: minmax(0, 1fr) auto`，真正的"内容区 / composer"二分在这一层，composer 并非 `.main` 的直接子元素）。增删 `.workspace-main` 直接子元素时须同步调整行数，否则内容区高度失效
+- 中间工作台的"终端/文件/详情/配置/检查"5 个次要标签收在 `#workspaceSwitcherToggle` 图标按钮触发的弹出面板 `#workspaceSwitcherPanel` 里，仅"活动"作为常驻标签；`setActiveTab()`/`isActiveSessionHistoryOnly()` 逻辑本身未变，只是触发入口从常驻按钮改为面板内按钮
 - `connectTerminal()` 前须加 `isActiveSessionHistoryOnly()` 守卫（三处：`setActiveTab`、`handleSessionItemClick`、`refreshSessions`），否则点击「仅历史」会话会触发后端新建容器
 
 ### Dockerfile
