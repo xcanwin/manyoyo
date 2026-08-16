@@ -1685,6 +1685,19 @@ exit 0
         });
     });
 
+    describe('Doctor Command', () => {
+        test('doctor --json outputs a stable diagnostic report without a container', () => {
+            const stdout = execSync(`node ${BIN_PATH} doctor --json`, { encoding: 'utf-8' });
+            const report = JSON.parse(stdout);
+
+            expect(report).toEqual(expect.objectContaining({
+                ok: expect.any(Boolean),
+                checks: expect.any(Array)
+            }));
+            expect(report.checks.map(check => check.code)).toEqual(expect.arrayContaining(['MODE_VALID']));
+        });
+    });
+
     // ==============================================================================
     // 选项测试
     // ==============================================================================

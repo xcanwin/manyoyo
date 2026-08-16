@@ -15,6 +15,7 @@ const { initAgentConfigs } = require('../lib/init-config');
 const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
 const { resolveYoloCommand } = require('../lib/agent-adapters');
+const { runDoctorChecks } = require('../lib/doctor');
 const { runPluginCommand, createPlugin } = require('../lib/plugin');
 const { buildManyoyoLogPath } = require('../lib/log-path');
 const { resolveRuntimeConfig } = require('../lib/runtime-resolver');
@@ -744,6 +745,14 @@ function runCmd(cmd, args, options = {}) {
     return result.stdout || '';
 }
 
+function checkPortAvailability(port) {
+    return new Promise(resolve => {
+        const server = net.createServer();
+        server.once('error', () => resolve('occupied'));
+        server.listen(port, '127.0.0.1', () => server.close(() => resolve('available')));
+    });
+}
+
 function dockerExecArgs(args, options = {}) {
     try {
         return runCmd(DOCKER_CMD, args, options);
@@ -1275,6 +1284,13 @@ Notes:
         .option('--yes', '所有提示自动确认 (用于CI/脚本)')
         .action((agents, options) => selectAction('init', { ...options, initConfig: agents === undefined ? 'all' : agents }));
 
+    program.command('doctor')
+        .description('诊断容器运行时、镜像、配置、Agent、模式、插件和端口')
+        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+        .option('--port <port>', '检查指定监听端口')
+        .option('--json', '以 JSON 输出稳定诊断结果')
+        .action(options => selectAction('doctor', { ...options, doctor: true }));
+
     program.command('update')
         .description('更新 MANYOYO（若检测为本地 file 安装则跳过）')
         .action(() => selectAction('update', { update: true }));
@@ -1321,6 +1337,7 @@ Notes:
     const isPruneMode = selectedAction === 'prune';
     const isShowConfigMode = selectedAction === 'config-show';
     const isShowCommandMode = selectedAction === 'config-command';
+    const isDoctorMode = selectedAction === 'doctor';
     const isServerMode = options.server !== undefined;
     const isServerStopMode = Boolean(selectedAction === 'serve' && options.stop);
     const isServerRestartMode = Boolean(selectedAction === 'serve' && options.restart);
@@ -1329,7 +1346,7 @@ Notes:
         throw new Error('serve --stop 与 --restart 不能同时使用');
     }
 
-    const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin']);
+    const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin', 'doctor']);
     if (isServerStopMode) {
         noDockerActions.add('serve');
     }
@@ -1513,6 +1530,31 @@ Notes:
         const sanitizedConfig = sanitizeSensitiveData(finalConfig);
         console.log(JSON.stringify(sanitizedConfig, null, 4));
         process.exit(0);
+    }
+
+    if (isDoctorMode) {
+        const parsedPort = options.port === undefined ? null : Number(options.port);
+        const portStatus = Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535
+            ? await checkPortAvailability(parsedPort)
+            : undefined;
+        const report = runDoctorChecks({
+            runCommand: runCmd,
+            configExists: fs.existsSync(getManyoyoConfigPath()),
+            imageName: IMAGE_NAME,
+            imageVersion: IMAGE_VERSION,
+            agentCommand: EXEC_COMMAND,
+            containerMode: contModeValue || 'common',
+            pluginConfig: config.plugins,
+            portStatus
+        });
+        if (options.json) {
+            console.log(JSON.stringify(report, null, 4));
+        } else {
+            report.checks.forEach(check => {
+                console.log(`[${check.status.toUpperCase()}] ${check.code}: ${check.summary}${check.action ? ` (${check.action})` : ''}`);
+            });
+        }
+        process.exit(report.ok ? 0 : 1);
     }
 
     if (isPsMode) { getContList(); process.exit(0); }
