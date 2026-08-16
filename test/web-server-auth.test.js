@@ -1112,8 +1112,8 @@ process.exit(2);
         }
     });
 
-    test('should move "AGENT 过程" below "AGENT 回复" for display via reorderMessagesForDisplay', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-reorder-'));
+    test('should merge "AGENT 过程" into "AGENT 回复" for display (single block, trace before reply content, no separate 过程 label)', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-merge-'));
         const port = await getFreePort();
         let handle = null;
 
@@ -1126,14 +1126,77 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(chatBehaviorScript.response.status).toBe(200);
-            expect(chatBehaviorScript.text).toContain('function reorderMessagesForDisplay(messages) {');
+            expect(chatBehaviorScript.text).toContain('function mergeTraceIntoReply(messages) {');
+            // 合并后的消息用 trace 的时间戳作为唯一显示时间
+            expect(chatBehaviorScript.text).toContain('Object.assign({}, next, { timestamp: msg.timestamp, pairedTrace: msg })');
 
             const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
                 headers: { Cookie: authCookie }
             });
             expect(appScript.response.status).toBe(200);
             expect(appScript.text).toContain('function renderMessages(rawMessages, options) {');
-            expect(appScript.text).toContain('const messages = window.ManyoyoChatBehavior.reorderMessagesForDisplay(rawMessages);');
+            expect(appScript.text).toContain('const messages = window.ManyoyoChatBehavior.mergeTraceIntoReply(rawMessages);');
+            // trace 内容渲染在回复气泡内部、回复正文之前，不再单独起一行 "AGENT 过程"
+            expect(appScript.text).toContain('if (msg && msg.pairedTrace) {\n            appendStructuredTraceContent(bubble, msg.pairedTrace);\n        }');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should raise a hovered message above later siblings and the sticky mobile composer so its copy-action overlay is never covered', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-msg-actions-zindex-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            // .msg 的入场 animation 会让每条消息各自建立独立层叠上下文，悬浮浮层的 z-index
+            // 只在本条消息内部有效，会被 DOM 序更靠后的兄弟消息整体盖住；显式给 .msg 一个
+            // z-index 基线，悬浮/聚焦时再抬高，才能让浮层穿透到兄弟消息之上
+            expect(appStyle.text).toMatch(/\.msg\s*\{[^}]*z-index:\s*0;/);
+            expect(appStyle.text).toMatch(/\.msg:hover,\s*\n\.msg:focus-within\s*\{\s*[^}]*z-index:\s*4;/);
+            // 移动端 .composer 是 position: sticky 且 z-index: 3，悬浮态必须盖过它
+            expect(appStyle.text).toMatch(/\.composer\s*\{[^}]*z-index:\s*3;/);
+            // 仅靠 z-index 不够：#messages 用 overflow-y: auto 裁切超出自身盒子的内容，
+            // z-index 再高也救不回被裁掉的像素。最后一条消息的浮层会伸到气泡下方，
+            // 必须给 #messages 留够 padding-bottom，滚到底部时浮层才有地方完整显示，不被裁掉
+            expect(appStyle.text).toMatch(/#messages\s*\{[^}]*padding:\s*14px 14px 44px;/);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should pin the workspace switcher toggle to the right edge of the workbench-tabs row, and mobileSessionToggle to the left', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-workbench-alignment-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            // .workbench-tabs 撑满一整行；.workspace-switcher（"···"）用 margin-left: auto 贴住行的右边，
+            // 无论前面有没有"会话"按钮（移动端才有），都始终贴右；"会话"保持默认贴左
+            expect(appStyle.text).toMatch(/\.workbench-tabs\s*\{[^}]*flex:\s*1;/);
+            expect(appStyle.text).toMatch(/\.workspace-switcher\s*\{[^}]*margin-left:\s*auto;/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();

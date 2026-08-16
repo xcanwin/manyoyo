@@ -1062,8 +1062,10 @@ button.tree-toggle:active {
 }
 
 .workbench-tabs {
-    display: inline-flex;
+    flex: 1;
+    display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
 }
 
@@ -1077,6 +1079,8 @@ button.tree-toggle:active {
 .workspace-switcher {
     position: relative;
     display: inline-flex;
+    /* 始终贴住这一行的右侧：桌面端只有它自己时贴最右，移动端"会话"贴最左时它仍贴最右 */
+    margin-left: auto;
 }
 
 .workspace-switcher-btn {
@@ -1155,7 +1159,7 @@ body.workspace-switcher-open .workspace-switcher-panel {
     min-height: 0;
     overflow-y: auto;
     margin: 0;
-    padding: 14px;
+    padding: 14px 14px 44px;
     border-radius: 14px;
     display: flex;
     flex-direction: column;
@@ -1651,6 +1655,17 @@ body.terminal-mode .composer {
     gap: 6px;
     animation: msgIn 210ms ease both;
     animation-delay: 0ms;
+    /* animation 会让每条消息各自建立独立的层叠上下文（transform/opacity 动画的副作用），
+       悬浮显示的 .msg-actions 浮层因此只能在本条消息内部比较 z-index，
+       会被后面消息按 DOM 序整体盖住；悬浮时显式提升本条消息的 z-index 才能穿透 */
+    z-index: 0;
+}
+
+.msg:hover,
+.msg:focus-within {
+    /* 需要高于移动端 .composer 的 z-index: 3（position: sticky，悬浮在滚动内容之上），
+       否则最后一条消息的浮层会被吸底的输入框盖住 */
+    z-index: 4;
 }
 
 .msg.user {
@@ -2258,7 +2273,6 @@ details.trace-card > .trace-card-summary {
     }
 
     .workbench-tabs {
-        display: flex;
         gap: 6px;
     }
 

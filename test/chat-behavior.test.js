@@ -107,52 +107,74 @@ describe('ManyoyoChatBehavior.buildDocumentTitle', () => {
     });
 });
 
-describe('ManyoyoChatBehavior.reorderMessagesForDisplay', () => {
-    const { reorderMessagesForDisplay } = loadChatBehavior();
+describe('ManyoyoChatBehavior.mergeTraceIntoReply', () => {
+    const { mergeTraceIntoReply } = loadChatBehavior();
 
-    test('trace 紧跟着最终回复：显示时把回复挪到 trace 前面', () => {
+    test('trace 紧跟着最终回复：合并成一条，携带 pairedTrace，时间用 trace 的时间', () => {
         const user = { id: 'u1', role: 'user' };
-        const trace = { id: 't1', role: 'assistant', streamTrace: true };
-        const reply = { id: 'r1', role: 'assistant', mode: 'agent' };
-        expect(reorderMessagesForDisplay([user, trace, reply])).toEqual([user, reply, trace]);
+        const trace = { id: 't1', role: 'assistant', streamTrace: true, timestamp: '2026-01-01T00:00:00.000Z' };
+        const reply = { id: 'r1', role: 'assistant', mode: 'agent', content: '你好', timestamp: '2026-01-01T00:00:05.000Z' };
+        const result = mergeTraceIntoReply([user, trace, reply]);
+        expect(result).toEqual([
+            user,
+            { id: 'r1', role: 'assistant', mode: 'agent', content: '你好', timestamp: '2026-01-01T00:00:00.000Z', pairedTrace: trace }
+        ]);
     });
 
-    test('trace 紧跟着流式回复（streamingReply）：同样挪到前面', () => {
-        const trace = { id: 't1', role: 'assistant', streamTrace: true };
-        const streamingReply = { id: 'r1', role: 'assistant', streamingReply: true };
-        expect(reorderMessagesForDisplay([trace, streamingReply])).toEqual([streamingReply, trace]);
+    test('trace 紧跟着流式回复（streamingReply）：同样合并', () => {
+        const trace = { id: 't1', role: 'assistant', streamTrace: true, timestamp: 't' };
+        const streamingReply = { id: 'r1', role: 'assistant', streamingReply: true, content: '进行中', timestamp: 'r' };
+        const result = mergeTraceIntoReply([trace, streamingReply]);
+        expect(result).toEqual([
+            { id: 'r1', role: 'assistant', streamingReply: true, content: '进行中', timestamp: 't', pairedTrace: trace }
+        ]);
     });
 
-    test('trace 后面还没有回复（仍在等待）：保持原样', () => {
+    test('trace 后面还没有回复（仍在等待）：保持原样，不合并', () => {
         const trace = { id: 't1', role: 'assistant', streamTrace: true };
-        expect(reorderMessagesForDisplay([trace])).toEqual([trace]);
+        expect(mergeTraceIntoReply([trace])).toEqual([trace]);
     });
 
-    test('trace 后面跟着的不是 assistant 回复：不误swap', () => {
+    test('trace 后面跟着的不是 assistant 回复：不误合并', () => {
         const trace = { id: 't1', role: 'assistant', streamTrace: true };
         const user = { id: 'u2', role: 'user' };
-        expect(reorderMessagesForDisplay([trace, user])).toEqual([trace, user]);
+        expect(mergeTraceIntoReply([trace, user])).toEqual([trace, user]);
     });
 
-    test('trace 后面跟着另一个 trace：不误swap', () => {
+    test('trace 后面跟着另一个 trace：不误合并', () => {
         const trace1 = { id: 't1', role: 'assistant', streamTrace: true };
         const trace2 = { id: 't2', role: 'assistant', streamTrace: true };
-        expect(reorderMessagesForDisplay([trace1, trace2])).toEqual([trace1, trace2]);
+        expect(mergeTraceIntoReply([trace1, trace2])).toEqual([trace1, trace2]);
     });
 
-    test('多轮对话：每一对 trace+回复独立换序，互不影响', () => {
+    test('多轮对话：每一对 trace+回复独立合并，互不影响', () => {
         const u1 = { id: 'u1', role: 'user' };
-        const t1 = { id: 't1', role: 'assistant', streamTrace: true };
-        const r1 = { id: 'r1', role: 'assistant', mode: 'agent' };
+        const t1 = { id: 't1', role: 'assistant', streamTrace: true, timestamp: 't1' };
+        const r1 = { id: 'r1', role: 'assistant', mode: 'agent', timestamp: 'r1' };
         const u2 = { id: 'u2', role: 'user' };
-        const t2 = { id: 't2', role: 'assistant', streamTrace: true };
-        const r2 = { id: 'r2', role: 'assistant', mode: 'agent' };
-        expect(reorderMessagesForDisplay([u1, t1, r1, u2, t2, r2])).toEqual([u1, r1, t1, u2, r2, t2]);
+        const t2 = { id: 't2', role: 'assistant', streamTrace: true, timestamp: 't2' };
+        const r2 = { id: 'r2', role: 'assistant', mode: 'agent', timestamp: 'r2' };
+        const result = mergeTraceIntoReply([u1, t1, r1, u2, t2, r2]);
+        expect(result).toEqual([
+            u1,
+            { id: 'r1', role: 'assistant', mode: 'agent', timestamp: 't1', pairedTrace: t1 },
+            u2,
+            { id: 'r2', role: 'assistant', mode: 'agent', timestamp: 't2', pairedTrace: t2 }
+        ]);
+    });
+
+    test('不修改原始消息对象（不产生副作用）', () => {
+        const trace = { id: 't1', role: 'assistant', streamTrace: true, timestamp: 't' };
+        const reply = { id: 'r1', role: 'assistant', mode: 'agent', timestamp: 'r' };
+        mergeTraceIntoReply([trace, reply]);
+        expect(reply.pairedTrace).toBeUndefined();
+        expect(reply.timestamp).toBe('r');
+        expect(trace.timestamp).toBe('t');
     });
 
     test('非数组/空输入不抛异常', () => {
-        expect(reorderMessagesForDisplay(null)).toEqual([]);
-        expect(reorderMessagesForDisplay(undefined)).toEqual([]);
-        expect(reorderMessagesForDisplay([])).toEqual([]);
+        expect(mergeTraceIntoReply(null)).toEqual([]);
+        expect(mergeTraceIntoReply(undefined)).toEqual([]);
+        expect(mergeTraceIntoReply([])).toEqual([]);
     });
 });
