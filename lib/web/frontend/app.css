@@ -118,7 +118,7 @@ body::after {
 
 .sidebar {
     min-height: 0;
-    padding: 16px;
+    padding: 16px 12px 8px;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -151,6 +151,7 @@ body::after {
     font-size: 22px;
     line-height: 1;
     text-transform: uppercase;
+    white-space: nowrap;
 }
 
 .sidebar-actions {
@@ -164,6 +165,16 @@ body::after {
 
 .sidebar-actions button {
     min-width: 62px;
+}
+
+.sidebar-create button,
+.sidebar-bottom button {
+    width: 100%;
+}
+
+.sidebar-bottom {
+    display: flex;
+    margin-top: -4px;
 }
 
 input:focus,
@@ -898,7 +909,7 @@ textarea:focus-visible {
 
 .main {
     min-height: 0;
-    padding: 14px;
+    padding: 8px 14px;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 0;
@@ -914,8 +925,7 @@ textarea:focus-visible {
     justify-content: space-between;
     align-items: flex-start;
     gap: 12px;
-    padding: 6px 8px 12px;
-    border-bottom: 1px solid var(--line-medium);
+    padding: 0 8px 4px;
 }
 
 .header-main {
@@ -995,7 +1005,7 @@ body.workspace-switcher-open .workspace-switcher-panel {
 .workspace-shell {
     min-height: 0;
     height: 100%;
-    padding-top: 10px;
+    padding-top: 6px;
     display: block;
     overflow: hidden;
 }
@@ -1871,8 +1881,8 @@ details.trace-card > .trace-card-summary {
 }
 
 .composer {
-    margin-top: 12px;
-    padding: 12px 8px 4px;
+    margin-top: 4px;
+    padding: 4px 8px 0;
     border-radius: 14px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 249, 240, 0.78) 100%);
 }
