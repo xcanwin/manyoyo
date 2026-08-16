@@ -837,8 +837,9 @@ button.tree-toggle:active {
     background: var(--panel-soft);
 }
 
-.tree-node-row-container .tree-node-button-container {
-    padding-right: 52px;
+.tree-node-row-container .tree-node-button-container,
+.tree-node-row-agent .tree-node-button-agent {
+    padding-right: 38px;
 }
 
 .tree-node-main {
@@ -891,32 +892,90 @@ button.tree-toggle:active {
     color: var(--status-unknown-text);
 }
 
-.tree-node-hover-menu {
+.tree-node-menu {
     position: absolute;
     top: 50%;
-    right: 10px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    right: 6px;
+    transform: translateY(-50%);
     opacity: 0;
     pointer-events: none;
-    transform: translateY(-50%) translateX(4px);
-    transition: opacity 140ms ease, transform 140ms ease;
+    transition: opacity 140ms ease;
 }
 
-.tree-node-row-container:hover .tree-node-hover-menu,
-.tree-node-hover-menu:focus-within {
+.tree-node-row:hover .tree-node-menu,
+.tree-node-menu:focus-within,
+.tree-node-menu.is-open {
     opacity: 1;
     pointer-events: auto;
-    transform: translateY(-50%) translateX(0);
 }
 
-.tree-node-menu-item {
-    padding: 6px 9px;
-    font-size: 11px;
-    border-radius: 999px;
-    white-space: nowrap;
-    box-shadow: 0 10px 22px rgba(44, 31, 15, 0.12);
+@media (hover: none) {
+    .tree-node-menu {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+
+.tree-node-menu-trigger {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+}
+
+.tree-node-menu-trigger svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+.tree-node-menu-panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 9;
+    width: max-content;
+    min-width: 140px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fffaf2;
+    box-shadow: var(--shadow-strong);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tree-node-menu-panel[hidden] {
+    display: none;
+}
+
+.tree-node-menu-panel-item {
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 12px;
+    padding: 7px 9px;
+    border-radius: 6px;
+}
+
+.tree-node-menu-panel-item:hover {
+    transform: none;
+    background: var(--panel-soft);
+}
+
+.tree-node-menu-panel-item.is-danger {
+    color: var(--danger);
+}
+
+.tree-node-menu-panel-item.is-danger:hover {
+    background: var(--danger-soft);
 }
 
 .tree-node-children[hidden] {

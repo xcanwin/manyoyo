@@ -913,9 +913,9 @@ process.exit(2);
             expect(appStyle.text).toMatch(/\.trace-flow-toggle\s*\{[^}]*border-radius:\s*10px/);
             expect(appStyle.text).toMatch(/\.trace-card\s*\{[^}]*border-radius:\s*10px/);
             expect(appStyle.text).toMatch(/\.msg-copy-btn\s*\{[^}]*border-radius:\s*10px/);
-            // 徽标语言：会话状态 / 树节点菜单 / 执行过程徽标统一为 999px 全圆 pill
+            // 徽标语言：会话状态 / 执行过程徽标统一为 999px 全圆 pill
+            // （会话树的"更多操作"已改造成下拉菜单，不再是 pill 按钮，见阶段6.2）
             expect(appStyle.text).toMatch(/\.session-status\s*\{[^}]*border-radius:\s*999px/);
-            expect(appStyle.text).toMatch(/\.tree-node-menu-item\s*\{[^}]*border-radius:\s*999px/);
             expect(appStyle.text).toMatch(/\.trace-card-badge\s*\{[^}]*border-radius:\s*999px/);
         } finally {
             if (handle && typeof handle.close === 'function') {
@@ -981,6 +981,49 @@ process.exit(2);
             expect(appStyle.text).toMatch(/\.tree-node-button\s*\{[^}]*background:\s*transparent;/);
             expect(appStyle.text).toMatch(/\.tree-node-button\.active\s*\{\s*background:\s*var\(--accent-soft\);\s*\}/);
             expect(appStyle.text).not.toContain('.tree-node-button-directory,');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should expose a per-row "..." menu with delete for both container and agent tree nodes, reachable on touch devices too', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-tree-menu-delete-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            // 通用菜单构造函数，容器行与 AGENT 行共用
+            expect(appScript.text).toContain('function createTreeNodeMenu(items) {');
+            expect(appScript.text).toContain('function closeOpenTreeNodeMenu() {');
+            // 容器行：新建 AGENT + 删除容器；AGENT 行：删除 AGENT
+            expect(appScript.text).toContain("label: '新建 AGENT',");
+            expect(appScript.text).toContain("label: '删除容器',");
+            expect(appScript.text).toContain("label: '删除 AGENT',");
+            expect(appScript.text).toContain('removeContainerByName(containerName);');
+            expect(appScript.text).toContain('removeAgentSessionByName(session.name, agentTitle);');
+            // 任意会话删除（不局限当前 active）：只有目标就是当前会话时才需要替补/重载消息
+            expect(appScript.text).toContain('const isActive = target === state.active;');
+            expect(appScript.text).toContain('const wasActiveContainer = parseSessionKey(state.active).containerName === target;');
+            // 点外部/Escape 关闭
+            expect(appScript.text).toContain('if (openTreeNodeMenu && !openTreeNodeMenu.wrap.contains(target)) {');
+            expect(appScript.text).toContain('if (event.key === \'Escape\' && openTreeNodeMenu) {');
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            // 触屏设备兜底：无 hover 能力时菜单触发按钮必须默认可见
+            expect(appStyle.text).toMatch(/@media \(hover: none\) \{\s*\.tree-node-menu \{\s*opacity: 1;/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -1055,8 +1098,8 @@ process.exit(2);
             expect(appScript.text).toContain("button.innerHTML = '<svg viewBox=\"0 0 12 12\"");
             expect(appScript.text).toContain("button.setAttribute('role', 'treeitem');");
             expect(appScript.text).toContain("childrenNode.setAttribute('role', 'group');");
-            expect(appScript.text).toContain("hoverMenu.className = 'tree-node-hover-menu';");
-            expect(appScript.text).toContain("addAgentBtn.className = 'secondary tree-node-menu-item';");
+            expect(appScript.text).toContain("wrap.className = 'tree-node-menu';");
+            expect(appScript.text).toContain("trigger.className = 'secondary tree-node-menu-trigger';");
             expect(appScript.text).toContain('function updateSidebarActiveSelection() {');
             expect(appScript.text).toContain('updateSidebarActiveSelection();');
 
@@ -1066,8 +1109,8 @@ process.exit(2);
             expect(appStyle.response.status).toBe(200);
             expect(appStyle.text).toContain('--tree-guide:');
             expect(appStyle.text).toContain('.disclosure-toggle svg');
-            expect(appStyle.text).toContain('.tree-node-hover-menu');
-            expect(appStyle.text).toContain('.tree-node-row-container:hover .tree-node-hover-menu');
+            expect(appStyle.text).toContain('.tree-node-menu {');
+            expect(appStyle.text).toContain('.tree-node-row:hover .tree-node-menu,');
             expect(appStyle.text).not.toContain('.tree-node-action');
             expect(appStyle.text).not.toContain('animation-delay: calc(var(--item-index, 0) * 24ms);');
             expect(appStyle.text).not.toContain('.tree-prefix-toggle.is-expanded::after');
@@ -1447,11 +1490,10 @@ process.exit(2);
             });
             expect(appHtml.response.status).toBe(200);
             expect(appHtml.text).toContain('id="openCreateMenuBtn" class="secondary">新建容器</button>');
-            expect(appHtml.text.indexOf('id="openCreateMenuBtn"')).toBeLessThan(appHtml.text.indexOf('id="removeBtn"'));
-            expect(appHtml.text.indexOf('id="removeBtn"')).toBeLessThan(appHtml.text.indexOf('id="addAgentBtn"'));
-            expect(appHtml.text).toContain('id="removeBtn" class="danger">删除容器</button>');
+            expect(appHtml.text.indexOf('id="openCreateMenuBtn"')).toBeLessThan(appHtml.text.indexOf('id="addAgentBtn"'));
             expect(appHtml.text).toContain('id="addAgentBtn" class="secondary">新建 AGENT</button>');
-            expect(appHtml.text).toContain('id="removeAllBtn" class="danger">删除 AGENT</button>');
+            expect(appHtml.text).not.toContain('id="removeBtn"');
+            expect(appHtml.text).not.toContain('id="removeAllBtn"');
 
             const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
                 headers: { Cookie: authCookie }
@@ -1464,14 +1506,14 @@ process.exit(2);
             expect(appScript.text).toContain("openCreateMenuBtn.addEventListener('click', function () {");
             expect(appScript.text).toContain('function findLatestCreatedSessionName(sessions, preferredContainerName) {');
             expect(appScript.text).toContain('function findPreferredSessionNameAfterRemoval(sessions, removedName) {');
-            expect(appScript.text).toContain('const fallbackSessionName = findPreferredSessionNameAfterRemoval(state.sessions, current);');
+            expect(appScript.text).toContain('const fallbackSessionName = isActive');
             expect(appScript.text).toContain("const directoryCount = new Set(state.sessions.map(function (session) {");
             expect(appScript.text).toContain("`${directoryCount} 个 目录 / ${containerCount} 个容器 / ${state.sessions.length} 个 AGENT`");
             expect(appScript.text).toContain('state.active = findLatestCreatedSessionName(state.sessions, preferredContainerName) || state.sessions[0].name;');
-            expect(appScript.text).toContain('preferredContainerName: targetContainerName,');
-            expect(appScript.text).toContain("preferredName: fallbackSessionName || '',");
             expect(appScript.text).toContain("sendState.textContent = '正在新建 AGENT…';");
-            expect(appScript.text).toContain("const yes = confirm('确认删除 AGENT ' + targetAgent + ' ?');");
+            expect(appScript.text).toContain("function removeContainerByName(containerName) {");
+            expect(appScript.text).toContain("function removeAgentSessionByName(sessionName, agentLabel) {");
+            expect(appScript.text).toContain("const yes = confirm('确认删除 AGENT ' + (agentLabel || target) + ' ?');");
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
