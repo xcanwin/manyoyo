@@ -822,6 +822,43 @@ process.exit(2);
         }
     });
 
+    test('should collapse the composer Agent/CLI meta row by default and expand it on focus', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-composer-expand-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const chatBehaviorScript = await request(`${baseUrl}/app/frontend/chat-behavior.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(chatBehaviorScript.text).toContain('function shouldExpandComposer(');
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).toContain('function syncComposerExpanded() {');
+            expect(appScript.text).toContain('window.ManyoyoChatBehavior.shouldExpandComposer({ focused, hasDraft });');
+            expect(appScript.text).toContain("commandInput.addEventListener('focus', syncComposerExpanded);");
+            expect(appScript.text).toContain("commandInput.addEventListener('blur', syncComposerExpanded);");
+            expect(appScript.text).toContain("commandInput.addEventListener('input', syncComposerExpanded);");
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.text).toContain('.composer.is-expanded .composer-toolbar {');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should sync containerPath to selected hostPath and remove container picker button', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-path-sync-'));
         const port = await getFreePort();
