@@ -16,6 +16,7 @@ const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
 const { resolveYoloCommand } = require('../lib/agent-adapters');
 const { runDoctorChecks } = require('../lib/doctor');
+const { resolveContainerMode } = require('../lib/container-modes');
 const { runPluginCommand, createPlugin } = require('../lib/plugin');
 const { buildManyoyoLogPath } = require('../lib/log-path');
 const { resolveRuntimeConfig } = require('../lib/runtime-resolver');
@@ -651,41 +652,21 @@ function setYolo(cli) {
  * @param {string} mode - 模式名称 (common, dind, sock)
  */
 function setContMode(mode) {
-    const modeAliasMap = {
-        common: 'common',
-        'docker-in-docker': 'dind',
-        dind: 'dind',
-        d: 'dind',
-        'mount-docker-socket': 'sock',
-        sock: 'sock',
-        s: 'sock'
-    };
-    const normalizedMode = modeAliasMap[String(mode || '').trim().toLowerCase()];
-
-    if (normalizedMode === 'common') {
-        CONT_MODE_ARGS = [];
-        return;
+    let resolved;
+    try {
+        resolved = resolveContainerMode(mode);
+    } catch (error) {
+        console.log(`${RED}⚠️  未知模式: ${mode}${NC}`);
+        process.exit(0);
     }
 
-    if (normalizedMode === 'dind') {
-        CONT_MODE_ARGS = ['--privileged'];
+    CONT_MODE_ARGS = resolved.args;
+
+    if (resolved.mode === 'dind') {
         console.log(`${GREEN}✅ 开启安全的容器嵌套容器模式, 手动在容器内启动服务: nohup dockerd &${NC}`);
-        return;
-    }
-
-    if (normalizedMode === 'sock') {
-        CONT_MODE_ARGS = [
-            '--privileged',
-            '--volume', '/var/run/docker.sock:/var/run/docker.sock',
-            '--env', 'DOCKER_HOST=unix:///var/run/docker.sock',
-            '--env', 'CONTAINER_HOST=unix:///var/run/docker.sock'
-        ];
+    } else if (resolved.mode === 'sock') {
         console.log(`${RED}⚠️  开启危险的容器嵌套容器模式, 危害: 容器可访问宿主机文件${NC}`);
-        return;
     }
-
-    console.log(`${RED}⚠️  未知模式: ${mode}${NC}`);
-    process.exit(0);
 }
 
 function showImagePullHint(err) {

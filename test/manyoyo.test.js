@@ -1685,6 +1685,35 @@ exit 0
         });
     });
 
+    describe('Container Mode (setContMode)', () => {
+        test('dind mode adds --privileged and prints the safety hint', () => {
+            const output = execSync(`node ${BIN_PATH} config command -m dind -n test-dind`, { encoding: 'utf-8' });
+            expect(output).toContain('开启安全的容器嵌套容器模式');
+            expect(output).toContain('--privileged');
+            expect(output).not.toContain('docker.sock');
+        });
+
+        test('sock mode adds docker.sock mount and prints the danger hint', () => {
+            const output = execSync(`node ${BIN_PATH} config command -m sock -n test-sock`, { encoding: 'utf-8' });
+            expect(output).toContain('开启危险的容器嵌套容器模式');
+            expect(output).toContain('--privileged');
+            expect(output).toContain('/var/run/docker.sock:/var/run/docker.sock');
+            expect(output).toContain('DOCKER_HOST=unix:///var/run/docker.sock');
+        });
+
+        test('common mode adds no extra args', () => {
+            const output = execSync(`node ${BIN_PATH} config command -m common -n test-common`, { encoding: 'utf-8' });
+            expect(output).not.toContain('--privileged');
+            expect(output).not.toContain('docker.sock');
+        });
+
+        test('unknown mode prints a warning and exits 0 without extra args', () => {
+            const output = execSync(`node ${BIN_PATH} config command -m badmode -n test-bad`, { encoding: 'utf-8' });
+            expect(output).toContain('未知模式: badmode');
+            expect(output).not.toContain('--privileged');
+        });
+    });
+
     describe('Doctor Command', () => {
         test('doctor --json outputs a stable diagnostic report without a container', () => {
             const stdout = execSync(`node ${BIN_PATH} doctor --json`, { encoding: 'utf-8' });
