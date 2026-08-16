@@ -40,12 +40,12 @@ lib/
     playwright-assets/  # Docker Compose 及 Dockerfile 场景模板
   web/
     server.js           # HTTP + WebSocket 服务器（终端、agent 对话、登录鉴权）
-    frontend/           # app / login / markdown-renderer / file-browser / codemirror
+    frontend/           # React/Vite 工作台源码、dist 与 login 静态资源
 docker/
   manyoyo.Dockerfile    # 多阶段镜像构建
   cache/                # 构建缓存（Node.js、JDT LSP、gopls），有效期 2 天
   res/                  # 各 Agent 默认配置、Playwright 资源、supervisor 模板
-scripts/                # dev-release.js（发布向导）、build-web-code-editor.js
+scripts/                # dev-release.js（发布向导）
 docs/zh/                # 中文文档（主维护），docs/en/ 为翻译，结构需保持一致
 test/                   # *.test.js，Jest 框架
 manyoyo.example.json     # 配置文件模板
@@ -63,8 +63,7 @@ npm run docs:build       # 检查 dead links
 
 npm install -g .         # 本地安装调试
 
-npm run build:web-editor # 改 lib/web/frontend/codemirror-entry.js 后必须执行，
-                         # 并一并提交生成的 codemirror.bundle.js
+npm run build:web        # 构建 React/Vite 网页产物并一并提交 dist
 npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
 
 # 运行单个测试文件

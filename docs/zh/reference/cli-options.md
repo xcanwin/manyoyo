@@ -17,6 +17,7 @@ description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频�
 | `manyoyo ps` | 列举容器 |
 | `manyoyo images` | 列举镜像 |
 | `manyoyo serve [listen]` | 启动网页交互服务，默认 `127.0.0.1:3000` |
+| `manyoyo doctor` | 诊断运行时、daemon、镜像、配置、Agent、模式、插件和端口 |
 | `manyoyo playwright` | 管理 Playwright 插件服务 |
 | `manyoyo plugin` | 插件命名空间；目前常见用法是 `plugin playwright ...` |
 | `manyoyo config show` | 显示最终生效配置 |
@@ -54,6 +55,8 @@ description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频�
 | `--rm-on-exit` | 退出后自动删除容器，仅 `run` 支持 |
 | `-q, --quiet <item>` | 静默输出，可多次使用 |
 
+`config show --explain` 会在输出中附加 `provenance`：标量字段标记为 `cli`、`run`、`global` 或 `default`；数组按元素标记来源，`env` 与 `first.env` 按 key 标记最终覆盖来源。敏感值仍会脱敏。
+
 ### `serve`
 
 `serve` 继承大部分 `run` 参数，并额外增加网页认证参数：
@@ -63,9 +66,16 @@ description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频�
 | `[listen]` | 监听地址，仅支持 `<port>` 或 `<host:port>` |
 | `-U, --user <username>` | 登录用户名，默认 `admin` |
 | `-P, --pass <password>` | 登录密码；未设置时启动时随机生成 |
+| `--trust-proxy` | 仅在前置 TLS 反向代理可信时启用；读取 `X-Forwarded-Proto: https` 并设置 `Secure` Cookie |
 | `-d, --detach` | 后台启动网页服务并立即返回；未设置密码时会打印本次随机密码 |
 | `--stop` | 停止后台网页服务；必须传入 `[listen]`，按监听地址精确停止对应实例 |
 | `--restart` | 重启后台网页服务；必须传入 `[listen]`，会先停止对应实例再按当前参数启动 |
+
+也可在全局或 `runs.<name>` 配置 `serverTrustProxy: true`。不要在可被外部直接访问的服务上启用该项，否则请求可伪造转发协议头。
+
+### `doctor`
+
+`manyoyo doctor --json` 输出稳定的检查 `code`、`status`、`summary` 与可选 `action`，适合 CI 或排障工具读取。`--port <port>` 额外检查监听端口是否可用；网页端可通过已认证的 `/api/doctor` 获取同一份检查模型。
 
 ### `build`
 
@@ -114,6 +124,7 @@ manyoyo run -r codex --ss "resume --last"
 
 # 调试配置和命令拼装
 manyoyo config show -r claude
+manyoyo config show -r claude --explain
 manyoyo config command -r claude
 
 # 自定义命令

@@ -1,0 +1,33 @@
+{
+    "schemaVersion": 1,
+    "node": {
+        "version": "24.19.0",
+        "sha256": {
+            "x64": "f625d97cd707df4ff96254916fbc5ff014f09c09effe5a1e0ca8f6d41a8789d4",
+            "arm64": "d28c8a5bf0a808f0ed434a1dce8c54ae98f0371c0bd86ac58abc613f73e6643f"
+        }
+    },
+    "jdtls": {
+        "version": "1.58.0-202604151538",
+        "fileName": "jdt-language-server-1.58.0-202604151538.tar.gz",
+        "url": "https://download.eclipse.org/jdtls/milestones/1.58.0/jdt-language-server-1.58.0-202604151538.tar.gz",
+        "sha256": "2a5bbe55ec91b4325392050dc422cead3220a2459b3766be35e1fff45b4a50d9"
+    },
+    "gopls": {
+        "version": "v0.23.0"
+    },
+    "npm": {
+        "version": "12.0.2"
+    },
+    "languageServers": {
+        "pyright": "1.1.413",
+        "typescriptLanguageServer": "5.3.0",
+        "typescript": "5.9.3"
+    },
+    "agentCli": {
+        "claude": "2.1.233",
+        "codex": "0.147.0",
+        "gemini": "0.55.1",
+        "opencode": "1.18.18"
+    }
+}

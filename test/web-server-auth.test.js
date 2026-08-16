@@ -1,8 +1,12 @@
 const fs = require('fs');
+const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const net = require('net');
+const WebSocket = require('ws');
 const { startWebServer } = require('../lib/web/server');
+const { createStaticAssetResolver } = require('../lib/web/static-assets');
+const { imageVersion: PACKAGE_IMAGE_VERSION } = require('../package.json');
 
 function getFreePort() {
     return new Promise((resolve, reject) => {
@@ -159,7 +163,9 @@ describe('Web Server Auth Gateway', () => {
 
             const unauth = await request(`${baseUrl}/api/sessions`);
             expect(unauth.response.status).toBe(401);
-            expect(unauth.json).toEqual(expect.objectContaining({ error: 'UNAUTHORIZED' }));
+            expect(unauth.json).toEqual(expect.objectContaining({
+                error: expect.objectContaining({ code: 'UNAUTHORIZED', correlationId: expect.any(String) })
+            }));
 
             const authCookie = await loginAndGetCookie(baseUrl);
 
@@ -180,11 +186,363 @@ describe('Web Server Auth Gateway', () => {
                 headers: { Cookie: authCookie }
             });
             expect(afterLogout.response.status).toBe(401);
-            expect(afterLogout.json).toEqual(expect.objectContaining({ error: 'UNAUTHORIZED' }));
+            expect(afterLogout.json).toEqual(expect.objectContaining({
+                error: expect.objectContaining({ code: 'UNAUTHORIZED', correlationId: expect.any(String) })
+            }));
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
             }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should use Secure cookies only when an explicitly trusted proxy reports HTTPS', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trust-proxy-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, { trustProxy: true }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const login = await request(`${baseUrl}/auth/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Forwarded-Proto': 'https'
+                },
+                body: JSON.stringify({ username: 'webadmin', password: 'topsecret' })
+            });
+
+            expect(login.response.status).toBe(200);
+            expect(login.response.headers.get('set-cookie')).toContain('; Secure');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should expose Agent adapter metadata through the authenticated API', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-meta-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+
+            const unauthenticated = await request(`${baseUrl}/api/meta/agents`);
+            expect(unauthenticated.response.status).toBe(401);
+
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const response = await request(`${baseUrl}/api/meta/agents`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(response.response.status).toBe(200);
+            expect(response.json).toEqual(expect.objectContaining({
+                agents: expect.arrayContaining([
+                    expect.objectContaining({
+                        id: 'codex',
+                        aliases: expect.arrayContaining(['cx']),
+                        capabilities: expect.objectContaining({ resume: true, yolo: true })
+                    })
+                ])
+            }));
+        } finally {
+            if (handle) await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should expose the shared doctor report through the authenticated API', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-doctor-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerExecArgs: () => 'ok'
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const report = await request(`${baseUrl}/api/doctor`, { headers: { Cookie: authCookie } });
+
+            expect(report.response.status).toBe(200);
+            expect(report.json).toEqual(expect.objectContaining({
+                version: 1,
+                checks: expect.arrayContaining([
+                    expect.objectContaining({ code: 'RUNTIME_AVAILABLE' }),
+                    expect.objectContaining({ code: 'MODE_VALID' })
+                ])
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should export a redacted session audit with RunSpec and event projection', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-audit-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerExecArgs: () => ''
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const created = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    createOptions: {
+                        containerName: 'audit-demo',
+                        hostPath: tempHost,
+                        env: { API_TOKEN: 'secret-value' }
+                    }
+                })
+            });
+            expect(created.response.status).toBe(200);
+
+            const audit = await request(`${baseUrl}/api/sessions/audit-demo/audit`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(audit.response.status).toBe(200);
+            expect(audit.json.audit).toEqual(expect.objectContaining({
+                runSpec: expect.objectContaining({ configVersion: 1 }),
+                projection: expect.objectContaining({ status: 'idle' })
+            }));
+            expect(audit.json.audit.runSpec.container.env.API_TOKEN).toBe('***');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should pull the default GHCR image before creating a Web session when it is missing locally', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-pull-'));
+        const port = await getFreePort();
+        const dockerExecArgs = jest.fn(args => {
+            if (args[0] === 'image' && args[1] === 'inspect') {
+                throw new Error('image missing');
+            }
+            return '';
+        });
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                imageName: 'ghcr.io/xcanwin/manyoyo',
+                imageVersion: '1.9.1-common',
+                dockerExecArgs
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const created = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ createOptions: { containerName: 'pull-demo', hostPath: tempHost } })
+            });
+
+            expect(created.response.status).toBe(200);
+            expect(dockerExecArgs.mock.calls.slice(0, 3).map(call => call[0])).toEqual([
+                ['image', 'inspect', 'ghcr.io/xcanwin/manyoyo:1.9.1-common'],
+                ['pull', 'ghcr.io/xcanwin/manyoyo:1.9.1-common'],
+                expect.arrayContaining(['run', '--name', 'pull-demo'])
+            ]);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should forward terminal input and resize events to the PTY adapter', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-terminal-'));
+        const port = await getFreePort();
+        const callbacks = {};
+        const terminal = {
+            write: jest.fn(),
+            resize: jest.fn(),
+            kill: jest.fn(),
+            onData: callback => { callbacks.data = callback; return { dispose() {} }; },
+            onExit: callback => { callbacks.exit = callback; return { dispose() {} }; }
+        };
+        const createTerminalProcess = jest.fn(() => terminal);
+        let handle = null;
+        let socket = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, { createTerminalProcess }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const terminalUrl = `ws://127.0.0.1:${handle.port || port}/api/sessions/terminal-demo/terminal/ws?cols=132&rows=41`;
+
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('terminal WebSocket timed out')), 3000);
+                socket = new WebSocket(terminalUrl, { headers: { Cookie: authCookie } });
+                socket.on('error', reject);
+                socket.on('message', raw => {
+                    const message = JSON.parse(raw.toString('utf-8'));
+                    if (message.type === 'status' && message.phase === 'ready') {
+                        socket.send(JSON.stringify({ type: 'input', data: 'pwd\n' }));
+                        socket.send(JSON.stringify({ type: 'resize', cols: 100, rows: 30 }));
+                    }
+                    if (message.type === 'status' && message.phase === 'resized') {
+                        clearTimeout(timeout);
+                        resolve();
+                    }
+                });
+            });
+
+            expect(createTerminalProcess).toHaveBeenCalledWith(expect.objectContaining({
+                dockerCmd: 'docker',
+                containerName: 'terminal-demo',
+                cols: 132,
+                rows: 41
+            }));
+            expect(terminal.write).toHaveBeenCalledWith('pwd\n');
+            expect(terminal.resize).toHaveBeenCalledWith(100, 30);
+        } finally {
+            if (socket) socket.close();
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should use an accessible inline error notice instead of browser alerts', () => {
+        const appSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/src/App.tsx'), 'utf-8');
+
+        expect(appSource).not.toContain('alert(');
+        expect(appSource).toContain('className="app-error" role="alert"');
+    });
+
+    test('should serve only manifest-declared Vite assets from the controlled app path', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-vite-assets-'));
+        const distDir = path.join(tempHost, 'dist');
+        fs.mkdirSync(path.join(distDir, '.vite'), { recursive: true });
+        fs.mkdirSync(path.join(distDir, 'assets'), { recursive: true });
+        fs.writeFileSync(path.join(distDir, 'assets', 'app-123.js'), 'window.viteAsset = true;', 'utf-8');
+        fs.writeFileSync(path.join(distDir, '.vite', 'manifest.json'), JSON.stringify({
+            'src/main.tsx': { file: 'assets/app-123.js' }
+        }), 'utf-8');
+        expect(createStaticAssetResolver(distDir).resolveViteAsset('assets/app-123.js'))
+            .toBe(path.join(distDir, 'assets', 'app-123.js'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, { frontendDistDir: distDir }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const allowed = await request(`${baseUrl}/app/assets/app-123.js`, { headers: { Cookie: authCookie } });
+            const rejected = await request(`${baseUrl}/app/assets/unknown.js`, { headers: { Cookie: authCookie } });
+
+            expect(allowed.response.status).toBe(200);
+            expect(allowed.text).toContain('viteAsset');
+            expect(allowed.response.headers.get('cache-control')).toContain('immutable');
+            expect(rejected.response.status).toBe(404);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should serve the React Vite entry at the authenticated root instead of the legacy application', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-react-root-'));
+        const distDir = path.join(tempHost, 'dist');
+        fs.mkdirSync(path.join(distDir, '.vite'), { recursive: true });
+        fs.mkdirSync(path.join(distDir, 'assets'), { recursive: true });
+        fs.writeFileSync(path.join(distDir, 'assets', 'app-123.js'), 'window.reactApp = true;', 'utf-8');
+        fs.writeFileSync(path.join(distDir, '.vite', 'manifest.json'), JSON.stringify({
+            'src/main.tsx': { file: 'assets/app-123.js' }
+        }), 'utf-8');
+        fs.writeFileSync(path.join(distDir, 'index.html'), '<main id="root"></main><script type="module" src="/app/assets/app-123.js"></script>', 'utf-8');
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, { frontendDistDir: distDir }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const page = await request(`${baseUrl}/`, { headers: { Cookie: authCookie } });
+
+            expect(page.response.status).toBe(200);
+            expect(page.text).toContain('id="root"');
+            expect(page.text).toContain('/app/assets/app-123.js');
+            expect(page.text).not.toContain('/app/frontend/app.js');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should obtain Agent command metadata from the API instead of duplicating it in the frontend', () => {
+        const apiSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/src/api.ts'), 'utf-8');
+
+        expect(apiSource).toContain("'/api/meta/agents'");
+        expect(apiSource).not.toContain('YOLO_COMMAND_MAP');
+        expect(apiSource).not.toContain('AGENT_PROMPT_TEMPLATE_MAP');
+    });
+
+    test('should rate-limit repeated failed login attempts', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-login-rate-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            for (let index = 0; index < 5; index += 1) {
+                const failed = await request(`${baseUrl}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'webadmin', password: 'wrong-password' })
+                });
+                expect(failed.response.status).toBe(401);
+            }
+            const limited = await request(`${baseUrl}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: 'webadmin', password: 'wrong-password' })
+            });
+            expect(limited.response.status).toBe(429);
+            expect(limited.response.headers.get('retry-after')).toBeTruthy();
+        } finally {
+            if (handle) await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should use the package imageVersion in the default web config template', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-default-config-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const response = await request(`${baseUrl}/api/config`, { headers: { Cookie: authCookie } });
+
+            expect(response.response.status).toBe(200);
+            expect(response.json.raw).toContain(`"imageVersion": "${PACKAGE_IMAGE_VERSION}"`);
+        } finally {
+            if (handle) await handle.close();
             fs.rmSync(tempHost, { recursive: true, force: true });
         }
     });
@@ -242,8 +600,8 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
-    test('should require auth for markdown assets and allow after login', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-vendor-marked-'));
+    test('should reject removed legacy frontend routes after login', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-legacy-assets-'));
         const port = await getFreePort();
         let handle = null;
 
@@ -251,53 +609,22 @@ describe('Web Server Auth Gateway', () => {
             handle = await startWebServer(buildServerOptions(tempHost, port));
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
 
-            const unauthVendor = await request(`${baseUrl}/app/vendor/marked.min.js`);
-            expect(unauthVendor.response.status).toBe(401);
-            const unauthRenderer = await request(`${baseUrl}/app/frontend/markdown-renderer.js`);
-            expect(unauthRenderer.response.status).toBe(401);
-            const unauthStyle = await request(`${baseUrl}/app/frontend/markdown.css`);
-            expect(unauthStyle.response.status).toBe(401);
-            const unauthFileBrowser = await request(`${baseUrl}/app/frontend/file-browser.js`);
-            expect(unauthFileBrowser.response.status).toBe(401);
-            const unauthEditorBundle = await request(`${baseUrl}/app/frontend/codemirror.bundle.js`);
-            expect(unauthEditorBundle.response.status).toBe(401);
+            const unauthenticated = await request(`${baseUrl}/app/frontend/app.js`);
+            expect(unauthenticated.response.status).toBe(401);
 
             const authCookie = await loginAndGetCookie(baseUrl);
-            const authedVendor = await request(`${baseUrl}/app/vendor/marked.min.js`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(authedVendor.response.status).toBe(200);
-            expect(authedVendor.response.headers.get('content-type')).toContain('application/javascript');
-            expect(authedVendor.text).toContain('marked');
-
-            const authedRenderer = await request(`${baseUrl}/app/frontend/markdown-renderer.js`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(authedRenderer.response.status).toBe(200);
-            expect(authedRenderer.response.headers.get('content-type')).toContain('application/javascript');
-            expect(authedRenderer.text).toContain('window.ManyoyoMarkdown');
-
-            const authedFileBrowser = await request(`${baseUrl}/app/frontend/file-browser.js`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(authedFileBrowser.response.status).toBe(200);
-            expect(authedFileBrowser.response.headers.get('content-type')).toContain('application/javascript');
-            expect(authedFileBrowser.text).toContain('window.ManyoyoFileBrowser');
-
-            const authedEditorBundle = await request(`${baseUrl}/app/frontend/codemirror.bundle.js`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(authedEditorBundle.response.status).toBe(200);
-            expect(authedEditorBundle.response.headers.get('content-type')).toContain('application/javascript');
-            expect(authedEditorBundle.text).toContain('window.ManyoyoCodeEditor');
-            expect(authedEditorBundle.text).toContain('getValue()');
-
-            const authedStyle = await request(`${baseUrl}/app/frontend/markdown.css`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(authedStyle.response.status).toBe(200);
-            expect(authedStyle.response.headers.get('content-type')).toContain('text/css');
-            expect(authedStyle.text).toContain('.md-content');
+            for (const legacyPath of [
+                '/app/frontend/app.js',
+                '/app/frontend/app.css',
+                '/app/frontend/markdown-renderer.js',
+                '/app/frontend/file-browser.js',
+                '/app/frontend/codemirror.bundle.js',
+                '/app/vendor/xterm.js',
+                '/app/vendor/marked.min.js'
+            ]) {
+                const response = await request(`${baseUrl}${legacyPath}`, { headers: { Cookie: authCookie } });
+                expect(response.response.status).toBe(404);
+            }
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -317,6 +644,7 @@ describe('Web Server Auth Gateway', () => {
         fs.writeFileSync(fakeDocker, `#!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const args = process.argv.slice(2);
 const command = args[4] || '';
 const readmeStore = ${JSON.stringify(readmeStore)};
@@ -352,17 +680,26 @@ if (command.includes('__MANYOYO_FS_READ__')) {
         size: Buffer.byteLength(readmeContent, 'utf8'),
         language: 'markdown',
         content: readmeContent,
+        revision: require('crypto').createHash('sha256').update(readmeContent, 'utf8').digest('hex'),
         truncated: false
     }));
     process.exit(0);
 }
 if (command.includes('__MANYOYO_FS_WRITE__')) {
-    const matched = command.match(/const nextContent = ([\\s\\S]+?);\\n\\ntry \\{/);
-    if (!matched) {
+    const matched = command.match(/const nextContent = ([\\s\\S]+?);\\nconst expectedRevision =/);
+    const expectedRevisionMatch = command.match(/const expectedRevision = ([\\s\\S]+?);\\n\\ntry \\{/);
+    if (!matched || !expectedRevisionMatch) {
         process.stderr.write('missing content');
         process.exit(3);
     }
     const readmeContent = JSON.parse(matched[1]);
+    const expectedRevision = JSON.parse(expectedRevisionMatch[1]);
+    const currentContent = fs.readFileSync(readmeStore, 'utf8');
+    const currentRevision = require('crypto').createHash('sha256').update(currentContent, 'utf8').digest('hex');
+    if (expectedRevision && expectedRevision !== currentRevision) {
+        process.stdout.write(JSON.stringify({ error: '文件已被外部修改，请重新加载后再保存', conflict: true, currentRevision }));
+        process.exit(0);
+    }
     fs.writeFileSync(readmeStore, readmeContent, 'utf-8');
     process.stdout.write(JSON.stringify({
         path: '/workspace/README.md',
@@ -431,6 +768,7 @@ process.exit(2);
                 truncated: false,
                 editable: true
             }));
+            expect(readRes.json.revision).toBe(crypto.createHash('sha256').update('# hello\nthis is readme\n', 'utf8').digest('hex'));
 
             const writeRes = await request(`${baseUrl}/api/sessions/test/fs/write`, {
                 method: 'PUT',
@@ -440,7 +778,8 @@ process.exit(2);
                 },
                 body: JSON.stringify({
                     path: '/workspace/README.md',
-                    content: '# changed\nsaved\n'
+                    content: '# changed\nsaved\n',
+                    expectedRevision: readRes.json.revision
                 })
             });
             expect(writeRes.response.status).toBe(200);
@@ -461,6 +800,23 @@ process.exit(2);
                 truncated: false,
                 editable: true
             }));
+
+            fs.writeFileSync(readmeStore, '# changed elsewhere\n', 'utf8');
+            const conflictRes = await request(`${baseUrl}/api/sessions/test/fs/write`, {
+                method: 'PUT',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    path: '/workspace/README.md',
+                    content: '# stale overwrite\n',
+                    expectedRevision: readAfterWriteRes.json.revision
+                })
+            });
+            expect(conflictRes.response.status).toBe(409);
+            expect(conflictRes.json).toEqual(expect.objectContaining({ conflict: true }));
+            expect(fs.readFileSync(readmeStore, 'utf8')).toBe('# changed elsewhere\n');
 
             const mkdirRes = await request(`${baseUrl}/api/sessions/test/fs/mkdir`, {
                 method: 'POST',
@@ -560,239 +916,45 @@ process.exit(2);
         expect(serverSource).toContain('const WEB_FILE_EDIT_MAX_BYTES = 2 * 1024 * 1024;');
     });
 
-    test('should expose editable-small-file and readonly-large-file behavior in file browser assets', () => {
-        const fileBrowserSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/file-browser.js'), 'utf-8');
-        const editorSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/codemirror-entry.js'), 'utf-8');
-        const editorBundleSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/codemirror.bundle.js'), 'utf-8');
-        const appHtmlSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/app.html'), 'utf-8');
-        const appSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/app.js'), 'utf-8');
-        const appStyleSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/app.css'), 'utf-8');
-        expect(fileBrowserSource).toContain("const FILE_EDIT_MAX_BYTES = 2 * 1024 * 1024;");
-        expect(fileBrowserSource).toContain('data-action="save" disabled>保存</button>');
-        expect(fileBrowserSource).toContain('data-role="path" value="/"');
-        expect(fileBrowserSource).toContain('data-action="visit">访问</button>');
-        expect(fileBrowserSource).toContain('data-action="mkdir">新建目录</button>');
-        expect(fileBrowserSource).not.toContain('data-action="up"');
-        expect(fileBrowserSource).not.toContain('data-action="refresh"');
-        expect(fileBrowserSource).toContain("window.confirm(`文件较大（${formatBytes(fileSize)}），继续后将以只读方式全量预览，无法保存。是否继续？`)");
-        expect(fileBrowserSource).toContain("'&full=1'");
-        expect(fileBrowserSource).toContain("/fs/write");
-        expect(fileBrowserSource).toContain("/fs/mkdir");
-        expect(fileBrowserSource).toContain('files-entry-parent');
-        expect(fileBrowserSource).toContain('请输入新目录名称');
-        expect(fileBrowserSource).toContain('saveBtn.disabled = !isEditablePreview();');
-        expect(fileBrowserSource).toContain("if (event.key === 'Enter')");
-        expect(fileBrowserSource).not.toContain("listNode.innerHTML = '<div class=\"files-empty\">当前目录为空。</div>';");
-        expect(fileBrowserSource).not.toContain("renderPreviewEmpty(state.currentPath, '请选择左侧文件进行预览。');");
-        expect(editorSource).toContain('getValue() {');
-        expect(editorBundleSource).toContain('getValue()');
-        expect(appHtmlSource).toContain('<div id="configEditor" class="config-editor"></div>');
-        expect(appHtmlSource).not.toContain('<textarea id="configEditor"');
-        expect(appSource).toContain('function ensureConfigCodeEditor() {');
-        expect(appSource).toContain("state.configEditor = window.ManyoyoCodeEditor.create(configEditor, {");
-        expect(appSource).toContain("language: 'javascript'");
-        expect(appSource).toContain('body: JSON.stringify({ raw: getConfigEditorValue() })');
-        expect(appStyleSource).toContain('.files-toolbar-path-group');
-        expect(appStyleSource).toContain('.files-toolbar-path-input');
-        expect(appStyleSource).toContain('.files-toolbar-meta');
-        expect(appStyleSource).toContain('flex-wrap: wrap;');
-        expect(appStyleSource).toContain('overflow-wrap: anywhere;');
-        expect(appStyleSource).toContain('.files-entry:hover');
-        expect(appStyleSource).toContain('box-shadow: inset 3px 0 0');
-        expect(appStyleSource).toContain('grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);');
-        expect(appStyleSource).toContain('grid-template-columns: minmax(0, 1fr) auto;');
-        expect(appStyleSource).toContain('.files-editor-host .cm-gutters');
-        expect(appStyleSource).toContain('.files-list > .files-empty');
-        expect(appStyleSource).toContain('.files-entry-parent');
-        expect(appStyleSource).toContain('.config-editor .cm-editor');
-        expect(appStyleSource).toContain('overflow-wrap: anywhere;');
-        expect(appStyleSource).toContain('text-align: right;');
+    test('should use React CodeMirror editors for editable files and configuration', () => {
+        const appSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/src/App.tsx'), 'utf-8');
+        const editorSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/src/CodeEditor.tsx'), 'utf-8');
+
+        expect(appSource).toContain('webApi.readFile');
+        expect(appSource).toContain('webApi.writeFile');
+        expect(appSource).toContain('webApi.saveConfig');
+        expect(appSource).toContain("<CodeEditor ariaLabel={t('fileContent')}");
+        expect(appSource).toContain("<CodeEditor ariaLabel={t('configuration')}");
+        expect(editorSource).toContain("from '@codemirror/view'");
+        expect(editorSource).toContain('EditorState.readOnly.of(readOnly)');
     });
 
-    test('should keep sidebar tree bodies hidden when hidden attribute is set', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-tree-style-'));
-        const port = await getFreePort();
-        let handle = null;
+    test('should keep the React create form focused on run, paths and container mode', () => {
+        const appSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/src/App.tsx'), 'utf-8');
 
-        try {
-            handle = await startWebServer(buildServerOptions(tempHost, port));
-            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
-            const authCookie = await loginAndGetCookie(baseUrl);
-
-            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appStyle.response.status).toBe(200);
-            expect(appStyle.response.headers.get('content-type')).toContain('text/css');
-            expect(appStyle.text).toContain('.tree-node-children[hidden]');
-            expect(appStyle.text).toMatch(/\.tree-node-children\[hidden\][\s\S]*display:\s*none/);
-        } finally {
-            if (handle && typeof handle.close === 'function') {
-                await handle.close();
-            }
-            fs.rmSync(tempHost, { recursive: true, force: true });
-        }
+        expect(appSource).toContain("t('runConfig')");
+        expect(appSource).toContain("t('hostPath')");
+        expect(appSource).toContain("t('containerPath')");
+        expect(appSource).toContain("t('mode')");
+        expect(appSource).toContain("t('advancedOptions')");
+        expect(appSource).not.toContain('directoryPickerPathInput');
     });
 
-    test('should toggle sidebar tree locally without rerendering the whole session list', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-tree-script-'));
-        const port = await getFreePort();
-        let handle = null;
+    test('should give the React session list tree semantics', () => {
+        const appSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/src/App.tsx'), 'utf-8');
 
-        try {
-            handle = await startWebServer(buildServerOptions(tempHost, port));
-            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
-            const authCookie = await loginAndGetCookie(baseUrl);
-
-            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appScript.response.status).toBe(200);
-            expect(appScript.response.headers.get('content-type')).toContain('application/javascript');
-            expect(appScript.text).toContain('function createTreePrefixSegment() {');
-            expect(appScript.text).toContain('function setDisclosureExpanded(control, expanded) {');
-            expect(appScript.text).toContain('function renderSessionTreeNodes(nodes, parentNode, ancestorHasNext, itemCounter) {');
-            expect(appScript.text).toContain('const nextExpanded = childrenNode.hidden;');
-            expect(appScript.text).toContain('setDisclosureExpanded(item, nextExpanded);');
-            expect(appScript.text).toContain('childrenNode.hidden = !nextExpanded;');
-        } finally {
-            if (handle && typeof handle.close === 'function') {
-                await handle.close();
-            }
-            fs.rmSync(tempHost, { recursive: true, force: true });
-        }
+        expect(appSource).toContain('role="tree" aria-label={t(\'sessionTree\')}');
+        expect(appSource).toContain('role="treeitem"');
+        expect(appSource).toContain('aria-selected={session.name === activeSession}');
     });
 
-    test('should sync containerPath to selected hostPath and remove container picker button', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-path-sync-'));
-        const port = await getFreePort();
-        let handle = null;
+    test('should render typed tool observations in the React activity stream', () => {
+        const appSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/src/App.tsx'), 'utf-8');
+        const reducerSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/src/event-reducer.ts'), 'utf-8');
 
-        try {
-            handle = await startWebServer(buildServerOptions(tempHost, port));
-            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
-            const authCookie = await loginAndGetCookie(baseUrl);
-
-            const appHtml = await request(`${baseUrl}/`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appHtml.response.status).toBe(200);
-            expect(appHtml.text).not.toContain('id="pickContainerPathBtn"');
-            expect(appHtml.text).not.toContain('/app/frontend/path-picker-utils.js');
-            expect(appHtml.text).toContain('id="directoryPickerPathInput"');
-            expect(appHtml.text).toContain('id="directoryPickerVisitBtn"');
-            expect(appHtml.text).toContain('id="directoryPickerMkdirBtn"');
-            expect(appHtml.text).toContain('id="directoryPickerStatus"');
-            expect(appHtml.text).not.toContain('id="directoryPickerUpBtn"');
-            expect(appHtml.text).not.toContain('id="directoryPickerCurrent"');
-
-            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appScript.response.status).toBe(200);
-            expect(appScript.text).toContain('createHostPath.value = picker.currentPath;');
-            expect(appScript.text).toContain('createContainerPath.value = picker.currentPath;');
-            expect(appScript.text).toContain("directoryPickerPathInput.value = picker.pathDraft || picker.currentPath || '/'");
-            expect(appScript.text).toContain("setDirectoryPickerStatus('共 ' + picker.entries.length + ' 项');");
-            expect(appScript.text).toContain('<span class="files-entry-title">..</span>');
-            expect(appScript.text).toContain("await api('/api/fs/directories/mkdir', {");
-            expect(appScript.text).not.toContain("openDirectoryPicker('container')");
-            expect(appScript.text).not.toContain('pickContainerPathBtn');
-        } finally {
-            if (handle && typeof handle.close === 'function') {
-                await handle.close();
-            }
-            fs.rmSync(tempHost, { recursive: true, force: true });
-        }
-    });
-
-    test('should ship simplified sidebar tree guides with tree semantics', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-tree-a11y-'));
-        const port = await getFreePort();
-        let handle = null;
-
-        try {
-            handle = await startWebServer(buildServerOptions(tempHost, port));
-            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
-            const authCookie = await loginAndGetCookie(baseUrl);
-
-            const appHtml = await request(`${baseUrl}/`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appHtml.response.status).toBe(200);
-            expect(appHtml.text).toContain('id="sessionList" role="tree" aria-label="会话树"');
-
-            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appScript.response.status).toBe(200);
-            expect(appScript.text).toContain("button.innerHTML = '<svg viewBox=\"0 0 12 12\"");
-            expect(appScript.text).toContain("button.setAttribute('role', 'treeitem');");
-            expect(appScript.text).toContain("childrenNode.setAttribute('role', 'group');");
-            expect(appScript.text).toContain("hoverMenu.className = 'tree-node-hover-menu';");
-            expect(appScript.text).toContain("addAgentBtn.className = 'secondary tree-node-menu-item';");
-            expect(appScript.text).toContain('function updateSidebarActiveSelection() {');
-            expect(appScript.text).toContain('updateSidebarActiveSelection();');
-
-            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appStyle.response.status).toBe(200);
-            expect(appStyle.text).toContain('--tree-guide:');
-            expect(appStyle.text).toContain('.disclosure-toggle svg');
-            expect(appStyle.text).toContain('.tree-node-hover-menu');
-            expect(appStyle.text).toContain('.tree-node-row-container:hover .tree-node-hover-menu');
-            expect(appStyle.text).not.toContain('.tree-node-action');
-            expect(appStyle.text).not.toContain('animation-delay: calc(var(--item-index, 0) * 24ms);');
-            expect(appStyle.text).not.toContain('.tree-prefix-toggle.is-expanded::after');
-            expect(appStyle.text).not.toContain('translateX(-2.5px)');
-        } finally {
-            if (handle && typeof handle.close === 'function') {
-                await handle.close();
-            }
-            fs.rmSync(tempHost, { recursive: true, force: true });
-        }
-    });
-
-    test('should ship unified trace card rendering for toolchain events', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-trace-card-assets-'));
-        const port = await getFreePort();
-        let handle = null;
-
-        try {
-            handle = await startWebServer(buildServerOptions(tempHost, port));
-            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
-            const authCookie = await loginAndGetCookie(baseUrl);
-
-            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appScript.response.status).toBe(200);
-            expect(appScript.text).toContain("card.className = 'trace-card trace-tone-' + resolveTraceTone(event);");
-            expect(appScript.text).toContain("card.className = 'trace-card trace-tone-' + resolveResidualTraceTone(line) + ' trace-card-residual';");
-            expect(appScript.text).toContain("bodyParts.push({ label: '命令', value: event.command });");
-            expect(appScript.text).toContain("bodyParts.push({ label: '退出码', value: String(event.exitCode) });");
-            expect(appScript.text).toContain("bodyParts.push({ label: '结果', value: event.result });");
-            expect(appScript.text).toContain("bodyParts.push({ label: '错误', value: event.error });");
-            expect(appScript.text).toContain("if (event.kind === 'tool') {");
-            expect(appScript.text).not.toContain("event.kind === 'tool' && (event.provider === 'codex' || event.provider === 'opencode')");
-            expect(appScript.text).toContain("bodyParts.push({ label: '工具', value: [event.server, event.tool].filter(Boolean).join('.') });");
-            expect(appScript.text).not.toContain('function shouldCompactTraceEvent(traceEvent)');
-            expect(appScript.text).not.toContain('trace-card-compact');
-
-            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appStyle.response.status).toBe(200);
-            expect(appStyle.text).toContain('details.trace-card > .trace-card-summary');
-            expect(appStyle.text).toContain('.trace-card.trace-card-residual');
-            expect(appStyle.text).not.toContain('.trace-card.trace-card-compact');
-        } finally {
-            if (handle && typeof handle.close === 'function') {
-                await handle.close();
-            }
-            fs.rmSync(tempHost, { recursive: true, force: true });
-        }
+        expect(appSource).toContain('className="tool-card"');
+        expect(reducerSource).toContain("event.type === 'agent.tool.observed'");
+        expect(reducerSource).toContain('tools: [...state.tools');
     });
 
     test('should expose multi-agent sessions under one container and create new agent sessions', async () => {
@@ -1106,52 +1268,13 @@ process.exit(2);
         }
     });
 
-    test('should expose AGENT-focused labels, created-order fallback, and create entry in web shell assets', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-label-assets-'));
-        const port = await getFreePort();
-        let handle = null;
+    test('should create a new Agent session from the React workbench', () => {
+        const appSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/src/App.tsx'), 'utf-8');
+        const apiSource = fs.readFileSync(path.join(__dirname, '../lib/web/frontend/src/api.ts'), 'utf-8');
 
-        try {
-            handle = await startWebServer(buildServerOptions(tempHost, port));
-            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
-            const authCookie = await loginAndGetCookie(baseUrl);
-
-            const appHtml = await request(`${baseUrl}/`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appHtml.response.status).toBe(200);
-            expect(appHtml.text).toContain('id="openCreateMenuBtn" class="secondary">新建容器</button>');
-            expect(appHtml.text.indexOf('id="openCreateMenuBtn"')).toBeLessThan(appHtml.text.indexOf('id="removeBtn"'));
-            expect(appHtml.text.indexOf('id="removeBtn"')).toBeLessThan(appHtml.text.indexOf('id="addAgentBtn"'));
-            expect(appHtml.text).toContain('id="removeBtn" class="danger">删除容器</button>');
-            expect(appHtml.text).toContain('id="addAgentBtn" class="secondary">新建 AGENT</button>');
-            expect(appHtml.text).toContain('id="removeAllBtn" class="danger">删除 AGENT</button>');
-
-            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
-                headers: { Cookie: authCookie }
-            });
-            expect(appScript.response.status).toBe(200);
-            expect(appScript.text).toContain('creatingAgent: false');
-            expect(appScript.text).toContain("addAgentBtn.textContent = state.creatingAgent ? '新建中...' : '新建 AGENT';");
-            expect(appScript.text).toContain("const openCreateMenuBtn = document.getElementById('openCreateMenuBtn');");
-            expect(appScript.text).toContain('openCreateMenuBtn.disabled = state.createLoading || state.createSubmitting;');
-            expect(appScript.text).toContain("openCreateMenuBtn.addEventListener('click', function () {");
-            expect(appScript.text).toContain('function findLatestCreatedSessionName(sessions, preferredContainerName) {');
-            expect(appScript.text).toContain('function findPreferredSessionNameAfterRemoval(sessions, removedName) {');
-            expect(appScript.text).toContain('const fallbackSessionName = findPreferredSessionNameAfterRemoval(state.sessions, current);');
-            expect(appScript.text).toContain("const directoryCount = new Set(state.sessions.map(function (session) {");
-            expect(appScript.text).toContain("`${directoryCount} 个 目录 / ${containerCount} 个容器 / ${state.sessions.length} 个 AGENT`");
-            expect(appScript.text).toContain('state.active = findLatestCreatedSessionName(state.sessions, preferredContainerName) || state.sessions[0].name;');
-            expect(appScript.text).toContain('preferredContainerName: targetContainerName,');
-            expect(appScript.text).toContain("preferredName: fallbackSessionName || '',");
-            expect(appScript.text).toContain("sendState.textContent = '正在新建 AGENT…';");
-            expect(appScript.text).toContain("const yes = confirm('确认删除 AGENT ' + targetAgent + ' ?');");
-        } finally {
-            if (handle && typeof handle.close === 'function') {
-                await handle.close();
-            }
-            fs.rmSync(tempHost, { recursive: true, force: true });
-        }
+        expect(appSource).toContain("creatingAgent ? t('creating') : t('newAgent')");
+        expect(appSource).toContain('await webApi.createAgent(activeSession);');
+        expect(apiSource).toContain('/agents`');
     });
 
     test('should infer agent template for existing multi-agent container from container default label', async () => {
@@ -1248,6 +1371,10 @@ process.exit(2);
         fs.mkdirSync(nestedDir, { recursive: true });
         fs.mkdirSync(betaDir, { recursive: true });
         fs.writeFileSync(path.join(tempHost, 'note.txt'), 'ignore me', 'utf-8');
+        const realTempHost = fs.realpathSync(tempHost);
+        const realAlphaDir = fs.realpathSync(alphaDir);
+        const realBetaDir = fs.realpathSync(betaDir);
+        const realNestedDir = fs.realpathSync(nestedDir);
         let handle = null;
 
         try {
@@ -1261,10 +1388,10 @@ process.exit(2);
             );
             expect(rootList.response.status).toBe(200);
             expect(rootList.json).toEqual(expect.objectContaining({
-                currentPath: tempHost,
+                currentPath: realTempHost,
                 entries: expect.arrayContaining([
-                    expect.objectContaining({ name: 'alpha', path: alphaDir }),
-                    expect.objectContaining({ name: 'beta', path: betaDir })
+                    expect.objectContaining({ name: 'alpha', path: realAlphaDir }),
+                    expect.objectContaining({ name: 'beta', path: realBetaDir })
                 ])
             }));
             expect(rootList.json.entries.some(item => item.name === 'note.txt')).toBe(false);
@@ -1275,9 +1402,9 @@ process.exit(2);
             );
             expect(nestedList.response.status).toBe(200);
             expect(nestedList.json).toEqual(expect.objectContaining({
-                currentPath: nestedDir,
-                basePath: alphaDir,
-                parentPath: alphaDir
+                currentPath: realNestedDir,
+                basePath: realAlphaDir,
+                parentPath: realAlphaDir
             }));
         } finally {
             if (handle && typeof handle.close === 'function') {
@@ -1320,7 +1447,7 @@ process.exit(2);
             expect(listRes.response.status).toBe(200);
             expect(listRes.json).toEqual(expect.objectContaining({
                 entries: expect.arrayContaining([
-                    expect.objectContaining({ name: 'created-from-web', path: targetDir })
+                    expect.objectContaining({ name: 'created-from-web', path: fs.realpathSync(targetDir) })
                 ])
             }));
         } finally {
@@ -1399,7 +1526,9 @@ process.exit(2);
                 body: JSON.stringify({ raw: '{ invalid-json5 ' })
             });
             expect(invalidSave.response.status).toBe(400);
-            expect(invalidSave.json).toEqual(expect.objectContaining({ error: '配置格式错误' }));
+            expect(invalidSave.json).toEqual(expect.objectContaining({
+                error: expect.objectContaining({ code: 'INVALID_REQUEST', summary: '配置格式错误' })
+            }));
 
             const invalidPortsSave = await request(`${baseUrl}/api/config`, {
                 method: 'PUT',
@@ -1410,7 +1539,9 @@ process.exit(2);
                 body: JSON.stringify({ raw: '{\n"ports": "8080:80"\n}\n' })
             });
             expect(invalidPortsSave.response.status).toBe(400);
-            expect(invalidPortsSave.json).toEqual(expect.objectContaining({ error: '配置格式错误' }));
+            expect(invalidPortsSave.json).toEqual(expect.objectContaining({
+                error: expect.objectContaining({ code: 'INVALID_REQUEST', summary: '配置格式错误' })
+            }));
 
             const validSave = await request(`${baseUrl}/api/config`, {
                 method: 'PUT',
@@ -1739,7 +1870,9 @@ process.exit(2);
             });
 
             expect(created.response.status).toBe(400);
-            expect(created.json).toEqual(expect.objectContaining({ error: '不允许挂载根目录或home目录。' }));
+            expect(created.json).toEqual(expect.objectContaining({
+                error: expect.objectContaining({ code: 'INVALID_REQUEST', summary: '不允许挂载根目录或home目录。' })
+            }));
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -2384,6 +2517,19 @@ process.exit(0);
                     expectedEvents.push(expect.objectContaining({ type: 'trace', text: item.expectedToolStartTrace }));
                 }
                 expect(streamRes.events).toEqual(expect.arrayContaining(expectedEvents));
+                const controlEvents = streamRes.events.map(event => event.controlEvent);
+                expect(controlEvents).toEqual(expect.arrayContaining([
+                    expect.objectContaining({
+                        version: 1,
+                        aggregateId: item.sessionName,
+                        seq: 1,
+                        type: 'session.ready'
+                    })
+                ]));
+                expect(controlEvents.every(event => event && typeof event.id === 'string')).toBe(true);
+                expect(controlEvents.map(event => event.seq)).toEqual(
+                    controlEvents.map((event, index) => index + 1)
+                );
 
                 if (item.provider === 'opencode') {
                     expect(streamRes.events).toEqual(expect.arrayContaining([
@@ -2404,6 +2550,21 @@ process.exit(0);
                 }
 
                 const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, `${item.sessionName}.json`), 'utf-8'));
+                const persistedEvents = persisted.agents && persisted.agents.default
+                    ? persisted.agents.default.events
+                    : [];
+                expect(persistedEvents).toEqual(expect.arrayContaining([
+                    expect.objectContaining({ version: 1, type: 'session.ready', seq: 1 })
+                ]));
+                expect(persistedEvents.map(event => event.seq)).toEqual(
+                    persistedEvents.map((event, index) => index + 1)
+                );
+                const resumedEvents = await request(
+                    `${baseUrl}/api/sessions/${item.sessionName}/events?cursor=1`,
+                    { headers: { Cookie: authCookie } }
+                );
+                expect(resumedEvents.response.status).toBe(200);
+                expect(resumedEvents.json.events.every(event => event.seq > 1)).toBe(true);
                 const traceMessage = (persisted.messages || []).find(message => message && message.streamTrace === true);
                 expect(traceMessage).toEqual(expect.objectContaining({
                     role: 'assistant',
@@ -2779,6 +2940,24 @@ process.exit(0);
                 expect.objectContaining({ type: 'result', interrupted: true })
             ]));
 
+            const historyPath = path.join(webHistoryDir, 'demo.json');
+            const persistedHistory = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+            persistedHistory.agents.default.events = [];
+            fs.writeFileSync(historyPath, JSON.stringify(persistedHistory), 'utf-8');
+
+            const refreshedSessions = await request(`${baseUrl}/api/sessions`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(refreshedSessions.json.sessions).toEqual(expect.arrayContaining([
+                expect.objectContaining({ name: 'demo', status: 'interrupted' })
+            ]));
+            const recoveredEvents = await request(`${baseUrl}/api/sessions/demo/events`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(recoveredEvents.json.events).toEqual(expect.arrayContaining([
+                expect.objectContaining({ type: 'process.interrupted' })
+            ]));
+
             const stopAgain = await request(`${baseUrl}/api/sessions/demo/agent/stop`, {
                 method: 'POST',
                 headers: {
@@ -2841,7 +3020,7 @@ process.exit(0);
             });
             expect(noTemplateRes.response.status).toBe(400);
             expect(noTemplateRes.json).toEqual(expect.objectContaining({
-                error: '当前会话未配置 agentPromptCommand'
+                error: expect.objectContaining({ code: 'INVALID_REQUEST', summary: '当前会话未配置 agentPromptCommand' })
             }));
 
             const emptyPromptRes = await request(`${baseUrl}/api/sessions/demo2/agent`, {
@@ -2853,7 +3032,9 @@ process.exit(0);
                 body: JSON.stringify({ prompt: '' })
             });
             expect(emptyPromptRes.response.status).toBe(400);
-            expect(emptyPromptRes.json).toEqual(expect.objectContaining({ error: 'prompt 不能为空' }));
+            expect(emptyPromptRes.json).toEqual(expect.objectContaining({
+                error: expect.objectContaining({ code: 'INVALID_REQUEST', summary: 'prompt 不能为空' })
+            }));
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();

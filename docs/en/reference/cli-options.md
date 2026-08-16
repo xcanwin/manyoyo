@@ -17,6 +17,7 @@ This page follows the current `manyoyo --help` and subcommand `--help` output. I
 | `manyoyo ps` | List containers |
 | `manyoyo images` | List images |
 | `manyoyo serve [listen]` | Start the web UI server, default `127.0.0.1:3000` |
+| `manyoyo doctor` | Diagnose runtime, daemon, image, config, Agent, mode, plugin, and port state |
 | `manyoyo playwright` | Manage the Playwright plugin service |
 | `manyoyo plugin` | Plugin namespace; common use is `plugin playwright ...` |
 | `manyoyo config show` | Print the final resolved configuration |
@@ -54,6 +55,8 @@ These commands share the same core runtime options:
 | `--rm-on-exit` | Remove the container after exit; `run` only |
 | `-q, --quiet <item>` | Quiet selected output, repeatable |
 
+`config show --explain` adds `provenance` to the output: scalar fields are marked `cli`, `run`, `global`, or `default`; array items retain their source, while `env` and `first.env` identify the final source for each key. Sensitive values remain redacted.
+
 ### `serve`
 
 `serve` reuses most `run` options and adds web auth options:
@@ -63,9 +66,16 @@ These commands share the same core runtime options:
 | `[listen]` | Listen address, supports `<port>` or `<host:port>` |
 | `-U, --user <username>` | Login username, default `admin` |
 | `-P, --pass <password>` | Login password; randomly generated at startup if omitted |
+| `--trust-proxy` | Enable only behind a trusted TLS reverse proxy; honors `X-Forwarded-Proto: https` and sets a `Secure` cookie |
 | `-d, --detach` | Start the web server in background and return immediately; if no password is set, prints the generated password for this run |
 | `--stop` | Stop a background web server; `[listen]` is required and targets that instance exactly |
 | `--restart` | Restart a background web server; `[listen]` is required, and it stops the matched instance before starting with current arguments |
+
+You can also set `serverTrustProxy: true` globally or in `runs.<name>`. Do not enable it when the service is directly reachable by untrusted clients, because forwarded protocol headers can be forged.
+
+### `doctor`
+
+`manyoyo doctor --json` emits stable check `code`, `status`, `summary`, and optional `action` fields for CI or troubleshooting tools. `--port <port>` also checks whether a listening port is available; the authenticated `/api/doctor` endpoint exposes the same check model to the web UI.
 
 ### `build`
 
@@ -114,6 +124,7 @@ manyoyo run -r codex --ss "resume --last"
 
 # Inspect config and generated command
 manyoyo config show -r claude
+manyoyo config show -r claude --explain
 manyoyo config command -r claude
 
 # Custom commands

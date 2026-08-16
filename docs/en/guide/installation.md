@@ -301,8 +301,8 @@ manyoyo build --in localhost/myuser/sandbox --iv 1.0.0-common
 # Skip Git SSL verification (development environments only)
 manyoyo build --iba GIT_SSL_NO_VERIFY=true
 
-# Disable China mirrors (users outside China)
-manyoyo build --iba NODE_MIRROR= --iba NPM_REGISTRY=
+# Override public mirrors in a restricted network
+manyoyo build --iba NODE_MIRROR=https://mirror.example/nodejs --iba NPM_REGISTRY=https://registry.example/npm/
 
 # Use custom mirror sources
 manyoyo build --iba NODE_MIRROR=https://custom-mirror.com
@@ -383,12 +383,14 @@ docker images | grep manyoyo  # or podman images
 # localhost/xcanwin/manyoyo  1.8.0-common  xxx  xxx  xxGB
 ```
 
-### 3. Initialize Agent Config (Recommended)
+### 3. Initialize Agent Config (Optional, recommended for review)
 
 ```bash
 # Migrate existing claude/codex/gemini/opencode setup from host
 manyoyo init all
 ```
+
+If the configuration file does not exist, the first `manyoyo run` performs the same non-interactive initialization and then continues. Run `init all` manually when you want to review migration results first.
 
 ### 4. Create Test Container
 

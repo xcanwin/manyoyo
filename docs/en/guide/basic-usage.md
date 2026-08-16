@@ -117,6 +117,8 @@ manyoyo config show --serve 127.0.0.1:3000
 
 When listening on public interfaces, always set a strong password and restrict source IPs.
 
+After signing in, the workbench Details tab can export a session audit JSON containing the redacted RunSpec, control events, and final projection. Use it to review runtime parameters and terminal state; it is not a security-policy verdict.
+
 ## Playwright plugin
 
 Prefer the top-level `manyoyo playwright` command. `manyoyo plugin playwright` is mainly the namespace form.

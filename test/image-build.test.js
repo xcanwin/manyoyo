@@ -31,8 +31,18 @@ function createTestRoot() {
     fs.writeFileSync(path.join(dockerDir, 'manyoyo.Dockerfile'), 'FROM scratch\n');
     fs.writeFileSync(path.join(dockerResDir, 'update-agents.sh'), '#!/usr/bin/env bash\n');
     fs.writeFileSync(path.join(nodeCacheDir, `node-v24.0.0-linux-${archNode}.tar.gz`), 'cache');
+    const cacheHash = crypto.createHash('sha256').update('cache').digest('hex');
+    fs.writeFileSync(path.join(dockerDir, 'tool-manifest.json'), JSON.stringify({
+        schemaVersion: 1,
+        node: { version: '24.0.0', sha256: { x64: cacheHash, arm64: cacheHash } },
+        jdtls: { version: 'test', fileName: 'jdtls-test.tar.gz', url: 'https://example.invalid/jdtls.tar.gz', sha256: cacheHash },
+        gopls: { version: 'v0.1.0' },
+        npm: { version: '1.0.0' },
+        languageServers: { pyright: '1.0.0', typescriptLanguageServer: '1.0.0', typescript: '1.0.0' },
+        agentCli: { claude: '1.0.0', codex: '1.0.0', gemini: '1.0.0', opencode: '1.0.0' }
+    }));
     fs.writeFileSync(path.join(cacheDir, '.timestamps.json'), JSON.stringify({
-        'node/': new Date().toISOString()
+        [`node/24.0.0/${archNode}`]: new Date().toISOString()
     }));
 
     return rootDir;
@@ -412,9 +422,7 @@ describe('image-build with unified build and buildkit fallback', () => {
             loadConfig: () => ({ cacheTTL: 0 }),
             runCmd: jest.fn((cmd, args) => {
                 if (cmd === 'curl') {
-                    if (Array.isArray(args) && args.some(arg => String(arg).includes('SHASUMS256.txt'))) {
-                        return `${cacheHash} node-v24.0.0-linux-${archNode}.tar.gz\n`;
-                    }
+                    fs.writeFileSync(args[args.indexOf('-o') + 1], 'cache');
                     return '';
                 }
                 return '';
@@ -423,7 +431,7 @@ describe('image-build with unified build and buildkit fallback', () => {
 
         fs.writeFileSync(
             path.join(options.rootDir, 'docker', 'cache', '.timestamps.json'),
-            JSON.stringify({ 'node/': '2000-01-01T00:00:00.000Z' })
+            JSON.stringify({ [`node/24.0.0/${archNode}`]: '2000-01-01T00:00:00.000Z' })
         );
 
         await buildImage(options);
@@ -453,10 +461,14 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(options.log).toHaveBeenCalledWith(expect.stringContaining('跳过 gopls 本地缓存预下载'));
     });
 
-    test('jdtls 下载 URL 应使用与架构匹配的 alpine 目录', async () => {
+    test('jdtls 下载应使用清单中固定的公共 URL 并校验缓存内容', async () => {
         const options = createBaseOptions({
             imageVersionTag: '1.8.0-full',
-            runCmd: jest.fn((cmd) => {
+            runCmd: jest.fn((cmd, args) => {
+                if (cmd === 'curl') {
+                    fs.writeFileSync(args[args.indexOf('-o') + 1], 'cache');
+                    return '';
+                }
                 if (cmd === 'go') {
                     const err = new Error('spawnSync go ENOENT');
                     err.code = 'ENOENT';
@@ -468,38 +480,18 @@ describe('image-build with unified build and buildkit fallback', () => {
 
         await buildImage(options);
 
+        const manifest = JSON.parse(fs.readFileSync(path.join(options.rootDir, 'docker', 'tool-manifest.json'), 'utf8'));
         const jdtlsCurl = options.runCmd.mock.calls.find(([cmd, args]) => (
-            cmd === 'curl' && Array.isArray(args) && args.some(arg => String(arg).includes('jdtls-'))
+            cmd === 'curl' && Array.isArray(args) && args.includes(manifest.jdtls.url)
         ));
         expect(jdtlsCurl).toBeTruthy();
-        const url = jdtlsCurl[1].join(' ');
-        const expectedAlpineArch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
-        expect(url).toContain(`community/${expectedAlpineArch}/`);
+        expect(fs.existsSync(path.join(options.rootDir, 'docker', 'cache', 'jdtls', manifest.jdtls.fileName))).toBe(true);
     });
 
-    test('jdtls 重打包时应剥离 macOS 扩展属性，避免 GNU tar 警告', async () => {
-        const options = createBaseOptions({
-            imageVersionTag: '1.8.0-full',
-            runCmd: jest.fn((cmd) => {
-                if (cmd === 'go') {
-                    const err = new Error('spawnSync go ENOENT');
-                    err.code = 'ENOENT';
-                    throw err;
-                }
-                return '';
-            })
-        });
-
-        await buildImage(options);
-
-        const repackCall = options.runCmd.mock.calls.find(([cmd, args]) => (
-            cmd === 'tar'
-            && Array.isArray(args)
-            && args.includes('-czf')
-            && args.some(arg => String(arg).includes('jdt-language-server-latest.tar.gz'))
-        ));
-        expect(repackCall).toBeTruthy();
-        expect(repackCall[1]).toContain('--no-xattrs');
+    test('jdtls 缓存不再经过架构相关的 APK 重打包路径', () => {
+        const source = fs.readFileSync(path.join(path.resolve(__dirname, '..'), 'lib', 'image-build.js'), 'utf8');
+        expect(source).not.toContain('latest-stable/community');
+        expect(source).not.toContain('jdtls.apk');
     });
 
     test('docker image should include built-in playwright cli headless config assets', () => {
@@ -542,4 +534,44 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(dockerfile).not.toContain('COPY --from=cache-stage /opt/gopls /tmp/gopls-cache');
     });
 
+});
+
+describe('tool manifest build inputs', () => {
+    test('injects pinned tool versions and uses public reproducible download defaults', async () => {
+        const rootDir = path.resolve(__dirname, '..');
+        const options = createBaseOptions({ imageVersionTag: '1.8.0-common' });
+        const manifest = JSON.parse(fs.readFileSync(path.join(options.rootDir, 'docker', 'tool-manifest.json'), 'utf8'));
+
+        await buildImage(options);
+
+        const buildCall = options.runCmd.mock.calls.find(([cmd, args]) => (
+            cmd === 'docker' && Array.isArray(args) && args[0] === 'build'
+        ));
+        expect(buildCall[1]).toEqual(expect.arrayContaining([
+            '--build-arg', `NODE_VERSION=${manifest.node.version}`,
+            '--build-arg', `GOPLS_VERSION=${manifest.gopls.version}`,
+            '--build-arg', `CLAUDE_CODE_VERSION=${manifest.agentCli.claude}`,
+            '--build-arg', `CODEX_VERSION=${manifest.agentCli.codex}`
+        ]));
+
+        const dockerfile = fs.readFileSync(path.join(rootDir, 'docker', 'manyoyo.Dockerfile'), 'utf8');
+        expect(dockerfile).toContain('ARG APT_MIRROR=https://archive.ubuntu.com');
+        expect(dockerfile).toContain('ARG NPM_REGISTRY=https://registry.npmjs.org/');
+        expect(dockerfile).not.toContain('latest-v24.x');
+        expect(dockerfile).not.toContain('jdt-language-server-latest.tar.gz');
+        expect(dockerfile).not.toContain('golang.org/x/tools/gopls@latest');
+    });
+});
+
+describe('image release provenance', () => {
+    test('publishes SBOM and provenance attestations with the multi-architecture image', () => {
+        const workflow = fs.readFileSync(path.join(path.resolve(__dirname, '..'), '.github', 'workflows', 'image-publish.yml'), 'utf8');
+        expect(workflow).toContain('sbom: true');
+        expect(workflow).toContain('provenance: mode=max');
+        expect(workflow).toContain('linux/amd64,linux/arm64');
+        expect(workflow).toContain('image_digest=${{ steps.image.outputs.digest }}');
+        expect(workflow).toContain('actions/upload-artifact@v4');
+        expect(workflow).toContain('docker/tool-manifest.json');
+        expect(workflow).toContain('tool_manifest_schema=$(node -p');
+    });
 });

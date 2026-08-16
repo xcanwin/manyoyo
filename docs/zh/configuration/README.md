@@ -114,7 +114,7 @@ MANYOYO 配置参数分为三类，具有不同的合并行为：
 | 覆盖型 | `containerName` | 取最高优先级的值 | CLI `-n test` 覆盖 `runs.<name>` 或全局值 |
 | 覆盖型 | `hostPath` | 取最高优先级的值 | 默认为当前目录 |
 | 覆盖型 | `containerPath` | 取最高优先级的值 | 默认与 hostPath 相同 |
-| 覆盖型 | `imageName` | 取最高优先级的值 | 默认 `localhost/xcanwin/manyoyo` |
+| 覆盖型 | `imageName` | 取最高优先级的值 | 默认 `ghcr.io/xcanwin/manyoyo` |
 | 覆盖型 | `imageVersion` | 取最高优先级的值 | 如 `1.8.0-common` |
 | 覆盖型 | `containerMode` | 取最高优先级的值 | `common`, `dind`, `sock` |
 | 覆盖型 | `yolo` | 取最高优先级的值 | `c`, `gm`, `cx`, `oc` |

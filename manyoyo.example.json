@@ -5,7 +5,7 @@
     "containerName": "my-dev",
     "hostPath": "/path/to/your/project",
     "containerPath": "/path/to/your/project",
-    "imageName": "localhost/xcanwin/manyoyo",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "1.8.8-common",
     "containerMode": "common",
 
@@ -43,6 +43,7 @@
     // 优先级：命令行 > runs.<name> > 全局配置 > 环境变量 > 默认值
     "serverUser": "admin",
     "serverPass": "change-this-password",
+    "serverTrustProxy": false,
 
     // 可选插件（manyoyo playwright / manyoyo plugin playwright）
     "plugins": {

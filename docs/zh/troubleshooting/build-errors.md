@@ -70,20 +70,19 @@ manyoyo prune
 manyoyo build --iv 1.8.0-common --yes
 ```
 
-#### 4. 国外用户修改镜像源
+#### 4. 自定义镜像源
 
-如果在国外，可能需要禁用国内镜像源：
+默认使用 Ubuntu、npm、PyPI、Node.js 与 Go 的公共源。网络受限时可仅覆盖对应源：
 
-编辑 `docker/manyoyo.Dockerfile`，注释掉镜像源相关的 ARG：
-```dockerfile
-# ARG NODE_MIRROR=https://mirrors.tencent.com/nodejs-release/
-# ARG NPM_REGISTRY=https://registry.npmmirror.com
-```
-
-或使用空值：
 ```bash
-manyoyo build --iv 1.8.0-common --iba NODE_MIRROR= --iba NPM_REGISTRY=
+manyoyo build --iv 1.9.1-common \
+  --iba NODE_MIRROR=https://mirror.example/nodejs \
+  --iba NPM_REGISTRY=https://registry.example/npm/ \
+  --iba PIP_INDEX_URL=https://pypi.example/simple \
+  --iba GOPROXY=https://proxy.example
 ```
+
+工具版本、Node/JDTLS 校验和位于 `docker/tool-manifest.json`。除非在构建自定义镜像，否则不要覆盖其中自动注入的版本参数。
 
 #### 5. 分步构建调试
 
@@ -147,7 +146,7 @@ Error: pinging container registry localhost failed
 
 ### 原因
 
-MANYOYO 默认使用本地镜像（`localhost/xcanwin/manyoyo`），需要先构建。
+MANYOYO 默认使用 GHCR 镜像（`ghcr.io/xcanwin/manyoyo`），首次运行会自动拉取；网络不可用或自定义镜像时可在本地构建。
 
 ### 解决方案
 

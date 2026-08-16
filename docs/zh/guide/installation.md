@@ -301,8 +301,8 @@ manyoyo build --in localhost/myuser/sandbox --iv 1.0.0-common
 # 跳过 Git SSL 验证（仅限开发环境）
 manyoyo build --iba GIT_SSL_NO_VERIFY=true
 
-# 禁用国内镜像源（国外用户）
-manyoyo build --iba NODE_MIRROR= --iba NPM_REGISTRY=
+# 覆盖受限网络中的公共镜像源
+manyoyo build --iba NODE_MIRROR=https://mirror.example/nodejs --iba NPM_REGISTRY=https://registry.example/npm/
 
 # 使用自定义镜像源
 manyoyo build --iba NODE_MIRROR=https://custom-mirror.com
@@ -383,12 +383,14 @@ docker images | grep manyoyo  # 或 podman images
 # localhost/xcanwin/manyoyo  1.8.0-common  xxx  xxx  xxGB
 ```
 
-### 3. 初始化 Agent 配置（推荐）
+### 3. 初始化 Agent 配置（可选，推荐提前检查）
 
 ```bash
 # 从宿主机已有的 claude/codex/gemini/opencode 配置迁移
 manyoyo init all
 ```
+
+若配置文件尚不存在，首次 `manyoyo run` 会自动完成相同的无交互初始化后继续运行；手动执行 `init all` 适合希望先检查迁移结果的场景。
 
 ### 4. 创建测试容器
 

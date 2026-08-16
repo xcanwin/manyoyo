@@ -14,8 +14,8 @@ mkdir -p ~/.manyoyo/
 
 cat > ~/.manyoyo/manyoyo.json << 'EOF2'
 {
-    "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.8.0-common",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
+    "imageVersion": "1.9.1-common",
     "runs": {
         "claude": {
             "envFile": ["/abs/path/anthropic_claudecode.env"],
@@ -102,8 +102,8 @@ export OPENAI_MODEL="gpt-4-turbo"
 **`~/.manyoyo/manyoyo.json`**:
 ```json5
 {
-    "imageName": "localhost/xcanwin/manyoyo",
-    "imageVersion": "1.8.0-common",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
+    "imageVersion": "1.9.1-common",
     "env": {
         "TZ": "Asia/Shanghai"
     },

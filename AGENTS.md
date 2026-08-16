@@ -33,7 +33,7 @@
 - `lib/plugin/index.js` + `lib/plugin/playwright.js`: 插件命令分发与 Playwright 插件主逻辑（场景配置、容器/宿主启动链路）。
 - `lib/plugin/playwright-assets/`: Playwright 容器场景 compose 与镜像资源模板。
 - `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
-- `lib/web/frontend/`: 网页前端静态资源（`app/login/markdown/file-browser/CodeMirror` 的 `html/css/js`）。
+- `lib/web/frontend/`: React + TypeScript 网页前端源码与 Vite `dist/` 产物；登录页保留独立静态资源。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docker/res/`: 各 Agent 默认配置、Playwright 资源与 supervisor 模板。
@@ -56,7 +56,7 @@
 - `npm test` 也会执行入口文档示例版本检查（当前覆盖 `README.md`、`quick-start`、`basic-usage`、`cli-options`），要求其示例版本与 `package.json.imageVersion` 保持同一主版本号。
 - `npm run test:unit`: 仅跑 `test/` 下的单元测试。
 - `npm run lint`: 占位的 lint 检查（不做风格约束）。
-- `npm run build:web-editor`: 从 `lib/web/frontend/codemirror-entry.js` 打包生成 `lib/web/frontend/codemirror.bundle.js`；修改 CodeMirror 编辑器入口后需执行并提交 bundle。
+- `npm run build:web`: 构建 React/Vite 网页产物到 `lib/web/frontend/dist/`；修改前端源码后需执行并提交产物。
 - `npm run docs:dev|build|preview`: 启动/构建/预览文档站点。提交前或文档校验时先执行 `npm ci --include=optional`，再执行 `npm run docs:build`（不要并行）。
 - `npm install -g .` / `npm link` / `npm run install-link`: 本地全局安装或软链 CLI。
 

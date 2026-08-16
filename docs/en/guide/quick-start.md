@@ -26,15 +26,19 @@ Container runtime install/switch references:
 
 ## 3. Build sandbox image
 
+Released builds use `ghcr.io/xcanwin/manyoyo:1.9.1-common` by default and the first `run` pulls it automatically. Use the local build command below only when the registry is unavailable or you need a custom image:
+
 ```bash
 manyoyo build --iv 1.9.1-common
 ```
 
-## 4. Migrate existing configs now
+## 4. Optional: migrate existing configs now
 
 ```bash
 manyoyo init all
 ```
+
+When `~/.manyoyo/manyoyo.json` does not exist, the first `manyoyo run` (including `-r <agent>`) performs the equivalent non-interactive initialization before continuing. Existing configuration is never overwritten.
 
 ## 5. Start agents directly
 

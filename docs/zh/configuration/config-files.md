@@ -18,7 +18,7 @@ MANYOYO 支持两种配置文件：
 **示例**：
 ```json5
 {
-    "imageName": "localhost/xcanwin/manyoyo",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "1.8.0-full"
 }
 ```
@@ -87,7 +87,7 @@ MANYOYO 支持两种配置文件：
 
 #### imageName
 - **类型**：字符串
-- **默认值**：`localhost/xcanwin/manyoyo`
+- **默认值**：`ghcr.io/xcanwin/manyoyo`
 - **说明**：镜像名称（不含版本号）
 - **示例**：
 ```json5
@@ -361,12 +361,14 @@ MANYOYO 支持两种配置文件：
 - **合并方式**：累加合并
 - **说明**：镜像构建参数，传递给 Dockerfile
 - **格式**：`KEY=VALUE`
+- **默认版本**：`docker/tool-manifest.json` 会自动注入 Node、JDTLS、gopls、Agent CLI 与语言服务版本；仅自定义镜像时才覆盖这些参数
 - **示例**：
 ```json5
 {
     "imageBuildArgs": [
         "TOOL=common",
-        "GIT_SSL_NO_VERIFY=true"
+        "GIT_SSL_NO_VERIFY=true",
+        "NPM_REGISTRY=https://registry.example/npm/"
     ]
 }
 ```
@@ -427,7 +429,7 @@ first.envFile: 全局 first.envFile + runs.<name>.first.envFile + 命令行 --fi
 // ~/.manyoyo/manyoyo.json
 {
     // 使用自定义镜像
-    "imageName": "localhost/xcanwin/manyoyo",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "1.8.0-full",
 
     // 全局环境变量

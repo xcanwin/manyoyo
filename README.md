@@ -60,12 +60,11 @@ AI Agent CLI 往往需要：
 
 ```bash
 npm install -g @xcanwin/manyoyo
-podman pull ubuntu:24.04                        # 仅 Podman 需要
-manyoyo build --iv 1.9.1-common
-manyoyo init all
-manyoyo run -r claude
+manyoyo run -r claude                            # 自动初始化并拉取 ghcr.io/xcanwin/manyoyo:1.9.1-common
 manyoyo serve 127.0.0.1:3000 -U admin -P 123456 # Web UI 模式
 ```
+
+网络不可用或需要定制镜像时，可改为本地构建：`manyoyo build --iv 1.9.1-common`。
 
 系统要求：
 

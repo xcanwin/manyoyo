@@ -5,6 +5,13 @@ FROM ubuntu:24.04 AS cache-stage
 
 ARG TARGETARCH
 ARG TOOL="common"
+ARG NODE_MIRROR=https://nodejs.org/dist
+ARG NODE_VERSION=24.19.0
+ARG NODE_SHA256_X64=f625d97cd707df4ff96254916fbc5ff014f09c09effe5a1e0ca8f6d41a8789d4
+ARG NODE_SHA256_ARM64=d28c8a5bf0a808f0ed434a1dce8c54ae98f0371c0bd86ac58abc613f73e6643f
+ARG JDTLS_URL=https://download.eclipse.org/jdtls/milestones/1.58.0/jdt-language-server-1.58.0-202604151538.tar.gz
+ARG JDTLS_FILE=jdt-language-server-1.58.0-202604151538.tar.gz
+ARG JDTLS_SHA256=2a5bbe55ec91b4325392050dc422cead3220a2459b3766be35e1fff45b4a50d9
 
 # 复制缓存目录（可能为空）
 COPY ./docker/cache/ /cache/
@@ -13,33 +20,36 @@ RUN <<EOX
     # 确定架构
     set -eu
     case "$TARGETARCH" in
-        amd64) ARCH_NODE="x64"; ARCH_GO="amd64" ;;
-        arm64) ARCH_NODE="arm64"; ARCH_GO="arm64" ;;
-        *)     ARCH_NODE="$TARGETARCH"; ARCH_GO="$TARGETARCH" ;;
+        amd64) ARCH_NODE="x64"; ARCH_GO="amd64"; NODE_SHA256="$NODE_SHA256_X64" ;;
+        arm64) ARCH_NODE="arm64"; ARCH_GO="arm64"; NODE_SHA256="$NODE_SHA256_ARM64" ;;
+        *)     ARCH_NODE="$TARGETARCH"; ARCH_GO="$TARGETARCH"; NODE_SHA256="" ;;
     esac
 
     # Node.js: 检测缓存，不存在则下载
     mkdir -p /opt/node
-    if ls /cache/node/node-*-linux-${ARCH_NODE}.tar.gz 1> /dev/null 2>&1; then
+    NODE_FILE="node-v${NODE_VERSION}-linux-${ARCH_NODE}.tar.gz"
+    if [ -f "/cache/node/${NODE_FILE}" ] && [ -n "$NODE_SHA256" ] && echo "${NODE_SHA256}  /cache/node/${NODE_FILE}" | sha256sum -c -; then
         echo "使用 Node.js 缓存"
-        NODE_TAR=$(ls /cache/node/node-*-linux-${ARCH_NODE}.tar.gz | head -1)
-        tar -xzf ${NODE_TAR} -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE' --no-same-owner
+        tar -xzf "/cache/node/${NODE_FILE}" -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE' --no-same-owner
     else
         echo "下载 Node.js"
-        NVM_NODEJS_ORG_MIRROR=https://mirrors.tencent.com/nodejs-release/
-        NODE_TAR=$(curl -sL ${NVM_NODEJS_ORG_MIRROR}/latest-v24.x/SHASUMS256.txt | grep linux-${ARCH_NODE}.tar.gz | awk '{print $2}')
-        curl -fsSL ${NVM_NODEJS_ORG_MIRROR}/latest-v24.x/${NODE_TAR} | tar -xz -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE'
+        test -n "$NODE_SHA256"
+        curl -fsSL "${NODE_MIRROR}/v${NODE_VERSION}/${NODE_FILE}" -o "/tmp/${NODE_FILE}"
+        echo "${NODE_SHA256}  /tmp/${NODE_FILE}" | sha256sum -c -
+        tar -xzf "/tmp/${NODE_FILE}" -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE'
     fi
 
     # JDT LSP: 仅在 full/java 时准备缓存
     mkdir -p /opt/jdtls
     case ",$TOOL," in *,full,*|*,java,*)
-        if [ -f /cache/jdtls/jdt-language-server-latest.tar.gz ]; then
+        if [ -f "/cache/jdtls/${JDTLS_FILE}" ] && echo "${JDTLS_SHA256}  /cache/jdtls/${JDTLS_FILE}" | sha256sum -c -; then
             echo "使用 JDT LSP 缓存"
-            tar -xzf /cache/jdtls/jdt-language-server-latest.tar.gz -C /opt/jdtls --no-same-owner
+            tar -xzf "/cache/jdtls/${JDTLS_FILE}" -C /opt/jdtls --no-same-owner
         else
             echo "下载 JDT LSP"
-            curl -fsSL https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz | tar -xz -C /opt/jdtls
+            curl -fsSL "$JDTLS_URL" -o /tmp/jdtls.tar.gz
+            echo "${JDTLS_SHA256}  /tmp/jdtls.tar.gz" | sha256sum -c -
+            tar -xzf /tmp/jdtls.tar.gz -C /opt/jdtls
         fi
     ;; esac
 
@@ -64,13 +74,22 @@ EOX
 FROM ubuntu:24.04
 
 ARG TARGETARCH
-ARG NODE_VERSION=24
 ARG TOOL="common"
 
-# 镜像源参数化（默认使用阿里云，可按需覆盖）
-ARG APT_MIRROR=https://mirrors.aliyun.com
-ARG NPM_REGISTRY=https://mirrors.tencent.com/npm/
-ARG PIP_INDEX_URL=https://mirrors.tencent.com/pypi/simple
+# 镜像源参数化（默认使用公共源，可按需覆盖）
+ARG APT_MIRROR=https://archive.ubuntu.com
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG GOPROXY=https://proxy.golang.org
+ARG GOPLS_VERSION=v0.23.0
+ARG NPM_VERSION=12.0.2
+ARG PYRIGHT_VERSION=1.1.413
+ARG TYPESCRIPT_LANGUAGE_SERVER_VERSION=5.3.0
+ARG TYPESCRIPT_VERSION=5.9.3
+ARG CLAUDE_CODE_VERSION=2.1.233
+ARG CODEX_VERSION=0.147.0
+ARG GEMINI_VERSION=0.55.1
+ARG OPENCODE_VERSION=1.18.18
 # 轻量级文本解析依赖（可通过 --build-arg 覆盖）
 ARG PY_TEXT_PIP_PACKAGES="PyYAML python-dotenv tomlkit pyjson5 jsonschema"
 ARG PY_TEXT_EXTRA_PIP_PACKAGES=""
@@ -139,17 +158,17 @@ RUN <<EOX
     # 配置 node.js
     set -eu
     npm config set registry=${NPM_REGISTRY}
-    npm install -g npm
+    npm install -g "npm@${NPM_VERSION}"
     npm config set allow-scripts=@anthropic-ai/claude-code,@openai/codex,@google/gemini-cli,opencode-ai,@playwright/cli,pyright,typescript-language-server,typescript --location=user
 
     export GIT_SSL_NO_VERIFY=$GIT_SSL_NO_VERIFY
 
     # 安装 LSP服务（python、typescript）
-    npm install -g pyright typescript-language-server typescript
+    npm install -g "pyright@${PYRIGHT_VERSION}" "typescript-language-server@${TYPESCRIPT_LANGUAGE_SERVER_VERSION}" "typescript@${TYPESCRIPT_VERSION}"
 
     # 安装 Claude CLI
     # npm install -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli opencode-ai
-    npm install -g @anthropic-ai/claude-code
+    npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
     mkdir -p ~/.claude/plugins/marketplaces/
     cp /tmp/docker-res/claude/claude.json ~/.claude.json
     cp /tmp/docker-res/claude/settings.json ~/.claude/settings.json
@@ -169,7 +188,7 @@ RUN <<EOX
     claude plugin install document-skills@anthropic-agent-skills
 
     # 安装 Codex CLI
-    npm install -g @openai/codex
+    npm install -g "@openai/codex@${CODEX_VERSION}"
     mkdir -p ~/.codex
     cp /tmp/docker-res/codex/config.toml ~/.codex/config.toml
     mkdir -p "$HOME/.codex/skills"
@@ -195,7 +214,7 @@ RUN <<EOX
 
     # 安装 Gemini CLI
     case ",$TOOL," in *,full,*|*,gemini,*)
-        npm install -g @google/gemini-cli
+        npm install -g "@google/gemini-cli@${GEMINI_VERSION}"
         mkdir -p ~/.gemini/ ~/.gemini/tmp/bin
         ln -s $(which rg) ~/.gemini/tmp/bin/rg
         cp /tmp/docker-res/gemini/settings.json ~/.gemini/settings.json
@@ -203,7 +222,7 @@ RUN <<EOX
 
     # 安装 OpenCode CLI
     case ",$TOOL," in *,full,*|*,opencode,*)
-        npm install -g opencode-ai
+        npm install -g "opencode-ai@${OPENCODE_VERSION}"
         mkdir -p ~/.config/opencode/
         cp /tmp/docker-res/opencode/opencode.json ~/.config/opencode/opencode.json
     ;; esac
@@ -258,7 +277,7 @@ RUN <<EOX
     case ",$TOOL," in *,full,*|*,go,*)
         apt-get update -y
         apt-get install -y --no-install-recommends golang gcc
-        go env -w GOPROXY=https://mirrors.tencent.com/go
+        go env -w GOPROXY=${GOPROXY}
 
         # 安装 LSP服务（go）
         if [ -f /usr/local/share/manyoyo-gopls/gopls ] && [ ! -f /usr/local/share/manyoyo-gopls/.no-cache ]; then
@@ -267,7 +286,7 @@ RUN <<EOX
             ln -sf /usr/local/share/manyoyo-gopls/gopls /usr/local/bin/gopls
         else
             # 下载编译
-            go install golang.org/x/tools/gopls@latest
+            go install golang.org/x/tools/gopls@${GOPLS_VERSION}
             ln -sf ~/go/bin/gopls /usr/local/bin/gopls
             rm -rf /usr/local/share/manyoyo-gopls
         fi

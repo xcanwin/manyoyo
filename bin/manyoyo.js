@@ -9,15 +9,39 @@ const net = require('net');
 const readline = require('readline');
 const { Command } = require('commander');
 const { startWebServer } = require('../lib/web/server');
-const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/container-run');
+const { buildContainerRunCommand } = require('../lib/container-run');
+const { compileContainerRun, compileContainerExec, createRuntimeDriver } = require('../lib/runtime/driver');
 const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = require('../lib/global-config');
 const { initAgentConfigs } = require('../lib/init-config');
+const { bootstrapFirstRun } = require('../lib/first-run-setup');
 const { buildImage } = require('../lib/image-build');
+const { runDoctorChecks } = require('../lib/doctor');
+const { DEFAULT_IMAGE_NAME } = require('../lib/default-image');
+const { ensureDefaultImage } = require('../lib/image-pull');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
 const { runPluginCommand, createPlugin } = require('../lib/plugin');
+const { registerPlaywrightAliasCommands } = require('../lib/cli/commands/playwright');
+const { registerConfigCommands } = require('../lib/cli/commands/config');
+const { registerCoreCommands } = require('../lib/cli/commands/core');
+const { startConfiguredWebServer } = require('../lib/cli/web-server');
+const { createServeProcessManager } = require('../lib/cli/serve-process');
+const {
+    connectExistingContainer: connectExistingContainerLifecycle,
+    createNewContainer: createNewContainerLifecycle,
+    executeFirstCommand: executeFirstCommandLifecycle,
+    executeInContainer: executeInContainerLifecycle,
+    handlePostExit: handlePostExitLifecycle,
+    setupContainer: setupContainerLifecycle,
+    waitForContainerReady: waitForContainerReadyLifecycle
+} = require('../lib/cli/container-lifecycle');
 const { buildManyoyoLogPath } = require('../lib/log-path');
 const { resolveRuntimeConfig } = require('../lib/runtime-resolver');
+const { resolveContainerMode } = require('../lib/runtime/container-modes');
+const {
+    assertProcessSucceeded
+} = require('../lib/runtime/container-exec');
 const { resolveWorktreeSupport } = require('../lib/worktrees');
+const { resolveYoloCommand } = require('../lib/agent-adapters/metadata');
 const {
     parseEnvEntry: parseEnvEntryOrThrow,
     normalizeVolume
@@ -64,7 +88,7 @@ const CONFIG = {
 let CONTAINER_NAME = `my-${formatDate()}`;
 let HOST_PATH = process.cwd();
 let CONTAINER_PATH = HOST_PATH;
-let IMAGE_NAME = "localhost/xcanwin/manyoyo";
+let IMAGE_NAME = DEFAULT_IMAGE_NAME;
 let IMAGE_VERSION = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
 let EXEC_COMMAND = "";
 let EXEC_COMMAND_PREFIX = "";
@@ -87,6 +111,7 @@ let SERVER_PORT = 3000;
 let SERVER_AUTH_USER = "";
 let SERVER_AUTH_PASS = "";
 let SERVER_AUTH_PASS_AUTO = false;
+let SERVER_TRUST_PROXY = false;
 const SAFE_CONTAINER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
 // Color definitions using ANSI codes
@@ -97,6 +122,22 @@ const BLUE = '\x1b[0;34m';
 const CYAN = '\x1b[0;36m';
 const NC = '\x1b[0m'; // No Color
 const IMAGE_VERSION_TAG_PATTERN = /^(\d+\.\d+\.\d+)-([A-Za-z0-9][A-Za-z0-9_.-]*)$/;
+const {
+    writeServePidFile,
+    stopServeProcess,
+    relaunchServeDetached
+} = createServeProcessManager({
+    fs,
+    path,
+    os,
+    processRef: process,
+    globalRef: global,
+    spawn,
+    sleep,
+    buildLogPath: buildManyoyoLogPath,
+    log: message => console.log(message),
+    colors: { GREEN, YELLOW, NC }
+});
 
 // Docker command (will be set by ensure_docker)
 let DOCKER_CMD = 'docker';
@@ -314,8 +355,7 @@ function installServeProcessDiagnostics(logger) {
  * 加载全局配置文件
  * @returns {Config} 配置对象
  */
-function loadConfig() {
-    const result = readManyoyoConfig();
+function loadConfig(result = readManyoyoConfig()) {
     if (result.exists) {
         if (result.parseError) {
             console.error(`${YELLOW}⚠️  配置文件格式错误: ${result.path}${NC}`);
@@ -635,27 +675,13 @@ function addImageBuildArg(value) {
     IMAGE_BUILD_ARGS.push("--build-arg", value);
 }
 
-const YOLO_COMMAND_MAP = {
-    claude: "IS_SANDBOX=1 claude --dangerously-skip-permissions",
-    cc: "IS_SANDBOX=1 claude --dangerously-skip-permissions",
-    c: "IS_SANDBOX=1 claude --dangerously-skip-permissions",
-    gemini: "gemini --yolo",
-    gm: "gemini --yolo",
-    g: "gemini --yolo",
-    codex: "codex --dangerously-bypass-approvals-and-sandbox",
-    cx: "codex --dangerously-bypass-approvals-and-sandbox",
-    opencode: "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode",
-    oc: "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
-};
-
 function setYolo(cli) {
-    const key = String(cli || '').trim().toLowerCase();
-    const mappedCommand = YOLO_COMMAND_MAP[key];
-    if (!mappedCommand) {
+    try {
+        EXEC_COMMAND = resolveYoloCommand(cli);
+    } catch (error) {
         console.log(`${RED}⚠️  未知LLM CLI: ${cli}${NC}`);
-        process.exit(0);
+        throw error;
     }
-    EXEC_COMMAND = mappedCommand;
 }
 
 /**
@@ -663,41 +689,31 @@ function setYolo(cli) {
  * @param {string} mode - 模式名称 (common, dind, sock)
  */
 function setContMode(mode) {
-    const modeAliasMap = {
-        common: 'common',
-        'docker-in-docker': 'dind',
-        dind: 'dind',
-        d: 'dind',
-        'mount-docker-socket': 'sock',
-        sock: 'sock',
-        s: 'sock'
-    };
-    const normalizedMode = modeAliasMap[String(mode || '').trim().toLowerCase()];
+    let resolvedMode;
+    try {
+        resolvedMode = resolveContainerMode(mode);
+    } catch (error) {
+        console.log(`${RED}⚠️  未知模式: ${mode}${NC}`);
+        throw error;
+    }
+    const normalizedMode = resolvedMode.mode;
 
     if (normalizedMode === 'common') {
-        CONT_MODE_ARGS = [];
+        CONT_MODE_ARGS = resolvedMode.args;
         return;
     }
 
     if (normalizedMode === 'dind') {
-        CONT_MODE_ARGS = ['--privileged'];
+        CONT_MODE_ARGS = resolvedMode.args;
         console.log(`${GREEN}✅ 开启安全的容器嵌套容器模式, 手动在容器内启动服务: nohup dockerd &${NC}`);
         return;
     }
 
     if (normalizedMode === 'sock') {
-        CONT_MODE_ARGS = [
-            '--privileged',
-            '--volume', '/var/run/docker.sock:/var/run/docker.sock',
-            '--env', 'DOCKER_HOST=unix:///var/run/docker.sock',
-            '--env', 'CONTAINER_HOST=unix:///var/run/docker.sock'
-        ];
+        CONT_MODE_ARGS = resolvedMode.args;
         console.log(`${RED}⚠️  开启危险的容器嵌套容器模式, 危害: 容器可访问宿主机文件${NC}`);
         return;
     }
-
-    console.log(`${RED}⚠️  未知模式: ${mode}${NC}`);
-    process.exit(0);
 }
 
 function showImagePullHint(err) {
@@ -769,18 +785,21 @@ function dockerExecArgs(args, options = {}) {
     }
 }
 
+function getRuntimeDriver() {
+    return createRuntimeDriver(dockerExecArgs);
+}
+
 function containerExists(name) {
-    const containers = dockerExecArgs(['ps', '-a', '--format', '{{.Names}}']);
-    return containers.split('\n').some(n => n.trim() === name);
+    return getRuntimeDriver().containerExists(name);
 }
 
 function getContainerStatus(name) {
-    return dockerExecArgs(['inspect', '-f', '{{.State.Status}}', name]).trim();
+    return getRuntimeDriver().getContainerStatus(name);
 }
 
 function removeContainer(name) {
     if ( !(QUIET.crm || QUIET.full) ) console.log(`${YELLOW}🗑️ 正在删除容器: ${name}...${NC}`);
-    dockerExecArgs(['rm', '-f', name], { stdio: 'pipe' });
+    getRuntimeDriver().removeContainer(name);
     if ( !(QUIET.crm || QUIET.full) ) console.log(`${GREEN}✅ 已彻底删除。${NC}`);
 }
 
@@ -797,6 +816,16 @@ function ensureDocker() {
     }
     console.error("docker/podman not found");
     process.exit(1);
+}
+
+function checkPortAvailability(port) {
+    return new Promise(resolve => {
+        const server = net.createServer();
+        server.once('error', () => resolve('occupied'));
+        server.listen(port, '127.0.0.1', () => {
+            server.close(() => resolve('available'));
+        });
+    });
 }
 
 function installManyoyo(name) {
@@ -1057,13 +1086,15 @@ function applyRunStyleOptions(command, options = {}) {
         command
             .option('--serve [listen]', '按 serve 模式解析配置 (仅支持 <ip:port>)')
             .option('-U, --user <username>', '网页服务登录用户名 (默认 admin)')
-            .option('-P, --pass <password>', '网页服务登录密码 (默认自动生成随机密码)');
+            .option('-P, --pass <password>', '网页服务登录密码 (默认自动生成随机密码)')
+            .option('--trust-proxy', '信任 TLS 反向代理的 X-Forwarded-Proto，并设置 Secure Cookie');
     }
 
     if (includeWebAuthOptions) {
         command
             .option('-U, --user <username>', '网页服务登录用户名 (默认 admin)')
-            .option('-P, --pass <password>', '网页服务登录密码 (默认自动生成随机密码)');
+            .option('-P, --pass <password>', '网页服务登录密码 (默认自动生成随机密码)')
+            .option('--trust-proxy', '信任 TLS 反向代理的 X-Forwarded-Proto，并设置 Secure Cookie');
     }
 
     return command;
@@ -1071,7 +1102,8 @@ function applyRunStyleOptions(command, options = {}) {
 
 async function setupCommander() {
     // Load config file
-    const config = loadConfig();
+    const configResult = readManyoyoConfig();
+    let config = loadConfig(configResult);
 
     const program = new Command();
     program.enablePositionalOptions();
@@ -1092,66 +1124,6 @@ async function setupCommander() {
             pluginExtensionNames: Array.isArray(params.extensionNames) ? params.extensionNames : [],
             pluginProdversion: params.prodversion || ''
         });
-    };
-
-    const registerPlaywrightAliasCommands = (command) => {
-        command.command('ls')
-            .description('列出 playwright 启用场景')
-            .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-            .action(options => selectPluginAction({
-                action: 'ls',
-                pluginName: 'playwright',
-                scene: 'all'
-            }, options));
-
-        const actions = ['up', 'down', 'status', 'health', 'logs'];
-        actions.forEach(action => {
-            const sceneCommand = command.command(`${action} [scene]`)
-                .description(`执行 playwright ${action} 场景（scene 默认 mcp-host-headless）`)
-                .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)');
-
-            if (action === 'up') {
-                appendArrayOption(sceneCommand, '--ext-path <path>', '追加浏览器扩展目录（可多次传入；目录需包含 manifest.json）');
-                appendArrayOption(sceneCommand, '--ext-name <name>', '追加 ~/.manyoyo/plugin/playwright/extensions/ 下的扩展目录名（可多次传入）');
-            }
-
-            sceneCommand.action((scene, options) => selectPluginAction({
-                action,
-                pluginName: 'playwright',
-                scene: scene || 'mcp-host-headless',
-                extensionPaths: action === 'up' ? (options.extPath || []) : [],
-                extensionNames: action === 'up' ? (options.extName || []) : []
-            }, options));
-        });
-
-        command.command('mcp-add')
-            .description('输出 playwright 的 MCP 接入命令')
-            .option('--host <host>', 'MCP URL 使用的主机名或IP (默认 host.docker.internal)')
-            .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-            .action(options => selectPluginAction({
-                action: 'mcp-add',
-                pluginName: 'playwright',
-                scene: 'all',
-                host: options.host || ''
-            }, options));
-
-        command.command('cli-add')
-            .description('输出 playwright-cli skill 安装命令')
-            .action(() => selectPluginAction({
-                action: 'cli-add',
-                pluginName: 'playwright',
-                scene: 'all'
-            }));
-
-        command.command('ext-download')
-            .description('下载并解压 Playwright 扩展到 ~/.manyoyo/plugin/playwright/extensions/')
-            .option('--prodversion <ver>', 'CRX 下载使用的 Chrome 版本号 (默认 132.0.0.0)')
-            .action(options => selectPluginAction({
-                action: 'ext-download',
-                pluginName: 'playwright',
-                scene: 'all',
-                prodversion: options.prodversion || ''
-            }, options));
     };
 
     program
@@ -1188,62 +1160,18 @@ async function setupCommander() {
   ${MANYOYO_NAME} run -n test -q tip -q cmd           多次使用静默选项
         `);
 
-    const runCommand = program.command('run').description('启动（容器不存在时）或连接（容器已存在时）容器并执行命令');
-    runCommand.addHelpText('after', `
-Examples:
-  ${MANYOYO_NAME} run -r codex
-  ${MANYOYO_NAME} run --rm-on-exit -x /bin/bash -lc "node -v"
-  ${MANYOYO_NAME} run -n demo --first-shell "npm ci" -s "npm test"
-
-Notes:
-  参数优先级与合并规则（标量覆盖、数组追加、env 按 key 合并）请用 ${MANYOYO_NAME} config show --help 或查看文档。
-`);
-    applyRunStyleOptions(runCommand);
-    enableShellSuffixPassThrough(runCommand);
-    runCommand.action((options, command) => {
-        validateShellSuffixPassThroughArgs(command);
-        selectAction('run', options);
-    });
-
-    const buildCommand = program.command('build').description('构建 manyoyo 沙箱镜像');
-    buildCommand
-        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-        .option('--in, --image-name <name>', '指定镜像名称')
-        .option('--iv, --image-ver <version>', '指定镜像版本 (格式: x.y.z-后缀，如 1.7.4-common)')
-        .option('--update-agents', '仅更新已有镜像内 Agent CLI 到 latest (Claude/Codex/Gemini/OpenCode)')
-        .option('--yes', '所有提示自动确认 (用于CI/脚本)');
-    appendArrayOption(buildCommand, '--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)');
-    buildCommand.action(options => selectAction('build', options));
-
-    const removeCommand = program.command('rm <name>').description('删除指定容器');
-    removeCommand
-        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-        .action((name, options) => selectAction('rm', { ...options, contName: name }));
-
-    program.command('ps')
-        .description('列举容器')
-        .action(() => selectAction('ps', { contList: true }));
-
-    program.command('images')
-        .description('列举镜像')
-        .action(() => selectAction('images', { imageList: true }));
-
-    const serveCommand = program.command('serve [listen]').description('启动网页交互服务 (默认 127.0.0.1:3000)');
-    applyRunStyleOptions(serveCommand, { includeRmOnExit: false, includeWebAuthOptions: true });
-    serveCommand.option('-d, --detach', '后台启动网页服务并立即返回');
-    serveCommand.option('--stop', '停止后台网页服务；必须显式传入 listen');
-    serveCommand.option('--restart', '重启后台网页服务；必须显式传入 listen');
-    serveCommand.action((listen, options) => {
-        selectAction('serve', {
-            ...options,
-            server: listen === undefined ? true : listen,
-            serverUser: options.user,
-            serverPass: options.pass
-        });
+    registerCoreCommands(program, {
+        manyoyoName: MANYOYO_NAME,
+        imageVersionHelpExample: IMAGE_VERSION_HELP_EXAMPLE,
+        applyRunStyleOptions,
+        appendArrayOption,
+        enableShellSuffixPassThrough,
+        validateShellSuffixPassThroughArgs,
+        selectAction
     });
 
     const playwrightCommand = program.command('playwright').description('管理 playwright 插件服务（推荐）');
-    registerPlaywrightAliasCommands(playwrightCommand);
+    registerPlaywrightAliasCommands(playwrightCommand, { appendArrayOption, selectPluginAction });
 
     const pluginCommand = program.command('plugin').description('管理 manyoyo 插件');
     pluginCommand.command('ls')
@@ -1255,50 +1183,14 @@ Notes:
             scene: 'all'
         }, options));
     const pluginPlaywrightCommand = pluginCommand.command('playwright').description('管理 playwright 插件服务');
-    registerPlaywrightAliasCommands(pluginPlaywrightCommand);
+    registerPlaywrightAliasCommands(pluginPlaywrightCommand, { appendArrayOption, selectPluginAction });
 
-    const configCommand = program.command('config').description('查看解析后的配置或命令');
-    const configShowCommand = configCommand.command('show').description('显示最终生效配置并退出');
-    applyRunStyleOptions(configShowCommand, { includeRmOnExit: false, includeServePreview: true });
-    enableShellSuffixPassThrough(configShowCommand);
-    configShowCommand.action((options, command) => {
-        validateShellSuffixPassThroughArgs(command);
-        const finalOptions = {
-            ...options,
-            showConfig: true
-        };
-        if (options.serve !== undefined) {
-            finalOptions.server = options.serve;
-            finalOptions.serverUser = options.user;
-            finalOptions.serverPass = options.pass;
-        }
-        selectAction('config-show', finalOptions);
+    registerConfigCommands(program, {
+        applyRunStyleOptions,
+        enableShellSuffixPassThrough,
+        validateShellSuffixPassThroughArgs,
+        selectAction
     });
-
-    const configRunCommand = configCommand.command('command').description('显示将执行的 docker run 命令并退出');
-    applyRunStyleOptions(configRunCommand, { includeRmOnExit: false });
-    enableShellSuffixPassThrough(configRunCommand);
-    configRunCommand.action((options, command) => {
-        validateShellSuffixPassThroughArgs(command);
-        selectAction('config-command', options);
-    });
-
-    const initCommand = program.command('init [agents]').description('初始化 Agent 配置到 ~/.manyoyo');
-    initCommand
-        .option('--yes', '所有提示自动确认 (用于CI/脚本)')
-        .action((agents, options) => selectAction('init', { ...options, initConfig: agents === undefined ? 'all' : agents }));
-
-    program.command('update')
-        .description('更新 MANYOYO（若检测为本地 file 安装则跳过）')
-        .action(() => selectAction('update', { update: true }));
-
-    program.command('install <name>')
-        .description(`安装 ${MANYOYO_NAME} 命令 (docker-cli-plugin)`)
-        .action(name => selectAction('install', { install: name }));
-
-    program.command('prune')
-        .description('清理悬空镜像和 <none> 镜像')
-        .action(() => selectAction('prune', { imageRemove: true }));
 
     // Docker CLI plugin metadata check
     if (maybeHandleDockerPluginMetadata(process.argv)) {
@@ -1334,6 +1226,7 @@ Notes:
     const isPruneMode = selectedAction === 'prune';
     const isShowConfigMode = selectedAction === 'config-show';
     const isShowCommandMode = selectedAction === 'config-command';
+    const isDoctorMode = selectedAction === 'doctor';
     const isServerMode = options.server !== undefined;
     const isServerStopMode = Boolean(selectedAction === 'serve' && options.stop);
     const isServerRestartMode = Boolean(selectedAction === 'serve' && options.restart);
@@ -1342,10 +1235,27 @@ Notes:
         throw new Error('serve --stop 与 --restart 不能同时使用');
     }
 
-    const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin']);
+    const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin', 'doctor']);
     if (isServerStopMode) {
         noDockerActions.add('serve');
     }
+
+    const bootstrappedFirstRun = await bootstrapFirstRun({
+        action: selectedAction,
+        configExists: configResult.exists,
+        initialize: () => initAgentConfigs('all', {
+            yesMode: true,
+            askQuestion,
+            loadConfig,
+            supportedAgents: SUPPORTED_INIT_AGENTS,
+            colors: { RED, GREEN, YELLOW, CYAN, NC }
+        }),
+        log: message => console.log(message)
+    });
+    if (bootstrappedFirstRun) {
+        config = loadConfig();
+    }
+
     if (!noDockerActions.has(selectedAction)) {
         ensureDocker();
     }
@@ -1475,6 +1385,7 @@ Notes:
     SERVER_PORT = resolvedRuntime.serverPort || SERVER_PORT;
     SERVER_AUTH_USER = resolvedRuntime.serverUser || '';
     SERVER_AUTH_PASS = resolvedRuntime.serverPass || '';
+    SERVER_TRUST_PROXY = Boolean(resolvedRuntime.serverTrustProxy);
     SERVER_AUTH_PASS_AUTO = Boolean(resolvedRuntime.serverPassAuto);
 
     if (isShowConfigMode) {
@@ -1504,6 +1415,7 @@ Notes:
             serverPort: isServerMode ? SERVER_PORT : null,
             serverUser: SERVER_AUTH_USER || "",
             serverPass: SERVER_AUTH_PASS || "",
+            serverTrustProxy: SERVER_TRUST_PROXY,
             exec: {
                 prefix: EXEC_COMMAND_PREFIX,
                 shell: EXEC_COMMAND,
@@ -1522,10 +1434,38 @@ Notes:
                 }
             }
         };
+        if (options.explain) {
+            finalConfig.provenance = resolvedRuntime.provenance;
+        }
         // 敏感信息脱敏
         const sanitizedConfig = sanitizeSensitiveData(finalConfig);
         console.log(JSON.stringify(sanitizedConfig, null, 4));
         process.exit(0);
+    }
+
+    if (isDoctorMode) {
+        const parsedPort = options.port === undefined ? null : Number(options.port);
+        const portStatus = Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535
+            ? await checkPortAvailability(parsedPort)
+            : undefined;
+        const report = runDoctorChecks({
+            runCommand: runCmd,
+            configExists: fs.existsSync(getManyoyoConfigPath()),
+            imageName: IMAGE_NAME,
+            imageVersion: IMAGE_VERSION,
+            agentCommand: EXEC_COMMAND,
+            containerMode: contModeValue || 'common',
+            pluginConfig: config.plugins,
+            portStatus
+        });
+        if (options.json) {
+            console.log(JSON.stringify(report, null, 4));
+        } else {
+            report.checks.forEach(check => {
+                console.log(`[${check.status.toUpperCase()}] ${check.code}: ${check.summary}${check.action ? ` (${check.action})` : ''}`);
+            });
+        }
+        process.exit(report.ok ? 0 : 1);
     }
 
     if (isPsMode) { getContList(); process.exit(0); }
@@ -1538,6 +1478,7 @@ Notes:
         isBuildMode,
         isRemoveMode,
         isShowCommandMode,
+        isDoctorMode,
         isServerMode,
         isServerStop: isServerStopMode,
         isServerRestart: isServerRestartMode,
@@ -1580,6 +1521,7 @@ function createRuntimeContext(modeState = {}) {
         serverAuthUser: SERVER_AUTH_USER,
         serverAuthPass: SERVER_AUTH_PASS,
         serverAuthPassAuto: SERVER_AUTH_PASS_AUTO,
+        serverTrustProxy: SERVER_TRUST_PROXY,
         logger: null
     };
 }
@@ -1620,213 +1562,27 @@ function validateHostPathOrThrow(hostPath) {
     }
 }
 
-function buildDetachedServeArgv(argv) {
-    const result = [];
-    for (let i = 0; i < argv.length; i++) {
-        const arg = String(argv[i] || '');
-        if (arg === '-d' || arg === '--detach' || arg === '--restart') {
-            continue;
-        }
-        result.push(arg);
-    }
-    return result;
-}
-
-function buildDetachedServeEnv(runtime) {
-    const env = { ...process.env };
-    if (runtime.serverAuthUser) {
-        env.MANYOYO_SERVER_USER = runtime.serverAuthUser;
-    }
-    if (runtime.serverAuthPass) {
-        env.MANYOYO_SERVER_PASS = runtime.serverAuthPass;
-    }
-    return env;
-}
-
-function formatServeListenHost(host) {
-    const text = String(host || '').trim() || '127.0.0.1';
-    if (text.includes(':') && !text.startsWith('[')) {
-        return `[${text}]`;
-    }
-    return text;
-}
-
-function buildServeListenLabel(host, port) {
-    return `${formatServeListenHost(host)}:${port}`;
-}
-
-function buildServePidFile(host, port, homeDir = os.homedir()) {
-    const dir = path.join(homeDir, '.manyoyo', 'run', 'serve');
-    const listen = buildServeListenLabel(host, port);
-    const safeName = listen.replace(/[^A-Za-z0-9_.-]+/g, '_');
-    return {
-        dir,
-        listen,
-        path: path.join(dir, `${safeName}.pid`)
-    };
-}
-
-function removeServePidFile(filePath) {
-    if (!filePath) return;
-    try {
-        fs.rmSync(filePath, { force: true });
-    } catch (e) {
-        // ignore cleanup failures
-    }
-}
-
-function isProcessRunning(pid) {
-    if (!Number.isInteger(pid) || pid <= 0) {
-        return false;
-    }
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (e) {
-        return e && e.code !== 'ESRCH';
-    }
-}
-
-function readServePidFile(filePath) {
-    try {
-        const text = fs.readFileSync(filePath, 'utf-8').trim();
-        if (!/^\d+$/.test(text)) {
-            return 0;
-        }
-        return Number(text);
-    } catch (e) {
-        return 0;
-    }
-}
-
-function getServePidTarget(host, port, homeDir = os.homedir()) {
-    const pidFile = buildServePidFile(host, port, homeDir);
-    const pid = readServePidFile(pidFile.path);
-    if (!Number.isInteger(pid) || pid <= 0 || !isProcessRunning(pid)) {
-        removeServePidFile(pidFile.path);
-        return null;
-    }
-    return {
-        pid,
-        listen: pidFile.listen,
-        path: pidFile.path
-    };
-}
-
-function installServePidCleanup(pidFilePath, logger) {
-    if (!pidFilePath || global.__manyoyoServePidCleanupInstalled) {
-        return;
-    }
-    global.__manyoyoServePidCleanupInstalled = true;
-    process.on('exit', () => {
-        removeServePidFile(pidFilePath);
-        if (logger && typeof logger.info === 'function') {
-            logger.info('serve pid file removed', { pidFilePath });
-        }
-    });
-}
-
-function writeServePidFile(runtime, serverHandle) {
-    const pidFile = buildServePidFile(serverHandle.host, serverHandle.port);
-    fs.mkdirSync(pidFile.dir, { recursive: true });
-    fs.writeFileSync(pidFile.path, `${process.pid}\n`);
-    installServePidCleanup(pidFile.path, runtime && runtime.logger);
-    return pidFile.path;
-}
-
-async function stopServeProcess(runtime, options = {}) {
-    const commandName = options.commandName || '--stop';
-    if (!runtime || !runtime.serverListenSpecified) {
-        throw new Error(`serve ${commandName} 必须显式传入 listen，例如 manyoyo serve 127.0.0.1:3000 ${commandName}`);
-    }
-    const target = getServePidTarget(runtime.serverHost, runtime.serverPort);
-    if (!target) {
-        const label = buildServeListenLabel(runtime.serverHost, runtime.serverPort);
-        console.log(`${YELLOW}⚠️  未发现运行中的 serve 实例: ${label}${NC}`);
-        return false;
-    }
-    try {
-        process.kill(target.pid, 'SIGTERM');
-    } catch (e) {
-        if (!e || e.code !== 'ESRCH') {
-            throw e;
-        }
-    }
-    await sleep(200);
-    if (isProcessRunning(target.pid)) {
-        try {
-            process.kill(target.pid, 'SIGKILL');
-        } catch (e) {
-            if (!e || e.code !== 'ESRCH') {
-                throw e;
-            }
-        }
-    }
-    removeServePidFile(target.path);
-    console.log(`${GREEN}✅ 已停止 serve: ${target.listen} (pid: ${target.pid})${NC}`);
-    return true;
-}
-
-function relaunchServeDetached(runtime) {
-    const serveLog = buildManyoyoLogPath('serve');
-    fs.mkdirSync(serveLog.dir, { recursive: true });
-
-    const existing = getServePidTarget(runtime.serverHost, runtime.serverPort);
-    if (existing) {
-        console.log(`${YELLOW}⚠️  serve 已在后台运行: ${existing.listen} (pid: ${existing.pid})${NC}`);
-        return;
-    }
-
-    const child = spawn(process.argv[0], buildDetachedServeArgv(process.argv.slice(1)), {
-        detached: true,
-        stdio: 'ignore',
-        env: buildDetachedServeEnv(runtime)
-    });
-    child.unref();
-
-    console.log(`${GREEN}✅ MANYOYO Web 服务已在后台启动: http://${buildServeListenLabel(runtime.serverHost, runtime.serverPort)}${NC}`);
-    console.log(`PID: ${child.pid}`);
-    console.log(`日志: ${serveLog.path}`);
-    console.log(`登录用户名: ${runtime.serverAuthUser}`);
-    if (runtime.serverAuthPassAuto) {
-        console.log(`登录密码(本次随机): ${runtime.serverAuthPass}`);
-    } else {
-        console.log('登录密码: 使用你配置的 serve -P / serverPass / MANYOYO_SERVER_PASS');
-    }
-}
-
 /**
  * 等待容器就绪（使用指数退避算法）
  * @param {string} containerName - 容器名称
  */
 async function waitForContainerReady(containerName) {
-    const MAX_RETRIES = CONFIG.CONTAINER_READY_MAX_RETRIES;
-    let retryDelay = CONFIG.CONTAINER_READY_INITIAL_DELAY;
-
-    for (let count = 0; count < MAX_RETRIES; count++) {
-        try {
-            const status = getContainerStatus(containerName);
-
-            if (status === 'running') {
-                return;
-            }
-
-            if (status === 'exited') {
-                console.log(`${RED}⚠️  错误: 容器启动后立即退出。${NC}`);
-                dockerExecArgs(['logs', containerName], { stdio: 'inherit' });
-                process.exit(1);
-            }
-
-            await sleep(retryDelay);
-            retryDelay = Math.min(retryDelay * 2, CONFIG.CONTAINER_READY_MAX_DELAY);
-        } catch (e) {
-            await sleep(retryDelay);
-            retryDelay = Math.min(retryDelay * 2, CONFIG.CONTAINER_READY_MAX_DELAY);
+    return waitForContainerReadyLifecycle(containerName, {
+        getContainerStatus,
+        sleep,
+        maxRetries: CONFIG.CONTAINER_READY_MAX_RETRIES,
+        initialDelay: CONFIG.CONTAINER_READY_INITIAL_DELAY,
+        maxDelay: CONFIG.CONTAINER_READY_MAX_DELAY,
+        onExited: name => {
+            console.log(`${RED}⚠️  错误: 容器启动后立即退出。${NC}`);
+            dockerExecArgs(['logs', name], { stdio: 'inherit' });
+            process.exit(1);
+        },
+        onTimeout: () => {
+            console.log(`${RED}⚠️  错误: 容器启动超时。${NC}`);
+            process.exit(1);
         }
-    }
-
-    console.log(`${RED}⚠️  错误: 容器启动超时。${NC}`);
-    process.exit(1);
+    });
 }
 
 function joinExecCommand(prefix, command, suffix) {
@@ -1834,39 +1590,19 @@ function joinExecCommand(prefix, command, suffix) {
 }
 
 function executeFirstCommand(runtime) {
-    if (!runtime.firstExecCommand || !String(runtime.firstExecCommand).trim()) {
-        return;
-    }
-
-    const firstCommand = joinExecCommand(
-        runtime.firstExecCommandPrefix,
-        runtime.firstExecCommand,
-        runtime.firstExecCommandSuffix
-    );
-
-    if (!(runtime.quiet.cmd || runtime.quiet.full)) {
-        console.log(`${BLUE}----------------------------------------${NC}`);
-        console.log(`⚙️  首次预执行命令: ${YELLOW}${firstCommand}${NC}`);
-    }
-
-    const firstExecArgs = [
-        'exec',
-        ...(runtime.firstContainerEnvs || []),
-        runtime.containerName,
-        '/bin/bash',
-        '-c',
-        firstCommand
-    ];
-    const firstExecResult = spawnSync(`${DOCKER_CMD}`, firstExecArgs, { stdio: 'inherit' });
-    if (firstExecResult.error) {
-        throw firstExecResult.error;
-    }
-    if (typeof firstExecResult.status === 'number' && firstExecResult.status !== 0) {
-        throw new Error(`首次预执行命令失败，退出码: ${firstExecResult.status}`);
-    }
-    if (firstExecResult.signal) {
-        throw new Error(`首次预执行命令被信号终止: ${firstExecResult.signal}`);
-    }
+    return executeFirstCommandLifecycle(runtime, {
+        joinExecCommand,
+        logCommand: command => {
+            console.log(`${BLUE}----------------------------------------${NC}`);
+            console.log(`⚙️  首次预执行命令: ${YELLOW}${command}${NC}`);
+        },
+        spawnSync,
+        dockerCmd: DOCKER_CMD,
+        compileContainerExec,
+        stdinIsTTY: Boolean(process.stdin.isTTY),
+        stdoutIsTTY: Boolean(process.stdout.isTTY),
+        assertProcessSucceeded
+    });
 }
 
 /**
@@ -1874,38 +1610,17 @@ function executeFirstCommand(runtime) {
  * @returns {Promise<string>} 默认命令
  */
 async function createNewContainer(runtime) {
-    if (!(runtime.quiet.cnew || runtime.quiet.full)) {
-        console.log(`${CYAN}📦 manyoyo by xcanwin 正在创建新容器: ${YELLOW}${runtime.containerName}${NC}`);
-    }
-
-    runtime.execCommand = joinExecCommand(
-        runtime.execCommandPrefix,
-        runtime.execCommand,
-        runtime.execCommandSuffix
-    );
-    const defaultCommand = runtime.execCommand;
-
-    if (runtime.showCommand) {
-        console.log(buildDockerRunCmd(runtime));
-        process.exit(0);
-    }
-
-    // 使用数组参数执行命令（安全方式）
-    try {
-        const args = buildDockerRunArgs(runtime);
-        dockerExecArgs(args, { stdio: 'pipe' });
-    } catch (e) {
-        showImagePullHint(e);
-        throw e;
-    }
-
-    // Wait for container to be ready
-    await waitForContainerReady(runtime.containerName);
-
-    // Run one-time bootstrap command for newly created containers only.
-    executeFirstCommand(runtime);
-
-    return defaultCommand;
+    return createNewContainerLifecycle(runtime, {
+        joinExecCommand,
+        logCreating: name => console.log(`${CYAN}📦 manyoyo by xcanwin 正在创建新容器: ${YELLOW}${name}${NC}`),
+        logCommandPreview: value => console.log(buildDockerRunCmd(value)),
+        exit: process.exit,
+        dockerExecArgs,
+        buildDockerRunArgs,
+        showImagePullHint,
+        waitForContainerReady,
+        executeFirstCommand
+    });
 }
 
 /**
@@ -1913,7 +1628,7 @@ async function createNewContainer(runtime) {
  * @returns {string[]} 命令参数数组
  */
 function buildDockerRunArgs(runtime) {
-    return buildContainerRunArgs({
+    return compileContainerRun({
         containerName: runtime.containerName,
         hostPath: runtime.hostPath,
         containerPath: runtime.containerPath,
@@ -1938,71 +1653,44 @@ function buildDockerRunCmd(runtime) {
 }
 
 async function connectExistingContainer(runtime) {
-    if (!(runtime.quiet.cnew || runtime.quiet.full)) {
-        console.log(`${CYAN}🔄 manyoyo by xcanwin 正在连接到现有容器: ${YELLOW}${runtime.containerName}${NC}`);
-    }
-
-    // Start container if stopped
-    const status = getContainerStatus(runtime.containerName);
-    if (status !== 'running') {
-        dockerExecArgs(['start', runtime.containerName], { stdio: 'pipe' });
-    }
-
-    // Get default command from label
-    const defaultCommand = dockerExecArgs(['inspect', '-f', '{{index .Config.Labels "manyoyo.default_cmd"}}', runtime.containerName]).trim();
-
-    if (!runtime.execCommand) {
-        runtime.execCommand = joinExecCommand(runtime.execCommandPrefix, defaultCommand, runtime.execCommandSuffix);
-    } else {
-        runtime.execCommand = joinExecCommand(runtime.execCommandPrefix, runtime.execCommand, runtime.execCommandSuffix);
-    }
-
-    return defaultCommand;
+    return connectExistingContainerLifecycle(runtime, {
+        getContainerStatus,
+        getRuntimeDriver,
+        joinExecCommand,
+        log: containerName => console.log(`${CYAN}🔄 manyoyo by xcanwin 正在连接到现有容器: ${YELLOW}${containerName}${NC}`)
+    });
 }
 
 async function setupContainer(runtime) {
-    if (runtime.showCommand) {
-        if (containerExists(runtime.containerName)) {
-            const defaultCommand = dockerExecArgs(['inspect', '-f', '{{index .Config.Labels "manyoyo.default_cmd"}}', runtime.containerName]).trim();
-            const execCmd = runtime.execCommand
-                ? joinExecCommand(runtime.execCommandPrefix, runtime.execCommand, runtime.execCommandSuffix)
-                : joinExecCommand(runtime.execCommandPrefix, defaultCommand, runtime.execCommandSuffix);
-            console.log(`${DOCKER_CMD} exec -it ${runtime.containerName} /bin/bash -c "${execCmd.replace(/"/g, '\\"')}"`);
-            process.exit(0);
-        }
-        runtime.execCommand = joinExecCommand(runtime.execCommandPrefix, runtime.execCommand, runtime.execCommandSuffix);
-        console.log(buildDockerRunCmd(runtime));
-        process.exit(0);
-    }
-    if (!containerExists(runtime.containerName)) {
-        return await createNewContainer(runtime);
-    } else {
-        return await connectExistingContainer(runtime);
-    }
+    return setupContainerLifecycle(runtime, {
+        containerExists,
+        getRuntimeDriver,
+        joinExecCommand,
+        logExistingCommandPreview: (name, command) => console.log(`${DOCKER_CMD} exec -it ${name} /bin/bash -c "${command.replace(/"/g, '\\"')}"`),
+        logNewCommandPreview: value => console.log(buildDockerRunCmd(value)),
+        exit: process.exit,
+        createNewContainer,
+        connectExistingContainer
+    });
 }
 
 function executeInContainer(runtime, defaultCommand) {
-    if (!containerExists(runtime.containerName)) {
-        throw new Error(`未找到容器: ${runtime.containerName}`);
-    }
-
-    const status = getContainerStatus(runtime.containerName);
-    if (status !== 'running') {
-        dockerExecArgs(['start', runtime.containerName], { stdio: 'pipe' });
-    }
-
-    getHelloTip(runtime.containerName, defaultCommand, runtime.execCommand);
-    if (!(runtime.quiet.cmd || runtime.quiet.full)) {
-        console.log(`${BLUE}----------------------------------------${NC}`);
-        console.log(`💻 执行命令: ${YELLOW}${runtime.execCommand || '交互式 Shell'}${NC}`);
-    }
-
-    // Execute command in container
-    if (runtime.execCommand) {
-        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash', '-c', runtime.execCommand], { stdio: 'inherit' });
-    } else {
-        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash'], { stdio: 'inherit' });
-    }
+    return executeInContainerLifecycle(runtime, defaultCommand, {
+        containerExists,
+        getContainerStatus,
+        getRuntimeDriver,
+        showHelloTip: getHelloTip,
+        logCommand: command => {
+            console.log(`${BLUE}----------------------------------------${NC}`);
+            console.log(`💻 执行命令: ${YELLOW}${command || '交互式 Shell'}${NC}`);
+        },
+        spawnSync,
+        dockerCmd: DOCKER_CMD,
+        compileContainerExec,
+        stdinIsTTY: Boolean(process.stdin.isTTY),
+        stdoutIsTTY: Boolean(process.stdout.isTTY),
+        assertProcessSucceeded
+    });
 }
 
 /**
@@ -2010,56 +1698,19 @@ function executeInContainer(runtime, defaultCommand) {
  * @param {string} defaultCommand - 默认命令
  */
 async function handlePostExit(runtime, defaultCommand) {
-    // --rm-on-exit 模式：自动删除容器
-    if (runtime.rmOnExit) {
-        removeContainer(runtime.containerName);
-        return false;
-    }
-
-    getHelloTip(runtime.containerName, defaultCommand, runtime.execCommand);
-
-    const resumeCommand = buildAgentResumeCommand(defaultCommand);
-    const hasResumeAction = Boolean(resumeCommand);
-    const menuResume = hasResumeAction ? ', r=恢复首次命令会话' : '';
-    const quietResume = hasResumeAction ? ' r' : '';
-    let tipAskKeep = `❔ 会话已结束。是否保留此后台容器 ${runtime.containerName}? [ y=默认保留, n=删除, 1=首次命令进入${menuResume}, x=执行命令, i=交互式SHELL ]: `;
-    if (runtime.quiet.askkeep || runtime.quiet.full) tipAskKeep = `保留容器吗? [y n 1${quietResume} x i] `;
-    const reply = await askQuestion(tipAskKeep);
-
-    const firstChar = reply.trim().toLowerCase()[0];
-
-    if (firstChar === 'n') {
-        removeContainer(runtime.containerName);
-        return false;
-    } else if (firstChar === '1') {
-        if (!(runtime.quiet.full)) console.log(`${GREEN}✅ 离开当前连接，用首次命令进入。${NC}`);
-        runtime.execCommandPrefix = "";
-        runtime.execCommandSuffix = "";
-        runtime.execCommand = defaultCommand;
-        return true;
-    } else if (firstChar === 'r' && hasResumeAction) {
-        if (!(runtime.quiet.full)) console.log(`${GREEN}✅ 离开当前连接，恢复首次命令会话。${NC}`);
-        runtime.execCommandPrefix = "";
-        runtime.execCommandSuffix = "";
-        runtime.execCommand = resumeCommand;
-        return true;
-    } else if (firstChar === 'x') {
-        const command = await askQuestion('❔ 输入要执行的命令: ');
-        if (!(runtime.quiet.cmd || runtime.quiet.full)) console.log(`${GREEN}✅ 离开当前连接，执行命令。${NC}`);
-        runtime.execCommandPrefix = "";
-        runtime.execCommandSuffix = "";
-        runtime.execCommand = command;
-        return true;
-    } else if (firstChar === 'i') {
-        if (!(runtime.quiet.full)) console.log(`${GREEN}✅ 离开当前连接，进入容器交互式SHELL。${NC}`);
-        runtime.execCommandPrefix = "";
-        runtime.execCommandSuffix = "";
-        runtime.execCommand = '/bin/bash';
-        return true;
-    } else {
-        console.log(`${GREEN}✅ 已退出连接。容器 ${runtime.containerName} 仍在后台运行。${NC}`);
-        return false;
-    }
+    return handlePostExitLifecycle(runtime, defaultCommand, {
+        removeContainer,
+        showHelloTip: getHelloTip,
+        buildAgentResumeCommand,
+        askQuestion,
+        log: (action, containerName) => {
+            if (action === 'first' && !runtime.quiet.full) console.log(`${GREEN}✅ 离开当前连接，用首次命令进入。${NC}`);
+            if (action === 'resume' && !runtime.quiet.full) console.log(`${GREEN}✅ 离开当前连接，恢复首次命令会话。${NC}`);
+            if (action === 'command' && !(runtime.quiet.cmd || runtime.quiet.full)) console.log(`${GREEN}✅ 离开当前连接，执行命令。${NC}`);
+            if (action === 'shell' && !runtime.quiet.full) console.log(`${GREEN}✅ 离开当前连接，进入容器交互式SHELL。${NC}`);
+            if (action === 'keep') console.log(`${GREEN}✅ 已退出连接。容器 ${containerName} 仍在后台运行。${NC}`);
+        }
+    });
 }
 
 async function runWebServerMode(runtime) {
@@ -2070,25 +1721,9 @@ async function runWebServerMode(runtime) {
         runtime.serverAuthPassAuto = SERVER_AUTH_PASS_AUTO;
     }
 
-    const serverHandle = await startWebServer({
-        serverHost: runtime.serverHost,
-        serverPort: runtime.serverPort,
-        authUser: runtime.serverAuthUser,
-        authPass: runtime.serverAuthPass,
-        authPassAuto: runtime.serverAuthPassAuto,
+    return startConfiguredWebServer(runtime, {
+        startWebServer,
         dockerCmd: DOCKER_CMD,
-        hostPath: runtime.hostPath,
-        containerPath: runtime.containerPath,
-        imageName: runtime.imageName,
-        imageVersion: runtime.imageVersion,
-        execCommandPrefix: runtime.execCommandPrefix,
-        execCommand: runtime.execCommand,
-        execCommandSuffix: runtime.execCommandSuffix,
-        contModeArgs: runtime.contModeArgs,
-        containerExtraArgs: runtime.containerExtraArgs,
-        containerEnvs: runtime.containerEnvs,
-        containerVolumes: runtime.containerVolumes,
-        containerPorts: runtime.containerPorts,
         validateHostPath: value => validateHostPathOrThrow(value),
         formatDate,
         isValidContainerName,
@@ -2099,18 +1734,9 @@ async function runWebServerMode(runtime) {
         showImagePullHint,
         removeContainer,
         webHistoryDir: path.join(os.homedir(), '.manyoyo', 'web-history'),
-        colors: {
-            RED,
-            GREEN,
-            YELLOW,
-            BLUE,
-            CYAN,
-            NC
-        },
-        logger: runtime.logger
+        colors: { RED, GREEN, YELLOW, BLUE, CYAN, NC },
+        writeServePidFile
     });
-    writeServePidFile(runtime, serverHandle);
-    return serverHandle;
 }
 
 async function main() {
@@ -2192,6 +1818,14 @@ async function main() {
 
         // 5. Validate host path safety
         validateHostPath(runtime);
+
+        ensureDefaultImage({
+            imageName: runtime.imageName,
+            imageVersion: runtime.imageVersion,
+            execute: dockerExecArgs,
+            commandName: MANYOYO_NAME,
+            log: message => console.log(`${CYAN}${message}${NC}`)
+        });
 
         // 6. Setup container (create or connect)
         const defaultCommand = await setupContainer(runtime);

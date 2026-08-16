@@ -26,15 +26,19 @@ manyoyo -v
 
 ## 3. 构建沙箱镜像
 
+发布版默认使用 `ghcr.io/xcanwin/manyoyo:1.9.1-common`，首次 `run` 会自动拉取；网络不可用或需要定制镜像时，再使用以下本地构建命令：
+
 ```bash
 manyoyo build --iv 1.9.1-common
 ```
 
-## 4. 立即迁移配置
+## 4. 可选：立即迁移配置
 
 ```bash
 manyoyo init all
 ```
+
+如果 `~/.manyoyo/manyoyo.json` 尚不存在，首次执行 `manyoyo run`（包括 `-r <agent>`）会自动执行等价的无交互初始化，再继续启动；已有配置不会被覆盖。
 
 ## 5. 直接启动 Agent
 

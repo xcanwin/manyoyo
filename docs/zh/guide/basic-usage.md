@@ -117,6 +117,8 @@ manyoyo config show --serve 127.0.0.1:3000
 
 对外监听时必须设置强密码，并限制来源地址。
 
+登录后，网页工作台的“详情”页可导出当前会话的审计 JSON，其中包含已脱敏的 RunSpec、控制事件与最终投影，用于复盘运行参数和终态；它不提供安全策略裁决。
+
 ## Playwright 插件
 
 优先使用一级命令 `manyoyo playwright`；`manyoyo plugin playwright` 主要用于兼容命名空间调用。

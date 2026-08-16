@@ -27,10 +27,28 @@ jobs:
           fi
       - run: npm ci --include=optional
       - run: npm run build --if-present
+      - run: npm run typecheck:web
+      - run: npm run test:web
+      - run: npm run build:web
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
       - run: npm test
 
-  publish-npm:
+  runtime-e2e:
     needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build runtime E2E image
+        run: docker build --tag manyoyo-runtime-e2e:local --file docker/manyoyo.Dockerfile .
+      - name: Verify common, dind and sock modes
+        env:
+          MANYOYO_TEST_RUNTIME: docker
+          MANYOYO_TEST_IMAGE: manyoyo-runtime-e2e:local
+        run: npm run test:runtime-e2e
+
+  publish-npm:
+    needs: [build, runtime-e2e]
     runs-on: ubuntu-latest
     permissions:
       id-token: write  # Required for OIDC
@@ -43,6 +61,20 @@ jobs:
           cache: npm
           registry-url: https://registry.npmjs.org/
       - run: npm ci --include=optional
+      - name: Pack and record npm integrity
+        run: |
+          mkdir -p .release-metadata
+          npm pack --pack-destination .release-metadata >/dev/null
+          PACKAGE_FILE="$(find .release-metadata -maxdepth 1 -name '*.tgz' -print -quit)"
+          NPM_INTEGRITY="$(node -e "const fs=require('fs'); const crypto=require('crypto'); process.stdout.write('sha512-'+crypto.createHash('sha512').update(fs.readFileSync(process.argv[1])).digest('base64'))" "$PACKAGE_FILE")"
+          node scripts/release-metadata.js \
+            --image-repository "ghcr.io/${{ github.repository_owner }}/manyoyo" \
+            --npm-integrity "$NPM_INTEGRITY" > .release-metadata/manyoyo-release-metadata.json
+      - name: Upload npm release metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: manyoyo-release-metadata-npm-${{ github.ref_name }}
+          path: .release-metadata/manyoyo-release-metadata.json
       - run: npm publish --access public --provenance
 
   create-release:

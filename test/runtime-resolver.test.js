@@ -120,6 +120,80 @@ describe('runtime resolver', () => {
         ]);
         expect(resolved.ports).toEqual(['1000:10', '2000:20', '3000:30']);
         expect(resolved.imageBuildArgs).toEqual(['GLOBAL=1', 'RUN=1', 'CLI=1']);
+        expect(resolved.runSpec).toEqual(expect.objectContaining({
+            configVersion: 1,
+            image: { name: 'localhost/xcanwin/manyoyo', version: '1.9.0-common' },
+            container: expect.objectContaining({
+                name: 'cli-name',
+                hostPath: '/global/host',
+                mode: 'common',
+                modeArgs: []
+            }),
+            process: expect.objectContaining({ shell: 'cli-shell' })
+        }));
+    });
+
+    test('should expose provenance without changing merge semantics', () => {
+        const resolved = resolveRuntimeConfig({
+            cliOptions: {
+                contName: 'cli-name',
+                env: ['SHARED=cli', 'CLI_A=3'],
+                volume: ['~/cli:/workspace/cli'],
+                port: ['3000:30'],
+                imageBuildArg: ['CLI=1'],
+                shell: 'cli-shell'
+            },
+            globalConfig: {
+                hostPath: '/global/host',
+                env: { GLOBAL_A: '1', SHARED: 'global' },
+                volumes: ['~/global:/workspace/global'],
+                ports: ['1000:10'],
+                imageBuildArgs: ['GLOBAL=1']
+            },
+            runConfig: {
+                env: { RUN_A: '2', SHARED: 'run' },
+                volumes: ['/run:/workspace/run'],
+                ports: ['2000:20'],
+                imageBuildArgs: ['RUN=1'],
+                shell: 'run-shell'
+            },
+            globalFirstConfig: {},
+            runFirstConfig: {},
+            defaults: {
+                hostPath: '/default/host',
+                containerName: 'default-name',
+                containerPath: '/default/container',
+                imageName: 'localhost/xcanwin/manyoyo',
+                imageVersion: '1.9.0-common'
+            },
+            envVars: {},
+            argv: ['node', 'bin/manyoyo.js', 'config', 'show', '--explain'],
+            isServerMode: false,
+            isServerStopMode: false,
+            pickConfigValue,
+            resolveContainerNameTemplate: value => value,
+            normalizeCommandSuffix,
+            normalizeJsonEnvMap,
+            normalizeCliEnvMap,
+            mergeArrayConfig,
+            normalizeVolume: value => normalizeVolume(value, '/tmp/home'),
+            parseServerListen
+        });
+
+        expect(resolved.provenance).toEqual(expect.objectContaining({
+            hostPath: 'global',
+            containerName: 'cli',
+            exec: expect.objectContaining({ shell: 'cli' }),
+            env: expect.objectContaining({
+                GLOBAL_A: 'global',
+                RUN_A: 'run',
+                CLI_A: 'cli',
+                SHARED: 'cli'
+            }),
+            volumes: ['global', 'run', 'cli'],
+            ports: ['global', 'run', 'cli'],
+            imageBuildArgs: ['global', 'run', 'cli']
+        }));
     });
 
     test('should prefer double-dash suffix over shell-suffix option', () => {

@@ -70,20 +70,19 @@ manyoyo prune
 manyoyo build --iv 1.8.0-common --yes
 ```
 
-#### 4. Modify Mirror Sources for International Users
+#### 4. Customize Mirror Sources
 
-If you're outside China, you may need to disable domestic mirror sources:
+The defaults use public Ubuntu, npm, PyPI, Node.js, and Go endpoints. In a restricted network, override only the relevant source:
 
-Edit `docker/manyoyo.Dockerfile`, comment out mirror source related ARGs:
-```dockerfile
-# ARG NODE_MIRROR=https://mirrors.tencent.com/nodejs-release/
-# ARG NPM_REGISTRY=https://registry.npmmirror.com
-```
-
-Or use empty values:
 ```bash
-manyoyo build --iv 1.8.0-common --iba NODE_MIRROR= --iba NPM_REGISTRY=
+manyoyo build --iv 1.9.1-common \
+  --iba NODE_MIRROR=https://mirror.example/nodejs \
+  --iba NPM_REGISTRY=https://registry.example/npm/ \
+  --iba PIP_INDEX_URL=https://pypi.example/simple \
+  --iba GOPROXY=https://proxy.example
 ```
+
+Tool versions plus Node/JDTLS checksums live in `docker/tool-manifest.json`. Do not override the automatically injected version arguments unless you are building a custom image.
 
 #### 5. Step-by-Step Build Debugging
 
@@ -147,7 +146,7 @@ Error: pinging container registry localhost failed
 
 ### Cause
 
-MANYOYO uses local images by default (`localhost/xcanwin/manyoyo`), which need to be built first.
+MANYOYO uses the GHCR image by default (`ghcr.io/xcanwin/manyoyo`) and pulls it on first run; build locally when the registry is unavailable or you need a custom image.
 
 ### Solutions
 

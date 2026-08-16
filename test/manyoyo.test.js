@@ -158,6 +158,7 @@ describe('MANYOYO CLI', () => {
                         // ignore process cleanup failures in test teardown
                     }
                 }
+                await waitForHttpClosed(port);
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }
         });
@@ -378,9 +379,63 @@ describe('MANYOYO CLI', () => {
         });
 
         test('default imageVersion should match package imageVersion', () => {
-            const output = execSync(`node ${BIN_PATH} config show`, { encoding: 'utf-8' });
-            const config = JSON.parse(output);
-            expect(config.imageVersion).toBe(PACKAGE_IMAGE_VERSION);
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-default-image-version-'));
+            try {
+                const output = execSync(`node ${BIN_PATH} config show`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome }
+                });
+                const config = JSON.parse(output);
+                expect(config.imageVersion).toBe(PACKAGE_IMAGE_VERSION);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('config show should enable trusted proxy only when explicitly requested', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-trust-proxy-'));
+            try {
+                const output = execSync(`node ${BIN_PATH} config show --serve --trust-proxy`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome }
+                });
+                expect(JSON.parse(output)).toEqual(expect.objectContaining({ serverTrustProxy: true }));
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('doctor --json should expose stable diagnostic codes without starting a container', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-doctor-'));
+            const tempBin = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-doctor-bin-'));
+            writeGlobalConfig(tempHome, {
+                imageVersion: PACKAGE_IMAGE_VERSION,
+                shell: 'codex exec --skip-git-repo-check',
+                plugins: {}
+            });
+            writeExecutable(path.join(tempBin, 'docker'), `#!/bin/sh
+if [ "$1" = "--version" ] || [ "$1" = "info" ] || [ "$1" = "image" ]; then
+  echo ok
+  exit 0
+fi
+exit 1
+`);
+            try {
+                const output = execSync(`node ${BIN_PATH} doctor --json`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, HOME: tempHome, PATH: `${tempBin}:${process.env.PATH}` }
+                });
+                const report = JSON.parse(output);
+                expect(report.ok).toBe(true);
+                expect(report.checks).toEqual(expect.arrayContaining([
+                    expect.objectContaining({ code: 'RUNTIME_AVAILABLE', status: 'ok' }),
+                    expect.objectContaining({ code: 'DAEMON_AVAILABLE', status: 'ok' }),
+                    expect.objectContaining({ code: 'IMAGE_AVAILABLE', status: 'ok' })
+                ]));
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+                fs.rmSync(tempBin, { recursive: true, force: true });
+            }
         });
     });
 
@@ -545,6 +600,41 @@ describe('MANYOYO CLI', () => {
     // ==============================================================================
 
     describe('Configuration Merging', () => {
+        test('config show --explain should expose the resolved value provenance', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-config-explain-'));
+            writeGlobalConfig(tempHome, {
+                hostPath: '/global/project',
+                env: { SHARED: 'global', GLOBAL_A: '1' },
+                runs: {
+                    demo: {
+                        shell: 'run-shell',
+                        env: { SHARED: 'run', RUN_A: '2' }
+                    }
+                }
+            });
+
+            try {
+                const output = execSync(
+                    `node ${BIN_PATH} config show -r demo -n cli-name -e "SHARED=cli" --explain`,
+                    { encoding: 'utf-8', env: { ...process.env, HOME: tempHome } }
+                );
+                const config = JSON.parse(output);
+
+                expect(config.provenance).toEqual(expect.objectContaining({
+                    hostPath: 'global',
+                    containerName: 'cli',
+                    exec: expect.objectContaining({ shell: 'run' }),
+                    env: expect.objectContaining({
+                        GLOBAL_A: 'global',
+                        RUN_A: 'run',
+                        SHARED: 'cli'
+                    })
+                }));
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
         test('command line should override defaults', () => {
             const output = execSync(
                 `node ${BIN_PATH} config show --in custom-image --iv 2.0.0-common`,
@@ -876,15 +966,17 @@ exit 0
             try {
                 const output = execSync(`node ${BIN_PATH} config show --wt`, {
                     encoding: 'utf-8',
-                    cwd: repoDir
+                    cwd: repoDir,
+                    env: { ...process.env, HOME: tempDir }
                 });
                 const config = JSON.parse(output);
-                const expectedRoot = path.join(tempDir, 'worktrees', 'demo');
+                const expectedRoot = fs.realpathSync(path.join(tempDir, 'worktrees', 'demo'));
+                const realRepoDir = fs.realpathSync(repoDir);
 
                 expect(config.worktrees).toBe(true);
                 expect(config.worktreesRoot).toBe(expectedRoot);
-                expect(config.worktreeRepoRoot).toBe(repoDir);
-                expect(config.worktreeMainRepoRoot).toBe(repoDir);
+                expect(config.worktreeRepoRoot).toBe(realRepoDir);
+                expect(config.worktreeMainRepoRoot).toBe(realRepoDir);
                 expect(config.volumes).toContain(`${expectedRoot}:${expectedRoot}`);
                 expect(fs.existsSync(expectedRoot)).toBe(true);
             } finally {
@@ -929,16 +1021,20 @@ exit 0
             try {
                 const output = execSync(`node ${BIN_PATH} config show --worktrees`, {
                     encoding: 'utf-8',
-                    cwd: worktreeDir
+                    cwd: worktreeDir,
+                    env: { ...process.env, HOME: tempDir }
                 });
                 const config = JSON.parse(output);
+                const realWorktreesRoot = fs.realpathSync(worktreesRoot);
+                const realWorktreeDir = fs.realpathSync(worktreeDir);
+                const realRepoDir = fs.realpathSync(repoDir);
 
                 expect(config.worktrees).toBe(true);
-                expect(config.worktreesRoot).toBe(worktreesRoot);
-                expect(config.worktreeRepoRoot).toBe(worktreeDir);
-                expect(config.worktreeMainRepoRoot).toBe(repoDir);
-                expect(config.volumes).toContain(`${repoDir}:${repoDir}`);
-                expect(config.volumes).toContain(`${worktreesRoot}:${worktreesRoot}`);
+                expect(config.worktreesRoot).toBe(realWorktreesRoot);
+                expect(config.worktreeRepoRoot).toBe(realWorktreeDir);
+                expect(config.worktreeMainRepoRoot).toBe(realRepoDir);
+                expect(config.volumes).toContain(`${realRepoDir}:${realRepoDir}`);
+                expect(config.volumes).toContain(`${realWorktreesRoot}:${realWorktreesRoot}`);
             } finally {
                 fs.rmSync(tempDir, { recursive: true, force: true });
             }
@@ -972,12 +1068,15 @@ exit 0
                     cwd: worktreeDir,
                     env: {
                         ...process.env,
+                        HOME: tempDir,
                         PATH: `${tempDir}:${process.env.PATH}`
                     }
                 });
 
-                expect(output).toContain(`--volume ${repoDir}:${repoDir}`);
-                expect(output).toContain(`--volume ${worktreesRoot}:${worktreesRoot}`);
+                const realRepoDir = fs.realpathSync(repoDir);
+                const realWorktreesRoot = fs.realpathSync(worktreesRoot);
+                expect(output).toContain(`--volume ${realRepoDir}:${realRepoDir}`);
+                expect(output).toContain(`--volume ${realWorktreesRoot}:${realWorktreesRoot}`);
             } finally {
                 fs.rmSync(tempDir, { recursive: true, force: true });
             }
@@ -1463,7 +1562,7 @@ exit 0
                     line.includes('exec --env FROM_FILE=file-first --env FIRST_ONLY=1 first-new-test /bin/bash -c first-cmd')
                 );
                 const regularExecIndex = dockerArgs.findIndex(line =>
-                    line.includes('exec -it first-new-test /bin/bash -c regular-cmd')
+                    line.includes('exec first-new-test /bin/bash -c regular-cmd')
                 );
 
                 expect(firstExecIndex).toBeGreaterThan(-1);
@@ -1542,7 +1641,7 @@ exit 0
 
                 const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n').filter(Boolean);
                 expect(dockerArgs.some(line => line.includes('first-should-not-run'))).toBe(false);
-                expect(dockerArgs.some(line => line.includes('exec -it existing-test /bin/bash -c regular-existing-cmd'))).toBe(true);
+                expect(dockerArgs.some(line => line.includes('exec existing-test /bin/bash -c regular-existing-cmd'))).toBe(true);
             } finally {
                 fs.rmSync(tempDir, { recursive: true, force: true });
                 fs.rmSync(tempHome, { recursive: true, force: true });
@@ -1643,6 +1742,73 @@ exit 0
     // ==============================================================================
     // 容器运行时诊断测试
     // ==============================================================================
+
+    describe('First Run Setup', () => {
+        test('run profile should initialize missing config before resolving the requested agent', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-run-runtime-'));
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-run-home-'));
+            const fakeDockerPath = path.join(tempDir, 'docker');
+            const statePath = path.join(tempDir, 'state.txt');
+
+            writeExecutable(fakeDockerPath, `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "Docker version 26.0.0"
+  exit 0
+fi
+if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
+  if [ -f "${statePath}" ]; then
+    cat "${statePath}"
+  fi
+  exit 0
+fi
+if [ "$1" = "run" ]; then
+  shift
+  while [ $# -gt 0 ]; do
+    if [ "$1" = "--name" ]; then
+      shift
+      echo "$1" > "${statePath}"
+      break
+    fi
+    shift
+  done
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "-f" ] && [ "$3" = "{{.State.Status}}" ]; then
+  echo "running"
+  exit 0
+fi
+if [ "$1" = "exec" ]; then
+  exit 0
+fi
+exit 0
+`);
+
+            try {
+                const output = execSync(`node ${BIN_PATH} run -r claude -n first-run-test`, {
+                    encoding: 'utf-8',
+                    input: '\n',
+                    env: {
+                        ...process.env,
+                        HOME: tempHome,
+                        PATH: `${tempDir}:${process.env.PATH}`
+                    }
+                });
+                const config = JSON.parse(fs.readFileSync(path.join(tempHome, '.manyoyo', 'manyoyo.json'), 'utf-8'));
+
+                expect(output).toContain('检测到首次运行');
+                expect(output).toContain('首次配置已创建');
+                expect(config.runs).toEqual(expect.objectContaining({
+                    claude: expect.any(Object),
+                    codex: expect.any(Object),
+                    gemini: expect.any(Object),
+                    opencode: expect.any(Object)
+                }));
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+    });
 
     describe('Container Runtime Diagnostics', () => {
         test('run should suggest podman machine start when Podman socket is unavailable through docker command', () => {

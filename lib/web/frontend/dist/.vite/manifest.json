@@ -1,0 +1,113 @@
+{
+  "_codemirror-core-4T6qmu8y.js": {
+    "file": "assets/codemirror-core-4T6qmu8y.js",
+    "name": "codemirror-core"
+  },
+  "_codemirror-css-D4-btU5I.js": {
+    "file": "assets/codemirror-css-D4-btU5I.js",
+    "name": "codemirror-css",
+    "imports": [
+      "_codemirror-core-4T6qmu8y.js"
+    ]
+  },
+  "_codemirror-html-CsVDb8WC.js": {
+    "file": "assets/codemirror-html-CsVDb8WC.js",
+    "name": "codemirror-html",
+    "imports": [
+      "_codemirror-css-D4-btU5I.js",
+      "_codemirror-core-4T6qmu8y.js",
+      "_codemirror-javascript-Crujv7sa.js"
+    ]
+  },
+  "_codemirror-javascript-Crujv7sa.js": {
+    "file": "assets/codemirror-javascript-Crujv7sa.js",
+    "name": "codemirror-javascript",
+    "imports": [
+      "_codemirror-css-D4-btU5I.js",
+      "_codemirror-core-4T6qmu8y.js"
+    ]
+  },
+  "_codemirror-json-DZkUjNI2.js": {
+    "file": "assets/codemirror-json-DZkUjNI2.js",
+    "name": "codemirror-json",
+    "imports": [
+      "_codemirror-css-D4-btU5I.js",
+      "_codemirror-core-4T6qmu8y.js"
+    ]
+  },
+  "_codemirror-markdown-B78wQ5JT.js": {
+    "file": "assets/codemirror-markdown-B78wQ5JT.js",
+    "name": "codemirror-markdown",
+    "imports": [
+      "_codemirror-core-4T6qmu8y.js",
+      "_codemirror-html-CsVDb8WC.js"
+    ]
+  },
+  "_codemirror-python-Dc7CpopQ.js": {
+    "file": "assets/codemirror-python-Dc7CpopQ.js",
+    "name": "codemirror-python",
+    "imports": [
+      "_codemirror-css-D4-btU5I.js",
+      "_codemirror-core-4T6qmu8y.js"
+    ]
+  },
+  "_codemirror-yaml-Ce7tAHJ1.js": {
+    "file": "assets/codemirror-yaml-Ce7tAHJ1.js",
+    "name": "codemirror-yaml",
+    "imports": [
+      "_codemirror-css-D4-btU5I.js",
+      "_codemirror-core-4T6qmu8y.js"
+    ]
+  },
+  "_xterm-6GBZ9nXN.css": {
+    "file": "assets/xterm-6GBZ9nXN.css",
+    "src": "_xterm-6GBZ9nXN.css"
+  },
+  "_xterm-BADreHn8.js": {
+    "file": "assets/xterm-BADreHn8.js",
+    "name": "xterm",
+    "css": [
+      "assets/xterm-6GBZ9nXN.css"
+    ]
+  },
+  "index.html": {
+    "file": "assets/index-D_bpPxvC.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "dynamicImports": [
+      "src/TerminalView.tsx",
+      "src/CodeEditor.tsx"
+    ],
+    "css": [
+      "assets/index-ynQQL0Cc.css"
+    ]
+  },
+  "src/CodeEditor.tsx": {
+    "file": "assets/CodeEditor-C4j0teiL.js",
+    "name": "CodeEditor",
+    "src": "src/CodeEditor.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_codemirror-core-4T6qmu8y.js",
+      "_codemirror-css-D4-btU5I.js",
+      "_codemirror-html-CsVDb8WC.js",
+      "_codemirror-javascript-Crujv7sa.js",
+      "_codemirror-json-DZkUjNI2.js",
+      "_codemirror-markdown-B78wQ5JT.js",
+      "_codemirror-python-Dc7CpopQ.js",
+      "_codemirror-yaml-Ce7tAHJ1.js"
+    ]
+  },
+  "src/TerminalView.tsx": {
+    "file": "assets/TerminalView-DhU8g-P4.js",
+    "name": "TerminalView",
+    "src": "src/TerminalView.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_xterm-BADreHn8.js"
+    ]
+  }
+}

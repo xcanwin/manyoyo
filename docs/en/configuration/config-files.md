@@ -18,7 +18,7 @@ MANYOYO supports two types of configuration files:
 **Example**:
 ```json5
 {
-    "imageName": "localhost/xcanwin/manyoyo",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "1.8.0-full"
 }
 ```
@@ -87,7 +87,7 @@ Refer to `manyoyo.example.json` to view all configurable items. Below are detail
 
 #### imageName
 - **Type**: String
-- **Default**: `localhost/xcanwin/manyoyo`
+- **Default**: `ghcr.io/xcanwin/manyoyo`
 - **Description**: Image name (without version tag)
 - **Example**:
 ```json5
@@ -361,12 +361,14 @@ Mode descriptions:
 - **Merge Method**: Accumulation merge
 - **Description**: Image build arguments, passed to Dockerfile
 - **Format**: `KEY=VALUE`
+- **Default versions**: `docker/tool-manifest.json` automatically injects Node, JDTLS, gopls, Agent CLI, and language-server versions; override them only for a custom image
 - **Example**:
 ```json5
 {
     "imageBuildArgs": [
         "TOOL=common",
-        "GIT_SSL_NO_VERIFY=true"
+        "GIT_SSL_NO_VERIFY=true",
+        "NPM_REGISTRY=https://registry.example/npm/"
     ]
 }
 ```
@@ -427,7 +429,7 @@ first.envFile: global first.envFile + runs.<name>.first.envFile + --first-env-fi
 // ~/.manyoyo/manyoyo.json
 {
     // Use custom image
-    "imageName": "localhost/xcanwin/manyoyo",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "1.8.0-full",
 
     // Global environment variables
