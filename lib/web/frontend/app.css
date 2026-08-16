@@ -911,6 +911,10 @@ button.tree-toggle:active {
     pointer-events: auto;
 }
 
+.tree-node-menu.is-open {
+    z-index: 20;
+}
+
 @media (hover: none) {
     .tree-node-menu {
         opacity: 1;

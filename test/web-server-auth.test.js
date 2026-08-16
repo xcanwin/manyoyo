@@ -1118,6 +1118,9 @@ process.exit(2);
             // 面板的 z-index:9 只在该上下文内部生效，从外部看等同于 z-index:auto，
             // 会被后面的、同样 position:relative 的 AGENT 行按 DOM 序盖在上面
             expect(appStyle.text).toMatch(/\.tree-node-menu\s*\{[^}]*z-index:\s*9;/);
+            // 已展开的菜单面板必须高于同级其它行悬浮时才显现的触发按钮（z-index:9），
+            // 否则鼠标移到后面的行时，其"···"按钮会按 DOM 序盖住前面仍展开的菜单
+            expect(appStyle.text).toMatch(/\.tree-node-menu\.is-open\s*\{\s*\n\s*z-index:\s*20;/);
             expect(appStyle.text).not.toContain('.tree-node-action');
             expect(appStyle.text).not.toContain('animation-delay: calc(var(--item-index, 0) * 24ms);');
             expect(appStyle.text).not.toContain('.tree-prefix-toggle.is-expanded::after');
