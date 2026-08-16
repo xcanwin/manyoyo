@@ -597,7 +597,7 @@ textarea:focus-visible {
 }
 
 .session-status {
-    border-radius: 99px;
+    border-radius: 999px;
     padding: 2px 8px;
     font-weight: 700;
     font-size: 11px;
@@ -1727,7 +1727,7 @@ body.terminal-mode .composer {
 
 .msg-copy-btn {
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: 10px;
     background: var(--panel-soft);
     color: var(--muted);
     font-size: 11px;

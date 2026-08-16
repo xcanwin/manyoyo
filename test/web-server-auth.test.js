@@ -889,6 +889,37 @@ process.exit(2);
         }
     });
 
+    test('should unify container corner radius (10px) and pill badge radius (999px) in the chat cluster', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-radius-language-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            // 容器语言：消息气泡 / 执行过程整体折叠 / 单条 trace 卡片 / 复制按钮统一为 10px
+            expect(appStyle.text).toMatch(/\.bubble\s*\{[^}]*border-radius:\s*10px/);
+            expect(appStyle.text).toMatch(/\.trace-flow-toggle\s*\{[^}]*border-radius:\s*10px/);
+            expect(appStyle.text).toMatch(/\.trace-card\s*\{[^}]*border-radius:\s*10px/);
+            expect(appStyle.text).toMatch(/\.msg-copy-btn\s*\{[^}]*border-radius:\s*10px/);
+            // 徽标语言：会话状态 / 树节点菜单 / 执行过程徽标统一为 999px 全圆 pill
+            expect(appStyle.text).toMatch(/\.session-status\s*\{[^}]*border-radius:\s*999px/);
+            expect(appStyle.text).toMatch(/\.tree-node-menu-item\s*\{[^}]*border-radius:\s*999px/);
+            expect(appStyle.text).toMatch(/\.trace-card-badge\s*\{[^}]*border-radius:\s*999px/);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should sync containerPath to selected hostPath and remove container picker button', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-path-sync-'));
         const port = await getFreePort();
