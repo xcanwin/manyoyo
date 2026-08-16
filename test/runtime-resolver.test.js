@@ -247,4 +247,48 @@ describe('runtime resolver', () => {
             '/parent/worktrees/repo:/parent/worktrees/repo'
         ]);
     });
+
+    function resolveServeTitle(globalConfig, runConfig) {
+        return resolveRuntimeConfig({
+            cliOptions: {},
+            globalConfig,
+            runConfig,
+            globalFirstConfig: {},
+            runFirstConfig: {},
+            defaults: {
+                hostPath: '/host',
+                containerName: 'default-name',
+                containerPath: '/container',
+                imageName: 'localhost/xcanwin/manyoyo',
+                imageVersion: '1.9.0-common'
+            },
+            envVars: {},
+            argv: ['node', 'bin/manyoyo.js', 'config', 'show'],
+            isServerMode: false,
+            isServerStopMode: false,
+            pickConfigValue,
+            resolveContainerNameTemplate: value => value,
+            normalizeCommandSuffix,
+            normalizeJsonEnvMap,
+            normalizeCliEnvMap,
+            mergeArrayConfig,
+            normalizeVolume,
+            parseServerListen
+        }).serveTitle;
+    }
+
+    test('should default serveTitle to null when serve.title is not configured', () => {
+        expect(resolveServeTitle({}, {})).toBe(null);
+    });
+
+    test('should honor an explicitly empty serve.title instead of falling back', () => {
+        expect(resolveServeTitle({ serve: { title: '' } }, {})).toBe('');
+    });
+
+    test('should prefer runs.<name>.serve.title over the global serve.title', () => {
+        expect(resolveServeTitle(
+            { serve: { title: 'Global Title' } },
+            { serve: { title: 'Run Title' } }
+        )).toBe('Run Title');
+    });
 });

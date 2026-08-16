@@ -44,6 +44,13 @@
     "serverUser": "admin",
     "serverPass": "change-this-password",
 
+    // serve 命令专属配置（覆盖型：runs.<name>.serve > 全局配置）
+    // 不设置 serve 字段（或不设置 title 字段）时，网页 <title> 按当前会话 Agent 名动态显示
+    // 一旦设置 title，则固定显示该值（不再随会话变化），留空字符串 "" 即固定显示为空
+    // "serve": {
+    //     "title": "My MANYOYO"
+    // },
+
     // 可选插件（manyoyo playwright / manyoyo plugin playwright）
     "plugins": {
         "playwright": {

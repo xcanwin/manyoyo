@@ -154,6 +154,19 @@ Mode descriptions:
 }
 ```
 
+#### serve.title
+- **Type**: Object `{ title?: string }`
+- **Priority**: `runs.<name>.serve.title` > global config `serve.title`
+- **Description**: The web page `<title>`. When unset, the title dynamically shows the active session's Agent name (default behavior). Once `title` is set (including an empty string), it stays fixed and no longer changes when switching sessions.
+- **Example**:
+```json5
+{
+    "serve": {
+        "title": "My MANYOYO"  // an empty string "" fixes the title to blank
+    }
+}
+```
+
 ### Environment Variable Configuration
 
 #### envFile

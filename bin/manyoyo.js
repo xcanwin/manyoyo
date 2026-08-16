@@ -90,6 +90,7 @@ let SERVER_PORT = 3000;
 let SERVER_AUTH_USER = "";
 let SERVER_AUTH_PASS = "";
 let SERVER_AUTH_PASS_AUTO = false;
+let SERVER_TITLE = null;
 const SAFE_CONTAINER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
 // Color definitions using ANSI codes
@@ -306,6 +307,7 @@ function installServeProcessDiagnostics(logger) {
  * @property {{shellPrefix?:string,shell?:string,shellSuffix?:string,env?:Object.<string,string|number|boolean>,envFile?:string[]}} [first] - 仅首次创建容器执行的一次性命令配置
  * @property {string[]} [volumes] - 挂载卷数组
  * @property {Object.<string, Object>} [plugins] - 可选插件配置映射（如 plugins.playwright）
+ * @property {{title?:string}} [serve] - serve 命令专属配置（如自定义网页标题，留空字符串则显示为空）
  * @property {Object.<string, Object>} [runs] - 运行配置映射（-r <name>）
  * @property {string} [yolo] - YOLO 模式
  * @property {string} [containerMode] - 容器模式
@@ -1461,6 +1463,7 @@ Notes:
     SERVER_AUTH_USER = resolvedRuntime.serverUser || '';
     SERVER_AUTH_PASS = resolvedRuntime.serverPass || '';
     SERVER_AUTH_PASS_AUTO = Boolean(resolvedRuntime.serverPassAuto);
+    SERVER_TITLE = resolvedRuntime.serveTitle;
 
     if (isShowConfigMode) {
         const finalConfig = {
@@ -1489,6 +1492,9 @@ Notes:
             serverPort: isServerMode ? SERVER_PORT : null,
             serverUser: SERVER_AUTH_USER || "",
             serverPass: SERVER_AUTH_PASS || "",
+            serve: {
+                title: SERVER_TITLE
+            },
             exec: {
                 prefix: EXEC_COMMAND_PREFIX,
                 shell: EXEC_COMMAND,
@@ -1590,6 +1596,7 @@ function createRuntimeContext(modeState = {}) {
         serverAuthUser: SERVER_AUTH_USER,
         serverAuthPass: SERVER_AUTH_PASS,
         serverAuthPassAuto: SERVER_AUTH_PASS_AUTO,
+        serveTitle: SERVER_TITLE,
         logger: null
     };
 }
@@ -2086,6 +2093,7 @@ async function runWebServerMode(runtime) {
         authUser: runtime.serverAuthUser,
         authPass: runtime.serverAuthPass,
         authPassAuto: runtime.serverAuthPassAuto,
+        serveTitle: runtime.serveTitle,
         dockerCmd: DOCKER_CMD,
         hostPath: runtime.hostPath,
         containerPath: runtime.containerPath,

@@ -154,6 +154,19 @@ MANYOYO 支持两种配置文件：
 }
 ```
 
+#### serve.title
+- **类型**：对象 `{ title?: string }`
+- **优先级**：`runs.<name>.serve.title` > 全局配置 `serve.title`
+- **说明**：网页 `<title>`。不设置该字段时按当前会话 Agent 名动态显示（原有行为）；一旦设置 `title`（包括空字符串），则固定显示该值，不再随会话切换变化
+- **示例**：
+```json5
+{
+    "serve": {
+        "title": "My MANYOYO"  // 留空字符串 "" 则固定显示为空
+    }
+}
+```
+
 ### 环境变量配置
 
 #### envFile
