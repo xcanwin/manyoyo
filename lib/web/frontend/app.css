@@ -14,8 +14,11 @@
     --line: #d9c7ad;
     --line-strong: #b59263;
     --line-soft: rgba(181, 146, 99, 0.26);
+    --line-medium: rgba(181, 146, 99, 0.4);
     --tree-guide: rgba(181, 146, 99, 0.44);
     --tree-guide-soft: rgba(181, 146, 99, 0.44);
+
+    --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(252, 246, 236, 0.88) 100%);
 
     --text: #1f1a14;
     --muted: #6a5f52;
@@ -1005,7 +1008,7 @@ button.tree-toggle:active {
     align-items: flex-start;
     gap: 12px;
     padding: 6px 8px 12px;
-    border-bottom: 1px solid rgba(181, 146, 99, 0.48);
+    border-bottom: 1px solid var(--line-medium);
 }
 
 .header-main {
@@ -1170,8 +1173,7 @@ body.mobile-actions-open .header-actions {
     flex-direction: column;
     gap: 14px;
     scroll-behavior: smooth;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(252, 246, 236, 0.88) 100%);
+    background: var(--surface-panel);
 }
 
 #terminalPanel {
@@ -1189,8 +1191,7 @@ body.mobile-actions-open .header-actions {
     border: 1px solid var(--line);
     border-radius: 14px;
     overflow: hidden;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(252, 246, 236, 0.88) 100%);
+    background: var(--surface-panel);
 }
 
 .files-browser {
@@ -1432,8 +1433,7 @@ body.mobile-actions-open .header-actions {
     padding: 0;
     border: 1px solid var(--line);
     border-radius: 14px;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(252, 246, 236, 0.88) 100%);
+    background: var(--surface-panel);
 }
 
 .inspector-stack {
@@ -1998,7 +1998,7 @@ details.trace-card > .trace-card-summary {
 }
 
 .composer {
-    border-top: 1px solid rgba(181, 146, 99, 0.45);
+    border-top: 1px solid var(--line-medium);
     margin-top: 12px;
     padding: 12px 8px 4px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 249, 240, 0.78) 100%);

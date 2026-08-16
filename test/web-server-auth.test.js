@@ -859,6 +859,36 @@ process.exit(2);
         }
     });
 
+    test('should consolidate repeated panel background gradients and header/composer dividers into shared tokens', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-surface-tokens-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.response.status).toBe(200);
+            expect(appStyle.text).toContain('--surface-panel: linear-gradient(');
+            expect(appStyle.text).toContain('--line-medium: rgba(181, 146, 99, 0.4);');
+
+            const panelBgUsages = appStyle.text.split('background: var(--surface-panel);').length - 1;
+            expect(panelBgUsages).toBe(3);
+
+            expect(appStyle.text).toContain('border-bottom: 1px solid var(--line-medium);');
+            expect(appStyle.text).toContain('border-top: 1px solid var(--line-medium);');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should sync containerPath to selected hostPath and remove container picker button', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-path-sync-'));
         const port = await getFreePort();
