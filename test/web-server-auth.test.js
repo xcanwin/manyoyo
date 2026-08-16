@@ -979,7 +979,7 @@ process.exit(2);
             expect(appStyle.response.status).toBe(200);
             expect(appStyle.text).toMatch(/\.tree-node-button\s*\{[^}]*border:\s*1px solid transparent;/);
             expect(appStyle.text).toMatch(/\.tree-node-button\s*\{[^}]*background:\s*transparent;/);
-            expect(appStyle.text).toMatch(/\.tree-node-button\.active\s*\{\s*background:\s*var\(--accent-soft\);\s*\}/);
+            expect(appStyle.text).toMatch(/\.tree-node-button\.active\s*\{\s*background:\s*var\(--tree-active\);\s*\}/);
             expect(appStyle.text).not.toContain('.tree-node-button-directory,');
         } finally {
             if (handle && typeof handle.close === 'function') {
@@ -1114,6 +1114,10 @@ process.exit(2);
             // AGENT 行也须是定位上下文，否则 .tree-node-menu（position: absolute）会脱离本行、
             // 相对不相关的祖先定位，导致"···"触发按钮错位并遮挡侧边栏滚动条
             expect(appStyle.text).toMatch(/\.tree-node-row\.tree-node-row-container,\s*\n\s*\.tree-node-row\.tree-node-row-agent\s*\{\s*\n\s*position:\s*relative;/);
+            // .tree-node-menu 的 translateY(-50%) 会隐式建立层叠上下文，若不显式设置 z-index，
+            // 面板的 z-index:9 只在该上下文内部生效，从外部看等同于 z-index:auto，
+            // 会被后面的、同样 position:relative 的 AGENT 行按 DOM 序盖在上面
+            expect(appStyle.text).toMatch(/\.tree-node-menu\s*\{[^}]*z-index:\s*9;/);
             expect(appStyle.text).not.toContain('.tree-node-action');
             expect(appStyle.text).not.toContain('animation-delay: calc(var(--item-index, 0) * 24ms);');
             expect(appStyle.text).not.toContain('.tree-prefix-toggle.is-expanded::after');

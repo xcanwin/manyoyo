@@ -17,6 +17,7 @@
     --line-medium: rgba(181, 146, 99, 0.4);
     --tree-guide: rgba(181, 146, 99, 0.44);
     --tree-guide-soft: rgba(181, 146, 99, 0.44);
+    --tree-active: #ecdfc8;
 
     --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(252, 246, 236, 0.88) 100%);
 
@@ -825,7 +826,7 @@ button.tree-toggle:active {
 }
 
 .tree-node-button.active {
-    background: var(--accent-soft);
+    background: var(--tree-active);
 }
 
 .tree-node-button.tree-node-tone-history .tree-node-title,
@@ -896,6 +897,7 @@ button.tree-toggle:active {
     position: absolute;
     top: 50%;
     right: 6px;
+    z-index: 9;
     transform: translateY(-50%);
     opacity: 0;
     pointer-events: none;
