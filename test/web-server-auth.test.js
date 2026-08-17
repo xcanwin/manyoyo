@@ -828,6 +828,50 @@ process.exit(2);
         }
     });
 
+    test('should not auto-focus inputs on mobile when switching tabs/modes or opening the CLI modal', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-mobile-focus-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+
+            // 切到终端页：移动端不应自动 focus 终端，避免自动弹出输入法
+            expect(appScript.text).toContain(
+                "if (state.terminal.term && !isMobileLayout()) {\n                state.terminal.term.focus();\n            }"
+            );
+            // WebSocket 连接建立时（connectTerminal 的 open 回调）同样不应在移动端自动 focus 终端
+            expect(appScript.text).toContain(
+                "if (state.terminal.term) {\n                if (!isMobileLayout()) {\n                    state.terminal.term.focus();\n                }\n                scheduleTerminalFit(true);\n            }"
+            );
+
+            // 切到活动页 / 系统命令 / Agent 对话：移动端不应自动 focus 输入框
+            expect(appScript.text).toContain(
+                "closeWorkspaceSwitcherMenu();\n            setActiveTab('activity');\n            if (!isMobileLayout()) {\n                commandInput.focus();\n            }"
+            );
+            expect(appScript.text).toContain(
+                "closeComposerOptionsMenu();\n            syncUi();\n            if (!isMobileLayout()) {\n                commandInput.focus();\n            }"
+            );
+
+            // 打开 CLI 模板弹窗：移动端不应自动 focus 下拉框（会自动展开选项）
+            expect(appScript.text).toContain(
+                "state.agentTemplateModalOpen = true;\n        fillAgentTemplateForm(detail);\n        syncUi();\n        if (isMobileLayout()) {\n            return;\n        }"
+            );
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should collapse Agent/命令/CLI/模型 into a single "选项" dropdown above "发送", opening upward and closed by default', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-composer-options-'));
         const port = await getFreePort();
@@ -859,7 +903,7 @@ process.exit(2);
             expect(appScript.text).toContain('function closeComposerOptionsMenu() {');
             expect(appScript.text).toContain("composerOptionsToggle.addEventListener('click', function () {");
             // 选中 Agent对话/系统命令、点击 CLI 之后都要收起下拉框
-            expect(appScript.text).toContain('closeComposerOptionsMenu();\n            syncUi();\n            commandInput.focus();');
+            expect(appScript.text).toContain('closeComposerOptionsMenu();\n            syncUi();\n            if (!isMobileLayout()) {\n                commandInput.focus();\n            }');
 
             const chatBehaviorScript = await request(`${baseUrl}/app/frontend/chat-behavior.js`, {
                 headers: { Cookie: authCookie }
