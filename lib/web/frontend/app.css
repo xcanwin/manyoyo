@@ -13,7 +13,8 @@
 
     --line: #d9c7ad;
     --line-strong: #b59263;
-    --tree-active: #ecdfc8;
+    --tree-active: #e0c99b;
+    --session-card-hover: #f0e0c4;
 
     --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(252, 246, 236, 0.88) 100%);
 
@@ -392,7 +393,8 @@ textarea:focus-visible {
 
 .form-grid input,
 .form-grid select,
-.text-block textarea {
+.text-block textarea,
+.text-block input {
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 9px 11px;
@@ -617,7 +619,7 @@ textarea:focus-visible {
 
 .session-card-button:hover {
     transform: none;
-    background: var(--panel-soft);
+    background: var(--session-card-hover);
 }
 
 .session-card-button:active {
@@ -639,7 +641,7 @@ textarea:focus-visible {
 }
 
 .session-card.has-active .session-card-button:not(.active) {
-    background: var(--panel-soft);
+    background: var(--tree-active);
 }
 
 .session-card-main {
