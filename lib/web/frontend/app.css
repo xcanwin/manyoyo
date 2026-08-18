@@ -13,8 +13,6 @@
 
     --line: #d9c7ad;
     --line-strong: #b59263;
-    --tree-guide: rgba(181, 146, 99, 0.44);
-    --tree-guide-soft: rgba(181, 146, 99, 0.44);
     --tree-active: #ecdfc8;
 
     --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(252, 246, 236, 0.88) 100%);
@@ -528,138 +526,66 @@ textarea:focus-visible {
     border-radius: 8px;
 }
 
-.tree-node-block,
-.tree-node-children {
+.crumb-bar {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.tree-node-row {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: stretch;
-    column-gap: 8px;
-}
-
-.tree-node-row.tree-node-row-container,
-.tree-node-row.tree-node-row-agent {
-    position: relative;
-}
-
-.tree-prefix {
-    min-height: 38px;
-    display: inline-flex;
-    align-items: stretch;
-    gap: 3px;
-    position: relative;
-}
-
-.tree-prefix-toggle {
-    position: relative;
-    width: 16px;
-    flex: 0 0 16px;
-    display: inline-flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
+    gap: 6px;
+    padding: 0 2px;
+    min-height: 20px;
 }
 
-.tree-prefix-segment,
-.tree-prefix-branch {
-    position: relative;
-    width: 10px;
-    flex: 0 0 10px;
-}
-
-.tree-prefix-branch::before,
-.tree-prefix-branch::after {
-    content: "";
-    position: absolute;
-    background: var(--tree-guide);
-}
-
-.tree-prefix-branch::before {
-    left: 5px;
-    top: -6px;
-    bottom: 50%;
-    width: 1px;
-}
-
-.tree-prefix-branch.is-mid::before {
-    bottom: -6px;
-}
-
-.tree-prefix-branch::after {
-    left: 5px;
-    top: 50%;
-    width: 9px;
-    height: 1px;
-    background: var(--tree-guide-soft);
-}
-
-.tree-prefix-leaf {
-    position: relative;
-    width: 12px;
-    flex: 0 0 12px;
-}
-
-.tree-prefix-leaf::before {
-    content: "";
-    position: absolute;
-    left: 1px;
-    top: 50%;
-    width: 10px;
-    height: 1px;
-    background: var(--tree-guide-soft);
-    transform: translateY(0);
-}
-
-.disclosure-toggle {
-    width: 16px;
-    height: 16px;
-    padding: 0;
-    align-self: center;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+.crumb-item {
     border: none;
-    border-radius: 6px;
-    color: #8c7257;
     background: transparent;
-    transition: transform 140ms ease, background-color 140ms ease, color 140ms ease;
-}
-
-.disclosure-toggle svg {
-    width: 12px;
-    height: 12px;
-    display: block;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    vector-effect: non-scaling-stroke;
-}
-
-.disclosure-toggle:hover {
-    transform: none;
     color: var(--accent-strong);
-    background: rgba(196, 85, 31, 0.08);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 2px;
+    border-radius: 6px;
+    cursor: pointer;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.disclosure-toggle:active {
+.crumb-item:hover {
     transform: none;
+    text-decoration: underline;
 }
 
-.disclosure-toggle[aria-expanded="true"] {
-    transform: rotate(90deg);
+.crumb-item.is-current {
+    color: var(--text);
+    cursor: default;
+    font-weight: 700;
 }
 
-.disclosure-toggle[aria-expanded="true"]:hover {
-    transform: rotate(90deg);
+.crumb-item.is-current:hover {
+    text-decoration: none;
 }
 
-.tree-node-button {
+.crumb-sep {
+    color: #a3927c;
+    font-size: 12px;
+}
+
+.crumb-jump-active {
+    margin-left: auto;
+    border: 1px solid var(--line);
+    background: var(--panel-soft);
+    color: var(--accent-strong);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+}
+
+.session-card {
+    position: relative;
+}
+
+.session-card-button {
     width: 100%;
     text-align: left;
     border: 1px solid transparent;
@@ -670,65 +596,84 @@ textarea:focus-visible {
     transition: background-color 120ms ease;
 }
 
-.tree-node-button:hover {
+.session-card-container .session-card-button,
+.session-card-agent .session-card-button {
+    padding-right: 38px;
+}
+
+.session-card-button:hover {
     transform: none;
     background: var(--panel-soft);
 }
 
-.tree-node-button:active {
+.session-card-button:active {
     transform: none;
 }
 
-.tree-node-button:focus-visible {
+.session-card-button:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px rgba(196, 85, 31, 0.14);
 }
 
-.tree-node-button.active {
+.session-card-button.active {
     background: var(--tree-active);
 }
 
-.tree-node-button.tree-node-tone-history .tree-node-title,
-.tree-node-button.tree-node-tone-history .tree-node-meta {
+.session-card.tree-node-tone-history .session-card-title,
+.session-card.tree-node-tone-history .session-card-meta {
     color: var(--tree-history-text);
 }
 
-.tree-node-block.has-active > .tree-node-row > .tree-node-button:not(.active) {
+.session-card.has-active .session-card-button:not(.active) {
     background: var(--panel-soft);
 }
 
-.tree-node-row-container .tree-node-button-container,
-.tree-node-row-agent .tree-node-button-agent {
-    padding-right: 38px;
-}
-
-.tree-node-main {
+.session-card-main {
     min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 6px;
 }
 
-.tree-node-title {
+.session-card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.session-card-title {
     margin-top: 0;
     font-weight: 700;
     font-size: 13px;
     line-height: 1.5;
     overflow-wrap: anywhere;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.tree-node-button-directory .tree-node-title,
-.tree-node-button-container .tree-node-title {
+.session-card-container .session-card-title {
     font-family: var(--font-mono);
     font-size: 12px;
     font-weight: 600;
 }
 
-.tree-node-meta {
+.session-card-meta {
     color: #7b6d5d;
     font-size: 11px;
     line-height: 1.45;
     overflow-wrap: anywhere;
+}
+
+.session-card-submeta {
+    color: #a3927c;
+    font-size: 10px;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .tree-node-status {
@@ -763,7 +708,7 @@ textarea:focus-visible {
     transition: opacity 140ms ease;
 }
 
-.tree-node-row:hover .tree-node-menu,
+.session-card:hover .tree-node-menu,
 .tree-node-menu:focus-within,
 .tree-node-menu.is-open {
     opacity: 1;
@@ -841,10 +786,6 @@ textarea:focus-visible {
 
 .tree-node-menu-panel-item.is-danger:hover {
     background: var(--danger-soft);
-}
-
-.tree-node-children[hidden] {
-    display: none;
 }
 
 .dir-picker-modal {

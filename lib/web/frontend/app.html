@@ -32,7 +32,8 @@
                 <span>工作台</span>
                 <span id="sessionCount">0 个</span>
             </div>
-            <div id="sessionList" role="tree" aria-label="会话树"></div>
+            <nav class="crumb-bar" id="sessionBreadcrumb" aria-label="导航路径"></nav>
+            <div id="sessionList" aria-label="容器与 AGENT 列表"></div>
             <div class="sidebar-bottom">
                 <button type="button" id="openConfigBtn" class="secondary">系统设置</button>
             </div>
@@ -292,6 +293,25 @@
                 </div>
                 <footer class="modal-footer">
                     <button type="button" id="externalLinkOpenBtn">确认并新标签打开</button>
+                </footer>
+            </section>
+        </div>
+
+        <div id="cloneNameModal" class="modal-backdrop" hidden>
+            <section class="modal" role="dialog" aria-modal="true" aria-labelledby="cloneNameTitle">
+                <header class="modal-header">
+                    <h2 id="cloneNameTitle">创建相同配置容器</h2>
+                    <button type="button" id="cloneNameCancelBtn" class="secondary">关闭</button>
+                </header>
+                <div class="modal-body">
+                    <div id="cloneNameTip" class="modal-tip"></div>
+                    <label class="text-block">新容器名称
+                        <input type="text" id="cloneNameInput" spellcheck="false" />
+                    </label>
+                    <div id="cloneNameError" class="modal-error" hidden></div>
+                </div>
+                <footer class="modal-footer">
+                    <button type="button" id="cloneNameConfirmBtn">确认</button>
                 </footer>
             </section>
         </div>

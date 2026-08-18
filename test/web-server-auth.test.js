@@ -609,8 +609,8 @@ process.exit(2);
         expect(appStyleSource).toContain('text-align: right;');
     });
 
-    test('should keep sidebar tree bodies hidden when hidden attribute is set', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-tree-style-'));
+    test('should ship breadcrumb bar and session card layout styles', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-nav-style-'));
         const port = await getFreePort();
         let handle = null;
 
@@ -624,8 +624,12 @@ process.exit(2);
             });
             expect(appStyle.response.status).toBe(200);
             expect(appStyle.response.headers.get('content-type')).toContain('text/css');
-            expect(appStyle.text).toContain('.tree-node-children[hidden]');
-            expect(appStyle.text).toMatch(/\.tree-node-children\[hidden\][\s\S]*display:\s*none/);
+            expect(appStyle.text).toContain('.crumb-bar {');
+            expect(appStyle.text).toContain('.crumb-item {');
+            expect(appStyle.text).toContain('.crumb-item.is-current {');
+            expect(appStyle.text).toContain('.crumb-jump-active {');
+            expect(appStyle.text).toContain('.session-card {');
+            expect(appStyle.text).toContain('.session-card-button {');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -634,8 +638,8 @@ process.exit(2);
         }
     });
 
-    test('should toggle sidebar tree locally without rerendering the whole session list', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-tree-script-'));
+    test('should navigate sidebar container/agent levels locally without re-fetching sessions', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-nav-script-'));
         const port = await getFreePort();
         let handle = null;
 
@@ -649,12 +653,12 @@ process.exit(2);
             });
             expect(appScript.response.status).toBe(200);
             expect(appScript.response.headers.get('content-type')).toContain('application/javascript');
-            expect(appScript.text).toContain('function createTreePrefixSegment() {');
-            expect(appScript.text).toContain('function setDisclosureExpanded(control, expanded) {');
-            expect(appScript.text).toContain('function renderSessionTreeNodes(nodes, parentNode, ancestorHasNext) {');
-            expect(appScript.text).toContain('const nextExpanded = childrenNode.hidden;');
-            expect(appScript.text).toContain('setDisclosureExpanded(item, nextExpanded);');
-            expect(appScript.text).toContain('childrenNode.hidden = !nextExpanded;');
+            // 下钻/返回只是切换 state.navLevel/navContainer 并本地重渲染，不重新请求 /api/sessions
+            expect(appScript.text).toContain('function navigateTo(level, params) {');
+            expect(appScript.text).toContain('persistSidebarNavState();\n        renderSessions();');
+            expect(appScript.text).toContain('function renderContainerLevel(groups) {');
+            expect(appScript.text).toContain('function renderAgentLevel(containerGroup) {');
+            expect(appScript.text).toContain('function renderBreadcrumb() {');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -1411,9 +1415,9 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(appStyle.response.status).toBe(200);
-            expect(appStyle.text).toMatch(/\.tree-node-button\s*\{[^}]*border:\s*1px solid transparent;/);
-            expect(appStyle.text).toMatch(/\.tree-node-button\s*\{[^}]*background:\s*transparent;/);
-            expect(appStyle.text).toMatch(/\.tree-node-button\.active\s*\{\s*background:\s*var\(--tree-active\);\s*\}/);
+            expect(appStyle.text).toMatch(/\.session-card-button\s*\{[^}]*border:\s*1px solid transparent;/);
+            expect(appStyle.text).toMatch(/\.session-card-button\s*\{[^}]*background:\s*transparent;/);
+            expect(appStyle.text).toMatch(/\.session-card-button\.active\s*\{\s*background:\s*var\(--tree-active\);\s*\}/);
             expect(appStyle.text).not.toContain('.tree-node-button-directory,');
         } finally {
             if (handle && typeof handle.close === 'function') {
@@ -1444,7 +1448,7 @@ process.exit(2);
             expect(appScript.text).toContain("label: '新建 AGENT',");
             expect(appScript.text).toContain("label: '删除容器',");
             expect(appScript.text).toContain("label: '删除 AGENT',");
-            expect(appScript.text).toContain('removeContainerByName(containerName);');
+            expect(appScript.text).toContain('removeContainerByName(containerGroup.containerName);');
             expect(appScript.text).toContain('removeAgentSessionByName(session.name, agentTitle);');
             // 任意会话删除（不局限当前 active）：只有目标就是当前会话时才需要替补/重载消息
             expect(appScript.text).toContain('const isActive = target === state.active;');
@@ -1509,8 +1513,8 @@ process.exit(2);
         }
     });
 
-    test('should ship simplified sidebar tree guides with tree semantics', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-tree-a11y-'));
+    test('should ship breadcrumb-based container/agent navigation with card semantics', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidebar-nav-a11y-'));
         const port = await getFreePort();
         let handle = null;
 
@@ -1523,37 +1527,38 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
-            expect(appHtml.text).toContain('id="sessionList" role="tree" aria-label="会话树"');
+            expect(appHtml.text).toContain('<nav class="crumb-bar" id="sessionBreadcrumb" aria-label="导航路径"></nav>');
+            expect(appHtml.text).toContain('id="sessionList" aria-label="容器与 AGENT 列表"');
+            expect(appHtml.text).not.toContain('role="tree"');
 
             const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
                 headers: { Cookie: authCookie }
             });
             expect(appScript.response.status).toBe(200);
-            expect(appScript.text).toContain("button.innerHTML = '<svg viewBox=\"0 0 12 12\"");
-            expect(appScript.text).toContain("button.setAttribute('role', 'treeitem');");
-            expect(appScript.text).toContain("childrenNode.setAttribute('role', 'group');");
             expect(appScript.text).toContain("wrap.className = 'tree-node-menu';");
             expect(appScript.text).toContain("trigger.className = 'secondary tree-node-menu-trigger';");
             expect(appScript.text).toContain('function updateSidebarActiveSelection() {');
             expect(appScript.text).toContain('updateSidebarActiveSelection();');
+            expect(appScript.text).not.toContain("button.setAttribute('role', 'treeitem');");
+            expect(appScript.text).not.toContain("childrenNode.setAttribute('role', 'group');");
 
             const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
                 headers: { Cookie: authCookie }
             });
             expect(appStyle.response.status).toBe(200);
-            expect(appStyle.text).toContain('--tree-guide:');
-            expect(appStyle.text).toContain('.disclosure-toggle svg');
+            expect(appStyle.text).not.toContain('--tree-guide:');
+            expect(appStyle.text).not.toContain('.disclosure-toggle');
             expect(appStyle.text).toContain('.tree-node-menu {');
-            expect(appStyle.text).toContain('.tree-node-row:hover .tree-node-menu,');
-            // AGENT 行也须是定位上下文，否则 .tree-node-menu（position: absolute）会脱离本行、
+            expect(appStyle.text).toContain('.session-card:hover .tree-node-menu,');
+            // AGENT/容器卡片都须是定位上下文，否则 .tree-node-menu（position: absolute）会脱离本卡片、
             // 相对不相关的祖先定位，导致"···"触发按钮错位并遮挡侧边栏滚动条
-            expect(appStyle.text).toMatch(/\.tree-node-row\.tree-node-row-container,\s*\n\s*\.tree-node-row\.tree-node-row-agent\s*\{\s*\n\s*position:\s*relative;/);
+            expect(appStyle.text).toMatch(/\.session-card\s*\{\s*\n\s*position:\s*relative;/);
             // .tree-node-menu 的 translateY(-50%) 会隐式建立层叠上下文，若不显式设置 z-index，
             // 面板的 z-index:9 只在该上下文内部生效，从外部看等同于 z-index:auto，
-            // 会被后面的、同样 position:relative 的 AGENT 行按 DOM 序盖在上面
+            // 会被后面的、同样 position:relative 的卡片按 DOM 序盖在上面
             expect(appStyle.text).toMatch(/\.tree-node-menu\s*\{[^}]*z-index:\s*9;/);
-            // 已展开的菜单面板必须高于同级其它行悬浮时才显现的触发按钮（z-index:9），
-            // 否则鼠标移到后面的行时，其"···"按钮会按 DOM 序盖住前面仍展开的菜单
+            // 已展开的菜单面板必须高于同级其它卡片悬浮时才显现的触发按钮（z-index:9），
+            // 否则鼠标移到后面的卡片时，其"···"按钮会按 DOM 序盖住前面仍展开的菜单
             expect(appStyle.text).toMatch(/\.tree-node-menu\.is-open\s*\{\s*\n\s*z-index:\s*20;/);
             expect(appStyle.text).not.toContain('.tree-node-action');
             expect(appStyle.text).not.toContain('animation-delay: calc(var(--item-index, 0) * 24ms);');
@@ -1957,8 +1962,8 @@ process.exit(2);
             expect(appScript.text).toContain('function findLatestCreatedSessionName(sessions, preferredContainerName) {');
             expect(appScript.text).toContain('function findPreferredSessionNameAfterRemoval(sessions, removedName) {');
             expect(appScript.text).toContain('const fallbackSessionName = isActive');
-            expect(appScript.text).toContain("const directoryCount = new Set(state.sessions.map(function (session) {");
-            expect(appScript.text).toContain("`${directoryCount} 个 目录 / ${containerCount} 个容器 / ${state.sessions.length} 个 AGENT`");
+            expect(appScript.text).toContain("const containerCount = new Set(state.sessions.map(function (session) {");
+            expect(appScript.text).toContain("`${containerCount} 个容器 / ${state.sessions.length} 个 AGENT`");
             expect(appScript.text).toContain('state.active = findLatestCreatedSessionName(state.sessions, preferredContainerName) || state.sessions[0].name;');
             expect(appScript.text).toContain("function removeContainerByName(containerName) {");
             expect(appScript.text).toContain("function removeAgentSessionByName(sessionName, agentLabel) {");
