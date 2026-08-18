@@ -535,6 +535,20 @@ textarea:focus-visible {
     min-height: 20px;
 }
 
+.container-search-input {
+    width: 100%;
+    font-size: 12px;
+    padding: 6px 9px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel-soft);
+    color: var(--text);
+}
+
+.container-search-input[hidden] {
+    display: none;
+}
+
 .crumb-item {
     border: none;
     background: transparent;
