@@ -121,7 +121,7 @@
                                         <button type="button" id="activityAgentBtn" class="secondary is-active">Agent对话</button>
                                         <button type="button" id="activityCommandBtn" class="secondary">系统命令</button>
                                         <button type="button" id="agentTemplateBtn" class="secondary">CLI · —</button>
-                                        <span id="activityModelChip" class="composer-options-info" aria-live="polite">模型 · —</span>
+                                        <button type="button" id="activityModelChip" class="secondary">模型 · —</button>
                                     </div>
                                 </div>
                                 <button type="submit" id="sendBtn">发送</button>
@@ -284,6 +284,31 @@
                 <footer class="modal-footer">
                     <button type="button" id="agentTemplateResetBtn" class="secondary">恢复当前值</button>
                     <button type="button" id="agentTemplateSaveBtn">保存</button>
+                </footer>
+            </section>
+        </div>
+
+        <div id="modelModal" class="modal-backdrop" hidden>
+            <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modelModalTitle">
+                <header class="modal-header">
+                    <h2 id="modelModalTitle">选择模型</h2>
+                    <button type="button" id="modelModalCancelBtn" class="secondary">关闭</button>
+                </header>
+                <div class="modal-body">
+                    <div id="modelModalLoading" class="modal-tip" hidden>正在获取模型列表…</div>
+                    <label class="text-block">模型
+                        <select id="modelSelect">
+                            <option value="">跟随默认（不传 --model）</option>
+                            <option value="__custom__">自定义…</option>
+                        </select>
+                    </label>
+                    <label class="text-block" id="modelCustomGroup" hidden>自定义模型名称
+                        <input type="text" id="modelCustomInput" placeholder="例如 gemini-2.5-pro">
+                    </label>
+                    <div id="modelModalError" class="modal-error" hidden></div>
+                </div>
+                <footer class="modal-footer">
+                    <button type="button" id="modelModalSaveBtn">保存</button>
                 </footer>
             </section>
         </div>

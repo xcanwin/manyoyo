@@ -391,10 +391,15 @@ textarea:focus-visible {
     color: var(--muted);
 }
 
+.text-block[hidden] {
+    display: none;
+}
+
 .form-grid input,
 .form-grid select,
 .text-block textarea,
-.text-block input {
+.text-block input,
+.text-block select {
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 9px 11px;

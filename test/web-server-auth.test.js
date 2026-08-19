@@ -1178,7 +1178,7 @@ process.exit(2);
             expect(appHtml.response.status).toBe(200);
             expect(appHtml.text).not.toContain('composer-toolbar');
             expect(appHtml.text).toMatch(
-                /<button[^>]*id="composerOptionsToggle"[^>]*>选项<\/button>\s*<div class="composer-options-panel" id="composerOptionsPanel" hidden>\s*<button type="button" id="activityAgentBtn" class="secondary is-active">Agent对话<\/button>\s*<button type="button" id="activityCommandBtn" class="secondary">系统命令<\/button>\s*<button type="button" id="agentTemplateBtn" class="secondary">CLI · —<\/button>\s*<span id="activityModelChip" class="composer-options-info"[^>]*>模型 · —<\/span>/
+                /<button[^>]*id="composerOptionsToggle"[^>]*>选项<\/button>\s*<div class="composer-options-panel" id="composerOptionsPanel" hidden>\s*<button type="button" id="activityAgentBtn" class="secondary is-active">Agent对话<\/button>\s*<button type="button" id="activityCommandBtn" class="secondary">系统命令<\/button>\s*<button type="button" id="agentTemplateBtn" class="secondary">CLI · —<\/button>\s*<button type="button" id="activityModelChip" class="secondary">模型 · —<\/button>/
             );
             // "选项"必须在"发送"之前（DOM 序），对应视觉上"选项在发送上方"
             expect(appHtml.text.indexOf('id="composerOptionsToggle"')).toBeLessThan(appHtml.text.indexOf('id="sendBtn"'));
@@ -1194,6 +1194,11 @@ process.exit(2);
             expect(appScript.text).toContain("composerOptionsToggle.addEventListener('click', function () {");
             // 选中 Agent对话/系统命令、点击 CLI 之后都要收起下拉框
             expect(appScript.text).toContain('closeComposerOptionsMenu();\n            syncUi();\n            if (!isMobileLayout()) {\n                commandInput.focus();\n            }');
+            // 模型 chip 现在是可点击按钮，点击打开模型选择弹窗
+            expect(appScript.text).toContain('async function openModelModal() {');
+            expect(appScript.text).toContain("await api('/api/sessions/' + encodeURIComponent(state.active) + '/models');");
+            expect(appScript.text).toContain("await api('/api/sessions/' + encodeURIComponent(state.active) + '/model', {");
+            expect(appScript.text).toContain('activityModelChip.addEventListener(\'click\', function () {');
 
             const chatBehaviorScript = await request(`${baseUrl}/app/frontend/chat-behavior.js`, {
                 headers: { Cookie: authCookie }
@@ -1208,6 +1213,11 @@ process.exit(2);
             expect(appStyle.text).not.toContain('.composer-mode-switch');
             // 触发按钮贴在 composer 底部，下拉框必须往上展开，不能往下超出视口
             expect(appStyle.text).toMatch(/\.composer-options-panel\s*\{[^}]*bottom:\s*calc\(100% \+ 8px\);/);
+            // 模型弹窗里的 <select> 用的是通用 .text-block 包裹，必须补上 select 样式，否则渲染成无样式的浏览器默认下拉框
+            expect(appStyle.text).toContain('.text-block select {');
+            // .text-block 自带 display: flex，会盖掉浏览器默认的 [hidden]{display:none}，
+            // 必须显式补一条 [hidden] 规则，否则"自定义模型名称"输入框在下拉选中已知模型时也不会隐藏
+            expect(appStyle.text).toContain('.text-block[hidden] {\n    display: none;\n}');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -4770,6 +4780,243 @@ process.exit(0);
             expect(turn2.json.output).not.toContain('以下是当前会话最近对话历史');
             persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
             expect(persisted.agents.default.engineSessionId).toBe(threadId);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should fetch the live model catalog for claude/codex/opencode and return empty for gemini', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-model-catalog-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[args.length - 1] || '');
+  if (command.includes('claude ') && command.includes('--input-format')) {
+    let buf = '';
+    process.stdin.on('data', chunk => {
+      buf += chunk.toString();
+      let idx = buf.indexOf('\\n');
+      while (idx !== -1) {
+        const line = buf.slice(0, idx);
+        buf = buf.slice(idx + 1);
+        idx = buf.indexOf('\\n');
+        if (!line.trim()) continue;
+        const payload = JSON.parse(line);
+        if (payload.request && payload.request.subtype === 'initialize') {
+          process.stdout.write(JSON.stringify({
+            type: 'control_response',
+            response: {
+              subtype: 'success',
+              request_id: payload.request_id,
+              response: {
+                models: [
+                  { value: 'sonnet', resolvedModel: 'claude-sonnet-5', displayName: 'Sonnet', description: 'Sonnet 5 · 常规任务' },
+                  { value: 'opus[1m]', resolvedModel: 'claude-opus-5[1m]', displayName: 'Opus (1M context)', description: 'Opus 5 · 复杂任务' }
+                ]
+              }
+            }
+          }) + '\\n');
+        }
+      }
+    });
+    return;
+  }
+  if (command.includes('codex app-server')) {
+    let buf = '';
+    process.stdin.on('data', chunk => {
+      buf += chunk.toString();
+      let idx = buf.indexOf('\\n');
+      while (idx !== -1) {
+        const line = buf.slice(0, idx);
+        buf = buf.slice(idx + 1);
+        idx = buf.indexOf('\\n');
+        if (!line.trim()) continue;
+        const payload = JSON.parse(line);
+        if (payload.method === 'initialize') {
+          process.stdout.write(JSON.stringify({ id: payload.id, result: { userAgent: 'test' } }) + '\\n');
+        }
+        if (payload.method === 'model/list') {
+          process.stdout.write(JSON.stringify({
+            id: payload.id,
+            result: {
+              data: [
+                { id: 'gpt-5.6-sol', model: 'gpt-5.6-sol', displayName: 'GPT-5.6-Sol', description: '最强代理编码模型', isDefault: true },
+                { id: 'gpt-5.2', model: 'gpt-5.2', displayName: 'GPT-5.2', description: '专业长任务', isDefault: false }
+              ],
+              nextCursor: null
+            }
+          }) + '\\n');
+        }
+      }
+    });
+    return;
+  }
+  if (command.trim() === 'opencode models') {
+    process.stdout.write('anthropic/claude-sonnet-5\\nopenai/gpt-5.2\\n');
+    process.exit(0);
+    return;
+  }
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        const cases = [
+            {
+                sessionName: 'claude-catalog',
+                template: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}',
+                expectedModels: [
+                    { value: 'sonnet', label: 'Sonnet', description: 'Sonnet 5 · 常规任务' },
+                    { value: 'opus[1m]', label: 'Opus (1M context)', description: 'Opus 5 · 复杂任务' }
+                ]
+            },
+            {
+                sessionName: 'codex-catalog',
+                template: 'codex exec --skip-git-repo-check {prompt}',
+                expectedModels: [
+                    { value: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', description: '最强代理编码模型' },
+                    { value: 'gpt-5.2', label: 'GPT-5.2', description: '专业长任务' }
+                ]
+            },
+            {
+                sessionName: 'opencode-catalog',
+                template: 'OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode run {prompt}',
+                expectedModels: [
+                    { value: 'anthropic/claude-sonnet-5', label: 'anthropic/claude-sonnet-5', description: '' },
+                    { value: 'openai/gpt-5.2', label: 'openai/gpt-5.2', description: '' }
+                ]
+            },
+            {
+                sessionName: 'gemini-catalog',
+                template: 'gemini --yolo -p {prompt}',
+                expectedModels: []
+            }
+        ];
+        for (const item of cases) {
+            fs.writeFileSync(
+                path.join(webHistoryDir, `${item.sessionName}.json`),
+                JSON.stringify({
+                    containerName: item.sessionName,
+                    updatedAt: null,
+                    messages: [],
+                    agentPromptCommand: item.template
+                }, null, 4),
+                'utf-8'
+            );
+        }
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            for (const item of cases) {
+                const res = await request(`${baseUrl}/api/sessions/${item.sessionName}/models`, {
+                    headers: { Cookie: authCookie }
+                });
+                expect(res.response.status).toBe(200);
+                expect(res.json.models).toEqual(item.expectedModels);
+            }
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should set the selected model, reject unsafe values, and inject --model into the next turn command', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-model-select-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  process.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'claude-session' }) + '\\n');
+  process.stdout.write(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: command }] } }) + '\\n');
+  process.stdout.write(JSON.stringify({ type: 'result', subtype: 'success', session_id: 'claude-session' }) + '\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const rejectRes = await request(`${baseUrl}/api/sessions/demo/model`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: 'sonnet; rm -rf /' })
+            });
+            expect(rejectRes.response.status).toBe(400);
+
+            const setRes = await request(`${baseUrl}/api/sessions/demo/model`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: 'opus[1m]' })
+            });
+            expect(setRes.response.status).toBe(200);
+            expect(setRes.json.model).toBe('opus[1m]');
+
+            const detailRes = await request(`${baseUrl}/api/sessions/demo/detail`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(detailRes.json.detail.model).toBe('opus[1m]');
+
+            const runRes = await request(`${baseUrl}/api/sessions/demo/agent`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: 'hi' })
+            });
+            expect(runRes.response.status).toBe(200);
+            expect(String(runRes.json.output || '')).toContain('--model opus[1m]');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
