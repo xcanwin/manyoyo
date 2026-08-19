@@ -980,6 +980,7 @@ process.exit(2);
                 headers: { Cookie: authCookie }
             });
             expect(chatBehaviorScript.text).toContain('function summarizeTraceFlow(');
+            expect(chatBehaviorScript.text).toContain('function buildStructuredTraceResidualLines(');
 
             const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
                 headers: { Cookie: authCookie }
@@ -987,7 +988,11 @@ process.exit(2);
             expect(appScript.response.status).toBe(200);
             expect(appScript.text).toContain('const traceFlowExpandedState = new Map();');
             expect(appScript.text).toContain("toggle.className = 'trace-flow-toggle';");
-            expect(appScript.text).toContain('window.ManyoyoChatBehavior.summarizeTraceFlow(traceEvents, { pending });');
+            // 过程中的"状态"残留行（如"上下文模式: xxx"、"[任务] 已完成"）只在仍处于流式执行（pending）时展示，
+            // 任务结束后只保留结构化的 traceEvent 卡片，避免完整回复出现后还留一堆过程噪音
+            expect(appScript.text).toContain("if (pending) {\n            window.ManyoyoChatBehavior.buildStructuredTraceResidualLines(message).forEach(function (line) {");
+            expect(appScript.text).toContain('const mergedTraceEvents = window.ManyoyoChatBehavior.mergeToolTraceEvents(traceEvents);');
+            expect(appScript.text).toContain('window.ManyoyoChatBehavior.summarizeTraceFlow(mergedTraceEvents, { pending });');
             expect(appScript.text).toContain("toggle.addEventListener('toggle', function () {");
             expect(appScript.text).toContain('traceFlowExpandedState.set(messageId, toggle.open);');
 
@@ -3435,7 +3440,8 @@ process.exit(0);
                 expectedResult: '这是 Claude 最终答案。',
                 expectedAgentTrace: '[说明] 我先看看目录。',
                 expectedToolStartTrace: '[工具开始] Bash (command=ls -la)',
-                expectedToolCompleteTrace: '[工具完成] Bash (success)'
+                expectedToolCompleteTrace: '[工具完成] Bash (success)',
+                expectedToolId: 'toolu_1'
             },
             {
                 sessionName: 'gemini-demo',
@@ -3444,7 +3450,8 @@ process.exit(0);
                 expectedResult: '这是 Gemini 最终答案。',
                 expectedAgentTrace: '[说明] 我先看看目录。',
                 expectedToolStartTrace: '[工具开始] run_shell_command (command=ls -la)',
-                expectedToolCompleteTrace: '[工具完成] run_shell_command (success)'
+                expectedToolCompleteTrace: '[工具完成] run_shell_command (success)',
+                expectedToolId: 'tool_1'
             },
             {
                 sessionName: 'opencode-demo',
@@ -3452,7 +3459,8 @@ process.exit(0);
                 provider: 'opencode',
                 expectedResult: '这是 OpenCode 最终答案。',
                 expectedAgentTrace: '[说明] 这是 OpenCode 最终答案。',
-                expectedToolCompleteTrace: '[工具完成] bash (completed)'
+                expectedToolCompleteTrace: '[工具完成] bash (completed)',
+                expectedToolId: 'call_1'
             }
         ];
         for (const item of cases) {
@@ -3499,6 +3507,24 @@ process.exit(0);
                     expectedEvents.push(expect.objectContaining({ type: 'trace', text: item.expectedToolStartTrace }));
                 }
                 expect(streamRes.events).toEqual(expect.arrayContaining(expectedEvents));
+
+                // 同一工具调用的开始/完成事件须携带一致的 toolId，前端才能原地合并成同一张卡片
+                expect(streamRes.events).toEqual(expect.arrayContaining([
+                    expect.objectContaining({
+                        type: 'trace',
+                        text: item.expectedToolCompleteTrace,
+                        traceEvent: expect.objectContaining({ toolId: item.expectedToolId })
+                    })
+                ]));
+                if (item.expectedToolStartTrace) {
+                    expect(streamRes.events).toEqual(expect.arrayContaining([
+                        expect.objectContaining({
+                            type: 'trace',
+                            text: item.expectedToolStartTrace,
+                            traceEvent: expect.objectContaining({ toolId: item.expectedToolId })
+                        })
+                    ]));
+                }
 
                 if (item.provider === 'opencode') {
                     expect(streamRes.events).toEqual(expect.arrayContaining([
@@ -3612,7 +3638,8 @@ process.exit(0);
                         kind: 'command',
                         itemType: 'command_execution',
                         phase: 'started',
-                        command: '/bin/bash -lc ls -la'
+                        command: '/bin/bash -lc ls -la',
+                        toolId: 'item_1'
                     })
                 }),
                 expect.objectContaining({
@@ -3625,7 +3652,8 @@ process.exit(0);
                         phase: 'completed',
                         command: '/bin/bash -lc ls -la',
                         exitCode: 0,
-                        result: 'command output'
+                        result: 'command output',
+                        toolId: 'item_1'
                     })
                 }),
                 expect.objectContaining({
@@ -3638,7 +3666,8 @@ process.exit(0);
                         phase: 'started',
                         server: 'jina-mcp-server',
                         tool: 'search_web',
-                        argumentSummary: 'query=OpenAI latest news, num=5'
+                        argumentSummary: 'query=OpenAI latest news, num=5',
+                        toolId: 'item_2'
                     })
                 }),
                 expect.objectContaining({
@@ -3651,7 +3680,8 @@ process.exit(0);
                         phase: 'completed',
                         server: 'jina-mcp-server',
                         tool: 'search_web',
-                        argumentSummary: 'query=OpenAI latest news, num=5'
+                        argumentSummary: 'query=OpenAI latest news, num=5',
+                        toolId: 'item_2'
                     })
                 }),
                 expect.objectContaining({ type: 'result', output: '这是最终答案。' })
