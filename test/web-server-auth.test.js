@@ -1008,6 +1008,33 @@ process.exit(2);
         }
     });
 
+    test('should render cumulative usage stats card in the detail panel', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-usage-panel-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const appScript = await request(`${baseUrl}/app/frontend/app.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appScript.response.status).toBe(200);
+            expect(appScript.text).toContain("renderKeyValueCard(detailSummary, '用量统计', detail.usageTotal ? [");
+            expect(appScript.text).toContain("{ label: '累计输入 tokens', value: String(detail.usageTotal.inputTokens) }");
+            expect(appScript.text).toContain("{ label: '累计输出 tokens', value: String(detail.usageTotal.outputTokens) }");
+            expect(appScript.text).toContain("typeof detail.usageTotal.costUsd === 'number' ? `$${detail.usageTotal.costUsd.toFixed(4)}` : '暂不支持'");
+            expect(appScript.text).toContain('暂无数据（当前 Agent 程序不支持用量统计，或还未执行过对话）');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should expose copy-to-clipboard actions for user messages and agent markdown replies', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-copy-actions-'));
         const port = await getFreePort();
@@ -3557,6 +3584,212 @@ process.exit(0);
                     content: item.expectedResult
                 }));
             }
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should extract per-turn usage for claude/codex/opencode and leave gemini unsupported', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-usage-stats-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  if (command.includes('claude ')) {
+    process.stdout.write('{"type":"system","subtype":"init","session_id":"claude-session"}\\n');
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"完成了。"}]}}\\n');
+    process.stdout.write('{"type":"result","subtype":"success","session_id":"claude-session","total_cost_usd":0.0123,"usage":{"input_tokens":100,"output_tokens":50}}\\n');
+    process.exit(0);
+    return;
+  }
+  if (command.includes('gemini ')) {
+    process.stdout.write('{"type":"init","session_id":"gemini-session"}\\n');
+    process.stdout.write('{"type":"message","role":"assistant","content":"完成了。"}\\n');
+    process.stdout.write('{"type":"result","status":"success"}\\n');
+    process.exit(0);
+    return;
+  }
+  if (command.includes('codex ')) {
+    process.stdout.write('{"type":"thread.started"}\\n');
+    process.stdout.write('{"type":"turn.started"}\\n');
+    process.stdout.write('{"type":"item.completed","item":{"type":"agent_message","text":"完成了。"}}\\n');
+    process.stdout.write('{"type":"turn.completed","usage":{"input_tokens":200,"output_tokens":80}}\\n');
+    process.exit(0);
+    return;
+  }
+  if (command.includes('opencode ')) {
+    process.stdout.write('{"type":"step_start","sessionID":"opencode-session","part":{"id":"part_1","sessionID":"opencode-session","messageID":"message_1","type":"step-start"}}\\n');
+    process.stdout.write('{"type":"text","sessionID":"opencode-session","part":{"id":"part_2","sessionID":"opencode-session","messageID":"message_1","type":"text","text":"完成了。","time":{"start":1,"end":2}}}\\n');
+    process.stdout.write('{"type":"step_finish","sessionID":"opencode-session","part":{"id":"part_3","sessionID":"opencode-session","messageID":"message_1","type":"step-finish","reason":"stop","cost":0.0045,"tokens":{"input":300,"output":120,"reasoning":10,"cache":{"read":0,"write":0}}}}\\n');
+    process.exit(0);
+    return;
+  }
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        const cases = [
+            {
+                sessionName: 'claude-usage',
+                template: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}',
+                expectedUsage: { inputTokens: 100, outputTokens: 50, costUsd: 0.0123 }
+            },
+            {
+                sessionName: 'gemini-usage',
+                template: 'gemini --yolo -p {prompt}',
+                expectedUsage: null
+            },
+            {
+                sessionName: 'codex-usage',
+                template: 'codex exec --skip-git-repo-check {prompt}',
+                expectedUsage: { inputTokens: 200, outputTokens: 80, costUsd: null }
+            },
+            {
+                sessionName: 'opencode-usage',
+                template: 'OPENCODE_PERMISSION=\'{"*":"allow"}\' opencode run {prompt}',
+                expectedUsage: { inputTokens: 300, outputTokens: 120, costUsd: 0.0045 }
+            }
+        ];
+        for (const item of cases) {
+            fs.writeFileSync(
+                path.join(webHistoryDir, `${item.sessionName}.json`),
+                JSON.stringify({
+                    containerName: item.sessionName,
+                    updatedAt: null,
+                    messages: [],
+                    agentPromptCommand: item.template
+                }, null, 4),
+                'utf-8'
+            );
+        }
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            for (const item of cases) {
+                const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/${item.sessionName}/agent/stream`, {
+                    method: 'POST',
+                    headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: '你好' })
+                });
+                expect(streamRes.response.status).toBe(200);
+
+                const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, `${item.sessionName}.json`), 'utf-8'));
+                const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
+                expect(assistantMessage).toBeTruthy();
+                if (item.expectedUsage) {
+                    expect(assistantMessage.usage).toEqual(item.expectedUsage);
+                } else {
+                    expect(assistantMessage.usage).toBeUndefined();
+                }
+
+                const detailRes = await request(`${baseUrl}/api/sessions/${item.sessionName}/detail`, {
+                    headers: { Cookie: authCookie }
+                });
+                expect(detailRes.response.status).toBe(200);
+                expect(detailRes.json.detail.usageTotal).toEqual(item.expectedUsage);
+            }
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should accumulate usageTotal across multiple turns', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-usage-accumulate-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || '');
+  if (command.includes("-r ")) {
+    process.stdout.write('{"type":"system","subtype":"init","session_id":"claude-session"}\\n');
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"第二轮完成。"}]}}\\n');
+    process.stdout.write('{"type":"result","subtype":"success","session_id":"claude-session","total_cost_usd":0.02,"usage":{"input_tokens":10,"output_tokens":5}}\\n');
+    process.exit(0);
+    return;
+  }
+  process.stdout.write('{"type":"system","subtype":"init","session_id":"claude-session"}\\n');
+  process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"第一轮完成。"}]}}\\n');
+  process.stdout.write('{"type":"result","subtype":"success","session_id":"claude-session","total_cost_usd":0.01,"usage":{"input_tokens":20,"output_tokens":15}}\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: '第一轮' })
+            });
+            await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: '第二轮' })
+            });
+
+            const detailRes = await request(`${baseUrl}/api/sessions/demo/detail`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(detailRes.response.status).toBe(200);
+            expect(detailRes.json.detail.usageTotal).toEqual({
+                inputTokens: 30,
+                outputTokens: 20,
+                costUsd: 0.03
+            });
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
