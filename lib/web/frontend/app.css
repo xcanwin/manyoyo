@@ -1224,6 +1224,23 @@ body.workspace-switcher-open .workspace-switcher-panel {
     line-height: 1.6;
 }
 
+.files-markdown-preview {
+    padding: 4px 6px;
+}
+
+.files-image-preview {
+    display: flex;
+    justify-content: center;
+    padding: 12px;
+}
+
+.files-image-preview img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid rgba(181, 146, 99, 0.2);
+}
+
 .files-editor-host {
     min-height: 100%;
 }

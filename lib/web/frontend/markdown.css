@@ -1,33 +1,33 @@
-.bubble .md-content {
+.md-content {
     color: var(--text);
     font-size: 13px;
     line-height: 1.6;
     word-break: break-word;
 }
 
-.bubble .md-content > :first-child {
+.md-content > :first-child {
     margin-top: 0;
 }
 
-.bubble .md-content > :last-child {
+.md-content > :last-child {
     margin-bottom: 0;
 }
 
-.bubble .md-content p,
-.bubble .md-content ul,
-.bubble .md-content ol,
-.bubble .md-content blockquote,
-.bubble .md-content pre,
-.bubble .md-content table {
+.md-content p,
+.md-content ul,
+.md-content ol,
+.md-content blockquote,
+.md-content pre,
+.md-content table {
     margin: 0.6em 0;
 }
 
-.bubble .md-content ul,
-.bubble .md-content ol {
+.md-content ul,
+.md-content ol {
     padding-left: 1.4em;
 }
 
-.bubble .md-content code {
+.md-content code {
     font-family: var(--font-mono);
     font-size: 12px;
     padding: 1px 5px;
@@ -35,7 +35,7 @@
     background: rgba(194, 149, 79, 0.16);
 }
 
-.bubble .md-content pre {
+.md-content pre {
     border-radius: 8px;
     padding: 9px 10px;
     border: 1px solid #e6d2b7;
@@ -43,7 +43,7 @@
     overflow-x: auto;
 }
 
-.bubble .md-content pre code {
+.md-content pre code {
     background: transparent;
     border-radius: 0;
     padding: 0;
@@ -51,26 +51,26 @@
     line-height: 1.5;
 }
 
-.bubble .md-content blockquote {
+.md-content blockquote {
     margin-left: 0;
     padding-left: 10px;
     border-left: 3px solid #dcb788;
     color: #66492d;
 }
 
-.bubble .md-content table {
+.md-content table {
     border-collapse: collapse;
     width: 100%;
 }
 
-.bubble .md-content th,
-.bubble .md-content td {
+.md-content th,
+.md-content td {
     border: 1px solid #e6d2b7;
     padding: 4px 6px;
     text-align: left;
 }
 
-.bubble .md-content a {
+.md-content a {
     color: #8a4f17;
     text-decoration-line: underline;
     text-decoration-thickness: 2px;
@@ -78,7 +78,7 @@
     text-decoration-color: rgba(138, 79, 23, 0.8);
 }
 
-.bubble .md-content a:hover,
-.bubble .md-content a:focus-visible {
+.md-content a:hover,
+.md-content a:focus-visible {
     text-decoration-color: #8a4f17;
 }

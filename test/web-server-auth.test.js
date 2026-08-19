@@ -487,6 +487,260 @@ process.exit(2);
         }
     });
 
+    test('should stream whitelisted image files via fs/raw and reject non-image extensions without touching the container', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-fs-raw-'));
+        const port = await getFreePort();
+        const fakeDocker = path.join(tempHost, 'fake-docker.js');
+        const execLog = path.join(tempHost, 'exec.log');
+        const workspaceStore = path.join(tempHost, 'workspace');
+        fs.mkdirSync(workspaceStore, { recursive: true });
+        const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0x10, 0x20, 0xab, 0xcd]);
+        fs.writeFileSync(path.join(workspaceStore, 'photo.png'), imageBytes);
+        fs.writeFileSync(path.join(workspaceStore, 'notes.txt'), 'plain text');
+        fs.writeFileSync(execLog, '');
+        fs.writeFileSync(fakeDocker, `#!/usr/bin/env node
+const fs = require('fs');
+const path = require('path');
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(execLog)}, args.join(' ') + '\\n');
+const workspaceStore = ${JSON.stringify(workspaceStore)};
+function toHostWorkspacePath(targetPath) {
+    const requested = String(targetPath || '').trim();
+    if (!requested.startsWith('/workspace')) {
+        throw new Error('unexpected workspace path: ' + requested);
+    }
+    const relative = requested.slice('/workspace'.length).replace(/^[/]+/, '');
+    return relative ? path.join(workspaceStore, relative) : workspaceStore;
+}
+if (args[0] !== 'exec') {
+    process.stderr.write('unexpected docker args');
+    process.exit(1);
+}
+if (args[2] === 'cat') {
+    const requestedPath = args[4];
+    try {
+        const hostPath = toHostWorkspacePath(requestedPath);
+        const content = fs.readFileSync(hostPath);
+        process.stdout.write(content);
+        process.exit(0);
+    } catch (e) {
+        process.stderr.write('cat failed: ' + e.message);
+        process.exit(1);
+    }
+}
+const command = args[4] || '';
+if (command.includes('__MANYOYO_FS_STAT__')) {
+    const matched = command.match(/const requestedPath = ([\\s\\S]+?);\\n\\ntry \\{/);
+    const requestedPath = JSON.parse(matched[1]);
+    try {
+        const hostPath = toHostWorkspacePath(requestedPath);
+        const stat = fs.statSync(hostPath);
+        if (!stat.isFile()) {
+            throw new Error('目标不是文件: ' + requestedPath);
+        }
+        process.stdout.write(JSON.stringify({ path: requestedPath, size: stat.size }));
+        process.exit(0);
+    } catch (e) {
+        process.stdout.write(JSON.stringify({ error: e.message }));
+        process.exit(0);
+    }
+}
+if (command.includes('__MANYOYO_FS_READ__')) {
+    const matched = command.match(/const requestedPath = ([\\s\\S]+?);\\nconst maxBytes/);
+    const requestedPath = JSON.parse(matched[1]);
+    try {
+        const hostPath = toHostWorkspacePath(requestedPath);
+        const stat = fs.statSync(hostPath);
+        if (path.extname(requestedPath).toLowerCase() === '.png') {
+            process.stdout.write(JSON.stringify({ path: requestedPath, kind: 'image', size: stat.size }));
+        } else {
+            process.stdout.write(JSON.stringify({ path: requestedPath, kind: 'text', size: stat.size, truncated: false, content: fs.readFileSync(hostPath, 'utf-8') }));
+        }
+        process.exit(0);
+    } catch (e) {
+        process.stdout.write(JSON.stringify({ error: e.message }));
+        process.exit(0);
+    }
+}
+process.stderr.write('unknown command');
+process.exit(2);
+`, 'utf-8');
+        fs.chmodSync(fakeDocker, 0o755);
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDocker,
+                containerExists: () => true,
+                getContainerStatus: () => 'running'
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+
+            const unauthRes = await fetch(`${baseUrl}/api/sessions/test/fs/raw?path=${encodeURIComponent('/workspace/photo.png')}`);
+            expect(unauthRes.status).toBe(401);
+
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const badExtRes = await fetch(`${baseUrl}/api/sessions/test/fs/raw?path=${encodeURIComponent('/workspace/notes.txt')}`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(badExtRes.status).toBe(400);
+            expect(fs.readFileSync(execLog, 'utf-8')).toBe('');
+
+            const missingRes = await fetch(`${baseUrl}/api/sessions/test/fs/raw?path=${encodeURIComponent('/workspace/missing.png')}`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(missingRes.status).toBe(404);
+
+            const imageRes = await fetch(`${baseUrl}/api/sessions/test/fs/raw?path=${encodeURIComponent('/workspace/photo.png')}`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(imageRes.status).toBe(200);
+            expect(imageRes.headers.get('content-type')).toBe('image/png');
+            expect(imageRes.headers.get('content-length')).toBe(String(imageBytes.length));
+            expect(imageRes.headers.get('x-content-type-options')).toBe('nosniff');
+            const receivedBytes = Buffer.from(await imageRes.arrayBuffer());
+            expect(receivedBytes.equals(imageBytes)).toBe(true);
+
+            const imageReadRes = await fetch(`${baseUrl}/api/sessions/test/fs/read?path=${encodeURIComponent('/workspace/photo.png')}`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(imageReadRes.status).toBe(200);
+            const imageReadJson = await imageReadRes.json();
+            expect(imageReadJson).toEqual(expect.objectContaining({
+                path: '/workspace/photo.png',
+                kind: 'image',
+                size: imageBytes.length
+            }));
+            expect(imageReadJson.content).toBeUndefined();
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should cap concurrent fs/raw streams per container and release the slot on client abort', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-fs-raw-concurrency-'));
+        const port = await getFreePort();
+        const fakeDocker = path.join(tempHost, 'fake-docker.js');
+        const startedLog = path.join(tempHost, 'started.log');
+        const workspaceStore = path.join(tempHost, 'workspace');
+        fs.mkdirSync(workspaceStore, { recursive: true });
+        const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02, 0x03]);
+        fs.writeFileSync(path.join(workspaceStore, 'photo.png'), imageBytes);
+        fs.writeFileSync(startedLog, '');
+        fs.writeFileSync(fakeDocker, `#!/usr/bin/env node
+const fs = require('fs');
+const path = require('path');
+const args = process.argv.slice(2);
+const workspaceStore = ${JSON.stringify(workspaceStore)};
+function toHostWorkspacePath(targetPath) {
+    const requested = String(targetPath || '').trim();
+    if (!requested.startsWith('/workspace')) {
+        throw new Error('unexpected workspace path: ' + requested);
+    }
+    const relative = requested.slice('/workspace'.length).replace(/^[/]+/, '');
+    return relative ? path.join(workspaceStore, relative) : workspaceStore;
+}
+if (args[0] !== 'exec') {
+    process.stderr.write('unexpected docker args');
+    process.exit(1);
+}
+if (args[2] === 'cat') {
+    const requestedPath = args[4];
+    fs.appendFileSync(${JSON.stringify(startedLog)}, '1\\n');
+    setTimeout(() => {
+        try {
+            const hostPath = toHostWorkspacePath(requestedPath);
+            const content = fs.readFileSync(hostPath);
+            process.stdout.write(content);
+            process.exit(0);
+        } catch (e) {
+            process.stderr.write('cat failed: ' + e.message);
+            process.exit(1);
+        }
+    }, 300);
+} else {
+    const command = args[4] || '';
+    if (command.includes('__MANYOYO_FS_STAT__')) {
+        const matched = command.match(/const requestedPath = ([\\s\\S]+?);\\n\\ntry \\{/);
+        const requestedPath = JSON.parse(matched[1]);
+        try {
+            const hostPath = toHostWorkspacePath(requestedPath);
+            const stat = fs.statSync(hostPath);
+            process.stdout.write(JSON.stringify({ path: requestedPath, size: stat.size }));
+            process.exit(0);
+        } catch (e) {
+            process.stdout.write(JSON.stringify({ error: e.message }));
+            process.exit(0);
+        }
+    } else {
+        process.stderr.write('unknown command');
+        process.exit(2);
+    }
+}
+`, 'utf-8');
+        fs.chmodSync(fakeDocker, 0o755);
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDocker,
+                containerExists: () => true,
+                getContainerStatus: () => 'running'
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const rawUrl = `${baseUrl}/api/sessions/test/fs/raw?path=${encodeURIComponent('/workspace/photo.png')}`;
+
+            const serverSource = fs.readFileSync(path.join(__dirname, '../lib/web/server.js'), 'utf-8');
+            expect(serverSource).toContain('const WEB_FILE_RAW_MAX_CONCURRENT_PER_CONTAINER = 4;');
+            const MAX_CONCURRENT = 4;
+
+            const abortController = new AbortController();
+            const inFlight = [];
+            for (let i = 0; i < MAX_CONCURRENT; i++) {
+                const options = { headers: { Cookie: authCookie } };
+                if (i === 0) {
+                    options.signal = abortController.signal;
+                }
+                inFlight.push(fetch(rawUrl, options));
+            }
+
+            const waitStart = Date.now();
+            while (fs.readFileSync(startedLog, 'utf-8').trim().split('\n').filter(Boolean).length < MAX_CONCURRENT) {
+                if (Date.now() - waitStart > 2000) {
+                    throw new Error('timed out waiting for concurrent cat processes to start');
+                }
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+
+            const overflowRes = await fetch(rawUrl, { headers: { Cookie: authCookie } });
+            expect(overflowRes.status).toBe(429);
+
+            abortController.abort();
+            await expect(inFlight[0]).rejects.toThrow();
+
+            await new Promise(resolve => setTimeout(resolve, 50));
+            const afterAbortRes = await fetch(rawUrl, { headers: { Cookie: authCookie } });
+            expect(afterAbortRes.status).toBe(200);
+            await afterAbortRes.arrayBuffer();
+
+            const remaining = await Promise.all(inFlight.slice(1));
+            for (const res of remaining) {
+                expect(res.status).toBe(200);
+                await res.arrayBuffer();
+            }
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should read large json files via web api without truncating container json payload', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-container-fs-large-json-'));
         const port = await getFreePort();

@@ -95,6 +95,55 @@ describe('markdown renderer', () => {
         expect(rendered).toContain('>https://example.com</a>');
     });
 
+    test('should render relative image paths as img tags by default without a resolver', () => {
+        const runtime = loadMarkdownRenderer();
+
+        const rendered = runtime.window.ManyoyoMarkdown.render('![diagram](./diagram.png)');
+
+        expect(rendered).toContain('<img src="./diagram.png"');
+    });
+
+    test('should downgrade absolute http(s) images to a click-through link without rendering img', () => {
+        const runtime = loadMarkdownRenderer();
+
+        const rendered = runtime.window.ManyoyoMarkdown.render('![diagram](https://example.com/diagram.png)');
+
+        expect(rendered).not.toContain('<img');
+        expect(rendered).toContain('href="https://example.com/diagram.png"');
+        expect(rendered).toContain('data-safe-external-link="true"');
+    });
+
+    test('should resolve relative image paths through an optional imageUrlResolver', () => {
+        const runtime = loadMarkdownRenderer();
+        const resolver = jest.fn(relativeHref => `/api/sessions/test/fs/raw?path=${encodeURIComponent('/workspace/docs/' + relativeHref)}`);
+
+        const rendered = runtime.window.ManyoyoMarkdown.render('![diagram](./diagram.png)', { imageUrlResolver: resolver });
+
+        expect(resolver).toHaveBeenCalledWith('./diagram.png');
+        expect(rendered).toContain('<img src="/api/sessions/test/fs/raw?path=%2Fworkspace%2Fdocs%2F.%2Fdiagram.png"');
+    });
+
+    test('should not call imageUrlResolver for absolute http(s) images and keep them as links', () => {
+        const runtime = loadMarkdownRenderer();
+        const resolver = jest.fn(() => '/should-not-be-used');
+
+        const rendered = runtime.window.ManyoyoMarkdown.render('![diagram](https://example.com/diagram.png)', { imageUrlResolver: resolver });
+
+        expect(resolver).not.toHaveBeenCalled();
+        expect(rendered).not.toContain('<img');
+        expect(rendered).toContain('href="https://example.com/diagram.png"');
+    });
+
+    test('should drop the image when imageUrlResolver rejects a relative path', () => {
+        const runtime = loadMarkdownRenderer();
+        const resolver = jest.fn(() => '');
+
+        const rendered = runtime.window.ManyoyoMarkdown.render('![diagram](./diagram.png)', { imageUrlResolver: resolver });
+
+        expect(resolver).toHaveBeenCalledWith('./diagram.png');
+        expect(rendered).not.toContain('<img');
+    });
+
     test('should expose custom link open handler hook', () => {
         const runtime = loadMarkdownRenderer();
         const clickHandler = runtime.listeners.click;
