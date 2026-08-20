@@ -769,8 +769,8 @@ textarea:focus-visible {
 }
 
 .tree-node-menu-trigger {
-    width: 34px;
-    height: 34px;
+    width: 30px;
+    height: 30px;
     padding: 0;
     display: inline-flex;
     align-items: center;
