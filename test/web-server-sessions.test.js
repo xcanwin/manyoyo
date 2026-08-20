@@ -3,6 +3,8 @@ const os = require('os');
 const path = require('path');
 const net = require('net');
 const { startWebServer } = require('../lib/web/server');
+const { FileEventStore } = require('../lib/core/event-store');
+const { createControlEvent } = require('../lib/core/events');
 
 function getFreePort() {
     return new Promise((resolve, reject) => {
@@ -470,86 +472,6 @@ describe('Web Server Session Clone/Duplicate/Cascade Delete', () => {
         }
     });
 
-    test('by-directory/remove cascades to all containers under the hostPath but leaves other directories untouched', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-cascade-remove-'));
-        const port = await getFreePort();
-        const webHistoryDir = path.join(tempHost, 'web-history');
-        const removeContainer = jest.fn();
-        const removedNames = new Set();
-        removeContainer.mockImplementation(name => removedNames.add(name));
-
-        writeHistoryFile(webHistoryDir, 'dir-a-1', {
-            containerName: 'dir-a-1',
-            applied: { containerName: 'dir-a-1', hostPath: '/work/a' },
-            agents: {}
-        });
-        writeHistoryFile(webHistoryDir, 'dir-a-2', {
-            containerName: 'dir-a-2',
-            applied: { containerName: 'dir-a-2', hostPath: '/work/a' },
-            agents: {}
-        });
-        writeHistoryFile(webHistoryDir, 'dir-b-1', {
-            containerName: 'dir-b-1',
-            applied: { containerName: 'dir-b-1', hostPath: '/work/b' },
-            agents: {}
-        });
-
-        let handle = null;
-        try {
-            handle = await startWebServer(buildServerOptions(tempHost, port, {
-                containerExists: () => true,
-                removeContainer
-            }));
-            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
-            const authCookie = await loginAndGetCookie(baseUrl);
-
-            const res = await request(`${baseUrl}/api/sessions/by-directory/remove`, {
-                method: 'POST',
-                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ hostPath: '/work/a' })
-            });
-            expect(res.response.status).toBe(200);
-            expect(res.json.removed.sort()).toEqual(['dir-a-1', 'dir-a-2']);
-
-            expect(removedNames.has('dir-a-1')).toBe(true);
-            expect(removedNames.has('dir-a-2')).toBe(true);
-            expect(removedNames.has('dir-b-1')).toBe(false);
-
-            expect(fs.existsSync(path.join(webHistoryDir, 'dir-a-1.json'))).toBe(false);
-            expect(fs.existsSync(path.join(webHistoryDir, 'dir-a-2.json'))).toBe(false);
-            expect(fs.existsSync(path.join(webHistoryDir, 'dir-b-1.json'))).toBe(true);
-        } finally {
-            if (handle && typeof handle.close === 'function') {
-                await handle.close();
-            }
-            fs.rmSync(tempHost, { recursive: true, force: true });
-        }
-    });
-
-    test('by-directory/remove returns 404 when no container matches the given hostPath', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-cascade-remove-404-'));
-        const port = await getFreePort();
-        let handle = null;
-
-        try {
-            handle = await startWebServer(buildServerOptions(tempHost, port));
-            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
-            const authCookie = await loginAndGetCookie(baseUrl);
-
-            const res = await request(`${baseUrl}/api/sessions/by-directory/remove`, {
-                method: 'POST',
-                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ hostPath: '/nowhere' })
-            });
-            expect(res.response.status).toBe(404);
-        } finally {
-            if (handle && typeof handle.close === 'function') {
-                await handle.close();
-            }
-            fs.rmSync(tempHost, { recursive: true, force: true });
-        }
-    });
-
     test('container-remark sets and clears a container-level remark, reflected in GET /api/sessions', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-container-remark-'));
         const port = await getFreePort();
@@ -664,6 +586,384 @@ describe('Web Server Session Clone/Duplicate/Cascade Delete', () => {
             expect(defaultSession.agentRemark).toBe('主对话');
             expect(secondSession.agentRemark).toBe('调试分支');
             expect(defaultSession.containerRemark).toBe('');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('Web Server Container/Agent Removal with optional history', () => {
+    test('/remove without removeHistory keeps the history file, events and projections intact', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-remove-keep-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        const removeContainer = jest.fn();
+
+        writeHistoryFile(webHistoryDir, 'keep-me', {
+            containerName: 'keep-me',
+            applied: { containerName: 'keep-me', hostPath: tempHost },
+            agents: {
+                default: {
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    createdAt: '2025-01-01T00:00:00.000Z',
+                    updatedAt: '2025-01-01T00:00:00.000Z',
+                    messages: [buildAgentMessage('user', 'hi')]
+                }
+            }
+        });
+        const eventStore = new FileEventStore(webHistoryDir);
+        eventStore.append(createControlEvent({ type: 'session.ready', aggregateId: 'keep-me', seq: 1 }));
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => true,
+                removeContainer
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const res = await request(`${baseUrl}/api/sessions/keep-me/remove`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            expect(res.response.status).toBe(200);
+            expect(res.json).toEqual(expect.objectContaining({ removed: true, removedHistory: false }));
+            expect(removeContainer).toHaveBeenCalledWith('keep-me');
+
+            expect(fs.existsSync(path.join(webHistoryDir, 'keep-me.json'))).toBe(true);
+            expect(fs.existsSync(eventStore.getEventFilePath('keep-me'))).toBe(true);
+            expect(fs.existsSync(eventStore.getProjectionFilePath('keep-me'))).toBe(true);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('/remove with removeHistory removes the container, the history file, and every agent event/projection', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-remove-history-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        const removeContainer = jest.fn();
+
+        writeHistoryFile(webHistoryDir, 'wipe-me', {
+            containerName: 'wipe-me',
+            applied: { containerName: 'wipe-me', hostPath: tempHost },
+            agents: {
+                default: {
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    createdAt: '2025-01-01T00:00:00.000Z',
+                    updatedAt: '2025-01-01T00:00:00.000Z',
+                    messages: [buildAgentMessage('user', 'hi')]
+                },
+                'agent-2': {
+                    agentId: 'agent-2',
+                    agentName: 'AGENT 2',
+                    createdAt: '2025-01-01T00:00:00.000Z',
+                    updatedAt: '2025-01-01T00:00:00.000Z',
+                    messages: [buildAgentMessage('user', 'yo')]
+                }
+            }
+        });
+        const eventStore = new FileEventStore(webHistoryDir);
+        eventStore.append(createControlEvent({ type: 'session.ready', aggregateId: 'wipe-me', seq: 1 }));
+        eventStore.append(createControlEvent({ type: 'session.ready', aggregateId: 'wipe-me~agent-2', seq: 1 }));
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => true,
+                removeContainer
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const res = await request(`${baseUrl}/api/sessions/wipe-me/remove`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ removeHistory: true })
+            });
+            expect(res.response.status).toBe(200);
+            expect(res.json).toEqual(expect.objectContaining({ removed: true, removedHistory: true }));
+            expect(removeContainer).toHaveBeenCalledWith('wipe-me');
+
+            expect(fs.existsSync(path.join(webHistoryDir, 'wipe-me.json'))).toBe(false);
+            expect(fs.existsSync(eventStore.getEventFilePath('wipe-me'))).toBe(false);
+            expect(fs.existsSync(eventStore.getProjectionFilePath('wipe-me'))).toBe(false);
+            expect(fs.existsSync(eventStore.getEventFilePath('wipe-me~agent-2'))).toBe(false);
+            expect(fs.existsSync(eventStore.getProjectionFilePath('wipe-me~agent-2'))).toBe(false);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('/remove is idempotent when the container was already removed concurrently', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-remove-idempotent-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        const removeContainer = jest.fn(() => {
+            throw new Error('Command failed: docker rm -f already-gone');
+        });
+
+        writeHistoryFile(webHistoryDir, 'already-gone', {
+            containerName: 'already-gone',
+            applied: { containerName: 'already-gone', hostPath: tempHost },
+            agents: {
+                default: {
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    createdAt: '2025-01-01T00:00:00.000Z',
+                    updatedAt: '2025-01-01T00:00:00.000Z',
+                    messages: []
+                }
+            }
+        });
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => true,
+                removeContainer
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const res = await request(`${baseUrl}/api/sessions/already-gone/remove`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            expect(res.response.status).toBe(200);
+            expect(res.json).toEqual(expect.objectContaining({ removed: true }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('/remove-with-history with removeHistory hard-deletes a non-default agent and its event/projection files', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-remove-agent-history-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+
+        writeHistoryFile(webHistoryDir, 'multi-agent', {
+            containerName: 'multi-agent',
+            applied: { containerName: 'multi-agent', hostPath: tempHost },
+            agents: {
+                default: {
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    createdAt: '2025-01-01T00:00:00.000Z',
+                    updatedAt: '2025-01-01T00:00:00.000Z',
+                    messages: []
+                },
+                'agent-2': {
+                    agentId: 'agent-2',
+                    agentName: 'AGENT 2',
+                    createdAt: '2025-01-01T00:00:00.000Z',
+                    updatedAt: '2025-01-01T00:00:00.000Z',
+                    messages: [buildAgentMessage('user', 'bye')]
+                }
+            }
+        });
+        const eventStore = new FileEventStore(webHistoryDir);
+        eventStore.append(createControlEvent({ type: 'session.ready', aggregateId: 'multi-agent~agent-2', seq: 1 }));
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => true
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const res = await request(`${baseUrl}/api/sessions/multi-agent~agent-2/remove-with-history`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ removeHistory: true })
+            });
+            expect(res.response.status).toBe(200);
+            expect(res.json).toEqual(expect.objectContaining({ removedHistory: true }));
+
+            const savedHistory = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'multi-agent.json'), 'utf-8'));
+            expect(savedHistory.agents['agent-2']).toBeUndefined();
+            expect(fs.existsSync(eventStore.getEventFilePath('multi-agent~agent-2'))).toBe(false);
+            expect(fs.existsSync(eventStore.getProjectionFilePath('multi-agent~agent-2'))).toBe(false);
+
+            const listRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            expect(listRes.json.sessions.some(item => item.name === 'multi-agent~agent-2')).toBe(false);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('/remove-with-history without removeHistory archives the agent, keeps files on disk, and hides it from the API', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-archive-agent-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+
+        writeHistoryFile(webHistoryDir, 'multi-agent-2', {
+            containerName: 'multi-agent-2',
+            applied: { containerName: 'multi-agent-2', hostPath: tempHost },
+            agents: {
+                default: {
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    createdAt: '2025-01-01T00:00:00.000Z',
+                    updatedAt: '2025-01-01T00:00:00.000Z',
+                    messages: []
+                },
+                'agent-2': {
+                    agentId: 'agent-2',
+                    agentName: 'AGENT 2',
+                    createdAt: '2025-01-01T00:00:00.000Z',
+                    updatedAt: '2025-01-01T00:00:00.000Z',
+                    messages: [buildAgentMessage('user', 'keep this around')]
+                }
+            }
+        });
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => true
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const res = await request(`${baseUrl}/api/sessions/multi-agent-2~agent-2/remove-with-history`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ removeHistory: false })
+            });
+            expect(res.response.status).toBe(200);
+            expect(res.json).toEqual(expect.objectContaining({ removedHistory: false }));
+
+            const savedHistory = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'multi-agent-2.json'), 'utf-8'));
+            expect(savedHistory.agents['agent-2'].archived).toBe(true);
+            expect(savedHistory.agents['agent-2'].messages.map(m => m.content)).toEqual(['keep this around']);
+
+            const listRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            expect(listRes.json.sessions.some(item => item.name === 'multi-agent-2~agent-2')).toBe(false);
+
+            const detailRes = await request(`${baseUrl}/api/sessions/multi-agent-2~agent-2/detail`, { headers: { Cookie: authCookie } });
+            expect(detailRes.response.status).toBe(200);
+            expect(detailRes.json.detail).toBeNull();
+
+            const messagesRes = await request(`${baseUrl}/api/sessions/multi-agent-2~agent-2/messages`, { headers: { Cookie: authCookie } });
+            expect(messagesRes.response.status).toBe(200);
+            expect(messagesRes.json.messages).toEqual([]);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('archiving the only default agent keeps the container visible as a synthetic empty entry instead of vanishing', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-archive-default-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+
+        writeHistoryFile(webHistoryDir, 'lonely', {
+            containerName: 'lonely',
+            applied: { containerName: 'lonely', hostPath: tempHost },
+            agents: {
+                default: {
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    createdAt: '2025-01-01T00:00:00.000Z',
+                    updatedAt: '2025-01-01T00:00:00.000Z',
+                    messages: [buildAgentMessage('user', 'hi')]
+                }
+            }
+        });
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => true,
+                dockerExecArgs: args => {
+                    if (Array.isArray(args) && args[0] === 'ps') {
+                        return 'lonely\tUp 2 minutes\tlocalhost/xcanwin/manyoyo:1.0.0-common\n';
+                    }
+                    return '';
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const res = await request(`${baseUrl}/api/sessions/lonely/remove-with-history`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ removeHistory: false })
+            });
+            expect(res.response.status).toBe(200);
+
+            const listRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            const lonelySessions = listRes.json.sessions.filter(item => item.containerName === 'lonely');
+            expect(lonelySessions).toHaveLength(1);
+            expect(lonelySessions[0]).toEqual(expect.objectContaining({
+                name: 'lonely',
+                agentId: 'default',
+                messageCount: 0,
+                synthetic: true
+            }));
+
+            const savedHistory = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'lonely.json'), 'utf-8'));
+            expect(savedHistory.agents.default.archived).toBe(true);
+            expect(savedHistory.agents.default.messages.map(m => m.content)).toEqual(['hi']);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('creating a container immediately persists a real (non-synthetic) default agent', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-persists-default-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const created = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    createOptions: { containerName: 'brand-new', hostPath: tempHost }
+                })
+            });
+            expect(created.response.status).toBe(200);
+
+            const savedHistory = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'brand-new.json'), 'utf-8'));
+            expect(savedHistory.agents.default).toEqual(expect.objectContaining({ agentId: 'default', archived: false }));
+
+            const listRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            const defaultSession = listRes.json.sessions.find(item => item.containerName === 'brand-new');
+            expect(defaultSession.synthetic).not.toBe(true);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();

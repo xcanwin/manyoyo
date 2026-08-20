@@ -60,4 +60,22 @@ describe('FileEventStore', () => {
 
         expect(store.read(aggregateId).map(event => event.seq)).toEqual([501]);
     });
+
+    test('remove() deletes both the event log and the projection snapshot', () => {
+        const aggregateId = 'demo~agent-2';
+        store.append(createControlEvent({ type: 'session.ready', aggregateId, seq: 1 }));
+
+        expect(fs.existsSync(store.getEventFilePath(aggregateId))).toBe(true);
+        expect(fs.existsSync(store.getProjectionFilePath(aggregateId))).toBe(true);
+
+        store.remove(aggregateId);
+
+        expect(fs.existsSync(store.getEventFilePath(aggregateId))).toBe(false);
+        expect(fs.existsSync(store.getProjectionFilePath(aggregateId))).toBe(false);
+        expect(store.read(aggregateId)).toEqual([]);
+    });
+
+    test('remove() is a no-op when nothing exists for the aggregateId', () => {
+        expect(() => store.remove('never-existed')).not.toThrow();
+    });
 });

@@ -284,6 +284,10 @@ textarea:focus-visible {
     overflow: hidden;
 }
 
+.modal.modal-sm {
+    width: min(420px, calc(100vw - 24px));
+}
+
 .modal-header {
     display: flex;
     align-items: center;
@@ -745,6 +749,15 @@ textarea:focus-visible {
         opacity: 1;
         pointer-events: auto;
     }
+}
+
+.crumb-bar .tree-node-menu {
+    position: relative;
+    top: auto;
+    right: auto;
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .tree-node-menu-trigger {

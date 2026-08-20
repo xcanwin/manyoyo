@@ -215,6 +215,22 @@
             </section>
         </div>
 
+        <div id="removeConfirmModal" class="modal-backdrop" hidden>
+            <section class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="removeConfirmTitle">
+                <header class="modal-header">
+                    <h2 id="removeConfirmTitle">确认删除</h2>
+                    <button type="button" id="removeConfirmCancelBtn" class="secondary">关闭</button>
+                </header>
+                <div class="modal-body">
+                    <p id="removeConfirmMessage"></p>
+                </div>
+                <footer class="modal-footer">
+                    <button type="button" id="removeConfirmKeepHistoryBtn" class="secondary">否，保留历史</button>
+                    <button type="button" id="removeConfirmWithHistoryBtn" class="danger">是，连同历史一起删除</button>
+                </footer>
+            </section>
+        </div>
+
         <div id="directoryPickerModal" class="modal-backdrop" hidden>
             <section class="modal dir-picker-modal" role="dialog" aria-modal="true" aria-labelledby="directoryPickerTitle">
                 <header class="modal-header">

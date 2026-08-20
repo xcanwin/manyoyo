@@ -2259,11 +2259,11 @@ process.exit(2);
             expect(appScript.text).toContain('function findPreferredSessionNameAfterRemoval(sessions, removedName) {');
             expect(appScript.text).toContain('const fallbackSessionName = isActive');
             expect(appScript.text).toContain("const containerCount = new Set(state.sessions.map(function (session) {");
-            expect(appScript.text).toContain("`${containerCount} 个容器 / ${state.sessions.length} 个 AGENT`");
+            expect(appScript.text).toContain("`${containerCount} 个容器 / ${agentCount} 个 AGENT`");
             expect(appScript.text).toContain('state.active = findLatestCreatedSessionName(state.sessions, preferredContainerName) || state.sessions[0].name;');
             expect(appScript.text).toContain("function removeContainerByName(containerName) {");
             expect(appScript.text).toContain("function removeAgentSessionByName(sessionName, agentLabel) {");
-            expect(appScript.text).toContain("const yes = confirm('确认删除 AGENT ' + (agentLabel || target) + ' ?');");
+            expect(appScript.text).toContain('function confirmRemoveChoice(options) {');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
