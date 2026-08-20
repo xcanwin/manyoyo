@@ -222,11 +222,28 @@
                     <button type="button" id="removeConfirmCancelBtn" class="secondary">关闭</button>
                 </header>
                 <div class="modal-body">
-                    <p id="removeConfirmMessage"></p>
+                    <p id="removeConfirmMessage" class="modal-message"></p>
                 </div>
                 <footer class="modal-footer">
                     <button type="button" id="removeConfirmKeepHistoryBtn" class="secondary">否，保留历史</button>
                     <button type="button" id="removeConfirmWithHistoryBtn" class="danger">是，连同历史一起删除</button>
+                </footer>
+            </section>
+        </div>
+
+        <div id="genericDialogModal" class="modal-backdrop" hidden>
+            <section class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="genericDialogTitle">
+                <header class="modal-header">
+                    <h2 id="genericDialogTitle"></h2>
+                    <button type="button" id="genericDialogCloseBtn" class="secondary">关闭</button>
+                </header>
+                <div class="modal-body">
+                    <p id="genericDialogMessage" class="modal-message"></p>
+                    <input type="text" id="genericDialogInput" class="modal-dialog-input" hidden />
+                </div>
+                <footer class="modal-footer">
+                    <button type="button" id="genericDialogCancelBtn" class="secondary" hidden>取消</button>
+                    <button type="button" id="genericDialogConfirmBtn">确定</button>
                 </footer>
             </section>
         </div>

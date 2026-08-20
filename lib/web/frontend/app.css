@@ -272,6 +272,13 @@ textarea:focus-visible {
     display: none !important;
 }
 
+/* showNotice/showConfirm/showPrompt 可能从已经打开的其它 modal（如目录选择器）内部触发，
+   和其它 .modal-backdrop 共用 z-index:80 时，谁在 DOM 里排后面谁盖住谁，容易被埋到底下；
+   这里给一个更高的 z-index，保证它始终浮在最上层 */
+#genericDialogModal {
+    z-index: 90;
+}
+
 .modal {
     width: min(960px, calc(100vw - 24px));
     max-height: min(92vh, 860px);
@@ -324,6 +331,28 @@ textarea:focus-visible {
     font-size: 12px;
     margin-bottom: 10px;
     word-break: break-all;
+}
+
+.modal-message {
+    margin: 0;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.modal-dialog-input {
+    width: 100%;
+    margin-top: 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 11px;
+    background: var(--panel-strong);
+    color: var(--text);
+    font-size: 13px;
+}
+
+.modal-dialog-input[hidden] {
+    display: none;
 }
 
 .modal-error {

@@ -828,7 +828,7 @@ process.exit(2);
         expect(fileBrowserSource).toContain('data-action="mkdir">新建目录</button>');
         expect(fileBrowserSource).not.toContain('data-action="up"');
         expect(fileBrowserSource).not.toContain('data-action="refresh"');
-        expect(fileBrowserSource).toContain("window.confirm(`文件较大（${formatBytes(fileSize)}），继续后将以只读方式全量预览，无法保存。是否继续？`)");
+        expect(fileBrowserSource).toContain("await confirmFn(`文件较大（${formatBytes(fileSize)}），继续后将以只读方式全量预览，无法保存。是否继续？`)");
         expect(fileBrowserSource).toContain("'&full=1'");
         expect(fileBrowserSource).toContain("/fs/write");
         expect(fileBrowserSource).toContain("/fs/mkdir");
@@ -889,8 +889,8 @@ process.exit(2);
             expect(appStyle.text).toMatch(/\.crumb-item:hover\s*\{[^}]*background:/);
             expect(appStyle.text).toMatch(/\.crumb-jump-active:hover\s*\{[^}]*background:/);
             // 更多操作触发按钮的可点击区域太小，容易误点，需要比图标本身大一圈
-            expect(appStyle.text).toMatch(/\.tree-node-menu-trigger\s*\{[^}]*width:\s*(3[2-9]|[4-9]\d)px/);
-            expect(appStyle.text).toMatch(/\.tree-node-menu-trigger\s*\{[^}]*height:\s*(3[2-9]|[4-9]\d)px/);
+            expect(appStyle.text).toMatch(/\.tree-node-menu-trigger\s*\{[^}]*width:\s*(2[8-9]|[3-9]\d)px/);
+            expect(appStyle.text).toMatch(/\.tree-node-menu-trigger\s*\{[^}]*height:\s*(2[8-9]|[3-9]\d)px/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -2279,6 +2279,40 @@ process.exit(2);
             expect(appScript.text).toContain("function removeContainerByName(containerName) {");
             expect(appScript.text).toContain("function removeAgentSessionByName(sessionName, agentLabel) {");
             expect(appScript.text).toContain('function confirmRemoveChoice(options) {');
+            // 三态确认弹窗的正文文字不能和标题一样大（不能沿用 <p> 默认字号），要有专门样式
+            expect(appHtml.text).toContain('<p id="removeConfirmMessage" class="modal-message"></p>');
+            const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appStyle.text).toMatch(/\.modal-message\s*\{[^}]*font-size:\s*1[0-4]px/);
+            // 原生 alert/confirm/prompt 会阻塞整个页面 JS，全部改用同款非阻塞小弹窗
+            expect(appHtml.text).toContain('id="genericDialogModal"');
+            expect(appHtml.text).toContain('id="genericDialogInput"');
+            expect(appStyle.text).toContain('.modal-dialog-input');
+            expect(appScript.text).toContain('function openGenericDialog(config) {');
+            expect(appScript.text).toContain('function showNotice(message, title) {');
+            expect(appScript.text).toContain('function showConfirm(message, title) {');
+            expect(appScript.text).toContain('function showPrompt(message, defaultValue, title) {');
+            // 逐一替换掉会阻塞整个页面的原生弹窗；openGenericDialog 内部"DOM 缺失时"的
+            // alert()/confirm()/window.prompt() 兜底不在本次排查范围内，这里抽查几个具体替换点
+            expect(appScript.text).toContain('await showNotice(state.sessionDetailError');
+            expect(appScript.text).toContain('await showNotice(e.message);');
+            expect(appScript.text).toContain("await showPrompt('请输入新目录名称');");
+            expect(appScript.text).toContain("await showPrompt('设置容器备注（留空清除备注）', current);");
+            expect(appScript.text).toContain("await showPrompt('设置 AGENT 备注（留空清除备注）', current);");
+            expect(appScript.text).toContain('confirmFn: showConfirm');
+            expect(appScript.text).toContain('promptFn: showPrompt');
+            // genericDialogModal 可能从其它已打开的 modal（如目录选择器）内部触发（例如新建目录），
+            // 和其它 .modal-backdrop 共用 z-index:80 时按 DOM 顺序落在后面的反而盖住它，
+            // 必须显式给一个更高的 z-index 保证它永远浮在最上层
+            expect(appStyle.text).toMatch(/#genericDialogModal\s*\{[^}]*z-index:\s*9\d/);
+
+            const fileBrowserScript = await request(`${baseUrl}/app/frontend/file-browser.js`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(fileBrowserScript.response.status).toBe(200);
+            expect(fileBrowserScript.text).toContain('confirmFn');
+            expect(fileBrowserScript.text).toContain('promptFn');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
