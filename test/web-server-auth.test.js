@@ -884,6 +884,13 @@ process.exit(2);
             expect(appStyle.text).toContain('.crumb-jump-active {');
             expect(appStyle.text).toContain('.session-card {');
             expect(appStyle.text).toContain('.session-card-button {');
+            // 面包屑上的"全部容器"/"回到当前会话"是 <button>，通用 button:hover 会带来深色背景，
+            // 不显式覆盖 hover 背景色的话会和文字同色系撞色看不清（同一类问题在 .msg-copy-btn:hover 已修过一次）
+            expect(appStyle.text).toMatch(/\.crumb-item:hover\s*\{[^}]*background:/);
+            expect(appStyle.text).toMatch(/\.crumb-jump-active:hover\s*\{[^}]*background:/);
+            // 更多操作触发按钮的可点击区域太小，容易误点，需要比图标本身大一圈
+            expect(appStyle.text).toMatch(/\.tree-node-menu-trigger\s*\{[^}]*width:\s*(3[2-9]|[4-9]\d)px/);
+            expect(appStyle.text).toMatch(/\.tree-node-menu-trigger\s*\{[^}]*height:\s*(3[2-9]|[4-9]\d)px/);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -913,6 +920,14 @@ process.exit(2);
             expect(appScript.text).toContain('function renderContainerLevel(groups) {');
             expect(appScript.text).toContain('function renderAgentLevel(containerGroup) {');
             expect(appScript.text).toContain('function renderBreadcrumb() {');
+            // 容器卡片"无备注只有一行补充信息"时要用和 agent 卡片一样的 meta（更醒目），
+            // 只有"已设置备注、原名降级为次要信息"时才用 subMeta（更淡），两边字段映射规则必须一致
+            expect(appScript.text).toContain("meta: containerGroup.containerRemark ? containerGroup.containerName : containerGroup.hostPath,");
+            expect(appScript.text).toContain("subMeta: containerGroup.containerRemark ? containerGroup.hostPath : '',");
+            // 更多操作下拉面板在滚动列表底部会被 #sessionList 的 overflow 裁切，
+            // 需要在展开时把面板挂到 body 上用 position:fixed 定位，脱离滚动容器的裁切范围
+            expect(appScript.text).toContain("document.body.appendChild(panel);");
+            expect(appScript.text).toContain("panel.style.position = 'fixed';");
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -1750,7 +1765,7 @@ process.exit(2);
             expect(appScript.text).toContain('const isActive = target === state.active;');
             expect(appScript.text).toContain('const wasActiveContainer = parseSessionKey(state.active).containerName === target;');
             // 点外部/Escape 关闭
-            expect(appScript.text).toContain('if (openTreeNodeMenu && !openTreeNodeMenu.wrap.contains(target)) {');
+            expect(appScript.text).toContain('if (openTreeNodeMenu && !openTreeNodeMenu.containsTarget(target)) {');
             expect(appScript.text).toContain('if (event.key === \'Escape\' && openTreeNodeMenu) {');
 
             const appStyle = await request(`${baseUrl}/app/frontend/app.css`, {

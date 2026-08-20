@@ -577,6 +577,9 @@ textarea:focus-visible {
 
 .crumb-item:hover {
     transform: none;
+    /* 不显式设置背景色的话，通用 button:hover 规则的深色背景会覆盖进来，
+       和同色系的文字撞色看不清，这里保持透明背景即可 */
+    background: transparent;
     text-decoration: underline;
 }
 
@@ -606,6 +609,11 @@ textarea:focus-visible {
     border-radius: 999px;
 }
 
+.crumb-jump-active:hover {
+    /* 同 .crumb-item:hover，避免通用 button:hover 的深色背景和文字撞色 */
+    background: var(--panel-soft);
+}
+
 .session-card {
     position: relative;
 }
@@ -623,7 +631,7 @@ textarea:focus-visible {
 
 .session-card-container .session-card-button,
 .session-card-agent .session-card-button {
-    padding-right: 38px;
+    padding-right: 46px;
 }
 
 .session-card-button:hover {
@@ -761,18 +769,18 @@ textarea:focus-visible {
 }
 
 .tree-node-menu-trigger {
-    width: 26px;
-    height: 26px;
+    width: 34px;
+    height: 34px;
     padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 8px;
+    border-radius: 9px;
 }
 
 .tree-node-menu-trigger svg {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     fill: currentColor;
 }
 
