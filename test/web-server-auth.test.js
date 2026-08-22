@@ -951,6 +951,8 @@ process.exit(2);
         expect(fileBrowserSource).toContain('state.selectedFile.size = new TextEncoder().encode(nextValue).length;');
         expect(fileBrowserSource).toContain("parts.push('符号链接');");
         expect(fileBrowserSource).toContain('function openSymlinkEntry(entry)');
+        expect(fileBrowserSource).toContain('function sanitizeDisplayText(value)');
+        expect(fileBrowserSource).toContain('escapeHtml(sanitizeDisplayText(entry.name || entry.path || \'未命名\'))');
         expect(fileBrowserSource).toContain("if (entry.kind === 'symlink') {\n                        openSymlinkEntry(entry);");
         expect(fileBrowserSource).toContain('files-entry-parent');
         expect(fileBrowserSource).toContain('请输入新目录名称');
