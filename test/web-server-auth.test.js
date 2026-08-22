@@ -391,6 +391,26 @@ if (command.includes('__MANYOYO_FS_MKDIR__')) {
     }));
     process.exit(0);
 }
+if (command.includes('__MANYOYO_FS_CREATE__')) {
+    const matched = command.match(/const requestedPath = ([\\s\\S]+?);\\n\\ntry \\{/);
+    if (!matched) {
+        process.stderr.write('missing path');
+        process.exit(5);
+    }
+    const targetPath = JSON.parse(matched[1]);
+    const hostTargetPath = toHostWorkspacePath(targetPath);
+    fs.writeFileSync(hostTargetPath, '', 'utf-8');
+    const stat = fs.statSync(hostTargetPath);
+    process.stdout.write(JSON.stringify({
+        path: targetPath,
+        name: path.basename(targetPath),
+        kind: 'file',
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+        created: true
+    }));
+    process.exit(0);
+}
 process.stderr.write('unknown command');
 process.exit(2);
 `, 'utf-8');
@@ -477,6 +497,25 @@ process.exit(2);
                 path: '/workspace/new-dir',
                 name: 'new-dir',
                 kind: 'directory',
+                created: true
+            }));
+
+            const createFileRes = await request(`${baseUrl}/api/sessions/test/fs/create`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    path: '/workspace/new-file.txt'
+                })
+            });
+            expect(createFileRes.response.status).toBe(200);
+            expect(createFileRes.json).toEqual(expect.objectContaining({
+                path: '/workspace/new-file.txt',
+                name: 'new-file.txt',
+                kind: 'file',
+                size: 0,
                 created: true
             }));
         } finally {
@@ -832,6 +871,11 @@ process.exit(2);
         expect(fileBrowserSource).toContain("'&full=1'");
         expect(fileBrowserSource).toContain("/fs/write");
         expect(fileBrowserSource).toContain("/fs/mkdir");
+        expect(fileBrowserSource).toContain("/fs/create");
+        expect(fileBrowserSource).toContain('data-action="new-file">新建文件</button>');
+        expect(fileBrowserSource).toContain('请输入新文件名称');
+        expect(fileBrowserSource).toContain('function updatePreviewMeta()');
+        expect(fileBrowserSource).toContain('state.selectedFile.size = new TextEncoder().encode(nextValue).length;');
         expect(fileBrowserSource).toContain('files-entry-parent');
         expect(fileBrowserSource).toContain('请输入新目录名称');
         expect(fileBrowserSource).toContain('saveBtn.disabled = !isEditablePreview();');
@@ -849,6 +893,7 @@ process.exit(2);
         expect(appStyleSource).toContain('.files-toolbar-path-group');
         expect(appStyleSource).toContain('.files-toolbar-path-input');
         expect(appStyleSource).toContain('.files-toolbar-meta');
+        expect(appStyleSource).toContain('flex-wrap: nowrap;');
         expect(appStyleSource).toContain('flex-wrap: wrap;');
         expect(appStyleSource).toContain('overflow-wrap: anywhere;');
         expect(appStyleSource).toContain('.files-entry:hover');

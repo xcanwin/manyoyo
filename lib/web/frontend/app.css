@@ -1082,7 +1082,7 @@ body.workspace-switcher-open .workspace-switcher-panel {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     padding: 12px 14px;
     border-bottom: 1px solid var(--line);
     background: rgba(255, 251, 244, 0.96);
@@ -2173,6 +2173,20 @@ body.composer-options-open .composer-options-panel {
     .files-sidebar {
         border-right: 0;
         border-bottom: 1px solid var(--line);
+    }
+
+    .files-toolbar {
+        flex-wrap: wrap;
+    }
+
+    .files-toolbar-path-group {
+        flex-basis: 100%;
+    }
+
+    .files-toolbar-meta {
+        flex-basis: 100%;
+        flex-wrap: wrap;
+        margin-left: 0;
     }
 
     .files-browser[data-mobile-pane="list"] .files-preview {
