@@ -526,6 +526,79 @@ process.exit(2);
         }
     });
 
+    test('should surface resolved symlink target and kind via fs/list, following multi-hop chains', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-fs-symlink-'));
+        const port = await getFreePort();
+        const fakeDocker = path.join(tempHost, 'fake-docker.js');
+        const browseDir = path.join(tempHost, 'browse');
+        fs.mkdirSync(browseDir, { recursive: true });
+        const realFile = path.join(browseDir, 'real.txt');
+        fs.writeFileSync(realFile, 'secret content', 'utf-8');
+        // 三级链式符号链接：chained-link.txt -> link2 -> link1 -> real.txt
+        fs.symlinkSync(realFile, path.join(browseDir, 'link1'));
+        fs.symlinkSync(path.join(browseDir, 'link1'), path.join(browseDir, 'link2'));
+        fs.symlinkSync(path.join(browseDir, 'link2'), path.join(browseDir, 'chained-link.txt'));
+        fs.symlinkSync(path.join(browseDir, 'does-not-exist'), path.join(browseDir, 'broken-link.txt'));
+
+        // 这里让 fake docker 真正执行 buildContainerFileListCommand 生成的脚本本体（而不是手写返回值），
+        // 因为要验证的正是该脚本里新加的符号链接解析逻辑本身是否正确（多级链、断链）。
+        fs.writeFileSync(fakeDocker, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+const command = args[4] || '';
+if (args[0] !== 'exec') {
+    process.stderr.write('unexpected docker args');
+    process.exit(1);
+}
+if (command.includes('__MANYOYO_FS_LIST__')) {
+    const matched = command.match(/node <<'__MANYOYO_NODE__'\\n([\\s\\S]*)\\n__MANYOYO_NODE__/);
+    if (!matched) {
+        process.stderr.write('missing script body');
+        process.exit(2);
+    }
+    eval(matched[1]);
+    process.exit(0);
+}
+process.stderr.write('unknown command');
+process.exit(9);
+`, 'utf-8');
+        fs.chmodSync(fakeDocker, 0o755);
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDocker,
+                containerExists: () => true,
+                getContainerStatus: () => 'running'
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const listRes = await request(`${baseUrl}/api/sessions/test/fs/list?path=${encodeURIComponent(browseDir)}`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(listRes.response.status).toBe(200);
+
+            const chained = listRes.json.entries.find(entry => entry.name === 'chained-link.txt');
+            expect(chained).toEqual(expect.objectContaining({
+                kind: 'symlink',
+                symlinkTarget: fs.realpathSync(realFile),
+                symlinkTargetKind: 'file'
+            }));
+
+            const broken = listRes.json.entries.find(entry => entry.name === 'broken-link.txt');
+            expect(broken).toEqual(expect.objectContaining({
+                kind: 'symlink',
+                symlinkTarget: null,
+                symlinkTargetKind: null
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should stream whitelisted image files via fs/raw and reject non-image extensions without touching the container', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-fs-raw-'));
         const port = await getFreePort();
@@ -876,6 +949,9 @@ process.exit(2);
         expect(fileBrowserSource).toContain('请输入新文件名称');
         expect(fileBrowserSource).toContain('function updatePreviewMeta()');
         expect(fileBrowserSource).toContain('state.selectedFile.size = new TextEncoder().encode(nextValue).length;');
+        expect(fileBrowserSource).toContain("parts.push('符号链接');");
+        expect(fileBrowserSource).toContain('function openSymlinkEntry(entry)');
+        expect(fileBrowserSource).toContain("if (entry.kind === 'symlink') {\n                        openSymlinkEntry(entry);");
         expect(fileBrowserSource).toContain('files-entry-parent');
         expect(fileBrowserSource).toContain('请输入新目录名称');
         expect(fileBrowserSource).toContain('saveBtn.disabled = !isEditablePreview();');
