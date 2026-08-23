@@ -306,6 +306,61 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
+    test('should redirect unauthenticated /shadcn to its own login page and serve it after login', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-shadcn-route-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+
+            const unauth = await request(`${baseUrl}/shadcn`, { redirect: 'manual' });
+            expect(unauth.response.status).toBe(302);
+            expect(unauth.response.headers.get('location')).toBe('/shadcn/auth/login');
+
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const authed = await request(`${baseUrl}/shadcn`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(authed.response.status).toBe(200);
+            expect(authed.response.headers.get('content-type')).toContain('text/html');
+            expect(authed.text).toContain('<div id="root">');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should serve the shadcn login page without auth and let an already-authed visit reach it too', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-shadcn-login-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+
+            const unauth = await request(`${baseUrl}/shadcn/auth/login`);
+            expect(unauth.response.status).toBe(200);
+            expect(unauth.response.headers.get('content-type')).toContain('text/html');
+            expect(unauth.text).toContain('<div id="root">');
+
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const authed = await request(`${baseUrl}/shadcn/auth/login`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(authed.response.status).toBe(200);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should list and read container files via web api', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-container-fs-'));
         const port = await getFreePort();

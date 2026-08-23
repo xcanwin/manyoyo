@@ -32,7 +32,9 @@
     "scripts": {
         "dev:release": "node scripts/dev-release.js",
         "build:web-editor": "node scripts/build-web-code-editor.js",
-        "prepack": "npm run build:web-editor",
+        "build:web-shadcn": "node scripts/build-web-shadcn.js",
+        "dev:web-shadcn": "node scripts/dev-web-shadcn.js",
+        "prepack": "npm run build:web-editor && npm run build:web-shadcn",
         "prepare": "npm run build:web-editor",
         "install-link": "npm link",
         "test": "jest --coverage",

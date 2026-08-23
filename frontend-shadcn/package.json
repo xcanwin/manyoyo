@@ -1,0 +1,52 @@
+{
+  "name": "frontend-shadcn",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:single": "npm run build && node scripts/emit-shadcn-html.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{ts,tsx}\"",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@base-ui/react": "latest",
+    "@fontsource-variable/geist": "latest",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "@tailwindcss/typography": "^0.5",
+    "@tailwindcss/vite": "^4",
+    "class-variance-authority": "latest",
+    "clsx": "latest",
+    "dompurify": "latest",
+    "lucide-react": "latest",
+    "marked": "^18.0.9",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "tailwind-merge": "latest",
+    "tailwindcss": "^4",
+    "tw-animate-css": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6",
+    "eslint": "^10",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17",
+    "prettier": "^3.8.3",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "shadcn": "^4.19.0",
+    "typescript": "~6",
+    "typescript-eslint": "^8",
+    "vite": "^8",
+    "vite-plugin-singlefile": "^2"
+  },
+  "allowScripts": {}
+}

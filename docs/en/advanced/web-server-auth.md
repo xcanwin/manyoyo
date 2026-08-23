@@ -66,6 +66,37 @@ Current anonymous allowlist:
 - `/auth/logout`
 - `/auth/frontend/login.css`
 - `/auth/frontend/login.js`
+- `/shadcn/auth/login` (see the shadcn/ui preview frontend below)
+
+## shadcn/ui Preview Frontend (Experimental)
+
+`serve` mode also ships an experimental shadcn/ui-based frontend, meant to gradually replace the existing frontend under `lib/web/frontend/`. Both coexist without affecting each other.
+
+- Preview URL: `http://127.0.0.1:3000/shadcn`; when not logged in it redirects to `http://127.0.0.1:3000/shadcn/auth/login`, then back to `/shadcn` after a successful login
+- The login page reuses the same `/auth/login` endpoint and cookie as the existing frontend, so there's no separate account
+- Source lives in `frontend-shadcn/` at the repo root, a standalone Vite + React project that doesn't affect the rest of the project's CommonJS/no-build conventions
+
+Before working on it for the first time, install its own dependencies separately (it's a large, separate tree that won't slow down everyday `npm install`):
+
+```bash
+cd frontend-shadcn && npm install && cd ..
+```
+
+Then, depending on what you need:
+
+```bash
+# Just want to see the current build: build once, then preview via my serve as usual
+npm run build:web-shadcn
+manyoyo serve
+
+# Editing frontend-shadcn/src and want live reload (HMR) — two terminals:
+manyoyo serve                # Terminal 1: the real backend (containers, sessions, terminal WebSocket)
+npm run dev:web-shadcn       # Terminal 2: Vite dev server, proxies /api and /auth to 127.0.0.1:3000 by default
+```
+
+If `my serve` listens on an address other than the default `127.0.0.1:3000`, override the proxy target for `dev:web-shadcn` with the `MANYOYO_SERVE_URL` environment variable.
+
+On publish (`npm publish`/`npm pack`), `frontend-shadcn` is rebuilt automatically and the output is baked into `lib/web/frontend/shadcn.html`; running `my serve` in production needs no frontend toolchain beyond Node itself.
 
 ## Login and API Access Example
 
