@@ -24,6 +24,16 @@ import { apiGet, apiPut, type SessionSummary } from "@/lib/api"
 import { CLI_PROMPT_TEMPLATES } from "@/lib/agent-templates"
 
 const CUSTOM_CLI = "custom"
+// 与旧版前端 agentCliSelect 的空值选项（"继承容器默认"）对齐：
+// 选中后按 getInheritedContainerTemplateText 的优先级回填预览文本，
+// 但保存时如果仍停留在这个选项，要显式清空覆盖字段，让它真正走继承
+const INHERIT_CLI = "__inherit__"
+
+function getInheritedTemplateText(detail: Record<string, unknown>): string {
+  const containerText = String(detail.containerAgentPromptCommand || "").trim()
+  if (containerText) return containerText
+  return String(detail.agentPromptCommand || "").trim()
+}
 
 export function AgentTemplateDialog({
   open,
@@ -42,6 +52,7 @@ export function AgentTemplateDialog({
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState("")
+  const detailRef = React.useRef<Record<string, unknown>>({})
 
   React.useEffect(() => {
     if (!open || !session) return
@@ -50,10 +61,15 @@ export function AgentTemplateDialog({
     apiGet(`/api/sessions/${encodeURIComponent(session.name)}/detail`)
       .then((data) => {
         const detail = (data.detail || {}) as Record<string, unknown>
+        detailRef.current = detail
         const value = isDefaultAgent
           ? String(detail.containerAgentPromptCommand || "")
           : String(detail.agentPromptCommandOverride || "")
         setTemplate(value)
+        if (!isDefaultAgent && !value) {
+          setCli(INHERIT_CLI)
+          return
+        }
         const matchedCli = Object.entries(CLI_PROMPT_TEMPLATES).find(
           ([, tpl]) => tpl === value
         )?.[0]
@@ -66,6 +82,10 @@ export function AgentTemplateDialog({
   function handleCliChange(value: string | null) {
     const next = value ?? CUSTOM_CLI
     setCli(next)
+    if (next === INHERIT_CLI) {
+      setTemplate(getInheritedTemplateText(detailRef.current))
+      return
+    }
     if (next !== CUSTOM_CLI) {
       setTemplate(CLI_PROMPT_TEMPLATES[next])
     }
@@ -78,7 +98,7 @@ export function AgentTemplateDialog({
     try {
       const body = isDefaultAgent
         ? { containerAgentPromptCommand: template }
-        : { agentPromptCommandOverride: template }
+        : { agentPromptCommandOverride: cli === INHERIT_CLI ? "" : template }
       await apiPut(`/api/sessions/${encodeURIComponent(session.name)}/agent-template`, body)
       onOpenChange(false)
       onSaved()
@@ -112,6 +132,9 @@ export function AgentTemplateDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
+                    {!isDefaultAgent ? (
+                      <SelectItem value={INHERIT_CLI}>继承容器默认</SelectItem>
+                    ) : null}
                     <SelectItem value={CUSTOM_CLI}>自定义</SelectItem>
                     <SelectItem value="claude">claude</SelectItem>
                     <SelectItem value="codex">codex</SelectItem>

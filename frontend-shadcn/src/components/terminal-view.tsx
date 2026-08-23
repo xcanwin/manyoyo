@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit"
 import { Terminal } from "@xterm/xterm"
 import "@xterm/xterm/css/xterm.css"
 
+import { cn } from "@/lib/utils"
 import type { SessionSummary } from "@/lib/api"
 
 const MIN_COLS = 40
@@ -35,6 +36,20 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
   const containerRef = React.useRef<HTMLDivElement | null>(null)
   const socketRef = React.useRef<WebSocket | null>(null)
   const [status, setStatus] = React.useState("")
+  const [ctrlMode, setCtrlMode] = React.useState(false)
+  const [altMode, setAltMode] = React.useState(false)
+  const ctrlModeRef = React.useRef(false)
+  const altModeRef = React.useRef(false)
+  React.useEffect(() => {
+    ctrlModeRef.current = ctrlMode
+  }, [ctrlMode])
+  React.useEffect(() => {
+    altModeRef.current = altMode
+  }, [altMode])
+
+  // 与旧版前端 isActiveSessionHistoryOnly 对齐：仅历史会话没有可交互容器，
+  // 不应该自动建立终端连接（否则会静默触发后端新建容器）
+  const historyOnly = session?.status === "history"
 
   function sendKey(data: string) {
     const socket = socketRef.current
@@ -45,7 +60,7 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
 
   React.useEffect(() => {
     const container = containerRef.current
-    if (!session || !container) return
+    if (!session || !container || historyOnly) return
 
     const term = new Terminal({
       convertEol: true,
@@ -82,10 +97,19 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
     socket.onclose = () => setStatus("连接已断开")
     socket.onerror = () => setStatus("连接出错")
 
+    // 与旧版前端终端面板的 ctrl/alt 修饰键切换对齐：单字符输入时按当前修饰状态转换
     const dataDisposable = term.onData((data) => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "input", data }))
+      if (!data || socket.readyState !== WebSocket.OPEN) return
+      let send = data
+      if (ctrlModeRef.current && data.length === 1) {
+        const code = data.charCodeAt(0)
+        if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122)) {
+          send = String.fromCharCode(code & 0x1f)
+        }
+      } else if (altModeRef.current && data.length === 1) {
+        send = "\x1b" + data
       }
+      socket.send(JSON.stringify({ type: "input", data: send }))
     })
 
     let resizeTimer = 0
@@ -107,12 +131,21 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
       term.dispose()
       socketRef.current = null
     }
-  }, [session])
+  }, [session, historyOnly])
 
   if (!session) {
     return (
       <div className="flex h-full items-center justify-center bg-zinc-950 p-6 text-center text-sm text-zinc-400">
         请先在左侧选择一个容器 / AGENT
+      </div>
+    )
+  }
+
+  if (historyOnly) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-1 bg-zinc-950 p-6 text-center text-sm text-zinc-400">
+        <p className="font-medium text-zinc-200">容器不可用</p>
+        <p>当前会话只有历史记录，没有可访问的运行中容器，无法连接终端。</p>
       </div>
     )
   }
@@ -132,6 +165,26 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
               {key.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setCtrlMode((value) => !value)}
+            className={cn(
+              "rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
+              ctrlMode && "border-primary bg-primary text-primary-foreground"
+            )}
+          >
+            ctrl
+          </button>
+          <button
+            type="button"
+            onClick={() => setAltMode((value) => !value)}
+            className={cn(
+              "rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
+              altMode && "border-primary bg-primary text-primary-foreground"
+            )}
+          >
+            alt
+          </button>
         </div>
       </div>
       <div ref={containerRef} className="min-h-0 flex-1 p-2" />

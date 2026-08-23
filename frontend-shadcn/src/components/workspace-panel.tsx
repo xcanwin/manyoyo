@@ -8,12 +8,17 @@ import {
   apiStream,
   mergeTraceIntoReply,
   type ChatMessage,
+  type SessionDetail,
   type SessionSummary,
   type TraceEvent,
 } from "@/lib/api"
+import { useAgentRecoveryPoll } from "@/hooks/use-agent-recovery-poll"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AgentTemplateDialog } from "@/components/agent-template-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FilesPanel } from "@/components/files-panel"
 import { MarkdownContent } from "@/components/markdown-content"
 import { ModelDialog } from "@/components/model-dialog"
@@ -48,11 +53,82 @@ const OTHER_VIEWS = (Object.keys(VIEW_LABELS) as View[]).filter(
 const STREAMING_MESSAGE_ID = "__streaming__"
 const STREAMING_TRACE_ID = "__streaming_trace__"
 
-const CHECK_ROWS: Array<[string, string]> = [
-  ["容器运行时", "尚未接入（仍是占位数据）"],
-  ["镜像版本", "尚未接入（仍是占位数据）"],
-  ["端口占用", "尚未接入（仍是占位数据）"],
-]
+const IMAGE_VERSION_TAG_PATTERN = /^(\d+\.\d+\.\d+)-([A-Za-z0-9][A-Za-z0-9_.-]*)$/
+
+type Tone = "ok" | "warn" | "danger" | "info"
+
+const TONE_BADGE_VARIANT: Record<Tone, "default" | "secondary" | "destructive" | "outline"> = {
+  ok: "secondary",
+  warn: "outline",
+  danger: "destructive",
+  info: "outline",
+}
+
+const TEMPLATE_SOURCE_LABELS: Record<string, string> = {
+  agent: "当前 AGENT 覆盖",
+  container: "容器默认模板",
+  inferred: "从启动命令推导",
+  none: "未配置",
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  user: "用户",
+  assistant: "AGENT",
+  system: "系统",
+}
+
+function statusInfo(status: string): { label: string; tone: Tone } {
+  if (status === "history") return { label: "仅历史", tone: "warn" }
+  if (status.toLowerCase().includes("up")) return { label: "运行中", tone: "ok" }
+  return { label: "已停止", tone: "danger" }
+}
+
+function resumeStatus(detail: SessionDetail): { value: string; tone: Tone; detail: string } {
+  const lastResumeText = detail.lastResumeAt ? formatTime(detail.lastResumeAt) : "暂无记录"
+  if (detail.lastResumeOk === true) {
+    return { value: "最近成功", tone: "ok", detail: `最近一次 resume 成功，时间：${lastResumeText}。` }
+  }
+  if (detail.lastResumeOk === false) {
+    return {
+      value: "最近失败",
+      tone: "danger",
+      detail: detail.lastResumeError
+        ? `最近一次 resume 失败：${detail.lastResumeError}`
+        : `最近一次 resume 失败，时间：${lastResumeText}。`,
+    }
+  }
+  if (!detail.resumeSupported) {
+    return { value: "不支持", tone: "warn", detail: "当前 Agent 程序或模板不支持 resume。" }
+  }
+  return { value: "未执行", tone: "warn", detail: "支持 resume，但当前会话还没有最近一次执行记录。" }
+}
+
+type InfoRow = { label: string; value: string; tone?: Tone; detail?: string }
+
+function InfoCard({ title, rows }: { title: string; rows: InfoRow[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col divide-y">
+        {rows.map((row) => (
+          <div key={row.label} className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-muted-foreground">{row.label}</span>
+              {row.tone ? (
+                <Badge variant={TONE_BADGE_VARIANT[row.tone]}>{row.value}</Badge>
+              ) : (
+                <span className="truncate text-sm font-medium">{row.value}</span>
+              )}
+            </div>
+            {row.detail ? <p className="text-xs text-muted-foreground">{row.detail}</p> : null}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
 
 function formatTime(value: string): string {
   if (!value) return ""
@@ -154,41 +230,193 @@ function ActivityView({
   )
 }
 
-function SummaryView({ rows }: { rows: Array<[string, string]> }) {
+function EmptyPane({ text }: { text: string }) {
   return (
-    <div className="h-full overflow-auto p-4">
-      <div className="flex flex-col divide-y rounded-lg border">
-        {rows.map(([label, value]) => (
-          <div
-            key={label}
-            className="flex items-center justify-between gap-4 px-3 py-2 text-sm"
-          >
-            <span className="text-muted-foreground">{label}</span>
-            <span className="truncate font-medium">{value}</span>
-          </div>
-        ))}
-      </div>
+    <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+      {text}
     </div>
   )
 }
 
-function DetailView({ session }: { session: SessionSummary | null }) {
-  if (!session) {
-    return <SummaryView rows={[["提示", "请先选择左侧的容器 / AGENT"]]} />
-  }
+// 与旧版前端"检查"标签页的 renderCheckCard 对齐：容器状态 / Agent 输入 /
+// Resume 健康 / 镜像版本 / 工作目录映射 + 最近问题（仅在有 resume 错误时展示）
+function CheckView({ detail }: { detail: SessionDetail | null }) {
+  if (!detail) return <EmptyPane text="请先选择左侧的容器 / AGENT" />
+
+  const status = statusInfo(detail.status)
+  const resume = resumeStatus(detail)
+  const imageVersionValid = IMAGE_VERSION_TAG_PATTERN.test(detail.applied.imageVersion || "")
+  const workdirConfigured = Boolean(detail.applied.hostPath && detail.applied.containerPath)
+
   return (
-    <SummaryView
-      rows={[
-        ["容器状态", session.status],
-        ["镜像", session.image || "未知"],
-        ["CLI", session.agentProgram || "（无）"],
-        ["模型", session.model || "跟随默认"],
-        ["工作目录", session.hostPath || "未配置"],
-        ["容器内目录", session.containerPath || "未配置"],
-        ["消息数", String(session.messageCount)],
-        ["更新时间", formatTime(session.updatedAt || "")],
-      ]}
-    />
+    <div className="flex h-full flex-col gap-3 overflow-auto p-4">
+      <InfoCard
+        title="运行检查"
+        rows={[
+          {
+            label: "容器状态",
+            value: status.label,
+            tone: status.tone,
+            detail:
+              status.tone === "ok" ? "容器处于可交互状态。" : "当前不是活跃运行态，部分功能可能受限。",
+          },
+          {
+            label: "Agent 输入",
+            value: detail.agentEnabled ? "已配置" : "未配置",
+            tone: detail.agentEnabled ? "ok" : "warn",
+            detail: detail.agentEnabled ? "活动页可直接发送 Agent 提示词。" : "当前会话不支持 Agent 模式。",
+          },
+          { label: "Resume 健康", value: resume.value, tone: resume.tone, detail: resume.detail },
+          {
+            label: "镜像版本",
+            value: imageVersionValid ? "格式正常" : "格式异常",
+            tone: imageVersionValid ? "ok" : "danger",
+            detail: detail.applied.imageVersion
+              ? `当前值：${detail.applied.imageVersion}。建议保持 x.y.z-后缀 格式，便于 manyoyo 的版本校验。`
+              : "缺少 imageVersion，manyoyo 的版本校验会失效。",
+          },
+          {
+            label: "工作目录映射",
+            value: workdirConfigured ? "已配置" : "缺失",
+            tone: workdirConfigured ? "ok" : "danger",
+            detail: workdirConfigured
+              ? "宿主目录与容器目录都已配置。"
+              : "hostPath / containerPath 是容器会话最关键的上下文。",
+          },
+        ]}
+      />
+      {detail.lastResumeError ? (
+        <InfoCard
+          title="最近问题"
+          rows={[{ label: "Resume 错误", value: "有错误输出", tone: "danger", detail: detail.lastResumeError }]}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+// 与旧版前端"配置"标签页对齐：基础配置 / 路径与资源 / 命令与 Agent
+function ConfigView({ detail }: { detail: SessionDetail | null }) {
+  if (!detail) return <EmptyPane text="请先选择左侧的容器 / AGENT" />
+
+  const applied = detail.applied
+  const templateSourceLabel = TEMPLATE_SOURCE_LABELS[detail.agentPromptSource] || "未配置"
+  const commandRows: InfoRow[] = []
+  if (applied.shellPrefix) commandRows.push({ label: "shellPrefix", value: applied.shellPrefix })
+  if (applied.shell) commandRows.push({ label: "shell", value: applied.shell })
+  if (applied.shellSuffix) commandRows.push({ label: "shellSuffix", value: applied.shellSuffix })
+  if (applied.defaultCommand && applied.defaultCommand !== applied.shell) {
+    commandRows.push({ label: "启动命令", value: applied.defaultCommand })
+  } else if (!applied.shell) {
+    commandRows.push({ label: "启动命令", value: applied.defaultCommand || "—" })
+  }
+  commandRows.push({ label: "Agent 模板", value: detail.agentPromptCommand || "—" })
+  commandRows.push({ label: "模板来源", value: templateSourceLabel })
+  commandRows.push({ label: "yolo", value: applied.yolo || "—" })
+
+  return (
+    <div className="flex h-full flex-col gap-3 overflow-auto p-4">
+      <InfoCard
+        title="基础配置"
+        rows={[
+          { label: "AGENT", value: detail.agentName || detail.name || "—" },
+          { label: "containerName", value: applied.containerName || detail.containerName || "—" },
+          { label: "imageName", value: applied.imageName || detail.image || "—" },
+          { label: "imageVersion", value: applied.imageVersion || "—" },
+          { label: "containerMode", value: applied.containerMode || "default" },
+        ]}
+      />
+      <InfoCard
+        title="路径与资源"
+        rows={[
+          { label: "hostPath", value: applied.hostPath || "—" },
+          { label: "containerPath", value: applied.containerPath || "—" },
+          { label: "env 数量", value: String(applied.envCount || 0) },
+          { label: "volume 数量", value: String(applied.volumeCount || 0) },
+          { label: "port 数量", value: String(applied.portCount || 0) },
+        ]}
+      />
+      <InfoCard title="命令与 Agent" rows={commandRows} />
+    </div>
+  )
+}
+
+// 与旧版前端"详情"标签页对齐：会话概览 / Agent 运行 / 用量统计 / 最近活动
+function DetailView({ detail }: { detail: SessionDetail | null }) {
+  if (!detail) return <EmptyPane text="请先选择左侧的容器 / AGENT" />
+
+  const status = statusInfo(detail.status)
+  const resume = resumeStatus(detail)
+  const templateSourceLabel = TEMPLATE_SOURCE_LABELS[detail.agentPromptSource] || "未配置"
+  const latestRoleLabel = ROLE_LABELS[detail.latestRole] || "暂无"
+  const latestTimestampText = detail.latestTimestamp ? formatTime(detail.latestTimestamp) : "暂无"
+
+  return (
+    <div className="flex h-full flex-col gap-3 overflow-auto p-4">
+      <InfoCard
+        title="会话概览"
+        rows={[
+          { label: "AGENT", value: detail.agentName || detail.name },
+          { label: "容器", value: detail.containerName || "—" },
+          { label: "状态", value: status.label, tone: status.tone },
+          { label: "镜像", value: detail.image || detail.applied.imageName || "—" },
+          { label: "最近更新", value: detail.updatedAt ? formatTime(detail.updatedAt) : "—" },
+          { label: "消息数", value: String(detail.messageCount || 0) },
+        ]}
+      />
+      <InfoCard
+        title="Agent 运行"
+        rows={[
+          { label: "已启用", value: detail.agentEnabled ? "是" : "否", tone: detail.agentEnabled ? "ok" : "warn" },
+          { label: "程序", value: detail.agentProgram || "—" },
+          { label: "模板来源", value: templateSourceLabel },
+          {
+            label: "支持 resume",
+            value: detail.resumeSupported ? "是" : "否",
+            tone: detail.resumeSupported ? "ok" : "warn",
+          },
+          { label: "最近 resume", value: detail.lastResumeAt ? formatTime(detail.lastResumeAt) : "暂无" },
+          {
+            label: "最近结果",
+            value: detail.lastResumeOk == null ? "暂无" : detail.lastResumeOk ? "成功" : "失败",
+            tone: detail.lastResumeOk == null ? "info" : detail.lastResumeOk ? "ok" : "danger",
+          },
+        ]}
+      />
+      <InfoCard
+        title="用量统计"
+        rows={
+          detail.usageTotal
+            ? [
+                { label: "累计输入 tokens", value: String(detail.usageTotal.inputTokens) },
+                { label: "累计输出 tokens", value: String(detail.usageTotal.outputTokens) },
+                {
+                  label: "累计花费",
+                  value:
+                    typeof detail.usageTotal.costUsd === "number"
+                      ? `$${detail.usageTotal.costUsd.toFixed(4)}`
+                      : "暂不支持",
+                },
+              ]
+            : [
+                {
+                  label: "状态",
+                  value: "暂无数据",
+                  tone: "info",
+                  detail: "当前 Agent 程序不支持用量统计，或还未执行过对话。",
+                },
+              ]
+        }
+      />
+      <InfoCard
+        title="最近活动"
+        rows={[
+          { label: "最近角色", value: latestRoleLabel },
+          { label: "最近时间", value: latestTimestampText },
+          { label: "resume 状态", value: resume.value, tone: resume.tone },
+        ]}
+      />
+    </div>
   )
 }
 
@@ -217,25 +445,36 @@ function Composer({
   onOpenCliTemplate: () => void
   onOpenModel: () => void
 }) {
+  const isMobile = useIsMobile()
+  // 与旧版前端一致：Agent 模式下，如果当前会话本身不支持 Agent 输入，禁用发送
+  const agentUnavailable = mode === "agent" && Boolean(session) && !session?.agentEnabled
+  const inputDisabled = disabled || agentUnavailable
+
   return (
     <div className="border-t p-3">
       <Textarea
         placeholder={
           disabled
             ? "请先在左侧选择一个容器 / AGENT"
-            : mode === "command"
-              ? "输入容器命令，例如: ls -la"
-              : "输入要发给 AGENT 的内容"
+            : agentUnavailable
+              ? "当前会话不支持 Agent 模式"
+              : mode === "command"
+                ? "输入容器命令，例如: ls -la"
+                : "输入要发给 AGENT 的内容"
         }
         className="min-h-16 resize-none"
         value={draft}
-        disabled={disabled}
+        disabled={inputDisabled}
         onChange={(event) => onDraftChange(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault()
-            if (!sending) onSend()
-          }
+          // 输入法组词期间的 Enter（选字确认）不应触发发送
+          if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+          // 窄屏：Enter 始终换行，发送需点击发送按钮
+          if (isMobile) return
+          // Shift+Enter / Alt+Enter 换行，其余 Enter 发送
+          if (event.shiftKey || event.altKey) return
+          event.preventDefault()
+          if (!sending && !inputDisabled) onSend()
         }}
       />
       <div className="mt-2 flex items-center justify-between gap-2">
@@ -288,7 +527,7 @@ function Composer({
             停止
           </Button>
         ) : (
-          <Button size="sm" onClick={onSend} disabled={disabled}>
+          <Button size="sm" onClick={onSend} disabled={inputDisabled}>
             <SendIcon data-icon="inline-start" />
             发送
           </Button>
@@ -314,28 +553,52 @@ export function WorkspacePanel({
   const [loadError, setLoadError] = React.useState("")
   const [cliDialogOpen, setCliDialogOpen] = React.useState(false)
   const [modelDialogOpen, setModelDialogOpen] = React.useState(false)
+  const [sessionDetail, setSessionDetail] = React.useState<SessionDetail | null>(null)
+
+  const loadMessages = React.useCallback(
+    (silent?: boolean) => {
+      if (!activeSession) {
+        setMessages([])
+        return Promise.resolve()
+      }
+      if (!silent) setLoadError("")
+      return apiGet(`/api/sessions/${encodeURIComponent(activeSession.name)}/messages`)
+        .then((data) => {
+          setMessages(Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [])
+        })
+        .catch((err) => {
+          if (!silent) setLoadError(err instanceof Error ? err.message : "加载消息失败")
+        })
+    },
+    [activeSession?.name]
+  )
+
+  const loadDetail = React.useCallback(() => {
+    if (!activeSession) {
+      setSessionDetail(null)
+      return Promise.resolve()
+    }
+    return apiGet(`/api/sessions/${encodeURIComponent(activeSession.name)}/detail`)
+      .then((data) => setSessionDetail((data.detail as SessionDetail) || null))
+      .catch(() => {
+        // 静默失败：检查/配置/详情页保留上一次成功加载的数据
+      })
+  }, [activeSession?.name])
 
   React.useEffect(() => {
-    if (!activeSession) {
-      setMessages([])
-      return
-    }
-    let cancelled = false
-    setLoadError("")
-    apiGet(`/api/sessions/${encodeURIComponent(activeSession.name)}/messages`)
-      .then((data) => {
-        if (cancelled) return
-        setMessages(Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [])
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setLoadError(err instanceof Error ? err.message : "加载消息失败")
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [activeSession?.name])
+    loadMessages()
+    loadDetail()
+  }, [loadMessages, loadDetail])
+
+  // 与旧版前端 scheduleAgentRecoveryPoll 对齐：刷新页面/切回会话后，如果后端
+  // 仍在跑一次 Agent 回合（消息里还留着 pending 记录），持续轮询直到它结束
+  useAgentRecoveryPoll(
+    activeSession,
+    messages,
+    React.useCallback(async () => {
+      await Promise.all([loadMessages(true), loadDetail()])
+    }, [loadMessages, loadDetail])
+  )
 
   async function handleSend() {
     const text = draft.trim()
@@ -368,6 +631,7 @@ export function WorkspacePanel({
       } finally {
         setSending(false)
         onAfterSend()
+        loadDetail()
       }
       return
     }
@@ -441,6 +705,7 @@ export function WorkspacePanel({
     } finally {
       setSending(false)
       onAfterSend()
+      loadDetail()
     }
   }
 
@@ -513,9 +778,9 @@ export function WorkspacePanel({
         ) : null}
         {view === "terminal" ? <TerminalView session={activeSession} /> : null}
         {view === "files" ? <FilesPanel activeSession={activeSession} /> : null}
-        {view === "detail" ? <DetailView session={activeSession} /> : null}
-        {view === "config" ? <DetailView session={activeSession} /> : null}
-        {view === "check" ? <SummaryView rows={CHECK_ROWS} /> : null}
+        {view === "detail" ? <DetailView detail={sessionDetail} /> : null}
+        {view === "config" ? <ConfigView detail={sessionDetail} /> : null}
+        {view === "check" ? <CheckView detail={sessionDetail} /> : null}
       </div>
 
       {view === "activity" && loadError ? (
@@ -544,13 +809,19 @@ export function WorkspacePanel({
         open={cliDialogOpen}
         onOpenChange={setCliDialogOpen}
         session={activeSession}
-        onSaved={onAfterSend}
+        onSaved={() => {
+          onAfterSend()
+          loadDetail()
+        }}
       />
       <ModelDialog
         open={modelDialogOpen}
         onOpenChange={setModelDialogOpen}
         session={activeSession}
-        onSaved={onAfterSend}
+        onSaved={() => {
+          onAfterSend()
+          loadDetail()
+        }}
       />
     </div>
   )

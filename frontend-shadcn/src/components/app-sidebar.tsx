@@ -7,6 +7,14 @@ import {
   type ContainerGroup,
   type SessionSummary,
 } from "@/lib/api"
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CloneNameDialog, type CloneMode } from "@/components/clone-name-dialog"
@@ -100,6 +108,28 @@ export function AppSidebar({
     mode: CloneMode
     containerName: string
   } | null>(null)
+  const [removeDialog, setRemoveDialog] = React.useState<{
+    title: string
+    message: string
+    resolve: (choice: "keep-history" | "with-history" | null) => void
+  } | null>(null)
+
+  // 与旧版前端的 confirmRemoveChoice 对齐：取消 / 仅移除保留历史 / 移除并删除历史 三选一
+  function confirmRemoveChoice(
+    title: string,
+    message: string
+  ): Promise<"keep-history" | "with-history" | null> {
+    return new Promise((resolve) => {
+      setRemoveDialog({ title, message, resolve })
+    })
+  }
+
+  function settleRemoveDialog(choice: "keep-history" | "with-history" | null) {
+    setRemoveDialog((current) => {
+      current?.resolve(choice)
+      return null
+    })
+  }
 
   // 与旧版前端（app.js groupSessionsByContainer/renderAgentLevel）保持一致：
   // synthetic 是"从未真正对话过"的默认 AGENT 占位符，不计入 AGENT 数也不在列表里展示
@@ -192,8 +222,12 @@ export function AppSidebar({
   }
 
   async function removeContainer(containerName: string) {
-    if (!window.confirm(`确认删除容器「${containerName}」？`)) return
-    const removeHistory = window.confirm("是否同时删除该容器下的全部 AGENT 对话历史？")
+    const choice = await confirmRemoveChoice(
+      "删除容器",
+      `确认删除容器 ${containerName}？可以选择是否同时删除该容器的全部历史记录（消息与事件日志）。`
+    )
+    if (!choice) return
+    const removeHistory = choice === "with-history"
     setActionError("")
     try {
       await apiPost(`/api/sessions/${encodeURIComponent(containerName)}/remove`, {
@@ -224,8 +258,13 @@ export function AppSidebar({
   }
 
   async function removeAgent(session: SessionSummary) {
-    if (!window.confirm(`确认删除 AGENT「${session.agentRemark || session.agentName}」？`)) return
-    const removeHistory = window.confirm("是否同时删除该 AGENT 的对话历史？")
+    const agentLabel = session.agentRemark || session.agentName
+    const choice = await confirmRemoveChoice(
+      "删除 AGENT",
+      `确认删除 AGENT ${agentLabel}？可以选择是否同时删除它的历史记录（消息与事件日志）。`
+    )
+    if (!choice) return
+    const removeHistory = choice === "with-history"
     setActionError("")
     try {
       await apiPost(`/api/sessions/${encodeURIComponent(session.name)}/remove-with-history`, {
@@ -488,6 +527,33 @@ export function AppSidebar({
         }
         onSubmit={submitClone}
       />
+
+      <AlertDialog
+        open={removeDialog !== null}
+        onOpenChange={(next) => {
+          if (!next) settleRemoveDialog(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>{removeDialog?.title}</AlertDialogTitle>
+          <AlertDialogDescription>{removeDialog?.message}</AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              variant="outline"
+              size="default"
+              onClick={() => settleRemoveDialog(null)}
+            >
+              取消
+            </AlertDialogCancel>
+            <Button variant="outline" onClick={() => settleRemoveDialog("keep-history")}>
+              否，保留历史
+            </Button>
+            <Button variant="destructive" onClick={() => settleRemoveDialog("with-history")}>
+              是，连同历史一起删除
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sidebar>
   )
 }

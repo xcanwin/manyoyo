@@ -5,22 +5,64 @@ import {
   FilePlusIcon,
   FolderIcon,
   FolderPlusIcon,
+  Link2Icon,
   RefreshCwIcon,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { apiGet, apiPost, apiPut, type FsEntry, type FsReadResult, type SessionSummary } from "@/lib/api"
+import { sanitizeDisplayText } from "@/lib/sanitize"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { CodeMirrorEditor } from "@/components/code-mirror-editor"
 import { Input } from "@/components/ui/input"
+import { MarkdownContent } from "@/components/markdown-content"
 import { PromptDialog } from "@/components/prompt-dialog"
-import { Textarea } from "@/components/ui/textarea"
+
+// 与旧版前端 file-browser.js 的 FILE_EDIT_MAX_BYTES 对齐：>=2MB 的文件只提供只读全量预览
+const FILE_EDIT_MAX_BYTES = 2 * 1024 * 1024
 
 function joinPath(base: string, name: string): string {
   return `${base.replace(/\/$/, "")}/${name}`
 }
 
+function formatBytes(size: number): string {
+  if (!Number.isFinite(size)) return "未知大小"
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// 与旧版前端 resolveMarkdownImageUrl 对齐：借一个假的 internal origin 把相对路径解析成
+// 规范化的绝对路径，再拼到容器文件读取接口 fs/raw
+function resolveMarkdownImageUrl(sessionName: string, basePath: string, relativeHref: string): string {
+  try {
+    const lastSlash = basePath.lastIndexOf("/")
+    const baseDir = lastSlash >= 0 ? basePath.slice(0, lastSlash + 1) : "/"
+    const resolvedPath = new URL(relativeHref, "http://manyoyo-internal" + baseDir).pathname
+    return `/api/sessions/${encodeURIComponent(sessionName)}/fs/raw?path=${encodeURIComponent(resolvedPath)}`
+  } catch {
+    return ""
+  }
+}
+
+// 只处理最常见的行内图片写法 ![alt](href "title")，引用式图片不在预览场景考虑范围内
+function rewriteRelativeImageLinks(markdownText: string, resolver: (href: string) => string): string {
+  return markdownText.replace(
+    /!\[([^\]]*)\]\(([^)\s]+)(\s+"[^"]*")?\)/g,
+    (match, alt: string, href: string, titlePart = "") => {
+      if (/^(?:https?:|data:|#)/i.test(href)) return match
+      const resolved = resolver(href)
+      return resolved ? `![${alt}](${resolved}${titlePart})` : match
+    }
+  )
+}
+
 export function FilesPanel({ activeSession }: { activeSession: SessionSummary | null }) {
+  const historyOnly = activeSession?.status === "history"
+  const { confirm, dialog: confirmDialog } = useConfirmDialog()
+
   const [currentPath, setCurrentPath] = React.useState("/")
   const [parentPath, setParentPath] = React.useState("")
   const [entries, setEntries] = React.useState<FsEntry[]>([])
@@ -34,10 +76,12 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
   const [editing, setEditing] = React.useState(false)
   const [editContent, setEditContent] = React.useState("")
   const [saving, setSaving] = React.useState(false)
+  const [markdownViewMode, setMarkdownViewMode] = React.useState<"source" | "rendered">("rendered")
+  const [previewReadOnly, setPreviewReadOnly] = React.useState(false)
 
   const loadList = React.useCallback(
     (path: string) => {
-      if (!activeSession) return
+      if (!activeSession || historyOnly) return
       setLoading(true)
       setListError("")
       apiGet(
@@ -53,7 +97,7 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
         })
         .finally(() => setLoading(false))
     },
-    [activeSession]
+    [activeSession, historyOnly]
   )
 
   React.useEffect(() => {
@@ -61,31 +105,70 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
     setFileData(null)
     setFileError("")
     setEditing(false)
-    if (!activeSession) {
+    if (!activeSession || historyOnly) {
       setEntries([])
       return
     }
     loadList(activeSession.containerPath || "/")
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSession?.name])
+  }, [activeSession?.name, historyOnly])
 
-  function openEntry(entry: FsEntry) {
+  async function fetchFile(path: string, readOnly: boolean) {
+    if (!activeSession) return
+    setSelectedPath(path)
+    setFileData(null)
+    setEditing(false)
+    setMarkdownViewMode("rendered")
+    setPreviewReadOnly(readOnly)
+    setFileLoading(true)
+    setFileError("")
+    try {
+      const data = (await apiGet(
+        `/api/sessions/${encodeURIComponent(activeSession.name)}/fs/read?path=${encodeURIComponent(path)}&full=1`
+      )) as unknown as FsReadResult
+      setFileData(data)
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : "读取文件失败")
+    } finally {
+      setFileLoading(false)
+    }
+  }
+
+  async function openRegularFile(entry: FsEntry) {
+    const size = Number(entry.size)
+    let readOnly = false
+    if (Number.isFinite(size) && size >= FILE_EDIT_MAX_BYTES) {
+      const proceed = await confirm({
+        title: "大文件确认",
+        message: `文件较大（${formatBytes(size)}），继续后将以只读方式全量预览，无法保存。是否继续？`,
+        confirmLabel: "继续预览",
+      })
+      if (!proceed) return
+      readOnly = true
+    }
+    await fetchFile(entry.path, readOnly)
+  }
+
+  async function openEntry(entry: FsEntry) {
+    if (entry.kind === "symlink") {
+      const safeName = sanitizeDisplayText(entry.name)
+      const message = entry.symlinkTarget
+        ? `"${safeName}" 是符号链接，实际指向：\n${sanitizeDisplayText(entry.symlinkTarget)}\n\n是否继续访问？`
+        : `"${safeName}" 是一个无法解析的符号链接（可能已损坏），是否仍要尝试访问？`
+      const proceed = await confirm({ title: "符号链接确认", message, confirmLabel: "继续访问" })
+      if (!proceed) return
+      if (entry.symlinkTargetKind === "directory") {
+        loadList(entry.path)
+        return
+      }
+      await openRegularFile(entry)
+      return
+    }
     if (entry.kind === "directory") {
       loadList(entry.path)
       return
     }
-    if (!activeSession) return
-    setSelectedPath(entry.path)
-    setFileData(null)
-    setEditing(false)
-    setFileLoading(true)
-    setFileError("")
-    apiGet(
-      `/api/sessions/${encodeURIComponent(activeSession.name)}/fs/read?path=${encodeURIComponent(entry.path)}&full=1`
-    )
-      .then((data) => setFileData(data as unknown as FsReadResult))
-      .catch((err) => setFileError(err instanceof Error ? err.message : "读取文件失败"))
-      .finally(() => setFileLoading(false))
+    await openRegularFile(entry)
   }
 
   function startEditing() {
@@ -133,6 +216,18 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
     )
   }
 
+  if (historyOnly) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-1 p-6 text-center text-sm text-muted-foreground">
+        <p className="font-medium text-foreground">容器不可用</p>
+        <p>当前会话只有历史记录，没有可访问的运行中容器。</p>
+      </div>
+    )
+  }
+
+  const isMarkdown = fileData?.kind === "text" && fileData.language === "markdown"
+  const isEditable = Boolean(fileData?.kind === "text" && fileData.editable && !previewReadOnly)
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b p-2">
@@ -144,7 +239,7 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
         >
           <ArrowUpIcon />
         </Button>
-        <Input value={currentPath} readOnly className="h-8 font-mono text-xs" />
+        <Input value={sanitizeDisplayText(currentPath)} readOnly className="h-8 font-mono text-xs" />
         <Button variant="outline" size="icon-sm" onClick={() => loadList(currentPath)}>
           <RefreshCwIcon />
         </Button>
@@ -180,36 +275,60 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
                   "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
                   selectedPath === entry.path && "bg-muted"
                 )}
+                title={
+                  entry.kind === "symlink" && entry.symlinkTarget
+                    ? `符号链接 → ${sanitizeDisplayText(entry.symlinkTarget)}`
+                    : sanitizeDisplayText(entry.name)
+                }
               >
                 {entry.kind === "directory" ? (
                   <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
+                ) : entry.kind === "symlink" ? (
+                  <Link2Icon className="size-4 shrink-0 text-muted-foreground" />
                 ) : (
                   <FileIcon className="size-4 shrink-0 text-muted-foreground" />
                 )}
-                <span className="truncate">{entry.name}</span>
+                <span className="truncate">{sanitizeDisplayText(entry.name)}</span>
               </button>
             ))}
           </div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          {selectedPath && fileData?.kind === "text" && fileData.editable ? (
+          {selectedPath ? (
             <div className="flex shrink-0 items-center justify-between gap-2 border-b p-2">
-              <span className="truncate font-mono text-xs text-muted-foreground">{selectedPath}</span>
-              {editing ? (
-                <div className="flex shrink-0 gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={saving}>
-                    取消
+              <span className="truncate font-mono text-xs text-muted-foreground">
+                {sanitizeDisplayText(selectedPath)}
+              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                {isMarkdown && !editing ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setMarkdownViewMode((mode) => (mode === "source" ? "rendered" : "source"))
+                    }
+                  >
+                    {markdownViewMode === "source" ? "查看渲染" : "查看源码"}
                   </Button>
-                  <Button size="sm" onClick={handleSaveFile} disabled={saving}>
-                    {saving ? "保存中..." : "保存"}
-                  </Button>
-                </div>
-              ) : (
-                <Button variant="outline" size="sm" onClick={startEditing}>
-                  编辑
-                </Button>
-              )}
+                ) : null}
+                {isEditable ? (
+                  editing ? (
+                    <div className="flex shrink-0 gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={saving}>
+                        取消
+                      </Button>
+                      <Button size="sm" onClick={handleSaveFile} disabled={saving}>
+                        {saving ? "保存中..." : "保存"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={startEditing}>
+                      编辑
+                    </Button>
+                  )
+                ) : null}
+              </div>
             </div>
           ) : null}
 
@@ -240,15 +359,24 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
                     二进制文件，无法预览（{fileData.size} 字节）
                   </p>
                 ) : editing ? (
-                  <Textarea
+                  <CodeMirrorEditor
                     value={editContent}
-                    onChange={(event) => setEditContent(event.target.value)}
-                    className="h-full min-h-64 resize-none font-mono text-xs"
+                    language={fileData.language || "text"}
+                    readOnly={false}
+                    onChange={setEditContent}
+                  />
+                ) : isMarkdown && markdownViewMode === "rendered" ? (
+                  <MarkdownContent
+                    content={rewriteRelativeImageLinks(fileData.content || "", (href) =>
+                      resolveMarkdownImageUrl(activeSession.name, selectedPath, href)
+                    )}
                   />
                 ) : (
-                  <pre className="overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap">
-                    {fileData.content}
-                  </pre>
+                  <CodeMirrorEditor
+                    value={fileData.content || ""}
+                    language={fileData.language || "text"}
+                    readOnly
+                  />
                 )}
                 {fileData.truncated ? (
                   <p className="mt-2 text-xs text-muted-foreground">内容过大，已截断显示</p>
@@ -265,11 +393,12 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
           if (!next) setNewDialog(null)
         }}
         title={newDialog === "file" ? "新建文件" : "新建文件夹"}
-        description={`将在 ${currentPath} 下创建。`}
+        description={`将在 ${sanitizeDisplayText(currentPath)} 下创建。`}
         label="名称"
         initialValue=""
         onSubmit={handleCreateEntry}
       />
+      {confirmDialog}
     </div>
   )
 }

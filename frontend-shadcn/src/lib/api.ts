@@ -36,6 +36,41 @@ export type TraceEvent = {
   detail?: string
 }
 
+export type AppliedConfig = {
+  containerName: string
+  hostPath: string
+  containerPath: string
+  imageName: string
+  imageVersion: string
+  containerMode: string
+  shellPrefix: string
+  shell: string
+  shellSuffix: string
+  defaultCommand: string
+  agentEnabled: boolean
+  agentProgram: string
+  resumeSupported: boolean
+  yolo: string
+  envCount: number
+  volumeCount: number
+  portCount: number
+}
+
+export type SessionDetail = SessionSummary & {
+  latestRole: string
+  latestTimestamp: string
+  agentPromptCommand: string
+  containerAgentPromptCommand: string
+  agentPromptCommandOverride: string
+  inferredAgentPromptCommand: string
+  agentPromptSource: "agent" | "container" | "inferred" | "none" | string
+  lastResumeAt: string | null
+  lastResumeOk: boolean | null
+  lastResumeError: string
+  usageTotal: { inputTokens: number; outputTokens: number; costUsd: number | null } | null
+  applied: AppliedConfig
+}
+
 export type ChatMessage = {
   id: string | number
   role: "user" | "assistant" | "system"
