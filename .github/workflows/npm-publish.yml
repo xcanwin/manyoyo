@@ -27,6 +27,7 @@ jobs:
           fi
       - run: npm ci --include=optional
       - run: npm run build --if-present
+      - run: npm run build:web-shadcn
       - run: npm test
 
   publish-npm:
