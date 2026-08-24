@@ -34,7 +34,7 @@ export function App() {
         onSelectSession={handleSelectSession}
         onRefresh={refresh}
       />
-      <SidebarInset className="min-h-0">
+      <SidebarInset className="min-h-0 min-w-0">
         <WorkspacePanel activeSession={activeSession} onAfterSend={refresh} />
       </SidebarInset>
     </SidebarProvider>

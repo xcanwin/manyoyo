@@ -27,8 +27,11 @@ export type TraceEvent = {
   text: string
   toolId?: string
   toolName?: string
+  server?: string
   command?: string
   argumentSummary?: string
+  arguments?: unknown
+  exitCode?: number
   result?: string
   error?: string
   phase?: string

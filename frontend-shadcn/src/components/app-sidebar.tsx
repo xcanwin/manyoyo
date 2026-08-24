@@ -381,13 +381,8 @@ export function AppSidebar({
                             </SidebarMenuAction>
                           }
                         />
-                        <DropdownMenuContent side="right" align="start">
-                          <DropdownMenuGroup>
-                            <DropdownMenuItem
-                              onClick={() => createAgent(group.containerName)}
-                            >
-                              新建 AGENT
-                            </DropdownMenuItem>
+                        <DropdownMenuContent side="right" align="start" className="w-56">
+                          <DropdownMenuGroup className="flex flex-col gap-1">
                             <DropdownMenuItem
                               onClick={() =>
                                 editContainerRemark(
@@ -397,6 +392,11 @@ export function AppSidebar({
                               }
                             >
                               编辑备注
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => createAgent(group.containerName)}
+                            >
+                              新建 AGENT
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
@@ -448,8 +448,8 @@ export function AppSidebar({
                             </SidebarMenuAction>
                           }
                         />
-                        <DropdownMenuContent side="right" align="start">
-                          <DropdownMenuGroup>
+                        <DropdownMenuContent side="right" align="start" className="w-56">
+                          <DropdownMenuGroup className="flex flex-col gap-1">
                             <DropdownMenuItem
                               onClick={() => editAgentRemark(session)}
                             >

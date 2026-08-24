@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { cn } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -222,7 +223,14 @@ export function CreateContainerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg lg:max-w-2xl">
+      <DialogContent
+        className={cn(
+          "flex max-h-[85vh] flex-col sm:max-w-lg lg:max-w-2xl",
+          // 目录选择弹窗嵌套打开时，base-ui 的 Dialog 会复用外层已有的遮罩层，
+          // 不会再单独给这层弹窗加虚化，这里手动虚化+禁用交互，避免误点到背后的表单
+          pickerOpen && "pointer-events-none opacity-40 blur-[2px]"
+        )}
+      >
         <DialogHeader className="shrink-0">
           <DialogTitle>新建容器会话</DialogTitle>
         </DialogHeader>
@@ -477,7 +485,7 @@ export function CreateContainerDialog({
         open={pickerOpen}
         onOpenChange={setPickerOpen}
         initialPath={form.hostPath}
-        onSelect={(path) => setField("hostPath", path)}
+        onSelect={(path) => setForm((prev) => ({ ...prev, hostPath: path, containerPath: path }))}
       />
     </Dialog>
   )

@@ -102,7 +102,15 @@ export function ModelDialog({
               <FieldLabel htmlFor="model-select">模型</FieldLabel>
               <Select value={selected} onValueChange={(value) => setSelected(value ?? DEFAULT_VALUE)}>
                 <SelectTrigger id="model-select" className="w-full">
-                  <SelectValue />
+                  {/* base-ui 的 Select.Value 在没有 items 属性时只会显示原始 value 字面量，
+                      不会自动回填对应 SelectItem 的文案，这里用 children 函数手动映射 */}
+                  <SelectValue>
+                    {(value: string) => {
+                      if (value === DEFAULT_VALUE) return "跟随默认（不传 --model）"
+                      if (value === CUSTOM_VALUE) return "自定义..."
+                      return models.find((model) => model.value === value)?.label || value
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>

@@ -361,6 +361,41 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
+    test('should apply configured serveTitle to the shadcn frontend and login page', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-shadcn-title-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                serveTitle: '我的团队 · manyoyo'
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+
+            const loginPage = await request(`${baseUrl}/shadcn/auth/login`);
+            expect(loginPage.response.status).toBe(200);
+            expect(loginPage.text).toContain('<title>我的团队 · manyoyo</title>');
+
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const appPage = await request(`${baseUrl}/shadcn`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(appPage.response.status).toBe(200);
+            expect(appPage.text).toContain('<title>我的团队 · manyoyo</title>');
+
+            // 回归用例：shadcn.html 是 vite singlefile 打包产物，全部依赖内联成一个 <script>；
+            // 曾经对它也套用 app.html 那套 .replace('</head>', ...) 注入 __MANYOYO_SERVE_TITLE__ 标记，
+            // 结果命中了内联脚本里恰好出现的字面量 "</head>"，把注入内容（带着 "</script>"）插进
+            // 脚本中间，导致整页被当成纯文本展示。shadcn 前端目前不消费这个标记，不应该注入它。
+            expect(appPage.text).not.toContain('__MANYOYO_SERVE_TITLE__');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should list and read container files via web api', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-container-fs-'));
         const port = await getFreePort();

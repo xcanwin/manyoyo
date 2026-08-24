@@ -15,6 +15,16 @@ import {
 
 marked.setOptions({ breaks: true, gfm: true })
 
+// 防止 markdown 内容里的图片加载、外部链接携带 Referer 泄露当前站点地址给第三方
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.tagName === "IMG" || node.tagName === "A") {
+    node.setAttribute("referrerpolicy", "no-referrer")
+  }
+  if (node.tagName === "A") {
+    node.setAttribute("rel", "noopener noreferrer")
+  }
+})
+
 // 与旧版前端的 openExternalLinkModalView/confirmExternalLinkOpen 对齐：
 // Agent 回复内容可能包含 Agent 自己生成或从外部抓取的链接，直接点开有钓鱼风险，
 // 拦截点击后先展示真实 URL 二次确认，确认后才用 noopener/noreferrer 新标签打开。
@@ -31,6 +41,7 @@ export function MarkdownContent({
     const rawHtml = marked.parse(content || "", { async: false }) as string
     return DOMPurify.sanitize(rawHtml, {
       ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/)/i,
+      ADD_ATTR: ["referrerpolicy"],
     })
   }, [content])
 

@@ -1,5 +1,6 @@
 import * as React from "react"
 import {
+  ArrowLeftIcon,
   ArrowUpIcon,
   FileIcon,
   FilePlusIcon,
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils"
 import { apiGet, apiPost, apiPut, type FsEntry, type FsReadResult, type SessionSummary } from "@/lib/api"
 import { sanitizeDisplayText } from "@/lib/sanitize"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { CodeMirrorEditor } from "@/components/code-mirror-editor"
@@ -62,6 +64,9 @@ function rewriteRelativeImageLinks(markdownText: string, resolver: (href: string
 export function FilesPanel({ activeSession }: { activeSession: SessionSummary | null }) {
   const historyOnly = activeSession?.status === "history"
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
+  const isMobile = useIsMobile()
+  // 与旧版前端的移动端主从视图对齐：先看目录列表，点开文件后再切到内容页
+  const [mobilePane, setMobilePane] = React.useState<"list" | "detail">("list")
 
   const [currentPath, setCurrentPath] = React.useState("/")
   const [parentPath, setParentPath] = React.useState("")
@@ -105,6 +110,7 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
     setFileData(null)
     setFileError("")
     setEditing(false)
+    setMobilePane("list")
     if (!activeSession || historyOnly) {
       setEntries([])
       return
@@ -115,6 +121,7 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
 
   async function fetchFile(path: string, readOnly: boolean) {
     if (!activeSession) return
+    setMobilePane("detail")
     setSelectedPath(path)
     setFileData(null)
     setEditing(false)
@@ -228,37 +235,42 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
   const isMarkdown = fileData?.kind === "text" && fileData.language === "markdown"
   const isEditable = Boolean(fileData?.kind === "text" && fileData.editable && !previewReadOnly)
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b p-2">
-        <Button
-          variant="outline"
-          size="icon-sm"
-          disabled={!parentPath}
-          onClick={() => loadList(parentPath)}
-        >
-          <ArrowUpIcon />
-        </Button>
-        <Input value={sanitizeDisplayText(currentPath)} readOnly className="h-8 font-mono text-xs" />
-        <Button variant="outline" size="icon-sm" onClick={() => loadList(currentPath)}>
-          <RefreshCwIcon />
-        </Button>
-        <Button variant="outline" size="icon-sm" onClick={() => setNewDialog("file")} title="新建文件">
-          <FilePlusIcon />
-        </Button>
-        <Button variant="outline" size="icon-sm" onClick={() => setNewDialog("folder")} title="新建文件夹">
-          <FolderPlusIcon />
-        </Button>
-      </div>
+  const showListPane = !isMobile || mobilePane === "list"
+  const showDetailPane = !isMobile || mobilePane === "detail"
 
-      {listError ? (
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      {showListPane ? (
+        <div className="flex shrink-0 items-center gap-2 border-b p-2">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={!parentPath}
+            onClick={() => loadList(parentPath)}
+          >
+            <ArrowUpIcon />
+          </Button>
+          <Input value={sanitizeDisplayText(currentPath)} readOnly className="h-8 font-mono text-xs" />
+          <Button variant="outline" size="icon-sm" onClick={() => loadList(currentPath)}>
+            <RefreshCwIcon />
+          </Button>
+          <Button variant="outline" size="icon-sm" onClick={() => setNewDialog("file")} title="新建文件">
+            <FilePlusIcon />
+          </Button>
+          <Button variant="outline" size="icon-sm" onClick={() => setNewDialog("folder")} title="新建文件夹">
+            <FolderPlusIcon />
+          </Button>
+        </div>
+      ) : null}
+
+      {listError && showListPane ? (
         <Alert variant="destructive" className="m-2">
           <AlertDescription>{listError}</AlertDescription>
         </Alert>
       ) : null}
 
-      <div className="flex min-h-0 flex-1">
-        <div className="h-full w-64 shrink-0 overflow-y-auto border-r">
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <div className={cn("h-full w-64 shrink-0 overflow-y-auto border-r", isMobile && "w-full", !showListPane && "hidden")}>
           <div className="flex flex-col gap-0.5 p-2">
             {loading ? (
               <div className="px-2 py-1.5 text-xs text-muted-foreground">加载中...</div>
@@ -272,8 +284,8 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
                 type="button"
                 onClick={() => openEntry(entry)}
                 className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
-                  selectedPath === entry.path && "bg-muted"
+                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/8",
+                  selectedPath === entry.path && "bg-foreground/12 font-medium"
                 )}
                 title={
                   entry.kind === "symlink" && entry.symlinkTarget
@@ -294,12 +306,19 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", !showDetailPane && "hidden")}>
           {selectedPath ? (
             <div className="flex shrink-0 items-center justify-between gap-2 border-b p-2">
-              <span className="truncate font-mono text-xs text-muted-foreground">
-                {sanitizeDisplayText(selectedPath)}
-              </span>
+              <div className="flex min-w-0 items-center gap-1.5">
+                {isMobile ? (
+                  <Button variant="ghost" size="icon-sm" onClick={() => setMobilePane("list")}>
+                    <ArrowLeftIcon />
+                  </Button>
+                ) : null}
+                <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+                  {sanitizeDisplayText(selectedPath)}
+                </span>
+              </div>
               <div className="flex shrink-0 items-center gap-2">
                 {isMarkdown && !editing ? (
                   <Button

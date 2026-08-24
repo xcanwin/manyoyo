@@ -165,9 +165,11 @@ function CopyMessageButton({ text }: { text: string }) {
 function ActivityView({
   session,
   messages,
+  mode,
 }: {
   session: SessionSummary | null
   messages: ChatMessage[]
+  mode: "agent" | "command"
 }) {
   const displayMessages = React.useMemo(() => mergeTraceIntoReply(messages), [messages])
 
@@ -188,43 +190,50 @@ function ActivityView({
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-x-hidden overflow-y-auto">
       <div className="flex flex-col gap-3 p-4">
-        {displayMessages.map((message) => (
-          <div
-            key={message.id}
-            className={cn(
-              "flex flex-col gap-1",
-              message.role === "user" ? "items-end" : "items-start"
-            )}
-          >
-            {message.pairedTrace ? <TraceBlock trace={message.pairedTrace} /> : null}
+        {displayMessages.map((message) => {
+          // 与旧版前端 body.agent-mode/.command-mode + msg.origin-* 对齐：
+          // 切换发送模式时，历史里"另一种模式"产生的消息整体变淡，突出当前模式的上下文
+          const origin = message.mode === "agent" || message.mode === "command" ? message.mode : ""
+          const dimmed = origin !== "" && origin !== mode
+          return (
             <div
+              key={message.id}
               className={cn(
-                "max-w-[75%] rounded-xl px-3 py-2 text-sm",
-                message.role === "user"
-                  ? "bg-primary text-primary-foreground whitespace-pre-wrap"
-                  : message.role === "system"
-                    ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
-                    : "bg-muted text-foreground",
-                message.pending && "opacity-70"
+                "flex flex-col gap-1 transition-opacity",
+                message.role === "user" ? "items-end" : "items-start",
+                dimmed && "opacity-25"
               )}
             >
-              {message.role === "assistant" ? (
-                <MarkdownContent content={message.content || (message.pending ? "…" : "")} />
-              ) : (
-                message.content || (message.pending ? "…" : "")
-              )}
+              {message.pairedTrace ? <TraceBlock trace={message.pairedTrace} /> : null}
+              <div
+                className={cn(
+                  "max-w-full rounded-xl px-3 py-2 text-sm sm:max-w-[75%]",
+                  message.role === "user"
+                    ? "max-w-[88%] bg-[color-mix(in_oklch,var(--muted),black_10%)] text-foreground whitespace-pre-wrap sm:max-w-[75%]"
+                    : message.role === "system"
+                      ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
+                      : "bg-muted text-foreground",
+                  message.pending && "opacity-70"
+                )}
+              >
+                {message.role === "assistant" ? (
+                  <MarkdownContent content={message.content || (message.pending ? "…" : "")} />
+                ) : (
+                  message.content || (message.pending ? "…" : "")
+                )}
+              </div>
+              <span className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
+                {formatTime(message.timestamp)}
+                {message.interrupted ? " · 已停止" : ""}
+                {message.content && !message.pending ? (
+                  <CopyMessageButton text={message.content} />
+                ) : null}
+              </span>
             </div>
-            <span className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
-              {formatTime(message.timestamp)}
-              {message.interrupted ? " · 已停止" : ""}
-              {message.content && !message.pending ? (
-                <CopyMessageButton text={message.content} />
-              ) : null}
-            </span>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -479,11 +488,11 @@ function Composer({
       />
       <div className="mt-2 flex items-center justify-between gap-2">
         <Popover>
-          <PopoverTrigger render={<Button variant="outline" size="sm" disabled={disabled} />}>
+          <PopoverTrigger render={<Button variant="outline" className="px-4" disabled={disabled} />}>
             选项
           </PopoverTrigger>
           <PopoverContent align="start" className="w-44 p-1">
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1">
               <Button
                 variant={mode === "agent" ? "secondary" : "ghost"}
                 size="sm"
@@ -523,11 +532,11 @@ function Composer({
           </PopoverContent>
         </Popover>
         {sending ? (
-          <Button size="sm" variant="destructive" onClick={onStop}>
+          <Button variant="destructive" className="px-4" onClick={onStop}>
             停止
           </Button>
         ) : (
-          <Button size="sm" onClick={onSend} disabled={inputDisabled}>
+          <Button className="px-4" onClick={onSend} disabled={inputDisabled}>
             <SendIcon data-icon="inline-start" />
             发送
           </Button>
@@ -608,7 +617,7 @@ export function WorkspacePanel({
     setLoadError("")
     setMessages((prev) => [
       ...prev,
-      { id: `local-${Date.now()}`, role: "user", content: text, timestamp: new Date().toISOString() },
+      { id: `local-${Date.now()}`, role: "user", content: text, timestamp: new Date().toISOString(), mode },
     ])
 
     if (mode === "command") {
@@ -648,8 +657,16 @@ export function WorkspacePanel({
         streamTrace: true,
         traceEvents: [],
         pending: true,
+        mode: "agent",
       },
-      { id: STREAMING_MESSAGE_ID, role: "assistant", content: "", timestamp: new Date().toISOString(), pending: true },
+      {
+        id: STREAMING_MESSAGE_ID,
+        role: "assistant",
+        content: "",
+        timestamp: new Date().toISOString(),
+        pending: true,
+        mode: "agent",
+      },
     ])
     try {
       await apiStream(`/api/sessions/${encodeURIComponent(name)}/agent/stream`, { prompt: text }, (event) => {
@@ -719,7 +736,7 @@ export function WorkspacePanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
         <SidebarTrigger />
         <Separator orientation="vertical" className="h-4!" />
@@ -745,7 +762,7 @@ export function WorkspacePanel({
               <EllipsisIcon />
             </PopoverTrigger>
             <PopoverContent align="start" className="w-36 p-1">
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-1">
                 {OTHER_VIEWS.map((key) => (
                   <Button
                     key={key}
@@ -772,9 +789,9 @@ export function WorkspacePanel({
         </span>
       </header>
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
         {view === "activity" ? (
-          <ActivityView session={activeSession} messages={messages} />
+          <ActivityView session={activeSession} messages={messages} mode={mode} />
         ) : null}
         {view === "terminal" ? <TerminalView session={activeSession} /> : null}
         {view === "files" ? <FilesPanel activeSession={activeSession} /> : null}

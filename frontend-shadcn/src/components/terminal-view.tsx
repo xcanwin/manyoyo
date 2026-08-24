@@ -152,15 +152,16 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
 
   return (
     <div className="flex h-full flex-col bg-zinc-950">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-800 px-3 py-1.5">
-        <span className="text-xs text-zinc-400">{status}</span>
-        <div className="flex gap-1">
+      <div className="flex shrink-0 flex-col gap-1 border-b border-zinc-800 bg-zinc-900 px-2 py-1.5">
+        <span className="shrink-0 truncate px-1 text-xs text-zinc-400">{status}</span>
+        {/* 独占一行 + 横向滚动，避免窄屏下按钮被裁切导致 ctrl/alt 无法点击 */}
+        <div className="flex gap-1 overflow-x-auto pb-0.5">
           {KEYBAR_KEYS.map((key) => (
             <button
               key={key.label}
               type="button"
               onClick={() => sendKey(key.data)}
-              className="rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800"
+              className="shrink-0 rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800"
             >
               {key.label}
             </button>
@@ -169,7 +170,7 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
             type="button"
             onClick={() => setCtrlMode((value) => !value)}
             className={cn(
-              "rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
+              "shrink-0 rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
               ctrlMode && "border-primary bg-primary text-primary-foreground"
             )}
           >
@@ -179,7 +180,7 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
             type="button"
             onClick={() => setAltMode((value) => !value)}
             className={cn(
-              "rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
+              "shrink-0 rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
               altMode && "border-primary bg-primary text-primary-foreground"
             )}
           >

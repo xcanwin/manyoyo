@@ -93,7 +93,8 @@ export function DirectoryPickerDialog({
           </Alert>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
+        {/* 固定高度而不是随目录/文件数量伸缩，避免弹窗跟着内容多少上下抖动 */}
+        <div className="h-72 shrink-0 overflow-y-auto rounded-md border">
           <div className="flex flex-col gap-0.5 p-2">
             {loading ? (
               <div className="px-2 py-1.5 text-xs text-muted-foreground">加载中...</div>
