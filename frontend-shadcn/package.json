@@ -36,6 +36,7 @@
     "clsx": "latest",
     "codemirror": "^6.0.2",
     "dompurify": "latest",
+    "json5": "^2.2.3",
     "lucide-react": "latest",
     "marked": "^18.0.9",
     "react": "^19.2.6",
