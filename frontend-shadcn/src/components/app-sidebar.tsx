@@ -1,8 +1,16 @@
 import * as React from "react"
-import { ArrowLeftIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  MessageCircleIcon,
+  MoreHorizontalIcon,
+  PlusIcon,
+  SearchIcon,
+  SettingsIcon,
+} from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
+  apiGet,
   apiPost,
   type ContainerGroup,
   type SessionSummary,
@@ -20,6 +28,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { CloneNameDialog, type CloneMode } from "@/components/clone-name-dialog"
 import { CreateContainerDialog } from "@/components/create-container-dialog"
 import { PromptDialog } from "@/components/prompt-dialog"
+import { QuickChatSetupDialog } from "@/components/quick-chat-setup-dialog"
 import { SearchDialog } from "@/components/search-dialog"
 import { SystemSettingsDialog } from "@/components/system-settings-dialog"
 import {
@@ -102,6 +111,8 @@ export function AppSidebar({
   const [navLevel, setNavLevel] = React.useState<NavLevel>("containers")
   const [navContainer, setNavContainer] = React.useState("")
   const [searchOpen, setSearchOpen] = React.useState(false)
+  const [quickChatSetupOpen, setQuickChatSetupOpen] = React.useState(false)
+  const [quickChatBusy, setQuickChatBusy] = React.useState(false)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [actionError, setActionError] = React.useState("")
@@ -199,6 +210,57 @@ export function AppSidebar({
       if (created) selectSession(created)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "刷新会话列表失败")
+    }
+  }
+
+  // 格式对齐 manyoyo.json 里 containerName 模板的 {now}（MMDD-HHmm），
+  // 这里额外带上秒数——短时间内连点快捷对话时目录名不会撞车
+  function formatQuickChatTimestamp(date: Date): string {
+    const pad = (n: number) => String(n).padStart(2, "0")
+    return `${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+  }
+
+  async function runQuickChatWithConfig(quickChatPath: string, quickChatRun: string) {
+    setQuickChatBusy(true)
+    setActionError("")
+    try {
+      const timestamp = formatQuickChatTimestamp(new Date())
+      const requestedDir = `${quickChatPath.replace(/\/+$/, "")}/${timestamp}`
+      // mkdir 接口内部会展开 ~ 并返回解析后的绝对路径——新建容器要拿这个绝对路径，
+      // 不能直接把带 ~ 的原始字符串传给 hostPath（Node fs 不认识 ~，会报路径不存在）
+      const mkdirResult = await apiPost("/api/fs/directories/mkdir", { path: requestedDir })
+      const newDir = typeof mkdirResult.path === "string" && mkdirResult.path ? mkdirResult.path : requestedDir
+      const data = await apiPost("/api/sessions", {
+        run: quickChatRun,
+        createOptions: {
+          hostPath: newDir,
+          containerPath: newDir,
+          containerName: `easy-${timestamp}`,
+        },
+      })
+      await handleCreated(String(data.name))
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "快捷对话创建失败")
+    } finally {
+      setQuickChatBusy(false)
+    }
+  }
+
+  async function startQuickChat() {
+    if (quickChatBusy) return
+    if (!(await confirmLeaveIfDirty())) return
+    setActionError("")
+    try {
+      const data = await apiGet("/api/system/quick-chat-config")
+      const quickChatPath = typeof data.path === "string" ? data.path : ""
+      const quickChatRun = typeof data.run === "string" ? data.run : ""
+      if (quickChatPath && quickChatRun) {
+        await runQuickChatWithConfig(quickChatPath, quickChatRun)
+      } else {
+        setQuickChatSetupOpen(true)
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "读取快捷对话配置失败")
     }
   }
 
@@ -329,6 +391,10 @@ export function AppSidebar({
               ? "创建中..."
               : "新建AGENT"
             : "新建容器"}
+        </Button>
+        <Button className="w-full" variant="outline" disabled={quickChatBusy} onClick={startQuickChat}>
+          {quickChatBusy ? <Spinner data-icon="inline-start" /> : <MessageCircleIcon data-icon="inline-start" />}
+          {quickChatBusy ? "创建中..." : "快捷对话"}
         </Button>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>工作台</span>
@@ -562,6 +628,14 @@ export function AppSidebar({
           goToAgents(containerName)
           selectSession(session)
         }}
+      />
+
+      <QuickChatSetupDialog
+        open={quickChatSetupOpen}
+        onOpenChange={setQuickChatSetupOpen}
+        initialPath=""
+        initialRun=""
+        onSaved={(path, run) => runQuickChatWithConfig(path, run)}
       />
 
       <CreateContainerDialog

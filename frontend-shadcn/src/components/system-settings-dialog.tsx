@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { CapacityEstimateView } from "@/components/capacity-estimate-view"
 import { CodeMirrorEditor } from "@/components/code-mirror-editor"
+import { QuickChatSettingsView } from "@/components/quick-chat-settings-view"
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,7 @@ const CATEGORIES: ConfigCategory[] = [
   { id: "web", label: "Web 服务", keys: ["serverUser", "serverPass", "serve"] },
   { id: "plugins", label: "插件", keys: ["plugins"] },
   { id: "runs", label: "运行配置 (Runs)", keys: ["runs"] },
+  { id: "quick-chat", label: "快捷对话", keys: [] },
   { id: "capacity", label: "容量预估", keys: [] },
 ]
 
@@ -414,6 +416,8 @@ export function SystemSettingsDialog({
                       <RunsCategoryFields liveParsed={liveParsed} onCommit={handleLeafCommit} />
                     ) : category.id === "capacity" ? (
                       <CapacityEstimateView />
+                    ) : category.id === "quick-chat" ? (
+                      <QuickChatSettingsView />
                     ) : (
                       <CategoryFields category={category} liveParsed={liveParsed} onCommit={handleLeafCommit} />
                     )}
