@@ -15,11 +15,13 @@ import { apiGet, apiPost, apiPut, type FsEntry, type FsReadResult, type SessionS
 import { sanitizeDisplayText } from "@/lib/sanitize"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useResizableWidth } from "@/hooks/use-resizable-width"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { CodeMirrorEditor } from "@/components/code-mirror-editor"
 import { MarkdownContent } from "@/components/markdown-content"
 import { PromptDialog } from "@/components/prompt-dialog"
+import { ResizeHandle } from "@/components/resize-handle"
 import { Spinner } from "@/components/ui/spinner"
 
 // 与旧版前端 file-browser.js 的 FILE_EDIT_MAX_BYTES 对齐：>=2MB 的文件只提供只读全量预览
@@ -100,6 +102,12 @@ export function FilesPanel({
   const isMobile = useIsMobile()
   // 与旧版前端的移动端主从视图对齐：先看目录列表，点开文件后再切到内容页
   const [mobilePane, setMobilePane] = React.useState<"list" | "detail">("list")
+  const { width: listWidth, dragging: listDragging, onHandlePointerDown } = useResizableWidth({
+    storageKey: "manyoyo:files-list-width",
+    defaultWidth: 256,
+    min: 180,
+    max: 480,
+  })
 
   const [currentPath, setCurrentPath] = React.useState("/")
   const [parentPath, setParentPath] = React.useState("")
@@ -353,7 +361,10 @@ export function FilesPanel({
       ) : null}
 
       <div className="flex min-h-0 min-w-0 flex-1">
-        <div className={cn("h-full w-64 shrink-0 overflow-y-auto border-r", isMobile && "w-full", !showListPane && "hidden")}>
+        <div
+          style={isMobile ? undefined : { width: listWidth }}
+          className={cn("h-full shrink-0 overflow-y-auto border-r", isMobile && "w-full", !showListPane && "hidden")}
+        >
           <div className="flex flex-col gap-0.5 p-2">
             {loading ? (
               <div className="flex h-32 items-center justify-center">
@@ -393,6 +404,10 @@ export function FilesPanel({
             )}
           </div>
         </div>
+
+        {isMobile ? null : (
+          <ResizeHandle onPointerDown={onHandlePointerDown} dragging={listDragging} />
+        )}
 
         <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", !showDetailPane && "hidden")}>
           {selectedPath ? (

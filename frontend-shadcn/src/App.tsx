@@ -1,7 +1,10 @@
 import * as React from "react"
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { ResizeHandle } from "@/components/resize-handle"
 import { WorkspacePanel } from "@/components/workspace-panel"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { useResizableWidth } from "@/hooks/use-resizable-width"
 import { useSessions } from "@/hooks/use-sessions"
 import { useUnsavedChangesDialog } from "@/hooks/use-unsaved-changes-dialog"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -10,6 +13,13 @@ import type { SessionSummary } from "@/lib/api"
 
 export function App() {
   const { sessions, containers, loading, error, refresh } = useSessions()
+  const isMobile = useIsMobile()
+  const { width: sidebarWidth, dragging: sidebarDragging, onHandlePointerDown } = useResizableWidth({
+    storageKey: "manyoyo:sidebar-width",
+    defaultWidth: 288,
+    min: 224,
+    max: 512,
+  })
   const [activeSessionName, setActiveSessionName] = React.useState<string | null>(null)
   // 提到 App 一级，容器列表下拉里的「新建 AGENT」和 agent 列表头部按钮共用同一个状态，
   // 右侧工作台也据此展示加载态，不只是侧栏按钮自己转圈
@@ -40,8 +50,8 @@ export function App() {
 
   return (
     <SidebarProvider
-      className="h-svh overflow-hidden"
-      style={{ "--sidebar-width": "18rem" } as React.CSSProperties}
+      className="relative h-svh overflow-hidden"
+      style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}
     >
       <AppSidebar
         containers={containers}
@@ -54,6 +64,14 @@ export function App() {
         creatingAgentContainer={creatingAgentContainer}
         onCreatingAgentContainerChange={setCreatingAgentContainer}
       />
+      {isMobile ? null : (
+        <ResizeHandle
+          onPointerDown={onHandlePointerDown}
+          dragging={sidebarDragging}
+          className="absolute inset-y-0 z-20 -ml-1"
+          style={{ left: sidebarWidth }}
+        />
+      )}
       <SidebarInset className="min-h-0 min-w-0">
         <WorkspacePanel
           activeSession={activeSession}
