@@ -121,13 +121,15 @@ export function FilesPanel({
   const [fileLoading, setFileLoading] = React.useState(false)
   const [fileError, setFileError] = React.useState("")
   const [newDialog, setNewDialog] = React.useState<"file" | "folder" | null>(null)
-  const [editing, setEditing] = React.useState(false)
-  const [editContent, setEditContent] = React.useState("")
+  // 只有"编辑/预览"两种模式：预览对纯文本文件是只读展示，对 md 是渲染视图，
+  // 对 html 是触发右侧沙箱面板（内容区本身还是展示只读源码）
+  const [mode, setMode] = React.useState<"edit" | "preview">("preview")
+  // null 表示还没进入过编辑态、没有草稿；一旦进入编辑就固定是 string，取消编辑清回 null
+  const [editContent, setEditContent] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
-  const [markdownViewMode, setMarkdownViewMode] = React.useState<"source" | "rendered">("rendered")
   const [previewReadOnly, setPreviewReadOnly] = React.useState(false)
 
-  const isDirty = editing && fileData !== null && editContent !== (fileData.content || "")
+  const isDirty = editContent !== null && fileData !== null && editContent !== (fileData.content || "")
 
   const handleSaveFileRef = React.useRef<() => Promise<boolean>>(() => Promise.resolve(false))
   // 用稳定的函数引用委托给 handleSaveFileRef.current，这样外层守卫触发保存时
@@ -146,7 +148,7 @@ export function FilesPanel({
     }
   }, [isDirty, selectedPath, editorStateRef, saveCurrentFile])
   React.useEffect(() => {
-    if (!editing) return
+    if (mode !== "edit") return
     function handleKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault()
@@ -155,7 +157,7 @@ export function FilesPanel({
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [editing])
+  }, [mode])
 
   const loadList = React.useCallback(
     (path: string) => {
@@ -182,7 +184,8 @@ export function FilesPanel({
     setSelectedPath("")
     setFileData(null)
     setFileError("")
-    setEditing(false)
+    setEditContent(null)
+    setMode("preview")
     setMobilePane("list")
     if (!activeSession || historyOnly) {
       setEntries([])
@@ -198,8 +201,8 @@ export function FilesPanel({
     setMobilePane("detail")
     setSelectedPath(path)
     setFileData(null)
-    setEditing(false)
-    setMarkdownViewMode("rendered")
+    setEditContent(null)
+    setMode("preview")
     setPreviewReadOnly(readOnly)
     setFileLoading(true)
     setFileError("")
@@ -208,6 +211,19 @@ export function FilesPanel({
         `/api/sessions/${encodeURIComponent(activeSession.name)}/fs/read?path=${encodeURIComponent(path)}&full=1`
       )) as unknown as FsReadResult
       setFileData(data)
+      const editable = Boolean(data.kind === "text" && data.editable && !readOnly)
+      const isMd = data.kind === "text" && data.language === "markdown"
+      const isHtmlFile = data.kind === "text" && data.language === "html"
+      if (editable && !isMd && !isHtmlFile) {
+        // 纯文本文件打开即可编辑，不用先点一次"编辑"
+        setEditContent(data.content || "")
+        setMode("edit")
+      } else {
+        setMode("preview")
+        if (isHtmlFile && onPreviewHtml) {
+          onPreviewHtml(path.split("/").pop() || path, data.content || "")
+        }
+      }
     } catch (err) {
       setFileError(err instanceof Error ? err.message : "读取文件失败")
     } finally {
@@ -252,15 +268,21 @@ export function FilesPanel({
     await openRegularFile(entry)
   }
 
-  function startEditing() {
-    if (!fileData) return
-    setEditContent(fileData.content || "")
-    setMarkdownViewMode("source")
-    setEditing(true)
+  function enterEditMode() {
+    if (!fileData || !isEditable) return
+    setEditContent((prev) => (prev === null ? fileData.content || "" : prev))
+    setMode("edit")
+  }
+
+  function enterPreviewMode() {
+    setMode("preview")
+    if (isHtml && onPreviewHtml) {
+      onPreviewHtml(selectedPath.split("/").pop() || selectedPath, editContent ?? fileData?.content ?? "")
+    }
   }
 
   async function handleSaveFile(): Promise<boolean> {
-    if (!activeSession || !selectedPath || saving) return false
+    if (!activeSession || !selectedPath || saving || editContent === null) return false
     setSaving(true)
     setFileError("")
     try {
@@ -270,7 +292,8 @@ export function FilesPanel({
       })
       // 保存后继续停留在编辑态：CodeMirrorEditor 的 value 没变（就是刚保存的 editContent），
       // 内容同步 effect 会因为 doc 已经等于 value 而直接跳过，光标/选区不受影响
-      setFileData((prev) => (prev ? { ...prev, content: editContent, size: editContent.length } : prev))
+      const savedContent = editContent
+      setFileData((prev) => (prev ? { ...prev, content: savedContent, size: savedContent.length } : prev))
       return true
     } catch (err) {
       setFileError(err instanceof Error ? err.message : "保存失败")
@@ -283,10 +306,12 @@ export function FilesPanel({
     handleSaveFileRef.current = handleSaveFile
   })
 
-  async function handleCancelEdit() {
-    if (!(await confirmLeaveIfDirty())) return
-    setEditing(false)
-    setMarkdownViewMode("rendered")
+  function handleCancelEdit() {
+    setEditContent(null)
+    setMode("preview")
+    if (isHtml && onPreviewHtml) {
+      onPreviewHtml(selectedPath.split("/").pop() || selectedPath, fileData?.content || "")
+    }
   }
 
   async function handleMobileBackToList() {
@@ -423,48 +448,40 @@ export function FilesPanel({
                 ) : null}
                 <PathBar value={sanitizeDisplayText(selectedPath)} />
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {isEditable && !editing ? (
-                  <Button variant="outline" size="sm" onClick={startEditing}>
+              {fileData?.kind === "text" ? (
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    variant={mode === "edit" ? "secondary" : "outline"}
+                    size="sm"
+                    disabled={!isEditable}
+                    onClick={enterEditMode}
+                  >
                     编辑
                   </Button>
-                ) : null}
-                {isMarkdown ? (
                   <Button
-                    variant={markdownViewMode === "rendered" ? "secondary" : "outline"}
+                    variant={mode === "preview" ? "secondary" : "outline"}
                     size="sm"
-                    onClick={() =>
-                      setMarkdownViewMode((mode) => (mode === "source" ? "rendered" : "source"))
-                    }
+                    onClick={enterPreviewMode}
                   >
                     预览
                   </Button>
-                ) : null}
-                {isHtml && onPreviewHtml ? (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      onPreviewHtml(
-                        selectedPath.split("/").pop() || selectedPath,
-                        editing ? editContent : fileData?.content || ""
-                      )
-                    }
+                    onClick={handleCancelEdit}
+                    disabled={!(mode === "edit" && isDirty) || saving}
                   >
-                    预览
+                    取消
                   </Button>
-                ) : null}
-                {isEditable && editing ? (
-                  <>
-                    <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={saving}>
-                      取消
-                    </Button>
-                    <Button size="sm" onClick={handleSaveFile} disabled={saving}>
-                      {saving ? "保存中..." : "保存"}
-                    </Button>
-                  </>
-                ) : null}
-              </div>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveFile}
+                    disabled={!(mode === "edit" && isDirty) || saving}
+                  >
+                    {saving ? "保存中..." : "保存"}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -496,30 +513,22 @@ export function FilesPanel({
                   <p className="text-sm text-muted-foreground">
                     二进制文件，无法预览（{fileData.size} 字节）
                   </p>
-                ) : editing ? (
-                  isMarkdown && markdownViewMode === "rendered" ? (
-                    <MarkdownContent
-                      content={rewriteRelativeImageLinks(editContent, (href) =>
-                        resolveMarkdownImageUrl(activeSession.name, selectedPath, href)
-                      )}
-                    />
-                  ) : (
-                    <CodeMirrorEditor
-                      value={editContent}
-                      language={fileData.language || "text"}
-                      readOnly={false}
-                      onChange={setEditContent}
-                    />
-                  )
-                ) : isMarkdown && markdownViewMode === "rendered" ? (
+                ) : mode === "edit" ? (
+                  <CodeMirrorEditor
+                    value={editContent ?? fileData.content ?? ""}
+                    language={fileData.language || "text"}
+                    readOnly={false}
+                    onChange={setEditContent}
+                  />
+                ) : isMarkdown ? (
                   <MarkdownContent
-                    content={rewriteRelativeImageLinks(fileData.content || "", (href) =>
+                    content={rewriteRelativeImageLinks(editContent ?? fileData.content ?? "", (href) =>
                       resolveMarkdownImageUrl(activeSession.name, selectedPath, href)
                     )}
                   />
                 ) : (
                   <CodeMirrorEditor
-                    value={fileData.content || ""}
+                    value={editContent ?? fileData.content ?? ""}
                     language={fileData.language || "text"}
                     readOnly
                   />
