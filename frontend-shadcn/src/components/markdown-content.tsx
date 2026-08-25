@@ -91,7 +91,17 @@ export function MarkdownContent({
     <>
       <div
         className={cn(
-          "prose prose-sm dark:prose-invert max-w-none break-words prose-pre:bg-muted prose-pre:text-foreground",
+          "prose prose-sm dark:prose-invert max-w-none break-words",
+          // prose-sm 的 code 用 em 相对缩放，算下来比气泡正文还小，这里固定跟正文一样大
+          "prose-code:text-sm prose-pre:text-sm",
+          // 代码块背景改用 foreground 的浅色叠加而不是 muted——跟气泡本身的 muted 底色太接近，
+          // 混在一起分不清代码块的边界。prose-pre: 修饰符只改 typography 插件自己的
+          // --tw-prose-pre-bg 变量，套不到实际渲染的 background-color 上，改用直接的
+          // 后代选择器 + !important 绕开插件内部的变量间接层
+          "[&_pre]:bg-foreground/10! dark:[&_pre]:bg-foreground/15! prose-pre:text-foreground",
+          // 表格默认可能比气泡宽，加 overflow-x-auto 让它能横向滚动，再给一条常驻可见的
+          // 细滚动条（不依赖系统"仅交互时显示"的覆盖式滚动条），避免用户看不出还能往右滑
+          "[&_table]:block [&_table]:overflow-x-auto [&_table]:[scrollbar-width:thin] [&_table::-webkit-scrollbar]:h-1.5 [&_table::-webkit-scrollbar-thumb]:rounded-full [&_table::-webkit-scrollbar-thumb]:bg-foreground/25",
           className
         )}
         onClick={handleClick}
