@@ -8,15 +8,15 @@ import {
   type SessionSummary,
 } from "@/lib/api"
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { CloneNameDialog, type CloneMode } from "@/components/clone-name-dialog"
 import { CreateContainerDialog } from "@/components/create-container-dialog"
 import { PromptDialog } from "@/components/prompt-dialog"
@@ -83,6 +83,9 @@ export function AppSidebar({
   activeSessionName,
   onSelectSession,
   onRefresh,
+  confirmLeaveIfDirty,
+  creatingAgentContainer,
+  onCreatingAgentContainerChange,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   containers: ContainerGroup[]
@@ -91,6 +94,9 @@ export function AppSidebar({
   activeSessionName: string | null
   onSelectSession: (session: SessionSummary | null) => void
   onRefresh: () => Promise<SessionSummary[]>
+  confirmLeaveIfDirty: () => Promise<boolean>
+  creatingAgentContainer: string | null
+  onCreatingAgentContainerChange: (containerName: string | null) => void
 }) {
   const { isMobile, setOpenMobile } = useSidebar()
   const [navLevel, setNavLevel] = React.useState<NavLevel>("containers")
@@ -142,6 +148,15 @@ export function AppSidebar({
     () => (activeGroup?.sessions ?? []).filter((s) => s.synthetic !== true),
     [activeGroup]
   )
+  // 从agent列表返回容器列表后，靠当前激活的会话反推它所在的容器，
+  // 让容器列表也能高亮出"正在对话的是哪个容器"
+  const activeContainerName = React.useMemo(() => {
+    if (!activeSessionName) return ""
+    return (
+      containers.find((group) => group.sessions.some((s) => s.name === activeSessionName))
+        ?.containerName ?? ""
+    )
+  }, [containers, activeSessionName])
 
   const filteredContainers = React.useMemo(() => {
     const text = query.trim().toLowerCase()
@@ -164,7 +179,10 @@ export function AppSidebar({
   }
 
   // 移动端选中 AGENT 后自动收起侧边栏 Sheet，露出右侧聊天内容
-  function selectSession(session: SessionSummary | null) {
+  async function selectSession(session: SessionSummary | null) {
+    if (session && session.name !== activeSessionName) {
+      if (!(await confirmLeaveIfDirty())) return
+    }
     onSelectSession(session)
     if (session && isMobile) setOpenMobile(false)
   }
@@ -184,7 +202,10 @@ export function AppSidebar({
   }
 
   async function createAgent(containerName: string) {
+    if (creatingAgentContainer) return
+    if (!(await confirmLeaveIfDirty())) return
     setActionError("")
+    onCreatingAgentContainerChange(containerName)
     try {
       // 接口直接返回新建 AGENT 的 name，比"倒序猜最后一个"更可靠——
       // 会话列表的顺序并不保证与创建时间一致
@@ -196,6 +217,8 @@ export function AppSidebar({
       if (created) selectSession(created)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "新建 AGENT 失败")
+    } finally {
+      onCreatingAgentContainerChange(null)
     }
   }
 
@@ -290,17 +313,30 @@ export function AppSidebar({
         <Button
           className="w-full"
           size="lg"
+          disabled={navLevel === "agents" && creatingAgentContainer === navContainer}
           onClick={() =>
             navLevel === "agents" ? createAgent(navContainer) : setCreateOpen(true)
           }
         >
-          <PlusIcon data-icon="inline-start" />
-          {navLevel === "agents" ? "新建AGENT" : "新建容器"}
+          {navLevel === "agents" && creatingAgentContainer === navContainer ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <PlusIcon data-icon="inline-start" />
+          )}
+          {navLevel === "agents"
+            ? creatingAgentContainer === navContainer
+              ? "创建中..."
+              : "新建AGENT"
+            : "新建容器"}
         </Button>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>工作台</span>
           <span>
-            {loading ? "加载中..." : `${containers.length} 个容器 / ${agentCount} 个 AGENT`}
+            {loading
+              ? "加载中..."
+              : navLevel === "agents"
+                ? `${visibleAgentSessions.length} 个 AGENT`
+                : `${containers.length} 个容器 / ${agentCount} 个 AGENT`}
           </span>
         </div>
         <Breadcrumb>
@@ -351,6 +387,7 @@ export function AppSidebar({
                     <SidebarMenuItem key={group.containerName}>
                       <SidebarMenuButton
                         size="lg"
+                        isActive={group.containerName === activeContainerName}
                         onClick={() => goToAgents(group.containerName)}
                         className="h-auto flex-col items-start gap-1 py-2.5"
                       >
@@ -402,9 +439,17 @@ export function AppSidebar({
                               编辑备注
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              disabled={creatingAgentContainer === group.containerName}
                               onClick={() => createAgent(group.containerName)}
                             >
-                              新建 AGENT
+                              {creatingAgentContainer === group.containerName ? (
+                                <>
+                                  <Spinner data-icon="inline-start" />
+                                  创建中...
+                                </>
+                              ) : (
+                                "新建 AGENT"
+                              )}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
@@ -441,8 +486,15 @@ export function AppSidebar({
                         onClick={() => selectSession(session)}
                         className="h-auto flex-col items-start gap-1 py-2.5"
                       >
-                        <span className="w-full truncate font-medium">
-                          {session.agentRemark || session.agentName}
+                        <span className="flex w-full items-center gap-1.5">
+                          <span className="truncate font-medium">
+                            {session.agentRemark || session.agentName}
+                          </span>
+                          {session.archived ? (
+                            <Badge variant="outline" className="ml-auto shrink-0">
+                              已停止
+                            </Badge>
+                          ) : null}
                         </span>
                         <span className="w-full truncate text-xs text-muted-foreground">
                           {formatUpdatedAt(session.updatedAt || "")}
@@ -536,32 +588,28 @@ export function AppSidebar({
         onSubmit={submitClone}
       />
 
-      <AlertDialog
+      <Dialog
         open={removeDialog !== null}
-        onOpenChange={(next) => {
+        onOpenChange={(next: boolean) => {
           if (!next) settleRemoveDialog(null)
         }}
       >
-        <AlertDialogContent>
-          <AlertDialogTitle>{removeDialog?.title}</AlertDialogTitle>
-          <AlertDialogDescription>{removeDialog?.message}</AlertDialogDescription>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              variant="outline"
-              size="default"
-              onClick={() => settleRemoveDialog(null)}
-            >
+        <DialogContent className="sm:max-w-sm">
+          <DialogTitle>{removeDialog?.title}</DialogTitle>
+          <DialogDescription>{removeDialog?.message}</DialogDescription>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => settleRemoveDialog(null)}>
               取消
-            </AlertDialogCancel>
+            </Button>
             <Button variant="outline" onClick={() => settleRemoveDialog("keep-history")}>
               否，保留历史
             </Button>
             <Button variant="destructive" onClick={() => settleRemoveDialog("with-history")}>
               是，连同历史一起删除
             </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sidebar>
   )
 }

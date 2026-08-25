@@ -17,6 +17,7 @@ export type SessionSummary = {
   hostPath: string
   containerPath: string
   synthetic?: boolean
+  archived?: boolean
 }
 
 export type TraceEvent = {

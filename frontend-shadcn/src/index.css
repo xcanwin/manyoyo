@@ -59,11 +59,12 @@
     --popover-foreground: oklch(0.145 0 0);
     --primary: oklch(0.205 0 0);
     --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
+    /* 比 --background(0.975) 明显深一截，hover/active 态才有可辨识的对比度 */
+    --secondary: oklch(0.93 0 0);
     --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
+    --muted: oklch(0.93 0 0);
     --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
+    --accent: oklch(0.93 0 0);
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
     --border: oklch(0.922 0 0);
@@ -129,4 +130,36 @@
   html {
     @apply font-sans;
     }
+  /* 移动端聊天区域猛滑到顶/底时，防止 iOS Safari 把回弹（rubber-band）
+     顺着触摸事件链一路传导到整个页面，让页面本身也跟着晃 */
+  html, body {
+    overscroll-behavior: none;
+  }
+  /* marked 生成的表格没有外层滚动容器，宽表格在窄屏下会撑破气泡——
+     table 保留内部表格布局的同时把最外层变成可横向滚动的块 */
+  .prose table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+}
+
+/* 细滚动条：只在需要滚动的容器上按需出现，比浏览器默认滚动条更窄更轻。
+   颜色用 --color-ring 而不是 --color-border——border 和侧栏背景太接近，滚动条几乎隐形 */
+@layer utilities {
+  .thin-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-ring) transparent;
+  }
+  .thin-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .thin-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .thin-scrollbar::-webkit-scrollbar-thumb {
+    background-color: var(--color-ring);
+    border-radius: 9999px;
+  }
 }

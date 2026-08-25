@@ -813,7 +813,7 @@ describe('Web Server Container/Agent Removal with optional history', () => {
         }
     });
 
-    test('/remove-with-history without removeHistory archives the agent, keeps files on disk, and hides it from the API', async () => {
+    test('/remove-with-history without removeHistory archives the agent, keeps files on disk, and keeps it visible (archived) in the API', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-archive-agent-'));
         const port = await getFreePort();
         const webHistoryDir = path.join(tempHost, 'web-history');
@@ -860,15 +860,16 @@ describe('Web Server Container/Agent Removal with optional history', () => {
             expect(savedHistory.agents['agent-2'].messages.map(m => m.content)).toEqual(['keep this around']);
 
             const listRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
-            expect(listRes.json.sessions.some(item => item.name === 'multi-agent-2~agent-2')).toBe(false);
+            const archivedItem = listRes.json.sessions.find(item => item.name === 'multi-agent-2~agent-2');
+            expect(archivedItem).toEqual(expect.objectContaining({ archived: true, messageCount: 1 }));
 
             const detailRes = await request(`${baseUrl}/api/sessions/multi-agent-2~agent-2/detail`, { headers: { Cookie: authCookie } });
             expect(detailRes.response.status).toBe(200);
-            expect(detailRes.json.detail).toBeNull();
+            expect(detailRes.json.detail).toEqual(expect.objectContaining({ archived: true }));
 
             const messagesRes = await request(`${baseUrl}/api/sessions/multi-agent-2~agent-2/messages`, { headers: { Cookie: authCookie } });
             expect(messagesRes.response.status).toBe(200);
-            expect(messagesRes.json.messages).toEqual([]);
+            expect(messagesRes.json.messages.map(m => m.content)).toEqual(['keep this around']);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -877,7 +878,67 @@ describe('Web Server Container/Agent Removal with optional history', () => {
         }
     });
 
-    test('archiving the only default agent keeps the container visible as a synthetic empty entry instead of vanishing', async () => {
+    test('agent-remark on an archived agent updates the remark without wiping its preserved history', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-archive-remark-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+
+        writeHistoryFile(webHistoryDir, 'multi-agent-3', {
+            containerName: 'multi-agent-3',
+            applied: { containerName: 'multi-agent-3', hostPath: tempHost },
+            agents: {
+                default: {
+                    agentId: 'default',
+                    agentName: 'AGENT 1',
+                    createdAt: '2025-01-01T00:00:00.000Z',
+                    updatedAt: '2025-01-01T00:00:00.000Z',
+                    messages: []
+                },
+                'agent-2': {
+                    agentId: 'agent-2',
+                    agentName: 'AGENT 2',
+                    archived: true,
+                    createdAt: '2025-01-01T00:00:00.000Z',
+                    updatedAt: '2025-01-01T00:00:00.000Z',
+                    messages: [buildAgentMessage('user', 'keep this around')]
+                }
+            }
+        });
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => true
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const res = await request(`${baseUrl}/api/sessions/multi-agent-3~agent-2/agent-remark`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ remark: '归档测试备注' })
+            });
+            expect(res.response.status).toBe(200);
+
+            const savedHistory = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'multi-agent-3.json'), 'utf-8'));
+            expect(savedHistory.agents['agent-2'].archived).toBe(true);
+            expect(savedHistory.agents['agent-2'].remark).toBe('归档测试备注');
+            expect(savedHistory.agents['agent-2'].messages.map(m => m.content)).toEqual(['keep this around']);
+
+            const listRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            const archivedItem = listRes.json.sessions.find(item => item.name === 'multi-agent-3~agent-2');
+            expect(archivedItem).toEqual(
+                expect.objectContaining({ archived: true, agentRemark: '归档测试备注', messageCount: 1 })
+            );
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('archiving the only default agent keeps the container visible with the archived agent and its preserved history', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-archive-default-'));
         const port = await getFreePort();
         const webHistoryDir = path.join(tempHost, 'web-history');
@@ -923,9 +984,10 @@ describe('Web Server Container/Agent Removal with optional history', () => {
             expect(lonelySessions[0]).toEqual(expect.objectContaining({
                 name: 'lonely',
                 agentId: 'default',
-                messageCount: 0,
-                synthetic: true
+                messageCount: 1,
+                archived: true
             }));
+            expect(lonelySessions[0].synthetic).not.toBe(true);
 
             const savedHistory = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'lonely.json'), 'utf-8'));
             expect(savedHistory.agents.default.archived).toBe(true);

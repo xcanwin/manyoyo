@@ -63,7 +63,7 @@ export function PromptDialog({
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="prompt-dialog-input">{label}</FieldLabel>

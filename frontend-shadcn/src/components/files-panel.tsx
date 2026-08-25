@@ -21,6 +21,7 @@ import { CodeMirrorEditor } from "@/components/code-mirror-editor"
 import { Input } from "@/components/ui/input"
 import { MarkdownContent } from "@/components/markdown-content"
 import { PromptDialog } from "@/components/prompt-dialog"
+import { Spinner } from "@/components/ui/spinner"
 
 // 与旧版前端 file-browser.js 的 FILE_EDIT_MAX_BYTES 对齐：>=2MB 的文件只提供只读全量预览
 const FILE_EDIT_MAX_BYTES = 2 * 1024 * 1024
@@ -61,7 +62,22 @@ function rewriteRelativeImageLinks(markdownText: string, resolver: (href: string
   )
 }
 
-export function FilesPanel({ activeSession }: { activeSession: SessionSummary | null }) {
+// 有未保存修改时暴露给外层守卫（切换 agent / 新建 agent / 切换顶部标签）：
+// 文件名用于弹窗提示，save 触发真正的保存并返回是否成功
+export type FilesEditorState = {
+  fileName: string
+  save: () => Promise<boolean>
+}
+
+export function FilesPanel({
+  activeSession,
+  editorStateRef,
+  confirmLeaveIfDirty,
+}: {
+  activeSession: SessionSummary | null
+  editorStateRef?: React.RefObject<FilesEditorState | null>
+  confirmLeaveIfDirty: () => Promise<boolean>
+}) {
   const historyOnly = activeSession?.status === "history"
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
   const isMobile = useIsMobile()
@@ -83,6 +99,36 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
   const [saving, setSaving] = React.useState(false)
   const [markdownViewMode, setMarkdownViewMode] = React.useState<"source" | "rendered">("rendered")
   const [previewReadOnly, setPreviewReadOnly] = React.useState(false)
+
+  const isDirty = editing && fileData !== null && editContent !== (fileData.content || "")
+
+  const handleSaveFileRef = React.useRef<() => Promise<boolean>>(() => Promise.resolve(false))
+  // 用稳定的函数引用委托给 handleSaveFileRef.current，这样外层守卫触发保存时
+  // 总能拿到当次渲染最新的 selectedPath / editContent，而不是 effect 创建时的旧闭包
+  const saveCurrentFile = React.useCallback(() => handleSaveFileRef.current(), [])
+
+  // 把"编辑器有未保存修改"同步给外层 ref，供新建/切换 AGENT、切换顶部标签页时读取，
+  // 避免不小心一键跳走丢内容
+  React.useEffect(() => {
+    if (!editorStateRef) return
+    editorStateRef.current = isDirty
+      ? { fileName: selectedPath.split("/").pop() || selectedPath, save: saveCurrentFile }
+      : null
+    return () => {
+      editorStateRef.current = null
+    }
+  }, [isDirty, selectedPath, editorStateRef, saveCurrentFile])
+  React.useEffect(() => {
+    if (!editing) return
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault()
+        handleSaveFileRef.current()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [editing])
 
   const loadList = React.useCallback(
     (path: string) => {
@@ -121,6 +167,7 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
 
   async function fetchFile(path: string, readOnly: boolean) {
     if (!activeSession) return
+    if (!(await confirmLeaveIfDirty())) return
     setMobilePane("detail")
     setSelectedPath(path)
     setFileData(null)
@@ -184,8 +231,8 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
     setEditing(true)
   }
 
-  async function handleSaveFile() {
-    if (!activeSession || !selectedPath) return
+  async function handleSaveFile(): Promise<boolean> {
+    if (!activeSession || !selectedPath || saving) return false
     setSaving(true)
     setFileError("")
     try {
@@ -193,13 +240,29 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
         path: selectedPath,
         content: editContent,
       })
+      // 保存后继续停留在编辑态：CodeMirrorEditor 的 value 没变（就是刚保存的 editContent），
+      // 内容同步 effect 会因为 doc 已经等于 value 而直接跳过，光标/选区不受影响
       setFileData((prev) => (prev ? { ...prev, content: editContent, size: editContent.length } : prev))
-      setEditing(false)
+      return true
     } catch (err) {
       setFileError(err instanceof Error ? err.message : "保存失败")
+      return false
     } finally {
       setSaving(false)
     }
+  }
+  React.useEffect(() => {
+    handleSaveFileRef.current = handleSaveFile
+  })
+
+  async function handleCancelEdit() {
+    if (!(await confirmLeaveIfDirty())) return
+    setEditing(false)
+  }
+
+  async function handleMobileBackToList() {
+    if (!(await confirmLeaveIfDirty())) return
+    setMobilePane("list")
   }
 
   async function handleCreateEntry(name: string) {
@@ -247,11 +310,12 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
             size="icon-sm"
             disabled={!parentPath}
             onClick={() => loadList(parentPath)}
+            title="返回上一层目录"
           >
             <ArrowUpIcon />
           </Button>
           <Input value={sanitizeDisplayText(currentPath)} readOnly className="h-8 font-mono text-xs" />
-          <Button variant="outline" size="icon-sm" onClick={() => loadList(currentPath)}>
+          <Button variant="outline" size="icon-sm" onClick={() => loadList(currentPath)} title="刷新">
             <RefreshCwIcon />
           </Button>
           <Button variant="outline" size="icon-sm" onClick={() => setNewDialog("file")} title="新建文件">
@@ -273,36 +337,41 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
         <div className={cn("h-full w-64 shrink-0 overflow-y-auto border-r", isMobile && "w-full", !showListPane && "hidden")}>
           <div className="flex flex-col gap-0.5 p-2">
             {loading ? (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">加载中...</div>
-            ) : null}
-            {!loading && entries.length === 0 ? (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">空目录</div>
-            ) : null}
-            {entries.map((entry) => (
-              <button
-                key={entry.path}
-                type="button"
-                onClick={() => openEntry(entry)}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/8",
-                  selectedPath === entry.path && "bg-foreground/12 font-medium"
-                )}
-                title={
-                  entry.kind === "symlink" && entry.symlinkTarget
-                    ? `符号链接 → ${sanitizeDisplayText(entry.symlinkTarget)}`
-                    : sanitizeDisplayText(entry.name)
-                }
-              >
-                {entry.kind === "directory" ? (
-                  <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
-                ) : entry.kind === "symlink" ? (
-                  <Link2Icon className="size-4 shrink-0 text-muted-foreground" />
-                ) : (
-                  <FileIcon className="size-4 shrink-0 text-muted-foreground" />
-                )}
-                <span className="truncate">{sanitizeDisplayText(entry.name)}</span>
-              </button>
-            ))}
+              <div className="flex h-32 items-center justify-center">
+                <Spinner className="size-5" />
+              </div>
+            ) : (
+              <>
+                {entries.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">空目录</div>
+                ) : null}
+                {entries.map((entry) => (
+                  <button
+                    key={entry.path}
+                    type="button"
+                    onClick={() => openEntry(entry)}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/8",
+                      selectedPath === entry.path && "bg-foreground/12 font-medium"
+                    )}
+                    title={
+                      entry.kind === "symlink" && entry.symlinkTarget
+                        ? `符号链接 → ${sanitizeDisplayText(entry.symlinkTarget)}`
+                        : sanitizeDisplayText(entry.name)
+                    }
+                  >
+                    {entry.kind === "directory" ? (
+                      <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
+                    ) : entry.kind === "symlink" ? (
+                      <Link2Icon className="size-4 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <FileIcon className="size-4 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="truncate">{sanitizeDisplayText(entry.name)}</span>
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </div>
 
@@ -311,11 +380,11 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
             <div className="flex shrink-0 items-center justify-between gap-2 border-b p-2">
               <div className="flex min-w-0 items-center gap-1.5">
                 {isMobile ? (
-                  <Button variant="ghost" size="icon-sm" onClick={() => setMobilePane("list")}>
+                  <Button variant="ghost" size="icon-sm" onClick={handleMobileBackToList} title="返回列表">
                     <ArrowLeftIcon />
                   </Button>
                 ) : null}
-                <div className="min-w-0 flex-1 overflow-x-auto">
+                <div className="thin-scrollbar min-w-0 flex-1 overflow-x-auto pb-3">
                   <span className="block w-max font-mono text-xs whitespace-nowrap text-muted-foreground">
                     {sanitizeDisplayText(selectedPath)}
                   </span>
@@ -336,7 +405,7 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
                 {isEditable ? (
                   editing ? (
                     <div className="flex shrink-0 gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={saving}>
+                      <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={saving}>
                         取消
                       </Button>
                       <Button size="sm" onClick={handleSaveFile} disabled={saving}>
@@ -360,7 +429,9 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
               </p>
             ) : null}
             {fileLoading ? (
-              <p className="p-6 text-center text-sm text-muted-foreground">加载中...</p>
+              <div className="flex h-32 items-center justify-center">
+                <Spinner className="size-5" />
+              </div>
             ) : null}
             {fileError ? (
               <Alert variant="destructive">

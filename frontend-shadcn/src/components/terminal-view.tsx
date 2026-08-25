@@ -35,6 +35,7 @@ const KEYBAR_KEYS: Array<{ label: string; data: string }> = [
 export function TerminalView({ session }: { session: SessionSummary | null }) {
   const containerRef = React.useRef<HTMLDivElement | null>(null)
   const socketRef = React.useRef<WebSocket | null>(null)
+  const termRef = React.useRef<Terminal | null>(null)
   const [status, setStatus] = React.useState("")
   const [ctrlMode, setCtrlMode] = React.useState(false)
   const [altMode, setAltMode] = React.useState(false)
@@ -56,6 +57,9 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: "input", data }))
     }
+    // 点击按钮会把浏览器焦点带到按钮本身，这里点完再抢回来，
+    // 保证紧接着的物理键盘输入还能继续发到终端
+    termRef.current?.focus()
   }
 
   React.useEffect(() => {
@@ -72,6 +76,7 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
     term.loadAddon(fitAddon)
     term.open(container)
     fitAddon.fit()
+    termRef.current = term
 
     const cols = Math.max(term.cols || DEFAULT_COLS, MIN_COLS)
     const rows = Math.max(term.rows || DEFAULT_ROWS, MIN_ROWS)
@@ -130,6 +135,7 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
       }
       term.dispose()
       socketRef.current = null
+      termRef.current = null
     }
   }, [session, historyOnly])
 
@@ -168,20 +174,26 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
           ))}
           <button
             type="button"
-            onClick={() => setCtrlMode((value) => !value)}
+            onClick={() => {
+              setCtrlMode((value) => !value)
+              termRef.current?.focus()
+            }}
             className={cn(
               "shrink-0 rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
-              ctrlMode && "border-primary bg-primary text-primary-foreground"
+              ctrlMode && "border-zinc-100 bg-zinc-100 text-zinc-900 hover:bg-zinc-100"
             )}
           >
             ctrl
           </button>
           <button
             type="button"
-            onClick={() => setAltMode((value) => !value)}
+            onClick={() => {
+              setAltMode((value) => !value)
+              termRef.current?.focus()
+            }}
             className={cn(
               "shrink-0 rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
-              altMode && "border-primary bg-primary text-primary-foreground"
+              altMode && "border-zinc-100 bg-zinc-100 text-zinc-900 hover:bg-zinc-100"
             )}
           >
             alt

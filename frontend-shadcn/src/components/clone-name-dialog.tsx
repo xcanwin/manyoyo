@@ -67,7 +67,7 @@ export function CloneNameDialog({
               : `将以「${sourceContainerName}」的配置创建一个新容器，不复制对话历史。`}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="clone-name">新容器名称</FieldLabel>

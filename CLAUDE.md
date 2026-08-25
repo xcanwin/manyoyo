@@ -47,7 +47,9 @@ lib/
     playwright-assets/  # Docker Compose 及 Dockerfile 场景模板
   web/
     server.js           # HTTP + WebSocket 服务器（终端、agent 对话、登录鉴权）
-    frontend/           # app / login / markdown-renderer / file-browser / codemirror
+    frontend/           # 旧版前端：app / login / markdown-renderer / file-browser / codemirror
+frontend-shadcn/         # 新版前端（`/shadcn` 路由）：React + shadcn/ui（Base UI + Tailwind v4），
+                         # 独立 Vite 项目，与 lib/web/frontend/ 并存，不共用组件
 docker/
   manyoyo.Dockerfile    # 多阶段镜像构建
   cache/                # 构建缓存（Node.js、JDT LSP、gopls），有效期 2 天
@@ -138,6 +140,15 @@ npx jest --testNamePattern="关键词"
 - 布局是两层 grid 嵌套：`.main`（`header` + `.workspace-shell` 两个直接子元素）套着内层 `.workspace-main`（`grid-template-rows: minmax(0, 1fr) auto`，真正的"内容区 / composer"二分在这一层，composer 并非 `.main` 的直接子元素）。增删 `.workspace-main` 直接子元素时须同步调整行数，否则内容区高度失效
 - 中间工作台的"终端/文件/详情/配置/检查"5 个次要标签收在 `#workspaceSwitcherToggle` 图标按钮触发的弹出面板 `#workspaceSwitcherPanel` 里，仅"活动"作为常驻标签；`setActiveTab()`/`isActiveSessionHistoryOnly()` 逻辑本身未变，只是触发入口从常驻按钮改为面板内按钮
 - `connectTerminal()` 前须加 `isActiveSessionHistoryOnly()` 守卫（三处：`setActiveTab`、`handleSessionItemClick`、`refreshSessions`），否则点击「仅历史」会话会触发后端新建容器
+
+### frontend-shadcn/ 样式规范
+
+新前端遵循 shadcn skill 的通用规则（Skill 工具，名称 `shadcn`），此外项目内额外约束两条容易回归的问题：
+
+- **hover / active 态必须肉眼可辨**：`index.css` 里 `--muted`/`--secondary`/`--accent` 与 `--background` 的 oklch lightness 差值曾经只有 0.005（背景改浅到 `oklch(0.975)` 但没跟着调这三个 token），导致 `ghost`/`outline`/`secondary` 变体的按钮、下拉菜单项、弹出面板选项在浅色主题下悬浮/选中几乎看不出变化。现状是三个 token 固定在 `oklch(0.93)`，与背景保持约 0.04 的差值——**改动这几个 CSS 变量或新增依赖它们的组件后，必须在浏览器里同时用亮色和暗色主题实测悬浮/选中态**，不能只看代码 diff 判断"应该能看见"。
+- **不用 className 覆盖 `Button`/`Input` 等组件自带的内边距、字号**（例如手写 `py-*`、`text-*` 覆盖默认值）。需要不同大小时用已有的 `size` variant（`xs`/`sm`/`default`/`lg`/`icon*`）；确实缺档位就去 `buttonVariants`（或对应组件的 `cva` 定义）里加一档，不要在调用处零散覆盖——否则各处按钮粗细不一致，且下次升级 shadcn 组件版本时这些覆盖会被悄悄绕过。
+- **`DialogContent` 是 `grid gap-4`，直接子元素之间才有间距**。表单类弹窗如果用 `<form>` 包住 `FieldGroup` + `DialogFooter`（提交需要整体在 `<form>` 里），`<form>` 本身会挡住这层 grid gap，字段和底部按钮栏会贴在一起——`<form>` 必须显式补 `className="flex flex-col gap-4"`。不需要 `<form>` 包裹时（`FieldGroup`/`DialogFooter` 直接作为 `DialogContent` 的子元素）不用管，gap 是自动的。参考 `prompt-dialog.tsx`、`create-container-dialog.tsx`、`clone-name-dialog.tsx`。
+- **确认类弹窗（删除确认、未保存修改提示等）一律用 `Dialog`，不用 `AlertDialog`**：base-ui 的 `AlertDialog` 语义上要求必须点按钮才能关闭，默认不响应背景点击、`AlertDialogContent` 也没有右上角关闭按钮；这个项目的约定是所有弹窗都可以背景点击 / 右上角 ✕ 关闭（等价于"取消"），因此统一用 `Dialog` + 手动的"取消" `Button`（`variant="outline"`, `onClick` 里做取消逻辑），不要用 `AlertDialogCancel`。`frontend-shadcn/src/hooks/use-confirm-dialog.tsx`、`use-unsaved-changes-dialog.tsx` 是这个模式的参考实现。
 
 ### Dockerfile
 

@@ -5,13 +5,12 @@ import { marked } from "marked"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -74,23 +73,23 @@ export function MarkdownContent({
         onClick={handleClick}
         dangerouslySetInnerHTML={{ __html: html }}
       />
-      <AlertDialog
+      <Dialog
         open={pendingUrl !== null}
         onOpenChange={(next) => {
           if (!next) setPendingUrl(null)
         }}
       >
-        <AlertDialogContent>
-          <AlertDialogTitle>打开外部链接</AlertDialogTitle>
-          <AlertDialogDescription className="break-all">{pendingUrl}</AlertDialogDescription>
-          <AlertDialogFooter>
-            <AlertDialogCancel variant="outline" size="default">
+        <DialogContent className="sm:max-w-sm">
+          <DialogTitle>打开外部链接</DialogTitle>
+          <DialogDescription className="break-all">{pendingUrl}</DialogDescription>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingUrl(null)}>
               取消
-            </AlertDialogCancel>
+            </Button>
             <Button onClick={handleConfirmOpen}>确认并新标签打开</Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

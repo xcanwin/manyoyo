@@ -19,7 +19,7 @@ import { AgentTemplateDialog } from "@/components/agent-template-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { FilesPanel } from "@/components/files-panel"
+import { FilesPanel, type FilesEditorState } from "@/components/files-panel"
 import { MarkdownContent } from "@/components/markdown-content"
 import { ModelDialog } from "@/components/model-dialog"
 import { TerminalView } from "@/components/terminal-view"
@@ -37,7 +37,7 @@ import { TraceBlock } from "@/components/trace-block"
 type View = "activity" | "terminal" | "files" | "detail" | "config" | "check"
 
 const VIEW_LABELS: Record<View, string> = {
-  activity: "活动",
+  activity: "聊天",
   terminal: "终端",
   files: "文件",
   detail: "详情",
@@ -207,7 +207,11 @@ function ActivityView({
   }
 
   return (
-    <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-x-hidden overflow-y-auto">
+    <div
+      ref={scrollRef}
+      onScroll={handleScroll}
+      className="h-full overflow-x-hidden overflow-y-auto overscroll-y-contain"
+    >
       <div className="flex flex-col gap-3 p-4">
         {displayMessages.map((message) => {
           // 与旧版前端 body.agent-mode/.command-mode + msg.origin-* 对齐：
@@ -482,9 +486,11 @@ function Composer({
   onOpenModel: () => void
 }) {
   const isMobile = useIsMobile()
+  const [optionsOpen, setOptionsOpen] = React.useState(false)
   // 与旧版前端一致：Agent 模式下，如果当前会话本身不支持 Agent 输入，禁用发送
   const agentUnavailable = mode === "agent" && Boolean(session) && !session?.agentEnabled
-  const inputDisabled = disabled || agentUnavailable
+  const archived = Boolean(session?.archived)
+  const inputDisabled = disabled || agentUnavailable || archived
 
   return (
     <div className="border-t p-3">
@@ -492,7 +498,9 @@ function Composer({
         placeholder={
           disabled
             ? "请先在左侧选择一个容器 / AGENT"
-            : agentUnavailable
+            : archived
+              ? "该 AGENT 已被删除，仅可查看历史消息"
+              : agentUnavailable
               ? "当前会话不支持 Agent 模式"
               : mode === "command"
                 ? "输入容器命令，例如: ls -la"
@@ -514,7 +522,7 @@ function Composer({
         }}
       />
       <div className="mt-2 flex items-center justify-between gap-2">
-        <Popover>
+        <Popover open={optionsOpen} onOpenChange={setOptionsOpen}>
           <PopoverTrigger render={<Button variant="outline" className="px-4" disabled={disabled} />}>
             选项
           </PopoverTrigger>
@@ -524,7 +532,10 @@ function Composer({
                 variant={mode === "agent" ? "secondary" : "ghost"}
                 size="sm"
                 className="justify-start"
-                onClick={() => onModeChange("agent")}
+                onClick={() => {
+                  onModeChange("agent")
+                  setOptionsOpen(false)
+                }}
               >
                 Agent对话
               </Button>
@@ -532,7 +543,10 @@ function Composer({
                 variant={mode === "command" ? "secondary" : "ghost"}
                 size="sm"
                 className="justify-start"
-                onClick={() => onModeChange("command")}
+                onClick={() => {
+                  onModeChange("command")
+                  setOptionsOpen(false)
+                }}
               >
                 系统命令
               </Button>
@@ -541,8 +555,11 @@ function Composer({
                 variant="ghost"
                 size="sm"
                 className="justify-start"
-                disabled={!session}
-                onClick={onOpenCliTemplate}
+                disabled={!session || archived}
+                onClick={() => {
+                  onOpenCliTemplate()
+                  setOptionsOpen(false)
+                }}
               >
                 CLI · {session?.agentProgram || "未设置"}
               </Button>
@@ -550,8 +567,11 @@ function Composer({
                 variant="ghost"
                 size="sm"
                 className="justify-start"
-                disabled={!session}
-                onClick={onOpenModel}
+                disabled={!session || archived}
+                onClick={() => {
+                  onOpenModel()
+                  setOptionsOpen(false)
+                }}
               >
                 模型 · {session?.model || "跟随默认"}
               </Button>
@@ -576,9 +596,15 @@ function Composer({
 export function WorkspacePanel({
   activeSession,
   onAfterSend,
+  filesEditorRef,
+  confirmLeaveIfDirty,
+  creatingAgent,
 }: {
   activeSession: SessionSummary | null
   onAfterSend: () => void
+  filesEditorRef: React.RefObject<FilesEditorState | null>
+  confirmLeaveIfDirty: () => Promise<boolean>
+  creatingAgent: boolean
 }) {
   const [view, setView] = React.useState<View>("activity")
   const [messages, setMessages] = React.useState<ChatMessage[]>([])
@@ -600,6 +626,14 @@ export function WorkspacePanel({
   }, [activeSession?.name])
 
   const sending = activeSession ? sendingNames.has(activeSession.name) : false
+
+  // 文件编辑器有未保存修改时，切走顶部标签会直接丢弃 FilesPanel 的编辑状态
+  // （非 files 视图不渲染 FilesPanel），所以要在真正 setView 之前先拦一次
+  async function changeView(next: View) {
+    if (view === next) return
+    if (view === "files" && !(await confirmLeaveIfDirty())) return
+    setView(next)
+  }
 
   function setSendingFor(name: string, value: boolean) {
     setSendingNames((prev) => {
@@ -807,20 +841,22 @@ export function WorkspacePanel({
           <Button
             variant={view === "activity" ? "secondary" : "ghost"}
             size="sm"
-            onClick={() => setView("activity")}
+            aria-current={view === "activity"}
+            onClick={() => changeView("activity")}
           >
-            活动
+            聊天
           </Button>
           <Button
             variant={view === "files" ? "secondary" : "ghost"}
             size="sm"
-            onClick={() => setView("files")}
+            aria-current={view === "files"}
+            onClick={() => changeView("files")}
           >
             文件
           </Button>
           <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
             <PopoverTrigger
-              render={<Button variant="ghost" size="icon-sm" />}
+              render={<Button variant="ghost" size="icon-sm" title="更多标签页" />}
             >
               <EllipsisIcon />
             </PopoverTrigger>
@@ -832,8 +868,9 @@ export function WorkspacePanel({
                     variant={view === key ? "secondary" : "ghost"}
                     size="sm"
                     className="justify-start"
+                    aria-current={view === key}
                     onClick={() => {
-                      setView(key)
+                      changeView(key)
                       setSwitcherOpen(false)
                     }}
                   >
@@ -845,15 +882,27 @@ export function WorkspacePanel({
           </Popover>
         </div>
         <Separator orientation="vertical" className="h-4! shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-          {activeSession
-            ? `${activeSession.containerRemark || activeSession.containerName} · ${activeSession.agentRemark || activeSession.agentName}`
-            : "选择左侧的容器 / AGENT 开始"}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm font-medium">
+          <span className="truncate">
+            {activeSession
+              ? `${activeSession.containerRemark || activeSession.containerName} · ${activeSession.agentRemark || activeSession.agentName}`
+              : "选择左侧的容器 / AGENT 开始"}
+          </span>
+          {activeSession?.archived ? (
+            <Badge variant="outline" className="shrink-0">
+              已停止
+            </Badge>
+          ) : null}
         </span>
       </header>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
-        {view === "activity" ? (
+        {creatingAgent ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2">
+            <Spinner className="size-6" />
+            <p className="text-sm text-muted-foreground">正在创建 AGENT...</p>
+          </div>
+        ) : view === "activity" ? (
           messagesLoading ? (
             <div className="flex h-full items-center justify-center">
               <Spinner className="size-6" />
@@ -868,7 +917,13 @@ export function WorkspacePanel({
           )
         ) : null}
         {view === "terminal" ? <TerminalView session={activeSession} /> : null}
-        {view === "files" ? <FilesPanel activeSession={activeSession} /> : null}
+        {view === "files" ? (
+          <FilesPanel
+            activeSession={activeSession}
+            editorStateRef={filesEditorRef}
+            confirmLeaveIfDirty={confirmLeaveIfDirty}
+          />
+        ) : null}
         {view === "detail" ? <DetailView detail={sessionDetail} /> : null}
         {view === "config" ? <ConfigView detail={sessionDetail} /> : null}
         {view === "check" ? <CheckView detail={sessionDetail} /> : null}

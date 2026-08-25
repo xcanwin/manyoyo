@@ -234,7 +234,7 @@ export function CreateContainerDialog({
         <DialogHeader className="shrink-0">
           <DialogTitle>新建容器会话</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-4">
           <div className="-mx-4 min-h-0 flex-1 overflow-y-auto px-4">
             <FieldGroup className="gap-4">
               <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2">
