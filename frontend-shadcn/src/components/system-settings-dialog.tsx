@@ -1,6 +1,7 @@
 import * as React from "react"
 import JSON5 from "json5"
 
+import { cn } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { CapacityEstimateView } from "@/components/capacity-estimate-view"
@@ -206,21 +207,39 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
   )
 }
 
-function ConfigValueGroup({ path, value, onCommit }: { path: string[]; value: unknown; onCommit: LeafCommit }) {
+function ConfigValueGroup({
+  path,
+  value,
+  onCommit,
+  depth = 0,
+}: {
+  path: string[]
+  value: unknown
+  onCommit: LeafCommit
+  depth?: number
+}) {
   if (isPlainObject(value)) {
     const entries = Object.entries(value)
     return (
-      <FieldSet className="gap-3 border-l border-border pl-3">
-        <FieldLegend variant="label">{path[path.length - 1]}</FieldLegend>
+      <FieldSet className="gap-3 rounded-lg border bg-muted/30 p-3">
+        <FieldLegend variant="legend" className="text-sm font-semibold text-foreground">
+          {path[path.length - 1]}
+        </FieldLegend>
         {entries.length === 0 ? (
           <p className="text-xs text-muted-foreground">空</p>
         ) : (
-          entries.map(([key, item]) => <ConfigValueGroup key={key} path={[...path, key]} value={item} onCommit={onCommit} />)
+          entries.map(([key, item]) => (
+            <ConfigValueGroup key={key} path={[...path, key]} value={item} onCommit={onCommit} depth={depth + 1} />
+          ))
         )}
       </FieldSet>
     )
   }
-  return <ConfigLeafField path={path} value={value} onCommit={onCommit} />
+  return (
+    <div className={cn(depth > 0 && "pl-1")}>
+      <ConfigLeafField path={path} value={value} onCommit={onCommit} />
+    </div>
+  )
 }
 
 function CategoryFields({
@@ -368,7 +387,7 @@ export function SystemSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-4xl">
+      <DialogContent className="flex h-[80vh] max-h-[80vh] flex-col sm:max-w-4xl">
         <DialogHeader className="shrink-0">
           <div className="flex items-center justify-between gap-2 pr-6">
             <div>
