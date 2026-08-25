@@ -365,8 +365,18 @@ export function AppSidebar({
     }
   }
 
+  // 移动端侧边栏本身是个 Sheet（已经是一层浮层），从它里面再打开 Dialog 时
+  // base-ui 会复用这层已有的遮罩、不再单独虚化——手动给 Sheet 内容虚化+禁用交互，
+  // 跟 create-container-dialog.tsx 里嵌套打开目录选择器时的处理方式保持一致
+  const anyDialogOpen = Boolean(
+    searchOpen || quickChatSetupOpen || settingsOpen || createOpen || remarkDialog || cloneDialog || removeDialog
+  )
+
   return (
-    <Sidebar {...props}>
+    <Sidebar
+      {...props}
+      className={cn(isMobile && anyDialogOpen && "pointer-events-none opacity-40 blur-[2px]")}
+    >
       <SidebarHeader className="gap-3 px-3 pt-3">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-semibold tracking-tight">
@@ -414,8 +424,19 @@ export function AppSidebar({
                 size="xs"
                 disabled={navLevel === "containers"}
                 onClick={navLevel === "containers" ? undefined : goToContainers}
+                // Breadcrumb 自己套了一层 text-muted-foreground，Button 默认不强制文字颜色，
+                // 会被继承成灰色——这里显式改回前景色，不然容器名旁边这颗按钮看着像不能点
+                className="text-foreground"
               >
-                <ArrowLeftIcon data-icon="inline-start" />
+                {navLevel === "containers" ? (
+                  // 容器列表层级已经在最顶层，没有"返回"语义了，箭头图标换成一个等宽的圆点占位，
+                  // 既不会因为图标消失导致按钮宽度跳动，也不会让人误以为还能往回点
+                  <span data-icon="inline-start" className="flex size-4 items-center justify-center">
+                    <span className="size-1.5 rounded-full bg-current" />
+                  </span>
+                ) : (
+                  <ArrowLeftIcon data-icon="inline-start" />
+                )}
                 全部容器
               </Button>
             </BreadcrumbItem>
