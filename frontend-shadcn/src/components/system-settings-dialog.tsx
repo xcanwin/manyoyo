@@ -54,7 +54,7 @@ const CATEGORIES: ConfigCategory[] = [
   { id: "build", label: "构建参数", keys: ["imageBuildArgs"] },
   { id: "web", label: "Web 服务", keys: ["serverUser", "serverPass", "serve"] },
   { id: "plugins", label: "插件", keys: ["plugins"] },
-  { id: "runs", label: "运行配置 (Runs)", keys: ["runs"] },
+  { id: "runs", label: "运行配置", keys: ["runs"] },
   { id: "quick-chat", label: "快捷对话", keys: [] },
   { id: "capacity", label: "容量预估", keys: [] },
 ]
@@ -160,7 +160,10 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
           onBlur={() => commit(text)}
           placeholder="每行一项"
           spellCheck={false}
-          className="min-h-16 font-mono text-xs"
+          // 卷挂载/端口这类值经常是一整行长路径，自动换行会把路径拆断不好对齐检查——
+          // 关掉自动换行，改成横向滚动
+          wrap="off"
+          className="min-h-16 overflow-x-auto font-mono text-xs whitespace-pre"
         />
       </Field>
     )
@@ -392,26 +395,30 @@ export function SystemSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[80vh] max-h-[80vh] flex-col sm:max-w-4xl">
         <DialogHeader className="shrink-0">
-          <div className="flex items-center justify-between gap-2 pr-6">
-            <div>
-              <DialogTitle>系统设置</DialogTitle>
-              <DialogDescription>{path || "~/.manyoyo/manyoyo.json"}</DialogDescription>
-            </div>
-            <ToggleGroup
-              variant="outline"
-              size="sm"
-              value={[theme]}
-              onValueChange={(values) => {
-                const next = values[0]
-                if (next) setTheme(next as "light" | "dark" | "system")
-              }}
-            >
-              <ToggleGroupItem value="light">浅色</ToggleGroupItem>
-              <ToggleGroupItem value="dark">深色</ToggleGroupItem>
-              <ToggleGroupItem value="system">跟随系统</ToggleGroupItem>
-            </ToggleGroup>
-          </div>
+          <DialogTitle>系统设置</DialogTitle>
+          <DialogDescription>{path || "~/.manyoyo/manyoyo.json"}</DialogDescription>
         </DialogHeader>
+
+        {/* 窄屏下标题栏 + 亮暗切换的 ToggleGroup 挤在一行会被右上角关闭按钮顶得换行错位，
+            这里单独用一条"当前有效 tab"条把主题切换挪出标题栏，同时也顺带标出当前在哪个分类 */}
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b pb-2">
+          <span className="truncate text-sm font-medium text-foreground">
+            {viewMode === "form" ? CATEGORIES.find((c) => c.id === activeCategory)?.label : "JSON 设置"}
+          </span>
+          <ToggleGroup
+            variant="outline"
+            size="sm"
+            value={[theme]}
+            onValueChange={(values) => {
+              const next = values[0]
+              if (next) setTheme(next as "light" | "dark" | "system")
+            }}
+          >
+            <ToggleGroupItem value="light">浅色</ToggleGroupItem>
+            <ToggleGroupItem value="dark">深色</ToggleGroupItem>
+            <ToggleGroupItem value="system">跟随系统</ToggleGroupItem>
+          </ToggleGroup>
+        </div>
 
         <div className="min-h-0 flex-1 overflow-hidden">
           {loading ? (
@@ -465,21 +472,28 @@ export function SystemSettingsDialog({
           </Alert>
         ) : null}
 
-        <DialogFooter className="shrink-0 sm:justify-between">
+        <DialogFooter className="shrink-0 sm:flex-row sm:justify-between">
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className="w-full sm:w-auto"
             onClick={viewMode === "form" ? () => setViewMode("json") : switchToFormView}
             disabled={loading}
           >
             {viewMode === "form" ? "显示 JSON 设置" : "返回分类设置"}
           </Button>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={load} disabled={loading || saving}>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={load}
+              disabled={loading || saving}
+            >
               重新加载
             </Button>
-            <Button type="button" onClick={handleSave} disabled={loading || saving}>
+            <Button type="button" className="w-full sm:w-auto" onClick={handleSave} disabled={loading || saving}>
               {saving ? "保存中..." : "保存"}
             </Button>
           </div>
