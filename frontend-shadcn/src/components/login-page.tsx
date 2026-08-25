@@ -1,8 +1,9 @@
 import * as React from "react"
+import { ChevronRightIcon } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
@@ -64,51 +65,85 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">MANYOYO Web</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit}>
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="login-username">用户名</FieldLabel>
-                <Input
-                  id="login-username"
-                  autoFocus
-                  autoComplete="username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter") return
-                    event.preventDefault()
-                    document.getElementById("login-password")?.focus()
-                  }}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="login-password">密码</FieldLabel>
-                <Input
-                  id="login-password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              </Field>
-              {error ? (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              ) : null}
-              <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? "登录中..." : "登录"}
-              </Button>
-            </FieldGroup>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="relative flex min-h-svh items-center justify-center overflow-hidden p-6">
+      {/* 极淡的网格背景 + 卡片后方的柔光，呼应"终端/开发者工具"调性，同时不引入品牌色以外的新色板 */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] [background-size:32px_32px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,black,transparent)]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute top-1/4 left-1/2 -z-10 size-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 blur-3xl"
+        aria-hidden
+      />
+
+      <div className="relative flex w-full max-w-sm flex-col items-center gap-6">
+        <div className="flex flex-col items-center gap-1.5 text-center">
+          <span className="font-mono text-xs tracking-[0.2em] text-muted-foreground uppercase">
+            Agent Sandbox Console
+          </span>
+          <h1 className="font-mono text-4xl font-semibold tracking-tight text-foreground">MANYOYO</h1>
+          <p className="text-sm text-muted-foreground">AI Agent 容器安全沙箱 · Docker / Podman 隔离运行</p>
+        </div>
+
+        <Card className="w-full gap-0 py-0 shadow-lg">
+          <div className="flex items-center gap-1.5 border-b px-4 py-2.5">
+            <span className="size-2.5 rounded-full bg-destructive/70" />
+            <span className="size-2.5 rounded-full bg-amber-500/70" />
+            <span className="size-2.5 rounded-full bg-emerald-500/70" />
+            <span className="ml-2 font-mono text-xs text-muted-foreground">~/manyoyo/login</span>
+          </div>
+          <CardContent className="px-6 py-6">
+            <form onSubmit={handleSubmit}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel
+                    htmlFor="login-username"
+                    className="font-mono text-xs tracking-wide text-muted-foreground uppercase"
+                  >
+                    用户名
+                  </FieldLabel>
+                  <Input
+                    id="login-username"
+                    autoFocus
+                    autoComplete="username"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return
+                      event.preventDefault()
+                      document.getElementById("login-password")?.focus()
+                    }}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel
+                    htmlFor="login-password"
+                    className="font-mono text-xs tracking-wide text-muted-foreground uppercase"
+                  >
+                    密码
+                  </FieldLabel>
+                  <Input
+                    id="login-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                </Field>
+                {error ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                ) : null}
+                <Button type="submit" size="lg" className="w-full" disabled={submitting}>
+                  {submitting ? "登录中..." : "登录"}
+                  {!submitting ? <ChevronRightIcon data-icon="inline-end" /> : null}
+                </Button>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
