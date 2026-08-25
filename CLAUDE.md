@@ -54,7 +54,8 @@ docker/
   manyoyo.Dockerfile    # 多阶段镜像构建
   cache/                # 构建缓存（Node.js、JDT LSP、gopls），有效期 2 天
   res/                  # 各 Agent 默认配置、Playwright 资源、supervisor 模板
-scripts/                # dev-release.js（发布向导）、build-web-code-editor.js
+scripts/                # dev-release.js（发布向导）、build-web-code-editor.js、
+                         # build-web-shadcn.js / dev-web-shadcn.js（frontend-shadcn 构建与本地开发）
 docs/zh/                # 中文文档（主维护），docs/en/ 为翻译，结构需保持一致
 test/                   # *.test.js，Jest 框架
 manyoyo.example.json     # 配置文件模板
@@ -74,6 +75,8 @@ npm install -g .         # 本地安装调试
 
 npm run build:web-editor # codemirror.bundle.js 已加入 .gitignore，由 npm install 的
                          # prepare 钩子自动生成，本地调试可手动重跑此命令
+npm run dev:web-shadcn   # frontend-shadcn 本地开发（等价于在该目录下 npm run dev）
+npm run build:web-shadcn # 构建 frontend-shadcn 单文件产物，随 npm run prepack 自动执行
 npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
 
 # 运行单个测试文件
