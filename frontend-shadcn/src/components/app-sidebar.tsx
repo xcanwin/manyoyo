@@ -1,5 +1,5 @@
 import * as React from "react"
-import { ArrowLeftIcon, MoreHorizontalIcon, PlusIcon, SettingsIcon } from "lucide-react"
+import { ArrowLeftIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
@@ -20,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { CloneNameDialog, type CloneMode } from "@/components/clone-name-dialog"
 import { CreateContainerDialog } from "@/components/create-container-dialog"
 import { PromptDialog } from "@/components/prompt-dialog"
+import { SearchDialog } from "@/components/search-dialog"
 import { SystemSettingsDialog } from "@/components/system-settings-dialog"
 import {
   Breadcrumb,
@@ -42,7 +43,6 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
-  SidebarInput,
   SidebarMenu,
   SidebarMenuAction,
   SidebarMenuButton,
@@ -101,7 +101,7 @@ export function AppSidebar({
   const { isMobile, setOpenMobile } = useSidebar()
   const [navLevel, setNavLevel] = React.useState<NavLevel>("containers")
   const [navContainer, setNavContainer] = React.useState("")
-  const [query, setQuery] = React.useState("")
+  const [searchOpen, setSearchOpen] = React.useState(false)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [actionError, setActionError] = React.useState("")
@@ -158,16 +158,6 @@ export function AppSidebar({
     )
   }, [containers, activeSessionName])
 
-  const filteredContainers = React.useMemo(() => {
-    const text = query.trim().toLowerCase()
-    if (!text) return containers
-    return containers.filter(
-      (group) =>
-        group.containerName.toLowerCase().includes(text) ||
-        group.hostPath.toLowerCase().includes(text)
-    )
-  }, [containers, query])
-
   function goToContainers() {
     setNavLevel("containers")
     setNavContainer("")
@@ -186,6 +176,17 @@ export function AppSidebar({
     onSelectSession(session)
     if (session && isMobile) setOpenMobile(false)
   }
+
+  React.useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        setSearchOpen((open) => !open)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
 
   async function handleCreated(name: string) {
     setActionError("")
@@ -363,13 +364,15 @@ export function AppSidebar({
             ) : null}
           </BreadcrumbList>
         </Breadcrumb>
-        {navLevel === "containers" ? (
-          <SidebarInput
-            placeholder="按工作目录 / 容器名搜索"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        ) : null}
+        <Button
+          variant="outline"
+          className="w-full justify-start bg-background text-muted-foreground shadow-none"
+          onClick={() => setSearchOpen(true)}
+        >
+          <SearchIcon data-icon="inline-start" />
+          搜索容器 / AGENT
+          <kbd className="ml-auto font-mono text-xs text-muted-foreground">⌘K</kbd>
+        </Button>
         {error || actionError ? (
           <p className="text-xs text-destructive">{error || actionError}</p>
         ) : null}
@@ -380,7 +383,7 @@ export function AppSidebar({
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
               {navLevel === "containers"
-                ? filteredContainers.map((group) => (
+                ? containers.map((group) => (
                     <SidebarMenuItem key={group.containerName}>
                       <SidebarMenuButton
                         size="lg"
@@ -523,10 +526,8 @@ export function AppSidebar({
                       </DropdownMenu>
                     </SidebarMenuItem>
                   ))}
-              {navLevel === "containers" && !loading && filteredContainers.length === 0 ? (
-                <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-                  {query.trim() ? "没有匹配的容器" : "暂无 manyoyo 容器"}
-                </div>
+              {navLevel === "containers" && !loading && containers.length === 0 ? (
+                <div className="px-2 py-6 text-center text-xs text-muted-foreground">暂无 manyoyo 容器</div>
               ) : null}
               {navLevel === "agents" && visibleAgentSessions.length === 0 ? (
                 <div className="px-2 py-6 text-center text-xs text-muted-foreground">
@@ -551,6 +552,17 @@ export function AppSidebar({
       </SidebarFooter>
 
       <SystemSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+
+      <SearchDialog
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        containers={containers}
+        onSelectContainer={goToAgents}
+        onSelectAgent={(containerName, session) => {
+          goToAgents(containerName)
+          selectSession(session)
+        }}
+      />
 
       <CreateContainerDialog
         open={createOpen}
