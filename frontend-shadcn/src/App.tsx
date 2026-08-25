@@ -3,17 +3,38 @@ import * as React from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ResizeHandle } from "@/components/resize-handle"
 import { WorkspacePanel } from "@/components/workspace-panel"
-import { useIsMobile } from "@/hooks/use-mobile"
 import { useResizableWidth } from "@/hooks/use-resizable-width"
 import { useSessions } from "@/hooks/use-sessions"
 import { useUnsavedChangesDialog } from "@/hooks/use-unsaved-changes-dialog"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import type { FilesEditorState } from "@/components/files-panel"
 import type { SessionSummary } from "@/lib/api"
 
+// 侧边栏收起（offcanvas）后 Sidebar 本身平移出屏幕，但这根拖拽线之前是按 sidebarWidth
+// 独立定位的，跟收起状态无关——收起后线还留在原地、也还能拖，这里收起时直接不渲染
+function SidebarResizeHandle({
+  width,
+  dragging,
+  onPointerDown,
+}: {
+  width: number
+  dragging: boolean
+  onPointerDown: (event: React.PointerEvent) => void
+}) {
+  const { isMobile, state } = useSidebar()
+  if (isMobile || state === "collapsed") return null
+  return (
+    <ResizeHandle
+      onPointerDown={onPointerDown}
+      dragging={dragging}
+      className="absolute inset-y-0 z-20 -ml-1"
+      style={{ left: width }}
+    />
+  )
+}
+
 export function App() {
   const { sessions, containers, loading, error, refresh } = useSessions()
-  const isMobile = useIsMobile()
   const { width: sidebarWidth, dragging: sidebarDragging, onHandlePointerDown } = useResizableWidth({
     storageKey: "manyoyo:sidebar-width",
     defaultWidth: 288,
@@ -64,14 +85,11 @@ export function App() {
         creatingAgentContainer={creatingAgentContainer}
         onCreatingAgentContainerChange={setCreatingAgentContainer}
       />
-      {isMobile ? null : (
-        <ResizeHandle
-          onPointerDown={onHandlePointerDown}
-          dragging={sidebarDragging}
-          className="absolute inset-y-0 z-20 -ml-1"
-          style={{ left: sidebarWidth }}
-        />
-      )}
+      <SidebarResizeHandle
+        width={sidebarWidth}
+        dragging={sidebarDragging}
+        onPointerDown={onHandlePointerDown}
+      />
       <SidebarInset className="min-h-0 min-w-0">
         <WorkspacePanel
           activeSession={activeSession}
