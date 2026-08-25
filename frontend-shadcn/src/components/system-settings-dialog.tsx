@@ -44,6 +44,9 @@ type ConfigCategory = {
 }
 
 const CATEGORIES: ConfigCategory[] = [
+  // 主题是前端本地记忆（theme-provider 存 localStorage），不落进 manyoyo.json，
+  // keys 留空即可，跟 quick-chat/capacity 一样走自定义渲染分支
+  { id: "page", label: "页面", keys: [] },
   {
     id: "basic",
     label: "基础",
@@ -399,27 +402,6 @@ export function SystemSettingsDialog({
           <DialogDescription>{path || "~/.manyoyo/manyoyo.json"}</DialogDescription>
         </DialogHeader>
 
-        {/* 窄屏下标题栏 + 亮暗切换的 ToggleGroup 挤在一行会被右上角关闭按钮顶得换行错位，
-            这里单独用一条"当前有效 tab"条把主题切换挪出标题栏，同时也顺带标出当前在哪个分类 */}
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b pb-2">
-          <span className="truncate text-sm font-medium text-foreground">
-            {viewMode === "form" ? CATEGORIES.find((c) => c.id === activeCategory)?.label : "JSON 设置"}
-          </span>
-          <ToggleGroup
-            variant="outline"
-            size="sm"
-            value={[theme]}
-            onValueChange={(values) => {
-              const next = values[0]
-              if (next) setTheme(next as "light" | "dark" | "system")
-            }}
-          >
-            <ToggleGroupItem value="light">浅色</ToggleGroupItem>
-            <ToggleGroupItem value="dark">深色</ToggleGroupItem>
-            <ToggleGroupItem value="system">跟随系统</ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-
         <div className="min-h-0 flex-1 overflow-hidden">
           {loading ? (
             <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">加载中...</div>
@@ -445,7 +427,26 @@ export function SystemSettingsDialog({
               <div className="min-h-0 flex-1 overflow-y-auto pl-4">
                 {CATEGORIES.map((category) => (
                   <TabsContent key={category.id} value={category.id} className="mt-0">
-                    {category.id === "runs" ? (
+                    {category.id === "page" ? (
+                      <FieldGroup>
+                        <Field>
+                          <FieldLabel>主题</FieldLabel>
+                          <ToggleGroup
+                            variant="outline"
+                            size="sm"
+                            value={[theme]}
+                            onValueChange={(values) => {
+                              const next = values[0]
+                              if (next) setTheme(next as "light" | "dark" | "system")
+                            }}
+                          >
+                            <ToggleGroupItem value="light">浅色</ToggleGroupItem>
+                            <ToggleGroupItem value="dark">深色</ToggleGroupItem>
+                            <ToggleGroupItem value="system">跟随系统</ToggleGroupItem>
+                          </ToggleGroup>
+                        </Field>
+                      </FieldGroup>
+                    ) : category.id === "runs" ? (
                       <RunsCategoryFields liveParsed={liveParsed} onCommit={handleLeafCommit} />
                     ) : category.id === "capacity" ? (
                       <CapacityEstimateView />
