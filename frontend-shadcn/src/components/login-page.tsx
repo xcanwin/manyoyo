@@ -110,7 +110,12 @@ export function LoginPage() {
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
                     onKeyDown={(event) => {
-                      if (event.key !== "Enter") return
+                      // 中文拼音等 IME 输入英文候选词（如 admin）后按回车，第一次回车是
+                      // 确认候选词，此时 isComposing 为 true——这次按键不能当成"提交/切换
+                      // 焦点"处理，否则焦点在 IME 真正提交候选词之前就跳到密码框，候选词
+                      // 会被提交进密码框而不是用户名框。keyCode 229 是部分浏览器对确认候选词
+                      // 这次回车的兼容标记，同样要跳过
+                      if (event.key !== "Enter" || event.nativeEvent.isComposing || event.keyCode === 229) return
                       event.preventDefault()
                       document.getElementById("login-password")?.focus()
                     }}
