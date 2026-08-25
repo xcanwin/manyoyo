@@ -92,10 +92,12 @@ export function FilesPanel({
   activeSession,
   editorStateRef,
   confirmLeaveIfDirty,
+  onPreviewHtml,
 }: {
   activeSession: SessionSummary | null
   editorStateRef?: React.RefObject<FilesEditorState | null>
   confirmLeaveIfDirty: () => Promise<boolean>
+  onPreviewHtml?: (title: string, code: string) => void
 }) {
   const historyOnly = activeSession?.status === "history"
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
@@ -323,6 +325,7 @@ export function FilesPanel({
   }
 
   const isMarkdown = fileData?.kind === "text" && fileData.language === "markdown"
+  const isHtml = fileData?.kind === "text" && fileData.language === "html"
   const isEditable = Boolean(fileData?.kind === "text" && fileData.editable && !previewReadOnly)
 
   const showListPane = !isMobile || mobilePane === "list"
@@ -432,6 +435,20 @@ export function FilesPanel({
                     size="sm"
                     onClick={() =>
                       setMarkdownViewMode((mode) => (mode === "source" ? "rendered" : "source"))
+                    }
+                  >
+                    预览
+                  </Button>
+                ) : null}
+                {isHtml && onPreviewHtml ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      onPreviewHtml(
+                        selectedPath.split("/").pop() || selectedPath,
+                        editing ? editContent : fileData?.content || ""
+                      )
                     }
                   >
                     预览

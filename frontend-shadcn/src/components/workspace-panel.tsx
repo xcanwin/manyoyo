@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FilesPanel, type FilesEditorState } from "@/components/files-panel"
+import { HtmlPreviewPanel, type HtmlPreviewState } from "@/components/html-preview-panel"
 import { MarkdownContent } from "@/components/markdown-content"
 import { ModelDialog } from "@/components/model-dialog"
 import { TerminalView } from "@/components/terminal-view"
@@ -167,10 +168,12 @@ function ActivityView({
   session,
   messages,
   mode,
+  onPreviewHtml,
 }: {
   session: SessionSummary | null
   messages: ChatMessage[]
   mode: "agent" | "command"
+  onPreviewHtml: (title: string, code: string) => void
 }) {
   const displayMessages = React.useMemo(() => mergeTraceIntoReply(messages), [messages])
   const scrollRef = React.useRef<HTMLDivElement>(null)
@@ -248,7 +251,10 @@ function ActivityView({
                     )}
                   >
                     {message.role === "assistant" ? (
-                      <MarkdownContent content={message.content || (message.pending ? "…" : "")} />
+                      <MarkdownContent
+                        content={message.content || (message.pending ? "…" : "")}
+                        onPreviewHtml={(code) => onPreviewHtml("聊天中的 HTML 代码块", code)}
+                      />
                     ) : (
                       message.content || (message.pending ? "…" : "")
                     )}
@@ -619,6 +625,7 @@ export function WorkspacePanel({
   const [cliDialogOpen, setCliDialogOpen] = React.useState(false)
   const [modelDialogOpen, setModelDialogOpen] = React.useState(false)
   const [sessionDetail, setSessionDetail] = React.useState<SessionDetail | null>(null)
+  const [htmlPreview, setHtmlPreview] = React.useState<HtmlPreviewState>(null)
 
   const activeSessionNameRef = React.useRef<string | null>(activeSession?.name ?? null)
   React.useEffect(() => {
@@ -913,6 +920,7 @@ export function WorkspacePanel({
               session={activeSession}
               messages={messages}
               mode={mode}
+              onPreviewHtml={(title, code) => setHtmlPreview({ title, code })}
             />
           )
         ) : null}
@@ -922,6 +930,7 @@ export function WorkspacePanel({
             activeSession={activeSession}
             editorStateRef={filesEditorRef}
             confirmLeaveIfDirty={confirmLeaveIfDirty}
+            onPreviewHtml={(title, code) => setHtmlPreview({ title, code })}
           />
         ) : null}
         {view === "detail" ? <DetailView detail={sessionDetail} /> : null}
@@ -967,6 +976,12 @@ export function WorkspacePanel({
         onSaved={() => {
           onAfterSend()
           loadDetail()
+        }}
+      />
+      <HtmlPreviewPanel
+        state={htmlPreview}
+        onOpenChange={(open) => {
+          if (!open) setHtmlPreview(null)
         }}
       />
     </div>
