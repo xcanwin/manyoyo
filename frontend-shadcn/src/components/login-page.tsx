@@ -76,8 +76,10 @@ export function LoginPage() {
         aria-hidden
       />
 
-      <div className="relative flex w-full max-w-sm flex-col items-center gap-6">
-        <div className="flex flex-col items-center gap-1.5 text-center">
+      {/* 标题块用 absolute 从正常流里摘出来，浮在卡片上方——这样外层 items-center 只按卡片自身
+          高度居中，卡片才会落在视口正中央，不会被上面的标题块一起拖累偏下 */}
+      <div className="relative w-full max-w-sm">
+        <div className="absolute inset-x-0 bottom-full mb-6 flex flex-col items-center gap-1.5 text-center">
           <span className="font-mono text-xs tracking-[0.2em] text-muted-foreground uppercase">
             Agent Sandbox Console
           </span>
