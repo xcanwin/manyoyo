@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { CapacityEstimateView } from "@/components/capacity-estimate-view"
 import { CodeMirrorEditor } from "@/components/code-mirror-editor"
 import { QuickChatSettingsView } from "@/components/quick-chat-settings-view"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { useTheme } from "@/components/theme-provider"
 import {
   Dialog,
   DialogContent,
@@ -325,6 +327,7 @@ export function SystemSettingsDialog({
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState("")
   const [success, setSuccess] = React.useState("")
+  const { theme, setTheme } = useTheme()
 
   const load = React.useCallback(() => {
     setLoading(true)
@@ -394,15 +397,19 @@ export function SystemSettingsDialog({
               <DialogTitle>系统设置</DialogTitle>
               <DialogDescription>{path || "~/.manyoyo/manyoyo.json"}</DialogDescription>
             </div>
-            <Button
-              type="button"
+            <ToggleGroup
               variant="outline"
               size="sm"
-              onClick={viewMode === "form" ? () => setViewMode("json") : switchToFormView}
-              disabled={loading}
+              value={[theme]}
+              onValueChange={(values) => {
+                const next = values[0]
+                if (next) setTheme(next as "light" | "dark" | "system")
+              }}
             >
-              {viewMode === "form" ? "显示 JSON 格式系统设置" : "返回分类设置"}
-            </Button>
+              <ToggleGroupItem value="light">浅色</ToggleGroupItem>
+              <ToggleGroupItem value="dark">深色</ToggleGroupItem>
+              <ToggleGroupItem value="system">跟随系统</ToggleGroupItem>
+            </ToggleGroup>
           </div>
         </DialogHeader>
 
@@ -458,13 +465,24 @@ export function SystemSettingsDialog({
           </Alert>
         ) : null}
 
-        <DialogFooter className="shrink-0">
-          <Button type="button" variant="outline" onClick={load} disabled={loading || saving}>
-            重新加载
+        <DialogFooter className="shrink-0 sm:justify-between">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={viewMode === "form" ? () => setViewMode("json") : switchToFormView}
+            disabled={loading}
+          >
+            {viewMode === "form" ? "显示 JSON 设置" : "返回分类设置"}
           </Button>
-          <Button type="button" onClick={handleSave} disabled={loading || saving}>
-            {saving ? "保存中..." : "保存"}
-          </Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={load} disabled={loading || saving}>
+              重新加载
+            </Button>
+            <Button type="button" onClick={handleSave} disabled={loading || saving}>
+              {saving ? "保存中..." : "保存"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
