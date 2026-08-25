@@ -245,6 +245,7 @@ export function FilesPanel({
   function startEditing() {
     if (!fileData) return
     setEditContent(fileData.content || "")
+    setMarkdownViewMode("source")
     setEditing(true)
   }
 
@@ -275,6 +276,7 @@ export function FilesPanel({
   async function handleCancelEdit() {
     if (!(await confirmLeaveIfDirty())) return
     setEditing(false)
+    setMarkdownViewMode("rendered")
   }
 
   async function handleMobileBackToList() {
@@ -404,32 +406,31 @@ export function FilesPanel({
                 <PathBar value={sanitizeDisplayText(selectedPath)} />
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {isMarkdown && !editing ? (
+                {isEditable && !editing ? (
+                  <Button variant="outline" size="sm" onClick={startEditing}>
+                    编辑
+                  </Button>
+                ) : null}
+                {isMarkdown ? (
                   <Button
-                    variant="outline"
+                    variant={markdownViewMode === "rendered" ? "secondary" : "outline"}
                     size="sm"
                     onClick={() =>
                       setMarkdownViewMode((mode) => (mode === "source" ? "rendered" : "source"))
                     }
                   >
-                    {markdownViewMode === "source" ? "查看渲染" : "查看源码"}
+                    预览
                   </Button>
                 ) : null}
-                {isEditable ? (
-                  editing ? (
-                    <div className="flex shrink-0 gap-2">
-                      <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={saving}>
-                        取消
-                      </Button>
-                      <Button size="sm" onClick={handleSaveFile} disabled={saving}>
-                        {saving ? "保存中..." : "保存"}
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button variant="outline" size="sm" onClick={startEditing}>
-                      编辑
+                {isEditable && editing ? (
+                  <>
+                    <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={saving}>
+                      取消
                     </Button>
-                  )
+                    <Button size="sm" onClick={handleSaveFile} disabled={saving}>
+                      {saving ? "保存中..." : "保存"}
+                    </Button>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -464,12 +465,20 @@ export function FilesPanel({
                     二进制文件，无法预览（{fileData.size} 字节）
                   </p>
                 ) : editing ? (
-                  <CodeMirrorEditor
-                    value={editContent}
-                    language={fileData.language || "text"}
-                    readOnly={false}
-                    onChange={setEditContent}
-                  />
+                  isMarkdown && markdownViewMode === "rendered" ? (
+                    <MarkdownContent
+                      content={rewriteRelativeImageLinks(editContent, (href) =>
+                        resolveMarkdownImageUrl(activeSession.name, selectedPath, href)
+                      )}
+                    />
+                  ) : (
+                    <CodeMirrorEditor
+                      value={editContent}
+                      language={fileData.language || "text"}
+                      readOnly={false}
+                      onChange={setEditContent}
+                    />
+                  )
                 ) : isMarkdown && markdownViewMode === "rendered" ? (
                   <MarkdownContent
                     content={rewriteRelativeImageLinks(fileData.content || "", (href) =>
