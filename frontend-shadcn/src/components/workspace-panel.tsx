@@ -240,10 +240,10 @@ function ActivityView({
                     className={cn(
                       "max-w-full rounded-xl px-3 py-2 text-sm sm:max-w-[75%]",
                       message.role === "user"
-                        ? "max-w-[88%] bg-[color-mix(in_oklch,var(--muted),black_10%)] text-foreground whitespace-pre-wrap sm:max-w-[75%]"
+                        ? "max-w-[88%] bg-muted/80 text-foreground whitespace-pre-wrap sm:max-w-[75%]"
                         : message.role === "system"
                           ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
-                          : "bg-muted text-foreground",
+                          : "bg-muted/40 text-foreground",
                       message.pending && "opacity-70"
                     )}
                   >

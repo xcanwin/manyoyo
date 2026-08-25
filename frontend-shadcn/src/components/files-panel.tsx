@@ -18,7 +18,6 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { CodeMirrorEditor } from "@/components/code-mirror-editor"
-import { Input } from "@/components/ui/input"
 import { MarkdownContent } from "@/components/markdown-content"
 import { PromptDialog } from "@/components/prompt-dialog"
 import { Spinner } from "@/components/ui/spinner"
@@ -59,6 +58,24 @@ function rewriteRelativeImageLinks(markdownText: string, resolver: (href: string
       const resolved = resolver(href)
       return resolved ? `![${alt}](${resolved}${titlePart})` : match
     }
+  )
+}
+
+// 单行只读路径展示：外观和 Input 一致（边框/圆角/背景），但用可滚动的 div 实现——
+// 原生 input 在移动端对 readOnly 内容的横向触摸滑动支持并不可靠，div + overflow-x-auto
+// 是标准的内容滚动，各平台表现一致；no-scrollbar 只是不露出滚动条，不影响滑动能力
+function PathBar({ value, className }: { value: string; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "no-scrollbar flex h-8 w-full min-w-0 items-center overflow-x-auto rounded-lg border border-input bg-transparent px-2.5 dark:bg-input/30",
+        className
+      )}
+    >
+      <span className="w-max shrink-0 font-mono text-xs whitespace-nowrap text-muted-foreground">
+        {value}
+      </span>
+    </div>
   )
 }
 
@@ -314,7 +331,7 @@ export function FilesPanel({
           >
             <ArrowUpIcon />
           </Button>
-          <Input value={sanitizeDisplayText(currentPath)} readOnly className="h-8 font-mono text-xs" />
+          <PathBar value={sanitizeDisplayText(currentPath)} />
           <Button variant="outline" size="icon-sm" onClick={() => loadList(currentPath)} title="刷新">
             <RefreshCwIcon />
           </Button>
@@ -378,17 +395,13 @@ export function FilesPanel({
         <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", !showDetailPane && "hidden")}>
           {selectedPath ? (
             <div className="flex shrink-0 items-center justify-between gap-2 border-b p-2">
-              <div className="flex min-w-0 items-center gap-1.5">
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 {isMobile ? (
                   <Button variant="ghost" size="icon-sm" onClick={handleMobileBackToList} title="返回列表">
                     <ArrowLeftIcon />
                   </Button>
                 ) : null}
-                <div className="thin-scrollbar min-w-0 flex-1 overflow-x-auto pb-3">
-                  <span className="block w-max font-mono text-xs whitespace-nowrap text-muted-foreground">
-                    {sanitizeDisplayText(selectedPath)}
-                  </span>
-                </div>
+                <PathBar value={sanitizeDisplayText(selectedPath)} />
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {isMarkdown && !editing ? (

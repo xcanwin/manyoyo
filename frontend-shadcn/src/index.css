@@ -162,4 +162,13 @@
     background-color: var(--color-ring);
     border-radius: 9999px;
   }
+  /* 单行路径展示条用：保留触摸横向滑动的能力，但不露出滚动条本身，
+     看起来和普通的只读 Input 一样 */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
