@@ -244,9 +244,13 @@ function ActivityView({
                       "max-w-full rounded-xl px-3 py-2 text-sm sm:max-w-[75%]",
                       message.role === "user"
                         ? "max-w-[88%] bg-muted/80 text-foreground whitespace-pre-wrap sm:max-w-[75%]"
-                        : message.role === "system"
-                          ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
-                          : "bg-muted/40 text-foreground",
+                        : message.mode === "command"
+                          // 命令模式的回复是原始命令输出，不是被动的系统提示——
+                          // 走跟 assistant 一样的正常气泡，只是下面不做 markdown 渲染
+                          ? "bg-muted/40 whitespace-pre-wrap text-foreground"
+                          : message.role === "system"
+                            ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
+                            : "bg-muted/40 text-foreground",
                       message.pending && "opacity-70"
                     )}
                   >
