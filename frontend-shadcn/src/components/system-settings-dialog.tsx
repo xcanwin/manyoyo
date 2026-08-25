@@ -3,6 +3,7 @@ import JSON5 from "json5"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { CapacityEstimateView } from "@/components/capacity-estimate-view"
 import { CodeMirrorEditor } from "@/components/code-mirror-editor"
 import {
   Dialog,
@@ -50,6 +51,7 @@ const CATEGORIES: ConfigCategory[] = [
   { id: "web", label: "Web 服务", keys: ["serverUser", "serverPass", "serve"] },
   { id: "plugins", label: "插件", keys: ["plugins"] },
   { id: "runs", label: "运行配置 (Runs)", keys: ["runs"] },
+  { id: "capacity", label: "容量预估", keys: [] },
 ]
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -410,6 +412,8 @@ export function SystemSettingsDialog({
                   <TabsContent key={category.id} value={category.id} className="mt-0">
                     {category.id === "runs" ? (
                       <RunsCategoryFields liveParsed={liveParsed} onCommit={handleLeafCommit} />
+                    ) : category.id === "capacity" ? (
+                      <CapacityEstimateView />
                     ) : (
                       <CategoryFields category={category} liveParsed={liveParsed} onCommit={handleLeafCommit} />
                     )}
