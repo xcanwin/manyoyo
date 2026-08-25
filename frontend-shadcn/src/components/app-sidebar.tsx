@@ -1,5 +1,5 @@
 import * as React from "react"
-import { MoreHorizontalIcon, PlusIcon, SettingsIcon } from "lucide-react"
+import { ArrowLeftIcon, MoreHorizontalIcon, PlusIcon, SettingsIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
@@ -345,13 +345,10 @@ export function AppSidebar({
               {navLevel === "containers" ? (
                 <BreadcrumbPage>全部容器</BreadcrumbPage>
               ) : (
-                <button
-                  type="button"
-                  onClick={goToContainers}
-                  className="text-muted-foreground hover:text-foreground"
-                >
+                <Button variant="outline" size="xs" onClick={goToContainers}>
+                  <ArrowLeftIcon data-icon="inline-start" />
                   全部容器
-                </button>
+                </Button>
               )}
             </BreadcrumbItem>
             {navLevel === "agents" && activeGroup ? (
