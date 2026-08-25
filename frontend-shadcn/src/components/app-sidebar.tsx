@@ -186,11 +186,13 @@ export function AppSidebar({
   async function createAgent(containerName: string) {
     setActionError("")
     try {
-      await apiPost(`/api/sessions/${encodeURIComponent(containerName)}/agents`, {})
+      // 接口直接返回新建 AGENT 的 name，比"倒序猜最后一个"更可靠——
+      // 会话列表的顺序并不保证与创建时间一致
+      const data = await apiPost(`/api/sessions/${encodeURIComponent(containerName)}/agents`, {})
+      const newName = typeof data.name === "string" ? data.name : ""
       const freshSessions = await onRefresh()
-      const created = [...freshSessions]
-        .reverse()
-        .find((s) => s.containerName === containerName)
+      goToAgents(containerName)
+      const created = freshSessions.find((s) => s.name === newName)
       if (created) selectSession(created)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "新建 AGENT 失败")
@@ -285,9 +287,15 @@ export function AppSidebar({
             MANYOYO Web
           </span>
         </div>
-        <Button className="w-full" size="lg" onClick={() => setCreateOpen(true)}>
+        <Button
+          className="w-full"
+          size="lg"
+          onClick={() =>
+            navLevel === "agents" ? createAgent(navContainer) : setCreateOpen(true)
+          }
+        >
           <PlusIcon data-icon="inline-start" />
-          新建容器
+          {navLevel === "agents" ? "新建AGENT" : "新建容器"}
         </Button>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>工作台</span>

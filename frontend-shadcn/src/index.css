@@ -51,7 +51,7 @@
 
 :root {
     /* 比纯白稍灰一点，减少大面积纯白的刺眼感 */
-    --background: oklch(0.96 0 0);
+    --background: oklch(0.975 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.145 0 0);

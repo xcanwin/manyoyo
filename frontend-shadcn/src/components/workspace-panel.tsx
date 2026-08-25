@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { TraceBlock } from "@/components/trace-block"
 
@@ -172,6 +173,22 @@ function ActivityView({
   mode: "agent" | "command"
 }) {
   const displayMessages = React.useMemo(() => mergeTraceIntoReply(messages), [messages])
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  // 只有用户本来就停留在底部时，新消息/流式增量才会带着滚动条一起走；
+  // 一旦用户往上翻看历史，这里会记为 false，后续更新不再打断阅读
+  const stickToBottomRef = React.useRef(true)
+
+  function handleScroll() {
+    const el = scrollRef.current
+    if (!el) return
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+  }
+
+  React.useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !stickToBottomRef.current) return
+    el.scrollTop = el.scrollHeight
+  }, [displayMessages])
 
   if (!session) {
     return (
@@ -190,13 +207,17 @@ function ActivityView({
   }
 
   return (
-    <div className="h-full overflow-x-hidden overflow-y-auto">
+    <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-x-hidden overflow-y-auto">
       <div className="flex flex-col gap-3 p-4">
         {displayMessages.map((message) => {
           // 与旧版前端 body.agent-mode/.command-mode + msg.origin-* 对齐：
           // 切换发送模式时，历史里"另一种模式"产生的消息整体变淡，突出当前模式的上下文
           const origin = message.mode === "agent" || message.mode === "command" ? message.mode : ""
           const dimmed = origin !== "" && origin !== mode
+          // 正式回复还没抵达（比如切回一个仍在跑的会话）时，trace 消息会暂时
+          // 落单、配对不上下一条回复——这时也要走结构化执行过程展示，不能把
+          // 它当成一条普通回复，把裸的多行 content 直接当文本糊出来
+          const standaloneTrace = message.streamTrace === true && !message.pairedTrace
           return (
             <div
               key={message.id}
@@ -207,30 +228,36 @@ function ActivityView({
               )}
             >
               {message.pairedTrace ? <TraceBlock trace={message.pairedTrace} /> : null}
-              <div
-                className={cn(
-                  "max-w-full rounded-xl px-3 py-2 text-sm sm:max-w-[75%]",
-                  message.role === "user"
-                    ? "max-w-[88%] bg-[color-mix(in_oklch,var(--muted),black_10%)] text-foreground whitespace-pre-wrap sm:max-w-[75%]"
-                    : message.role === "system"
-                      ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
-                      : "bg-muted text-foreground",
-                  message.pending && "opacity-70"
-                )}
-              >
-                {message.role === "assistant" ? (
-                  <MarkdownContent content={message.content || (message.pending ? "…" : "")} />
-                ) : (
-                  message.content || (message.pending ? "…" : "")
-                )}
-              </div>
-              <span className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
-                {formatTime(message.timestamp)}
-                {message.interrupted ? " · 已停止" : ""}
-                {message.content && !message.pending ? (
-                  <CopyMessageButton text={message.content} />
-                ) : null}
-              </span>
+              {standaloneTrace ? (
+                <TraceBlock trace={message} />
+              ) : (
+                <>
+                  <div
+                    className={cn(
+                      "max-w-full rounded-xl px-3 py-2 text-sm sm:max-w-[75%]",
+                      message.role === "user"
+                        ? "max-w-[88%] bg-[color-mix(in_oklch,var(--muted),black_10%)] text-foreground whitespace-pre-wrap sm:max-w-[75%]"
+                        : message.role === "system"
+                          ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
+                          : "bg-muted text-foreground",
+                      message.pending && "opacity-70"
+                    )}
+                  >
+                    {message.role === "assistant" ? (
+                      <MarkdownContent content={message.content || (message.pending ? "…" : "")} />
+                    ) : (
+                      message.content || (message.pending ? "…" : "")
+                    )}
+                  </div>
+                  <span className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
+                    {formatTime(message.timestamp)}
+                    {message.interrupted ? " · 已停止" : ""}
+                    {message.content && !message.pending ? (
+                      <CopyMessageButton text={message.content} />
+                    ) : null}
+                  </span>
+                </>
+              )}
             </div>
           )
         })}
@@ -555,28 +582,54 @@ export function WorkspacePanel({
 }) {
   const [view, setView] = React.useState<View>("activity")
   const [messages, setMessages] = React.useState<ChatMessage[]>([])
+  const [messagesLoading, setMessagesLoading] = React.useState(false)
   const [draft, setDraft] = React.useState("")
   const [mode, setMode] = React.useState<"agent" | "command">("agent")
   const [switcherOpen, setSwitcherOpen] = React.useState(false)
-  const [sending, setSending] = React.useState(false)
+  // 按会话名记录"本标签页正在为哪些会话跑 stream"，而不是单个全局布尔值——
+  // 否则切到另一个 agent 时，输入框/发送按钮会继续显示上一个 agent 的状态
+  const [sendingNames, setSendingNames] = React.useState<Set<string>>(() => new Set())
   const [loadError, setLoadError] = React.useState("")
   const [cliDialogOpen, setCliDialogOpen] = React.useState(false)
   const [modelDialogOpen, setModelDialogOpen] = React.useState(false)
   const [sessionDetail, setSessionDetail] = React.useState<SessionDetail | null>(null)
 
+  const activeSessionNameRef = React.useRef<string | null>(activeSession?.name ?? null)
+  React.useEffect(() => {
+    activeSessionNameRef.current = activeSession?.name ?? null
+  }, [activeSession?.name])
+
+  const sending = activeSession ? sendingNames.has(activeSession.name) : false
+
+  function setSendingFor(name: string, value: boolean) {
+    setSendingNames((prev) => {
+      const next = new Set(prev)
+      if (value) next.add(name)
+      else next.delete(name)
+      return next
+    })
+  }
+
   const loadMessages = React.useCallback(
     (silent?: boolean) => {
       if (!activeSession) {
         setMessages([])
+        setMessagesLoading(false)
         return Promise.resolve()
       }
-      if (!silent) setLoadError("")
+      if (!silent) {
+        setLoadError("")
+        setMessagesLoading(true)
+      }
       return apiGet(`/api/sessions/${encodeURIComponent(activeSession.name)}/messages`)
         .then((data) => {
           setMessages(Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [])
         })
         .catch((err) => {
           if (!silent) setLoadError(err instanceof Error ? err.message : "加载消息失败")
+        })
+        .finally(() => {
+          if (!silent) setMessagesLoading(false)
         })
     },
     [activeSession?.name]
@@ -600,19 +653,24 @@ export function WorkspacePanel({
   }, [loadMessages, loadDetail])
 
   // 与旧版前端 scheduleAgentRecoveryPoll 对齐：刷新页面/切回会话后，如果后端
-  // 仍在跑一次 Agent 回合（消息里还留着 pending 记录），持续轮询直到它结束
+  // 仍在跑一次 Agent 回合（消息里还留着 pending 记录），持续轮询直到它结束；
+  // 但如果本标签页自己正在为这个会话跑 stream，则不需要（也不应该）叠加轮询
   useAgentRecoveryPoll(
     activeSession,
     messages,
     React.useCallback(async () => {
       await Promise.all([loadMessages(true), loadDetail()])
-    }, [loadMessages, loadDetail])
+    }, [loadMessages, loadDetail]),
+    sending
   )
 
   async function handleSend() {
     const text = draft.trim()
-    if (!text || !activeSession || sending) return
+    if (!text || !activeSession || sendingNames.has(activeSession.name)) return
     const name = activeSession.name
+    // 流式回调是异步触发的，期间用户可能已经切换到别的 agent——
+    // 用这个判断把消息更新限制在"仍然是当前活动会话"的情况下，避免串台
+    const isStillActive = () => activeSessionNameRef.current === name
     setDraft("")
     setLoadError("")
     setMessages((prev) => [
@@ -621,31 +679,33 @@ export function WorkspacePanel({
     ])
 
     if (mode === "command") {
-      setSending(true)
+      setSendingFor(name, true)
       try {
         const data = await apiPost(`/api/sessions/${encodeURIComponent(name)}/run`, { command: text })
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `result-${Date.now()}`,
-            role: "system",
-            content: String(data.output || ""),
-            timestamp: new Date().toISOString(),
-            mode: "command",
-            exitCode: data.exitCode as number,
-          },
-        ])
+        if (isStillActive()) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `result-${Date.now()}`,
+              role: "system",
+              content: String(data.output || ""),
+              timestamp: new Date().toISOString(),
+              mode: "command",
+              exitCode: data.exitCode as number,
+            },
+          ])
+        }
       } catch (err) {
-        setLoadError(err instanceof Error ? err.message : "命令执行失败")
+        if (isStillActive()) setLoadError(err instanceof Error ? err.message : "命令执行失败")
       } finally {
-        setSending(false)
+        setSendingFor(name, false)
         onAfterSend()
-        loadDetail()
+        if (isStillActive()) loadDetail()
       }
       return
     }
 
-    setSending(true)
+    setSendingFor(name, true)
     const traceEvents: TraceEvent[] = []
     setMessages((prev) => [
       ...prev,
@@ -670,6 +730,7 @@ export function WorkspacePanel({
     ])
     try {
       await apiStream(`/api/sessions/${encodeURIComponent(name)}/agent/stream`, { prompt: text }, (event) => {
+        if (!isStillActive()) return
         if (event.type === "trace") {
           if (event.traceEvent) traceEvents.push(event.traceEvent)
           setMessages((prev) =>
@@ -713,16 +774,18 @@ export function WorkspacePanel({
         }
       })
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "发送失败")
-      setMessages((prev) =>
-        prev.filter(
-          (message) => message.id !== STREAMING_MESSAGE_ID && message.id !== STREAMING_TRACE_ID
+      if (isStillActive()) {
+        setLoadError(err instanceof Error ? err.message : "发送失败")
+        setMessages((prev) =>
+          prev.filter(
+            (message) => message.id !== STREAMING_MESSAGE_ID && message.id !== STREAMING_TRACE_ID
+          )
         )
-      )
+      }
     } finally {
-      setSending(false)
+      setSendingFor(name, false)
       onAfterSend()
-      loadDetail()
+      if (isStillActive()) loadDetail()
     }
   }
 
@@ -784,14 +847,25 @@ export function WorkspacePanel({
         <Separator orientation="vertical" className="h-4! shrink-0" />
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
           {activeSession
-            ? `${activeSession.containerName} · ${activeSession.agentRemark || activeSession.agentName}`
+            ? `${activeSession.containerRemark || activeSession.containerName} · ${activeSession.agentRemark || activeSession.agentName}`
             : "选择左侧的容器 / AGENT 开始"}
         </span>
       </header>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
         {view === "activity" ? (
-          <ActivityView session={activeSession} messages={messages} mode={mode} />
+          messagesLoading ? (
+            <div className="flex h-full items-center justify-center">
+              <Spinner className="size-6" />
+            </div>
+          ) : (
+            <ActivityView
+              key={activeSession?.name ?? "none"}
+              session={activeSession}
+              messages={messages}
+              mode={mode}
+            />
+          )
         ) : null}
         {view === "terminal" ? <TerminalView session={activeSession} /> : null}
         {view === "files" ? <FilesPanel activeSession={activeSession} /> : null}
@@ -814,7 +888,7 @@ export function WorkspacePanel({
           onStop={handleStop}
           mode={mode}
           onModeChange={setMode}
-          disabled={!activeSession}
+          disabled={!activeSession || messagesLoading}
           sending={sending}
           session={activeSession}
           onOpenCliTemplate={() => setCliDialogOpen(true)}

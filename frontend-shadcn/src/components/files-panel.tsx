@@ -315,9 +315,11 @@ export function FilesPanel({ activeSession }: { activeSession: SessionSummary | 
                     <ArrowLeftIcon />
                   </Button>
                 ) : null}
-                <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-                  {sanitizeDisplayText(selectedPath)}
-                </span>
+                <div className="min-w-0 flex-1 overflow-x-auto">
+                  <span className="block w-max font-mono text-xs whitespace-nowrap text-muted-foreground">
+                    {sanitizeDisplayText(selectedPath)}
+                  </span>
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {isMarkdown && !editing ? (
