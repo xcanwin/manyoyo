@@ -82,7 +82,7 @@ export function LoginPage() {
             Agent Sandbox Console
           </span>
           <h1 className="font-mono text-4xl font-semibold tracking-tight text-foreground">MANYOYO</h1>
-          <p className="text-sm text-muted-foreground">AI Agent 容器安全沙箱 · Docker / Podman 隔离运行</p>
+          <p className="text-sm text-muted-foreground">AI Agent 容器安全沙箱 · 安全隔离运行</p>
         </div>
 
         <Card className="w-full gap-0 py-0 shadow-lg">
@@ -90,7 +90,6 @@ export function LoginPage() {
             <span className="size-2.5 rounded-full bg-destructive/70" />
             <span className="size-2.5 rounded-full bg-amber-500/70" />
             <span className="size-2.5 rounded-full bg-emerald-500/70" />
-            <span className="ml-2 font-mono text-xs text-muted-foreground">~/manyoyo/login</span>
           </div>
           <CardContent className="px-6 py-6">
             <form onSubmit={handleSubmit}>

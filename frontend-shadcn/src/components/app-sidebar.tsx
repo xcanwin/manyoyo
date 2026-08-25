@@ -213,11 +213,11 @@ export function AppSidebar({
     }
   }
 
-  // 格式对齐 manyoyo.json 里 containerName 模板的 {now}（MMDD-HHmm），
-  // 这里额外带上秒数——短时间内连点快捷对话时目录名不会撞车
+  // 年月日-时分秒，比 manyoyo.json 里 containerName 模板的 {now}（MMDD-HHmm）多带年份和秒数——
+  // 短时间内连点快捷对话时目录名/容器名不会撞车
   function formatQuickChatTimestamp(date: Date): string {
     const pad = (n: number) => String(n).padStart(2, "0")
-    return `${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+    return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
   }
 
   async function runQuickChatWithConfig(quickChatPath: string, quickChatRun: string) {
@@ -235,7 +235,7 @@ export function AppSidebar({
         createOptions: {
           hostPath: newDir,
           containerPath: newDir,
-          containerName: `easy-${timestamp}`,
+          containerName: `my-easy-${timestamp}`,
         },
       })
       await handleCreated(String(data.name))
@@ -408,21 +408,22 @@ export function AppSidebar({
         </div>
         <Breadcrumb>
           <BreadcrumbList className="flex-nowrap gap-1 text-xs">
-            <BreadcrumbItem>
-              {navLevel === "containers" ? (
-                <BreadcrumbPage>全部容器</BreadcrumbPage>
-              ) : (
-                <Button variant="outline" size="xs" onClick={goToContainers}>
-                  <ArrowLeftIcon data-icon="inline-start" />
-                  全部容器
-                </Button>
-              )}
+            <BreadcrumbItem className="shrink-0">
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={navLevel === "containers"}
+                onClick={navLevel === "containers" ? undefined : goToContainers}
+              >
+                <ArrowLeftIcon data-icon="inline-start" />
+                全部容器
+              </Button>
             </BreadcrumbItem>
             {navLevel === "agents" && activeGroup ? (
               <>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage className="max-w-32 truncate">
+                <BreadcrumbSeparator className="shrink-0" />
+                <BreadcrumbItem className="min-w-0 flex-1">
+                  <BreadcrumbPage className="block truncate">
                     {activeGroup.containerRemark || activeGroup.containerName}
                   </BreadcrumbPage>
                 </BreadcrumbItem>
