@@ -14,6 +14,14 @@ import {
 
 marked.setOptions({ breaks: true, gfm: true })
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
 // 防止 markdown 内容里的图片加载、外部链接携带 Referer 泄露当前站点地址给第三方
 DOMPurify.addHook("afterSanitizeAttributes", (node) => {
   if (node.tagName === "IMG" || node.tagName === "A") {
@@ -43,6 +51,18 @@ export function MarkdownContent({
   const { html, htmlBlocks } = React.useMemo(() => {
     const blocks: string[] = []
     const renderer = new Renderer()
+    const defaultImage = renderer.image.bind(renderer)
+    // 与旧版前端 markdown-renderer.js 的 renderer.image 对齐：外部 http(s) 图片
+    // 转为需用户点击确认的链接，避免消息一渲染就自动发起外部请求（跟踪像素/IP 泄露）；
+    // 相对路径图片（走容器文件接口，同源）仍按普通 <img> 渲染
+    renderer.image = (token) => {
+      const { href } = token
+      if (/^https?:/i.test(href || "")) {
+        const label = escapeHtml(token.text || href)
+        return `<a href="${escapeHtml(href)}" title="${escapeHtml(token.title || "")}">🖼️ 点击查看图片：${label}</a>`
+      }
+      return defaultImage(token)
+    }
     if (onPreviewHtml) {
       const defaultCode = renderer.code.bind(renderer)
       renderer.code = (token) => {
