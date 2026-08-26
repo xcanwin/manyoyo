@@ -34,12 +34,17 @@ export function CloneNameDialog({
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState("")
 
-  React.useEffect(() => {
-    if (open) {
+  // 渲染期间对比"open 时对应的建议名"来重置表单，而不是在 effect 里同步
+  // setState：弹窗打开、或已打开时 suggestedName 变化都会重新填充
+  const openSignature = open ? suggestedName : null
+  const [prevOpenSignature, setPrevOpenSignature] = React.useState(openSignature)
+  if (openSignature !== prevOpenSignature) {
+    setPrevOpenSignature(openSignature)
+    if (openSignature !== null) {
       setName(suggestedName)
       setError("")
     }
-  }, [open, suggestedName])
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()

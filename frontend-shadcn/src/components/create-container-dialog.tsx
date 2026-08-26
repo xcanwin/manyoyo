@@ -158,10 +158,17 @@ export function CreateContainerDialog({
     }
   }, [])
 
+  // 渲染期间对比 open 变化来重置错误提示，而不是在 effect 里同步 setState；
+  // effect 只保留真正的异步拉取（loadDefaults 内部的 setState 都在 await 之后触发）
+  const [prevOpen, setPrevOpen] = React.useState(open)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) setError("")
+  }
+
   React.useEffect(() => {
     if (!open) return
-    setError("")
-    loadDefaults()
+    queueMicrotask(() => loadDefaults())
   }, [open, loadDefaults])
 
   function setField<K extends keyof CreateContainerForm>(
