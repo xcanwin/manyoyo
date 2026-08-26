@@ -3,6 +3,7 @@ import * as React from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ResizeHandle } from "@/components/resize-handle"
 import { WorkspacePanel } from "@/components/workspace-panel"
+import { buildDocumentTitle } from "@/lib/chat-behavior"
 import { useResizableWidth } from "@/hooks/use-resizable-width"
 import { useSessions } from "@/hooks/use-sessions"
 import { useUnsavedChangesDialog } from "@/hooks/use-unsaved-changes-dialog"
@@ -74,8 +75,7 @@ export function App() {
   // 标题时，服务端会在 <head> 里插一个 meta 标记，这里跳过动态改写不覆盖它
   React.useEffect(() => {
     if (document.querySelector('meta[name="manyoyo-serve-title"]')) return
-    const agentName = (activeSession?.agentRemark || activeSession?.agentName || "").trim()
-    document.title = agentName ? `${agentName} · MANYOYO Web` : "MANYOYO Web"
+    document.title = buildDocumentTitle(activeSession?.agentRemark || activeSession?.agentName)
   }, [activeSession])
 
   return (

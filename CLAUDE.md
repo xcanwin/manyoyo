@@ -77,6 +77,7 @@ npm run build:web-editor # codemirror.bundle.js 已加入 .gitignore，由 npm i
                          # prepare 钩子自动生成，本地调试可手动重跑此命令
 npm run dev:web-shadcn   # frontend-shadcn 本地开发（等价于在该目录下 npm run dev）
 npm run build:web-shadcn # 构建 frontend-shadcn 单文件产物，随 npm run prepack 自动执行
+npm run test:web-shadcn  # frontend-shadcn 的 vitest 单测，随 npm test / npm run test:unit 自动执行
 npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
 
 # 运行单个测试文件
@@ -89,7 +90,7 @@ npx jest --testNamePattern="关键词"
 
 默认适用于新增功能、行为变更、bug 修复；纯文档改动可例外。
 
-- **Red**：先写失败测试，按变更领域选最小 case（CLI 优先 `test/manyoyo.test.js`；Web 优先 `test/web-server-auth.test.js`；插件优先 `test/plugin-command.test.js`）。
+- **Red**：先写失败测试，按变更领域选最小 case（CLI 优先 `test/manyoyo.test.js`；Web 优先 `test/web-server-auth.test.js`；插件优先 `test/plugin-command.test.js`；frontend-shadcn 优先 `frontend-shadcn/src/**/*.test.ts`，vitest，与源码同目录）。
 - **Green**：只做最小代码改动让测试通过，避免顺手重构。
 - **Refactor**：在测试持续通过的前提下整理命名或重复逻辑，确保行为不变。
 - 每个 bug fix 至少补一个回归用例（先失败后通过）；若无法先写失败测试，需说明原因与替代验证步骤。

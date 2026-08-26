@@ -13,6 +13,7 @@ import {
   type TraceEvent,
 } from "@/lib/api"
 import { useAgentRecoveryPoll } from "@/hooks/use-agent-recovery-poll"
+import { isNearBottom } from "@/lib/chat-behavior"
 import { markdownToPlainText } from "@/lib/markdown-text"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -222,7 +223,7 @@ function ActivityView({
   function handleScroll() {
     const el = scrollRef.current
     if (!el) return
-    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+    stickToBottomRef.current = isNearBottom(el.scrollTop, el.scrollHeight, el.clientHeight)
   }
 
   React.useEffect(() => {
