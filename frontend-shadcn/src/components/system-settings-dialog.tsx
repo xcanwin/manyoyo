@@ -355,7 +355,7 @@ export function SystemSettingsDialog({
   }, [])
 
   React.useEffect(() => {
-    if (open) load()
+    if (open) queueMicrotask(() => load())
   }, [open, load])
 
   function handleLeafCommit(fieldPath: string[], valueText: string, jsValue: unknown) {

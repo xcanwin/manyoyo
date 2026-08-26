@@ -180,18 +180,24 @@ export function FilesPanel({
     [activeSession, historyOnly]
   )
 
-  React.useEffect(() => {
+  // 渲染期间对比"当前会话签名"来重置文件面板本地状态，而不是在 effect 里
+  // 同步 setState；真正的目录加载放进下面的 effect（经 queueMicrotask 转发）
+  const filesSignature = `${activeSession?.name ?? ""}:${historyOnly}`
+  const [prevFilesSignature, setPrevFilesSignature] = React.useState(filesSignature)
+  if (filesSignature !== prevFilesSignature) {
+    setPrevFilesSignature(filesSignature)
     setSelectedPath("")
     setFileData(null)
     setFileError("")
     setEditContent(null)
     setMode("preview")
     setMobilePane("list")
-    if (!activeSession || historyOnly) {
-      setEntries([])
-      return
-    }
-    loadList(activeSession.containerPath || "/")
+    if (!activeSession || historyOnly) setEntries([])
+  }
+
+  React.useEffect(() => {
+    if (!activeSession || historyOnly) return
+    queueMicrotask(() => loadList(activeSession.containerPath || "/"))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession?.name, historyOnly])
 

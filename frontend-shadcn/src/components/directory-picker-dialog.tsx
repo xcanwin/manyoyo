@@ -48,10 +48,18 @@ export function DirectoryPickerDialog({
       .finally(() => setLoading(false))
   }, [])
 
+  // 渲染期间对比 open 变化来清空新建目录名输入框，而不是在 effect 里同步
+  // setState；实际目录加载放进 queueMicrotask，避免 effect 直接同步触达
+  // load() 内部的 setLoading/setError
+  const [prevOpen, setPrevOpen] = React.useState(open)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) setNewDirName("")
+  }
+
   React.useEffect(() => {
     if (!open) return
-    setNewDirName("")
-    load(initialPath)
+    queueMicrotask(() => load(initialPath))
   }, [open, initialPath, load])
 
   async function handleCreateDir() {

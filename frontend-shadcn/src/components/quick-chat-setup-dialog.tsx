@@ -45,11 +45,21 @@ export function QuickChatSetupDialog({
   const [error, setError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
 
+  // 渲染期间对比上一次的 open 值来重置表单：这是 React 官方推荐的
+  // "根据 prop 变化调整 state" 写法，避免在 effect 里同步调用 setState
+  // （effect 只保留下面拉取 runs 列表这个真正的异步副作用）
+  const [prevOpen, setPrevOpen] = React.useState(open)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) {
+      setError("")
+      setPath(initialPath || DEFAULT_QUICK_CHAT_PATH)
+      setRun(initialRun || "")
+    }
+  }
+
   React.useEffect(() => {
     if (!open) return
-    setError("")
-    setPath(initialPath || DEFAULT_QUICK_CHAT_PATH)
-    setRun(initialRun || "")
     apiGet("/api/config")
       .then((data) => {
         const parsed = (data.parsed || {}) as Record<string, unknown>
@@ -57,8 +67,6 @@ export function QuickChatSetupDialog({
         setRuns(Object.keys(runsMap))
       })
       .catch(() => setRuns([]))
-    // initialPath/initialRun 只在弹窗刚打开那一刻取一次初值，避免用户编辑过程中被外部刷新打断
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   async function handleSave() {

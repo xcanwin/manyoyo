@@ -34,12 +34,16 @@ export function PromptDialog({
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState("")
 
-  React.useEffect(() => {
-    if (open) {
+  // 渲染期间对比"open 时对应的初始值"来重置表单，而不是在 effect 里同步 setState
+  const openSignature = open ? initialValue : null
+  const [prevOpenSignature, setPrevOpenSignature] = React.useState(openSignature)
+  if (openSignature !== prevOpenSignature) {
+    setPrevOpenSignature(openSignature)
+    if (openSignature !== null) {
       setValue(initialValue)
       setError("")
     }
-  }, [open, initialValue])
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()

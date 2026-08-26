@@ -44,10 +44,20 @@ export function ModelDialog({
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState("")
 
+  // 渲染期间对比"当前应该加载哪个会话的模型列表"来重置 loading/error，而不是
+  // 在 effect 里同步 setState；effect 只保留真正的异步拉取
+  const openSignature = open && session ? session.name : null
+  const [prevOpenSignature, setPrevOpenSignature] = React.useState(openSignature)
+  if (openSignature !== prevOpenSignature) {
+    setPrevOpenSignature(openSignature)
+    if (openSignature !== null) {
+      setLoading(true)
+      setError("")
+    }
+  }
+
   React.useEffect(() => {
     if (!open || !session) return
-    setLoading(true)
-    setError("")
     apiGet(`/api/sessions/${encodeURIComponent(session.name)}/models`)
       .then((data) => {
         const list = Array.isArray(data.models) ? (data.models as ModelOption[]) : []

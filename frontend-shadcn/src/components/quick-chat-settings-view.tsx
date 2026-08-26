@@ -26,7 +26,7 @@ export function QuickChatSettingsView() {
   }, [])
 
   React.useEffect(() => {
-    load()
+    queueMicrotask(() => load())
   }, [load])
 
   const configured = Boolean(path && run)

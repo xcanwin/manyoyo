@@ -23,7 +23,7 @@ export function useSessions() {
   }, [])
 
   React.useEffect(() => {
-    refresh()
+    queueMicrotask(() => refresh())
   }, [refresh])
 
   const containers = React.useMemo(() => groupSessionsByContainer(sessions), [sessions])

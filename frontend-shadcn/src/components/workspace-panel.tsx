@@ -685,6 +685,10 @@ export function WorkspacePanel({
           if (!silent) setMessagesLoading(false)
         })
     },
+    // 依赖 activeSession?.name 而非整个对象：会话列表刷新会产生新的对象引用
+    // （同一个会话名），依赖整个对象会导致这个 callback 频繁重建、进而让下面
+    // 依赖它的 effect 反复重新加载
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeSession?.name]
   )
 
@@ -698,11 +702,14 @@ export function WorkspacePanel({
       .catch(() => {
         // 静默失败：检查/配置/详情页保留上一次成功加载的数据
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession?.name])
 
   React.useEffect(() => {
-    loadMessages()
-    loadDetail()
+    queueMicrotask(() => {
+      loadMessages()
+      loadDetail()
+    })
   }, [loadMessages, loadDetail])
 
   // 与旧版前端 scheduleAgentRecoveryPoll 对齐：刷新页面/切回会话后，如果后端

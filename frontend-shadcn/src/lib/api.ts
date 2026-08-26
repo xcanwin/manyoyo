@@ -190,7 +190,7 @@ async function request(url: string, options: RequestInit = {}) {
     window.location.href = "/shadcn/auth/login"
     throw new Error("未登录或登录已过期")
   }
-  let data: Record<string, unknown> = {}
+  let data: Record<string, unknown>
   try {
     data = await response.json()
   } catch {

@@ -51,7 +51,7 @@ export function CapacityEstimateView() {
   }, [])
 
   React.useEffect(() => {
-    load()
+    queueMicrotask(() => load())
   }, [load])
 
   return (
