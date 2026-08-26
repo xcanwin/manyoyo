@@ -13,6 +13,7 @@ import {
   type TraceEvent,
 } from "@/lib/api"
 import { useAgentRecoveryPoll } from "@/hooks/use-agent-recovery-poll"
+import { markdownToPlainText } from "@/lib/markdown-text"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AgentTemplateDialog } from "@/components/agent-template-dialog"
@@ -139,28 +140,61 @@ function formatTime(value: string): string {
   return date.toLocaleString()
 }
 
-function CopyMessageButton({ text }: { text: string }) {
+// markdown 为 undefined 时（用户输入 / 命令输出等非 markdown 消息）只提供一种
+// 复制方式，跟旧版一致；assistant 的 markdown 回复额外提供"复制文本"/"复制
+// Markdown"两个选项，对齐旧版 app.js 里 markdownNode.innerText 与 msg.content 的区分
+function CopyMessageButton({ text, markdown }: { text: string; markdown?: string }) {
+  const [open, setOpen] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
 
-  async function handleCopy() {
+  async function copy(value: string) {
     try {
-      await navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(value)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1500)
     } catch {
       // 剪贴板权限被拒绝时静默失败，不打断阅读
     }
+    setOpen(false)
+  }
+
+  if (markdown === undefined) {
+    return (
+      <button
+        type="button"
+        onClick={() => copy(text)}
+        title="复制"
+        className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
+      </button>
+    )
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      title="复制"
-      className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-    >
-      {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
-    </button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            title="复制"
+            className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          />
+        }
+      >
+        {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-32 p-1">
+        <div className="flex flex-col gap-1">
+          <Button variant="ghost" size="sm" className="justify-start" onClick={() => copy(text)}>
+            复制文本
+          </Button>
+          <Button variant="ghost" size="sm" className="justify-start" onClick={() => copy(markdown)}>
+            复制 Markdown
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -275,7 +309,14 @@ function ActivityView({
                     {formatTime(message.timestamp)}
                     {message.interrupted ? " · 已停止" : ""}
                     {message.content && !message.pending ? (
-                      <CopyMessageButton text={message.content} />
+                      message.role === "assistant" ? (
+                        <CopyMessageButton
+                          text={markdownToPlainText(message.content)}
+                          markdown={message.content}
+                        />
+                      ) : (
+                        <CopyMessageButton text={message.content} />
+                      )
                     ) : null}
                   </span>
                 </>
