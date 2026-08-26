@@ -191,6 +191,6 @@ npx jest --testNamePattern="关键词"
 
 ## 提交规范
 
-- 简短中文动词短语，文档用 `docs:` 前缀，不超过 50 字。
+- 简短中文动词短语，文档用 `docs:` 前缀，不超过 50 字；确需补充背景时最多追加一句精简摘要，不写分点列表、不写验证过程。
 - 未明确要求时不自动提交；需要时先给出 commit message 和命令让用户确认。
 - 提交前：`npm test` 通过；涉及文档：`npm ci --include=optional && npm run docs:build` 无错误；涉及新配置：更新 `manyoyo.example.json`；涉及文档结构调整：中英文同步更新。
