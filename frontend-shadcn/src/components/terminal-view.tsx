@@ -137,7 +137,10 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
       socketRef.current = null
       termRef.current = null
     }
-  }, [session, historyOnly])
+    // 依赖 session?.name 而非整个 session 对象：会话列表刷新会产生新的 session
+    // 对象引用（同一个会话名），若依赖整个对象会导致终端在正常刷新时被反复重连
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.name, historyOnly])
 
   if (!session) {
     return (
