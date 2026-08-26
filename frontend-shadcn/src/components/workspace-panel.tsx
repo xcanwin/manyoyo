@@ -255,10 +255,18 @@ function ActivityView({
                     )}
                   >
                     {message.role === "assistant" ? (
-                      <MarkdownContent
-                        content={message.content || (message.pending ? "…" : "")}
-                        onPreviewHtml={(code) => onPreviewHtml("聊天中的 HTML 代码块", code)}
-                      />
+                      // 流式期间只展示纯文本，避免每个 token 到达都触发一次全量
+                      // marked.parse + DOMPurify.sanitize（性能开销 + 未闭合代码块/
+                      // 标签导致的渲染抖动）；流结束后再一次性走 markdown 渲染，
+                      // 与旧版前端 shouldRenderMarkdown 的思路一致
+                      message.pending ? (
+                        <div className="whitespace-pre-wrap">{message.content || "…"}</div>
+                      ) : (
+                        <MarkdownContent
+                          content={message.content || ""}
+                          onPreviewHtml={(code) => onPreviewHtml("聊天中的 HTML 代码块", code)}
+                        />
+                      )
                     ) : (
                       message.content || (message.pending ? "…" : "")
                     )}
