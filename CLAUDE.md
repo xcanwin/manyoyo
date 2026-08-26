@@ -47,8 +47,8 @@ lib/
     playwright-assets/  # Docker Compose 及 Dockerfile 场景模板
   web/
     server.js           # HTTP + WebSocket 服务器（终端、agent 对话、登录鉴权）
-    frontend/           # 旧版前端：app / login / markdown-renderer / file-browser / codemirror
-frontend-shadcn/         # 新版前端（`/shadcn` 路由）：React + shadcn/ui（Base UI + Tailwind v4），
+    frontend/           # 旧版前端（`/legacy` 兜底路由）：app / login / markdown-renderer / file-browser / codemirror
+frontend-shadcn/         # 默认前端（`/` 路由，`/shadcn` 保留为别名）：React + shadcn/ui（Base UI + Tailwind v4），
                          # 独立 Vite 项目，与 lib/web/frontend/ 并存，不共用组件
 docker/
   manyoyo.Dockerfile    # 多阶段镜像构建

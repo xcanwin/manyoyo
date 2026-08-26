@@ -200,7 +200,11 @@ describe('Web Server Auth Gateway', () => {
 
             const pageRes = await request(`${baseUrl}/`, { redirect: 'manual' });
             expect(pageRes.response.status).toBe(302);
-            expect(pageRes.response.headers.get('location')).toBe('/auth/login');
+            expect(pageRes.response.headers.get('location')).toBe('/shadcn/auth/login');
+
+            const legacyRes = await request(`${baseUrl}/legacy`, { redirect: 'manual' });
+            expect(legacyRes.response.status).toBe(302);
+            expect(legacyRes.response.headers.get('location')).toBe('/auth/login');
 
             const faviconRes = await request(`${baseUrl}/favicon.ico`, { redirect: 'manual' });
             expect(faviconRes.response.status).toBe(204);
@@ -298,6 +302,31 @@ describe('Web Server Auth Gateway', () => {
             expect(authedStyle.response.status).toBe(200);
             expect(authedStyle.response.headers.get('content-type')).toContain('text/css');
             expect(authedStyle.text).toContain('.md-content');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should serve shadcn at / by default and keep the legacy theme reachable at /legacy', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-default-theme-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const rootHtml = await request(`${baseUrl}/`, { headers: { Cookie: authCookie } });
+            expect(rootHtml.response.status).toBe(200);
+            expect(rootHtml.text).toContain('<div id="root">');
+
+            const legacyHtml = await request(`${baseUrl}/legacy`, { headers: { Cookie: authCookie } });
+            expect(legacyHtml.response.status).toBe(200);
+            expect(legacyHtml.text).toContain('<script src="/app/frontend/app.js"></script>');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -1175,7 +1204,7 @@ process.exit(2);
             expect(chatBehaviorScript.text).toContain('window.ManyoyoChatBehavior');
             expect(chatBehaviorScript.text).toContain('function isNearBottom(');
 
-            const appHtml = await request(`${baseUrl}/`, {
+            const appHtml = await request(`${baseUrl}/legacy`, {
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.text).toContain('<script src="/app/frontend/chat-behavior.js"></script>');
@@ -1320,7 +1349,7 @@ process.exit(2);
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
-            const appHtml = await request(`${baseUrl}/`, {
+            const appHtml = await request(`${baseUrl}/legacy`, {
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
@@ -1408,7 +1437,7 @@ process.exit(2);
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
-            const appHtml = await request(`${baseUrl}/`, {
+            const appHtml = await request(`${baseUrl}/legacy`, {
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
@@ -1593,7 +1622,7 @@ process.exit(2);
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
-            const appHtml = await request(`${baseUrl}/`, {
+            const appHtml = await request(`${baseUrl}/legacy`, {
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
@@ -1631,7 +1660,7 @@ process.exit(2);
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
-            const appHtml = await request(`${baseUrl}/`, {
+            const appHtml = await request(`${baseUrl}/legacy`, {
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
@@ -1675,7 +1704,7 @@ process.exit(2);
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
-            const appHtml = await request(`${baseUrl}/`, {
+            const appHtml = await request(`${baseUrl}/legacy`, {
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
@@ -1717,7 +1746,7 @@ process.exit(2);
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
-            const appHtml = await request(`${baseUrl}/`, {
+            const appHtml = await request(`${baseUrl}/legacy`, {
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
@@ -2012,7 +2041,7 @@ process.exit(2);
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
-            const appHtml = await request(`${baseUrl}/`, {
+            const appHtml = await request(`${baseUrl}/legacy`, {
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
@@ -2055,7 +2084,7 @@ process.exit(2);
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
-            const appHtml = await request(`${baseUrl}/`, {
+            const appHtml = await request(`${baseUrl}/legacy`, {
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
@@ -2466,7 +2495,7 @@ process.exit(2);
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
-            const appHtml = await request(`${baseUrl}/`, {
+            const appHtml = await request(`${baseUrl}/legacy`, {
                 headers: { Cookie: authCookie }
             });
             expect(appHtml.response.status).toBe(200);
