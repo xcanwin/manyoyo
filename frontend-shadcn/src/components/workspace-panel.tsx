@@ -724,6 +724,28 @@ export function WorkspacePanel({
     sending
   )
 
+  // 与旧版前端 visibilitychange/focus 触发的对账对齐：标签页切走再切回、或窗口
+  // 重新获得焦点时，主动跟服务端核对一次消息与详情——网络抖动导致本标签页的
+  // stream 静默中断、但本地又没有 pending 标记时（见下面 handleSend 的
+  // loadMessages(true) 兜底），只靠 useAgentRecoveryPoll 的轮询条件是发现不了的，
+  // 这里补一次「用户回来了就顺手对一次账」，不依赖本地是否残留 pending 状态。
+  // 本标签页正在为当前会话跑 stream 时跳过，避免用半途的服务端快照覆盖实时状态。
+  React.useEffect(() => {
+    function reconcile() {
+      if (document.visibilityState !== "visible") return
+      if (!activeSessionNameRef.current) return
+      if (sendingNames.has(activeSessionNameRef.current)) return
+      loadMessages(true)
+      loadDetail()
+    }
+    document.addEventListener("visibilitychange", reconcile)
+    window.addEventListener("focus", reconcile)
+    return () => {
+      document.removeEventListener("visibilitychange", reconcile)
+      window.removeEventListener("focus", reconcile)
+    }
+  }, [loadMessages, loadDetail, sendingNames])
+
   async function handleSend() {
     const text = draft.trim()
     if (!text || !activeSession || sendingNames.has(activeSession.name)) return
@@ -841,6 +863,10 @@ export function WorkspacePanel({
             (message) => message.id !== STREAMING_MESSAGE_ID && message.id !== STREAMING_TRACE_ID
           )
         )
+        // 本地 stream 中断不代表服务端那一轮真的停了（可能只是网络抖动/标签页
+        // 被节流）；这里删掉本地占位消息后立刻跟服务端对一次账，服务端如果
+        // 仍在跑，返回的消息会带着 pending 标记，交给 useAgentRecoveryPoll 接手轮询
+        loadMessages(true)
       }
     } finally {
       setSendingFor(name, false)
