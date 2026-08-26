@@ -326,6 +326,10 @@ describe('Web Server Auth Gateway', () => {
             expect(authed.response.status).toBe(200);
             expect(authed.response.headers.get('content-type')).toContain('text/html');
             expect(authed.text).toContain('<div id="root">');
+            // 未配置 serveTitle 时不应该注入 manyoyo-serve-title 标记（前端 JS 源码里本身会提到
+            // 这个字符串用于 querySelector，这里必须断言完整的 meta 标签，不能只查子串），
+            // 这样前端才会按当前 AGENT 动态改写标题
+            expect(authed.text).not.toContain('<meta name="manyoyo-serve-title"');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
@@ -386,8 +390,12 @@ describe('Web Server Auth Gateway', () => {
             // 回归用例：shadcn.html 是 vite singlefile 打包产物，全部依赖内联成一个 <script>；
             // 曾经对它也套用 app.html 那套 .replace('</head>', ...) 注入 __MANYOYO_SERVE_TITLE__ 标记，
             // 结果命中了内联脚本里恰好出现的字面量 "</head>"，把注入内容（带着 "</script>"）插进
-            // 脚本中间，导致整页被当成纯文本展示。shadcn 前端目前不消费这个标记，不应该注入它。
+            // 脚本中间，导致整页被当成纯文本展示。shadcn 前端改用更窄的 <title> 定位注入
+            // manyoyo-serve-title 标记（见下），不应该再走 </head> 那套注入方式。
             expect(appPage.text).not.toContain('__MANYOYO_SERVE_TITLE__');
+            // shadcn 前端现在会按当前 AGENT 动态改写 document.title，配置了 serveTitle 时
+            // 需要告知前端跳过动态改写，不能覆盖用户显式设置的静态标题
+            expect(appPage.text).toContain('<meta name="manyoyo-serve-title" content="1">');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
