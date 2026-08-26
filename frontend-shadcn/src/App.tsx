@@ -69,6 +69,15 @@ export function App() {
     setActiveSessionName(session ? session.name : null)
   }
 
+  // 与旧版前端 buildDocumentTitle 对齐：按当前 AGENT 动态改写页面标题，方便
+  // 并行打开多个会话时在浏览器标签/任务切换器里辨认。--title 传了自定义静态
+  // 标题时，服务端会在 <head> 里插一个 meta 标记，这里跳过动态改写不覆盖它
+  React.useEffect(() => {
+    if (document.querySelector('meta[name="manyoyo-serve-title"]')) return
+    const agentName = (activeSession?.agentRemark || activeSession?.agentName || "").trim()
+    document.title = agentName ? `${agentName} · MANYOYO Web` : "MANYOYO Web"
+  }, [activeSession])
+
   return (
     <SidebarProvider
       className="relative h-svh overflow-hidden"
