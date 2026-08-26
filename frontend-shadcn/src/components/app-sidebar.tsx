@@ -61,6 +61,24 @@ import {
 
 type NavLevel = "containers" | "agents"
 
+// 与旧版前端 loadSidebarNavState/persistSidebarNavState 对齐：记住上次停留的
+// 容器/AGENT 两级导航位置，刷新页面或重开页面后能直接回到原来的上下文
+const SIDEBAR_NAV_STORAGE_KEY = "manyoyo.web.sidebarNav.v1"
+
+function loadPersistedNavState(): { navLevel: NavLevel; navContainer: string } {
+  try {
+    const raw = window.localStorage.getItem(SIDEBAR_NAV_STORAGE_KEY)
+    if (!raw) return { navLevel: "containers", navContainer: "" }
+    const parsed = JSON.parse(raw) as { navLevel?: unknown; navContainer?: unknown }
+    return {
+      navLevel: parsed.navLevel === "agents" ? "agents" : "containers",
+      navContainer: typeof parsed.navContainer === "string" ? parsed.navContainer : "",
+    }
+  } catch {
+    return { navLevel: "containers", navContainer: "" }
+  }
+}
+
 function formatUpdatedAt(value: string): string {
   if (!value) return "暂无更新"
   const date = new Date(value)
@@ -108,8 +126,8 @@ export function AppSidebar({
   onCreatingAgentContainerChange: (containerName: string | null) => void
 }) {
   const { isMobile, setOpenMobile } = useSidebar()
-  const [navLevel, setNavLevel] = React.useState<NavLevel>("containers")
-  const [navContainer, setNavContainer] = React.useState("")
+  const [navLevel, setNavLevel] = React.useState<NavLevel>(() => loadPersistedNavState().navLevel)
+  const [navContainer, setNavContainer] = React.useState(() => loadPersistedNavState().navContainer)
   const [searchOpen, setSearchOpen] = React.useState(false)
   const [quickChatSetupOpen, setQuickChatSetupOpen] = React.useState(false)
   const [quickChatBusy, setQuickChatBusy] = React.useState(false)
@@ -159,6 +177,39 @@ export function AppSidebar({
     () => (activeGroup?.sessions ?? []).filter((s) => s.synthetic !== true),
     [activeGroup]
   )
+
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        SIDEBAR_NAV_STORAGE_KEY,
+        JSON.stringify({ navLevel, navContainer })
+      )
+    } catch {
+      // localStorage 不可用（隐私模式等）时静默失败，不影响导航本身
+    }
+  }, [navLevel, navContainer])
+
+  // 与旧版前端 pruneSidebarNavState 对齐：会话列表每次刷新后，如果持久化下来的
+  // navContainer 已经不存在了（容器被删除/改名），退回容器列表层级，避免停留在
+  // 一个空的、找不到对应容器的 AGENT 列表页。渲染期间对比容器名单签名来判断
+  // "是否发生了一次新的刷新"，而不是在 effect 里同步 setState；首次加载数据
+  // 完成前（loading）签名固定为 null，不参与校验，避免 containers 还是空数组时
+  // 误把刚恢复的导航状态清空
+  const containersSignature = loading
+    ? null
+    : containers.map((group) => group.containerName).join(",")
+  const [prevContainersSignature, setPrevContainersSignature] = React.useState(containersSignature)
+  if (containersSignature !== prevContainersSignature) {
+    setPrevContainersSignature(containersSignature)
+    if (
+      containersSignature !== null &&
+      navLevel === "agents" &&
+      !containers.some((group) => group.containerName === navContainer)
+    ) {
+      setNavLevel("containers")
+      setNavContainer("")
+    }
+  }
   // 从agent列表返回容器列表后，靠当前激活的会话反推它所在的容器，
   // 让容器列表也能高亮出"正在对话的是哪个容器"
   const activeContainerName = React.useMemo(() => {
