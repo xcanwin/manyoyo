@@ -56,6 +56,10 @@ const OTHER_VIEWS = (Object.keys(VIEW_LABELS) as View[]).filter(
 const STREAMING_MESSAGE_ID = "__streaming__"
 const STREAMING_TRACE_ID = "__streaming_trace__"
 
+// 页面可见时的多设备/多标签页同步轮询：间隔与空闲超时，见下方 reconcile 相关 effect
+const SYNC_POLL_INTERVAL_MS = 6000
+const SYNC_POLL_IDLE_TIMEOUT_MS = 10 * 60 * 1000
+
 const IMAGE_VERSION_TAG_PATTERN = /^(\d+\.\d+\.\d+)-([A-Za-z0-9][A-Za-z0-9_.-]*)$/
 
 type Tone = "ok" | "warn" | "danger" | "info"
@@ -771,27 +775,72 @@ export function WorkspacePanel({
     sending
   )
 
-  // 与旧版前端 visibilitychange/focus 触发的对账对齐：标签页切走再切回、或窗口
-  // 重新获得焦点时，主动跟服务端核对一次消息与详情——网络抖动导致本标签页的
-  // stream 静默中断、但本地又没有 pending 标记时（见下面 handleSend 的
-  // loadMessages(true) 兜底），只靠 useAgentRecoveryPoll 的轮询条件是发现不了的，
-  // 这里补一次「用户回来了就顺手对一次账」，不依赖本地是否残留 pending 状态。
-  // 本标签页正在为当前会话跑 stream 时跳过，避免用半途的服务端快照覆盖实时状态。
+  // sendingNames 变化很频繁（任意会话开始/结束发送都会触发），下面的 effect 不
+  // 想因此反复重新订阅 DOM 事件监听器/重建定时器，所以用 ref 转发一份最新值
+  const sendingNamesRef = React.useRef(sendingNames)
   React.useEffect(() => {
+    sendingNamesRef.current = sendingNames
+  }, [sendingNames])
+
+  // 与旧版前端 visibilitychange/focus 触发的对账对齐，并补上多设备/多标签页
+  // 同时打开同一会话的同步：只靠 visibilitychange/focus 事件只能覆盖"从隐藏切回
+  // 可见"这一次状态跳变——如果手机和电脑两个窗口同时摆在眼前、都没有失去过
+  // 焦点，双方都不会触发任何事件，一边发的消息不会自动出现在另一边，必须手动
+  // 刷新或者随便发点内容才会重新拉取。这里在页面可见期间加一个轻量轮询，同时
+  // 用 SYNC_POLL_IDLE_TIMEOUT_MS 做空闲退避——超过这个时长没有任何用户操作就
+  // 暂停轮询，避免忘记关掉的标签页无限期空转消耗流量；有新操作、或重新可见/
+  // 聚焦会立刻恢复。本标签页正在为当前会话跑 stream 时跳过 loadMessages/loadDetail，
+  // 避免用半途的服务端快照覆盖实时状态；侧栏（onAfterSend）不受此限制。
+  React.useEffect(() => {
+    let lastActivityAt = Date.now()
+    function markActivity() {
+      lastActivityAt = Date.now()
+    }
     function reconcile() {
       if (document.visibilityState !== "visible") return
+      onAfterSend()
       if (!activeSessionNameRef.current) return
-      if (sendingNames.has(activeSessionNameRef.current)) return
+      if (sendingNamesRef.current.has(activeSessionNameRef.current)) return
       loadMessages(true)
       loadDetail()
     }
-    document.addEventListener("visibilitychange", reconcile)
-    window.addEventListener("focus", reconcile)
-    return () => {
-      document.removeEventListener("visibilitychange", reconcile)
-      window.removeEventListener("focus", reconcile)
+    function onVisibleOrFocus() {
+      markActivity()
+      reconcile()
     }
-  }, [loadMessages, loadDetail, sendingNames])
+    const activityEvents: Array<keyof WindowEventMap> = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "touchstart",
+      "scroll",
+    ]
+    activityEvents.forEach((type) => window.addEventListener(type, markActivity, { passive: true }))
+    document.addEventListener("visibilitychange", onVisibleOrFocus)
+    window.addEventListener("focus", onVisibleOrFocus)
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return
+      if (Date.now() - lastActivityAt > SYNC_POLL_IDLE_TIMEOUT_MS) return
+      reconcile()
+    }, SYNC_POLL_INTERVAL_MS)
+    return () => {
+      activityEvents.forEach((type) => window.removeEventListener(type, markActivity))
+      document.removeEventListener("visibilitychange", onVisibleOrFocus)
+      window.removeEventListener("focus", onVisibleOrFocus)
+      window.clearInterval(timer)
+    }
+  }, [loadMessages, loadDetail, onAfterSend])
+
+  // 与旧版前端一致：一旦不再有正在跑的 agent 任务（本地 stream 结束 + 消息里也
+  // 没有残留 pending），之前因为"已有运行中的 agent 任务"之类冲突提示留下的
+  // loadError 就该自动消失，不需要用户手动再发一次东西才能把它盖掉
+  const [prevActiveAgentRunning, setPrevActiveAgentRunning] = React.useState(activeAgentRunning)
+  if (activeAgentRunning !== prevActiveAgentRunning) {
+    setPrevActiveAgentRunning(activeAgentRunning)
+    if (prevActiveAgentRunning && !activeAgentRunning) {
+      setLoadError("")
+    }
+  }
 
   async function handleSend() {
     const text = draft.trim()
@@ -1031,8 +1080,8 @@ export function WorkspacePanel({
       </div>
 
       {view === "activity" && loadError ? (
-        <Alert variant="destructive" className="mx-3 mb-2">
-          <AlertDescription>{loadError}</AlertDescription>
+        <Alert variant="destructive" className="mx-3 mb-2 min-w-0">
+          <AlertDescription className="break-words">{loadError}</AlertDescription>
         </Alert>
       ) : null}
 
