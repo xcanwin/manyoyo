@@ -686,6 +686,12 @@ export function WorkspacePanel({
   }, [activeSession?.name])
 
   const sending = activeSession ? sendingNames.has(activeSession.name) : false
+  // 与旧版前端 hasPendingAgentMessagesForSession 对齐：composer 是否可用不能只看
+  // 本标签页这一次 fetch 有没有结束——网络抖动/标签页节流可能让本地 stream 提前
+  // 断开，但服务端那一轮 agent 任务（尤其是耗时更长的多 agent / 子 agent 任务）
+  // 其实还在跑，这时消息列表里会留着一条 pending 的 agent 回复，据此继续禁用输入
+  const activeAgentRunning =
+    sending || messages.some((message) => message.mode === "agent" && message.pending === true)
 
   // 文件编辑器有未保存修改时，切走顶部标签会直接丢弃 FilesPanel 的编辑状态
   // （非 files 视图不渲染 FilesPanel），所以要在真正 setView 之前先拦一次
@@ -1039,7 +1045,7 @@ export function WorkspacePanel({
           mode={mode}
           onModeChange={setMode}
           disabled={!activeSession || messagesLoading}
-          sending={sending}
+          sending={activeAgentRunning}
           session={activeSession}
           onOpenCliTemplate={() => setCliDialogOpen(true)}
           onOpenModel={() => setModelDialogOpen(true)}

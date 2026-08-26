@@ -239,6 +239,17 @@ export async function apiStream(
     throw new Error((data as { error?: string }).error || "请求失败")
   }
 
+  // result/error 是后端真正跑完（成功或明确失败）才会发的终态事件；HTTP 流
+  // 本身读完（done）不代表 agent 任务真的结束——网络抖动、代理/浏览器空闲超时、
+  // 后台标签页被节流都可能让连接提前断开，而服务端那一轮任务（尤其是耗时更长的
+  // 多 agent / 子 agent 任务）其实还在跑。没见过终态事件就把流当成功处理，会让
+  // 调用方误以为任务已结束。与旧版前端 app.js 的 finalResult 校验对齐
+  let sawTerminalEvent = false
+  function dispatch(event: StreamEvent) {
+    if (event.type === "result" || event.type === "error") sawTerminalEvent = true
+    onEvent(event)
+  }
+
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let pending = ""
@@ -253,7 +264,7 @@ export async function apiStream(
       if (!text) continue
       // 单行 NDJSON 解析失败不应打断整条流：跳过畸形/截断行，继续读取后续事件
       try {
-        onEvent(JSON.parse(text))
+        dispatch(JSON.parse(text))
       } catch {
         continue
       }
@@ -263,10 +274,14 @@ export async function apiStream(
   const finalText = (pending + rest).trim()
   if (finalText) {
     try {
-      onEvent(JSON.parse(finalText))
+      dispatch(JSON.parse(finalText))
     } catch {
       // 忽略无法解析的收尾数据
     }
+  }
+
+  if (!sawTerminalEvent) {
+    throw new Error("Agent 流式响应未返回结果")
   }
 }
 
