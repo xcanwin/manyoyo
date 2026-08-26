@@ -63,8 +63,13 @@ export function MarkdownContent({
       <div
         className={cn(
           "prose prose-sm dark:prose-invert max-w-none break-words",
+          // prose-sm 是为长文档设计的排版参数（行高 ≈1.71、段落上下各留 16px），
+          // 套进聊天气泡显得松散；这里对齐旧版前端 markdown.css 的紧凑排版
+          // （行高 1.6、块级元素 margin 0.6em、列表项不额外加 margin）
+          "prose-p:my-[0.6em] prose-p:leading-[1.6] prose-li:my-0",
+          "prose-ul:my-[0.6em] prose-ol:my-[0.6em] prose-blockquote:my-[0.6em]",
           // prose-sm 的 code 用 em 相对缩放，算下来比气泡正文还小，这里固定跟正文一样大
-          "prose-code:text-sm prose-pre:text-sm",
+          "prose-code:text-sm prose-pre:text-sm prose-pre:my-[0.6em]",
           // 代码块背景改用 foreground 的浅色叠加而不是 muted——跟气泡本身的 muted 底色太接近，
           // 混在一起分不清代码块的边界。prose-pre: 修饰符只改 typography 插件自己的
           // --tw-prose-pre-bg 变量，套不到实际渲染的 background-color 上，改用直接的
@@ -72,7 +77,7 @@ export function MarkdownContent({
           "[&_pre]:bg-foreground/10! dark:[&_pre]:bg-foreground/15! prose-pre:text-foreground",
           // 表格默认可能比气泡宽，加 overflow-x-auto 让它能横向滚动，再给一条常驻可见的
           // 细滚动条（不依赖系统"仅交互时显示"的覆盖式滚动条），避免用户看不出还能往右滑
-          "[&_table]:block [&_table]:overflow-x-auto [&_table]:[scrollbar-width:thin] [&_table::-webkit-scrollbar]:h-1.5 [&_table::-webkit-scrollbar-thumb]:rounded-full [&_table::-webkit-scrollbar-thumb]:bg-foreground/25",
+          "prose-table:my-[0.6em] [&_table]:block [&_table]:overflow-x-auto [&_table]:[scrollbar-width:thin] [&_table::-webkit-scrollbar]:h-1.5 [&_table::-webkit-scrollbar-thumb]:rounded-full [&_table::-webkit-scrollbar-thumb]:bg-foreground/25",
           className
         )}
         onClick={handleClick}
