@@ -251,13 +251,22 @@ export async function apiStream(
     for (const line of lines) {
       const text = line.trim()
       if (!text) continue
-      onEvent(JSON.parse(text))
+      // 单行 NDJSON 解析失败不应打断整条流：跳过畸形/截断行，继续读取后续事件
+      try {
+        onEvent(JSON.parse(text))
+      } catch {
+        continue
+      }
     }
   }
   const rest = decoder.decode()
   const finalText = (pending + rest).trim()
   if (finalText) {
-    onEvent(JSON.parse(finalText))
+    try {
+      onEvent(JSON.parse(finalText))
+    } catch {
+      // 忽略无法解析的收尾数据
+    }
   }
 }
 
