@@ -690,6 +690,12 @@ export function WorkspacePanel({
     activeSessionNameRef.current = activeSession?.name ?? null
   }, [activeSession?.name])
 
+  // 切换 AGENT 时清空未发送的草稿——否则在 A 会话里打的字会原样留在输入框，
+  // 切到 B 会话后如果没注意到就直接点发送，会把 A 的草稿当成 B 的消息发出去
+  React.useEffect(() => {
+    setDraft("")
+  }, [activeSession?.name])
+
   const sending = activeSession ? sendingNames.has(activeSession.name) : false
   // 与旧版前端 hasPendingAgentMessagesForSession 对齐：composer 是否可用不能只看
   // 本标签页这一次 fetch 有没有结束——网络抖动/标签页节流可能让本地 stream 提前
