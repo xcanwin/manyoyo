@@ -90,6 +90,95 @@ export type ChatMessage = {
 
 export type DisplayMessage = ChatMessage & { pairedTrace?: ChatMessage }
 
+// 消息列表里三类"本地乐观占位"的 id 约定：发送瞬间前端先用这些临时 id 渲染，
+// 服务端 meta/result 事件会带回持久化消息的真实 id，前端收到后原地替换——
+// 这样轮询对账（loadMessages 全量替换）时 React key 与服务端数据一致，
+// 不会把整个消息列表 DOM 重建掉（重建会清零代码块横向滚动位置与文字选区）
+export const LOCAL_USER_MESSAGE_ID_PREFIX = "local-"
+export const STREAMING_TRACE_ID = "__streaming_trace__"
+export const STREAMING_MESSAGE_ID = "__streaming__"
+
+function isValidServerMessageId(value: unknown): value is string | number {
+  return (typeof value === "string" && value !== "") || typeof value === "number"
+}
+
+// 把流式 meta/result 事件携带的服务端消息 id 应用到本地乐观占位上：
+// - userMessageId（meta）：最后一条 local-* user 消息
+// - traceMessageId（meta）：__streaming_trace__ 执行过程占位
+// - replyMessageId（result）：__streaming__ 流式回复占位
+// 找不到对应占位（如 409 冲突时 meta 未到达、或对账已先一步完成）时原样返回
+export function applyServerMessageIds(
+  messages: ChatMessage[],
+  ids: {
+    userMessageId?: string | number
+    traceMessageId?: string | number
+    replyMessageId?: string | number
+  }
+): ChatMessage[] {
+  let result = messages
+  const apply = (matches: (message: ChatMessage) => boolean, nextId: string | number) => {
+    result = result.map((message) => (matches(message) ? { ...message, id: nextId } : message))
+  }
+  if (isValidServerMessageId(ids.userMessageId)) {
+    // 从后往前找本轮刚 append 的 local user 占位（历史上可能残留更早的 local-*）
+    let lastIndex = -1
+    for (let i = result.length - 1; i >= 0; i--) {
+      const id = result[i].id
+      if (typeof id === "string" && id.startsWith(LOCAL_USER_MESSAGE_ID_PREFIX)) {
+        lastIndex = i
+        break
+      }
+    }
+    if (lastIndex >= 0) {
+      const next = result.slice()
+      next[lastIndex] = { ...next[lastIndex], id: ids.userMessageId }
+      result = next
+    }
+  }
+  if (isValidServerMessageId(ids.traceMessageId)) {
+    apply((message) => message.id === STREAMING_TRACE_ID, ids.traceMessageId)
+  }
+  if (isValidServerMessageId(ids.replyMessageId)) {
+    apply((message) => message.id === STREAMING_MESSAGE_ID, ids.replyMessageId)
+  }
+  return result
+}
+
+// loadMessages 响应回写前的守卫：请求发起后状态可能已经变化——
+// - 用户已切换到别的会话：旧会话的响应写进去会把 A 的消息糊到 B 的界面上
+// - 本标签页开始为该会话跑 stream：晚到的旧快照会把刚 append 的乐观 user
+//   消息整体覆盖掉，用户表现为"发出去的提示词消失了"
+// 两种情况都应丢弃这次响应
+export function shouldDiscardMessagesResponse(
+  requestedSessionName: string,
+  activeSessionName: string | null,
+  sessionSending: boolean
+): boolean {
+  if (activeSessionName !== requestedSessionName) return true
+  return sessionSending
+}
+
+// 发送请求在服务端确认前失败（409 冲突 / 网络错误等）时清除本轮全部本地乐观
+// 占位：最新一条 local-* user 消息 + 两个流式占位。服务端没收到这条消息，
+// 不清除会留下一条"永远没有回复"的幽灵消息。meta 已把占位换成服务端 id 的
+// 情况下（服务端已持久化），local-* 不存在，只会清掉残留占位，服务端消息不动
+export function removeLocalPendingPlaceholders(messages: ChatMessage[]): ChatMessage[] {
+  let lastLocalUserIndex = -1
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const id = messages[i].id
+    if (typeof id === "string" && id.startsWith(LOCAL_USER_MESSAGE_ID_PREFIX)) {
+      lastLocalUserIndex = i
+      break
+    }
+  }
+  return messages.filter(
+    (message, index) =>
+      index !== lastLocalUserIndex &&
+      message.id !== STREAMING_MESSAGE_ID &&
+      message.id !== STREAMING_TRACE_ID
+  )
+}
+
 // 与 lib/web/frontend/chat-behavior.js 的 mergeTraceIntoReply 对齐：
 // 把"执行过程"消息（streamTrace: true）合并进紧随其后的正式回复，
 // 供 UI 把执行过程渲染成回复气泡上方的可折叠块
@@ -211,10 +300,19 @@ export const apiPut = (url: string, body?: unknown) =>
   request(url, { method: "PUT", body: body === undefined ? "{}" : JSON.stringify(body) })
 
 export type StreamEvent =
-  | { type: "meta"; contextMode?: string; resumeAttempted?: boolean; resumeSucceeded?: boolean; agentProgram?: string }
+  | {
+      type: "meta"
+      contextMode?: string
+      resumeAttempted?: boolean
+      resumeSucceeded?: boolean
+      agentProgram?: string
+      // 服务端为本轮消息预先生成的持久化 id，见 applyServerMessageIds
+      userMessageId?: string
+      traceMessageId?: string
+    }
   | { type: "trace"; text: string; traceEvent?: TraceEvent }
   | { type: "content_delta"; content: string }
-  | { type: "result"; exitCode: number; output: string; interrupted?: boolean }
+  | { type: "result"; exitCode: number; output: string; interrupted?: boolean; replyMessageId?: string }
   | { type: "error"; error: string }
 
 export async function apiStream(

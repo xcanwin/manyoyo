@@ -4263,6 +4263,136 @@ process.exit(0);
         }
     });
 
+    test('agent/stop with no live run interrupts orphaned pending messages to unlock the composer', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-stop-orphan-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        // 预置一轮"仍在 pending"的消息：serve 重启后 agentRuns 登记丢失，
+        // 但消息永远 pending，前端会因 pending 残留永久禁用输入
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [
+                    { id: 'm1', role: 'user', content: '孤儿任务', pending: true, mode: 'agent', timestamp: '2026-01-01T00:00:00.000Z' },
+                    { id: 'm2', role: 'assistant', content: '[执行过程]', streamTrace: true, pending: true, mode: 'agent', timestamp: '2026-01-01T00:00:01.000Z' }
+                ]
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const stopRes = await request(`${baseUrl}/api/sessions/demo/agent/stop`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: '{}'
+            });
+            expect(stopRes.response.status).toBe(404);
+
+            const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            for (const message of persisted.messages || []) {
+                expect(message.pending).not.toBe(true);
+                expect(message.interrupted).toBe(true);
+            }
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('should expose persisted message ids on meta and result stream events', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-message-ids-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  process.stdout.write('{"type":"system","subtype":"init","session_id":"claude-session"}\\n');
+  process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"流式增量。"}]}}\\n');
+  process.stdout.write('{"type":"result","subtype":"success","session_id":"claude-session"}\\n');
+  process.exit(0);
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: '打个招呼' })
+            });
+            expect(streamRes.response.status).toBe(200);
+
+            // 前端拿到 meta/result 里的服务端消息 id 后，会把本地乐观占位（local-* /
+            // __streaming__ 等）替换成同一 id——这样轮询对账时 React key 不变、
+            // DOM 不重建，移动端代码块的横向滚动位置与文字选区才不会被清零
+            const metaEvent = streamRes.events.find(event => event.type === 'meta');
+            const resultEvent = streamRes.events.find(event => event.type === 'result');
+            expect(metaEvent).toBeTruthy();
+            expect(resultEvent).toBeTruthy();
+
+            const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
+            const persistedUser = (persisted.messages || []).find(message => message && message.role === 'user');
+            const persistedTrace = (persisted.messages || []).find(message => message && message.streamTrace === true);
+            const persistedReply = (persisted.messages || []).find(
+                message => message && message.role === 'assistant' && message.streamTrace !== true && message.pending !== true
+            );
+            expect(persistedUser && persistedUser.id).toBeTruthy();
+            expect(persistedTrace && persistedTrace.id).toBeTruthy();
+            expect(persistedReply && persistedReply.id).toBeTruthy();
+            expect(String(metaEvent.userMessageId)).toBe(String(persistedUser.id));
+            expect(String(metaEvent.traceMessageId)).toBe(String(persistedTrace.id));
+            expect(String(resultEvent.replyMessageId)).toBe(String(persistedReply.id));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should persist pending prompt and trace during agent streaming for refresh recovery', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-refresh-recovery-'));
         const port = await getFreePort();

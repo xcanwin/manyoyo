@@ -1,6 +1,16 @@
 import { describe, expect, test } from "vitest"
 
-import { mergeToolTraceEvents, mergeTraceIntoReply, summarizeTraceFlow } from "./api"
+import {
+  applyServerMessageIds,
+  LOCAL_USER_MESSAGE_ID_PREFIX,
+  mergeToolTraceEvents,
+  mergeTraceIntoReply,
+  removeLocalPendingPlaceholders,
+  shouldDiscardMessagesResponse,
+  STREAMING_MESSAGE_ID,
+  STREAMING_TRACE_ID,
+  summarizeTraceFlow,
+} from "./api"
 
 // 与旧版前端 test/chat-behavior.test.js 的 mergeTraceIntoReply 用例对齐
 describe("mergeTraceIntoReply", () => {
@@ -206,5 +216,110 @@ describe("summarizeTraceFlow", () => {
   test("已结束且无错误：标记为已完成", () => {
     const events = [{ kind: "command", text: "" }]
     expect(summarizeTraceFlow(events, false)).toBe("1 步 · 已完成")
+  })
+})
+
+// 回归用例：发送提示词后，本地乐观占位（local-* user / __streaming_trace__ /
+// __streaming__）的 id 与服务端持久化消息 id 不一致。轮询对账一旦用服务端快照
+// 整体替换 messages，React key 全部变化 → 整个消息列表 DOM 重建，移动端表现为
+// 代码块横向滚动位置被清零、选中文字被打断。收到 meta/result 事件里的服务端 id
+// 后应原地替换占位 id，对账时 key 保持稳定。
+describe("applyServerMessageIds", () => {
+  function localUserMessages() {
+    return [
+      { id: "server-old-1", role: "assistant" as const, content: "历史回复", timestamp: "t0" },
+      { id: `${LOCAL_USER_MESSAGE_ID_PREFIX}1`, role: "user" as const, content: "新提示词", timestamp: "t1" },
+      { id: STREAMING_TRACE_ID, role: "assistant" as const, content: "[执行过程]", streamTrace: true, traceEvents: [], pending: true, timestamp: "t2" },
+      { id: STREAMING_MESSAGE_ID, role: "assistant" as const, content: "流式回复", pending: true, timestamp: "t3" },
+    ]
+  }
+
+  test("meta 事件：替换最新一条 local user 与 trace 占位的 id，其余不动", () => {
+    const result = applyServerMessageIds(localUserMessages(), {
+      userMessageId: "server-user-9",
+      traceMessageId: "server-trace-9",
+    })
+    expect(result.map((m) => m.id)).toEqual(["server-old-1", "server-user-9", "server-trace-9", STREAMING_MESSAGE_ID])
+    // 除 id 外的字段保持不变
+    expect(result[1].content).toBe("新提示词")
+    expect(result[2].streamTrace).toBe(true)
+  })
+
+  test("result 事件：替换流式回复占位的 id", () => {
+    const result = applyServerMessageIds(localUserMessages(), { replyMessageId: "server-reply-9" })
+    expect(result.map((m) => m.id)).toEqual([
+      "server-old-1",
+      `${LOCAL_USER_MESSAGE_ID_PREFIX}1`,
+      STREAMING_TRACE_ID,
+      "server-reply-9",
+    ])
+  })
+
+  test("没有可替换的占位（如 409 冲突时 meta 未到达）：原样返回同一数组内容", () => {
+    const messages = [{ id: "server-1", role: "user" as const, content: "x", timestamp: "t" }]
+    const result = applyServerMessageIds(messages, { userMessageId: "server-2", replyMessageId: "server-3" })
+    expect(result).toEqual(messages)
+  })
+
+  test("id 缺失时不替换对应占位", () => {
+    const result = applyServerMessageIds(localUserMessages(), {})
+    expect(result.map((m) => m.id)).toEqual([
+      "server-old-1",
+      `${LOCAL_USER_MESSAGE_ID_PREFIX}1`,
+      STREAMING_TRACE_ID,
+      STREAMING_MESSAGE_ID,
+    ])
+  })
+
+  test("多轮残留：只替换最后一条 local user", () => {
+    const messages = [
+      { id: `${LOCAL_USER_MESSAGE_ID_PREFIX}0`, role: "user" as const, content: "旧", timestamp: "t0" },
+      { id: `${LOCAL_USER_MESSAGE_ID_PREFIX}1`, role: "user" as const, content: "新", timestamp: "t1" },
+    ]
+    const result = applyServerMessageIds(messages, { userMessageId: "server-user-9" })
+    expect(result.map((m) => m.id)).toEqual([`${LOCAL_USER_MESSAGE_ID_PREFIX}0`, "server-user-9"])
+  })
+})
+
+// 回归用例：loadMessages 的响应回写是无条件的——发送前发起的轮询请求，其响应在
+// 乐观 user 消息 append 之后才回来，会把刚显示的提示词整体覆盖掉（用户看到自己
+// 发的消息"消失"）。同理，切换会话后旧会话的 in-flight 响应会把 A 的消息写进 B
+// 的界面。回写前必须校验：请求的会话仍是活动会话、且该会话没有正在跑的本地流。
+describe("shouldDiscardMessagesResponse", () => {
+  test("会话仍活动且未在发送：不丢弃", () => {
+    expect(shouldDiscardMessagesResponse("demo", "demo", false)).toBe(false)
+  })
+
+  test("请求期间已切到别的会话：丢弃（防止串台）", () => {
+    expect(shouldDiscardMessagesResponse("a", "b", false)).toBe(true)
+  })
+
+  test("本标签页正为该会话跑 stream：丢弃（防止旧快照覆盖乐观消息）", () => {
+    expect(shouldDiscardMessagesResponse("demo", "demo", true)).toBe(true)
+  })
+})
+
+// 回归用例：POST /agent/stream 被服务端拒绝（如 409 "已有运行中的 agent 任务"）或
+// 网络失败时，本地乐观插入的 user 消息（local-*）与流式占位都应清除——服务端
+// 根本没收到这条消息，不清除会在界面上留下一条"永远没有回复"的幽灵消息
+describe("removeLocalPendingPlaceholders", () => {
+  test("清除最新一条 local user 与两个流式占位，保留服务端消息", () => {
+    const serverMsg = { id: "s1", role: "assistant" as const, content: "历史", timestamp: "t" }
+    const localUser = { id: `${LOCAL_USER_MESSAGE_ID_PREFIX}9`, role: "user" as const, content: "被拒", timestamp: "t" }
+    const trace = { id: STREAMING_TRACE_ID, role: "assistant" as const, content: "[执行过程]", streamTrace: true, pending: true, timestamp: "t" }
+    const reply = { id: STREAMING_MESSAGE_ID, role: "assistant" as const, content: "", pending: true, timestamp: "t" }
+    expect(removeLocalPendingPlaceholders([serverMsg, localUser, trace, reply])).toEqual([serverMsg])
+  })
+
+  test("meta 已把占位换成服务端 id 后（无 local-*）：只清除残留占位", () => {
+    const user = { id: "server-user", role: "user" as const, content: "x", timestamp: "t" }
+    const trace = { id: "server-trace", role: "assistant" as const, content: "", streamTrace: true, pending: true, timestamp: "t" }
+    expect(removeLocalPendingPlaceholders([user, trace])).toEqual([user, trace])
+  })
+
+  test("多轮残留的旧 local-*：只清最新一条", () => {
+    const old1 = { id: `${LOCAL_USER_MESSAGE_ID_PREFIX}1`, role: "user" as const, content: "旧", timestamp: "t1" }
+    const new1 = { id: `${LOCAL_USER_MESSAGE_ID_PREFIX}2`, role: "user" as const, content: "新", timestamp: "t2" }
+    expect(removeLocalPendingPlaceholders([old1, new1])).toEqual([old1])
   })
 })

@@ -6,7 +6,13 @@ import {
   apiGet,
   apiPost,
   apiStream,
+  applyServerMessageIds,
+  LOCAL_USER_MESSAGE_ID_PREFIX,
   mergeTraceIntoReply,
+  removeLocalPendingPlaceholders,
+  shouldDiscardMessagesResponse,
+  STREAMING_MESSAGE_ID,
+  STREAMING_TRACE_ID,
   type ChatMessage,
   type SessionDetail,
   type SessionSummary,
@@ -53,9 +59,6 @@ const PERSISTENT_VIEWS: View[] = ["activity", "files"]
 const OTHER_VIEWS = (Object.keys(VIEW_LABELS) as View[]).filter(
   (key) => !PERSISTENT_VIEWS.includes(key)
 )
-
-const STREAMING_MESSAGE_ID = "__streaming__"
-const STREAMING_TRACE_ID = "__streaming_trace__"
 
 // 页面可见时的多设备/多标签页同步轮询：间隔与空闲超时，见下方 reconcile 相关 effect
 const SYNC_POLL_INTERVAL_MS = 6000
@@ -555,6 +558,8 @@ function Composer({
   const agentUnavailable = mode === "agent" && Boolean(session) && !session?.agentEnabled
   const archived = Boolean(session?.archived)
   const inputDisabled = disabled || agentUnavailable || archived
+  // 空输入/纯空白时发送按钮直接置灰，而不是点了没反应
+  const sendDisabled = inputDisabled || draft.trim() === ""
 
   return (
     <div className="border-t p-3">
@@ -647,7 +652,7 @@ function Composer({
             停止
           </Button>
         ) : (
-          <Button className="px-4" onClick={onSend} disabled={inputDisabled}>
+          <Button className="px-4" onClick={onSend} disabled={sendDisabled}>
             <SendIcon data-icon="inline-start" />
             发送
           </Button>
@@ -671,7 +676,11 @@ export function WorkspacePanel({
   creatingAgent: boolean
 }) {
   const [view, setView] = React.useState<View>("activity")
-  const [messages, setMessages] = React.useState<ChatMessage[]>([])
+  // 消息按会话名隔离，而不是单一全局数组：流式回调各自更新自己会话的 key，
+  // 用户在 A 会话跑长任务时切到 B 再切回 A，A 的实时流式状态（用户消息、执行
+  // 过程、增量回复）原样还在——单一数组在切换时会被加载响应覆盖，本地流式
+  // 占位随之丢失，表现为"切回来界面空白，直到任务跑完才恢复"
+  const [messagesBySession, setMessagesBySession] = React.useState<Record<string, ChatMessage[]>>({})
   const [messagesLoading, setMessagesLoading] = React.useState(false)
   const [draft, setDraft] = React.useState("")
   const [mode, setMode] = React.useState<"agent" | "command">("agent")
@@ -690,11 +699,37 @@ export function WorkspacePanel({
     activeSessionNameRef.current = activeSession?.name ?? null
   }, [activeSession?.name])
 
+  // sendingNames 变化很频繁（任意会话开始/结束发送都会触发），各个 effect 不想
+  // 因此反复重建，统一通过这个 ref 读最新值；声明在 loadMessages 之前，供其
+  // 响应回写时校验"请求期间状态是否已变化"
+  const sendingNamesRef = React.useRef(sendingNames)
+  React.useEffect(() => {
+    sendingNamesRef.current = sendingNames
+  }, [sendingNames])
+
   // 切换 AGENT 时清空未发送的草稿——否则在 A 会话里打的字会原样留在输入框，
   // 切到 B 会话后如果没注意到就直接点发送，会把 A 的草稿当成 B 的消息发出去
   React.useEffect(() => {
     setDraft("")
   }, [activeSession?.name])
+
+  const activeSessionMessages = activeSession ? messagesBySession[activeSession.name] : undefined
+  // 已有该会话的消息快照（哪怕是空数组）：切换回来时先立即显示缓存内容，
+  // 后台刷新到位后无感更新——而不是先转一圈加载 Spinner 把界面闪空白
+  const hasCachedMessages = activeSessionMessages !== undefined
+  const messages = activeSessionMessages ?? []
+  // 更新某个会话的消息：流式回调在会话切换后仍持续维护自己会话的状态，
+  // 所以这里按 name 定位，而不是操作"当前活动会话"
+  const setSessionMessages = React.useCallback(
+    (name: string, updater: (prev: ChatMessage[]) => ChatMessage[]) => {
+      setMessagesBySession((prev) => {
+        const next = updater(prev[name] ?? [])
+        if (next === prev[name]) return prev
+        return { ...prev, [name]: next }
+      })
+    },
+    []
+  )
 
   const sending = activeSession ? sendingNames.has(activeSession.name) : false
   // 与旧版前端 hasPendingAgentMessagesForSession 对齐：composer 是否可用不能只看
@@ -724,7 +759,6 @@ export function WorkspacePanel({
   const loadMessages = React.useCallback(
     (silent?: boolean) => {
       if (!activeSession) {
-        setMessages([])
         setMessagesLoading(false)
         return Promise.resolve()
       }
@@ -734,7 +768,22 @@ export function WorkspacePanel({
       }
       return apiGet(`/api/sessions/${encodeURIComponent(activeSession.name)}/messages`)
         .then((data) => {
-          setMessages(Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [])
+          // 请求发出后状态可能已变：切到了别的会话（防串台）、或本标签页开始了
+          // 该会话的流式发送（晚到的旧快照会覆盖掉刚显示的乐观 user 消息，
+          // 用户表现为"发出去的提示词不立刻出现/消失"）——这两种响应直接丢弃
+          if (
+            shouldDiscardMessagesResponse(
+              activeSession.name,
+              activeSessionNameRef.current,
+              sendingNamesRef.current.has(activeSession.name)
+            )
+          ) {
+            return
+          }
+          setSessionMessages(
+            activeSession.name,
+            () => (Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [])
+          )
         })
         .catch((err) => {
           if (!silent) setLoadError(err instanceof Error ? err.message : "加载消息失败")
@@ -747,7 +796,7 @@ export function WorkspacePanel({
     // （同一个会话名），依赖整个对象会导致这个 callback 频繁重建、进而让下面
     // 依赖它的 effect 反复重新加载
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeSession?.name]
+    [activeSession?.name, setSessionMessages]
   )
 
   const loadDetail = React.useCallback(() => {
@@ -781,13 +830,6 @@ export function WorkspacePanel({
     }, [loadMessages, loadDetail]),
     sending
   )
-
-  // sendingNames 变化很频繁（任意会话开始/结束发送都会触发），下面的 effect 不
-  // 想因此反复重新订阅 DOM 事件监听器/重建定时器，所以用 ref 转发一份最新值
-  const sendingNamesRef = React.useRef(sendingNames)
-  React.useEffect(() => {
-    sendingNamesRef.current = sendingNames
-  }, [sendingNames])
 
   // 与旧版前端 visibilitychange/focus 触发的对账对齐，并补上多设备/多标签页
   // 同时打开同一会话的同步：只靠 visibilitychange/focus 事件只能覆盖"从隐藏切回
@@ -838,48 +880,42 @@ export function WorkspacePanel({
     }
   }, [loadMessages, loadDetail, onAfterSend])
 
-  // 与旧版前端一致：一旦不再有正在跑的 agent 任务（本地 stream 结束 + 消息里也
-  // 没有残留 pending），之前因为"已有运行中的 agent 任务"之类冲突提示留下的
-  // loadError 就该自动消失，不需要用户手动再发一次东西才能把它盖掉
-  const [prevActiveAgentRunning, setPrevActiveAgentRunning] = React.useState(activeAgentRunning)
-  if (activeAgentRunning !== prevActiveAgentRunning) {
-    setPrevActiveAgentRunning(activeAgentRunning)
-    if (prevActiveAgentRunning && !activeAgentRunning) {
-      setLoadError("")
-    }
-  }
-
   async function handleSend() {
     const text = draft.trim()
     if (!text || !activeSession || sendingNames.has(activeSession.name)) return
     const name = activeSession.name
-    // 流式回调是异步触发的，期间用户可能已经切换到别的 agent——
-    // 用这个判断把消息更新限制在"仍然是当前活动会话"的情况下，避免串台
+    // 流式回调是异步触发的，期间用户可能已经切换到别的 agent。消息状态按会话
+    // 隔离（setSessionMessages 按 name 定位），切走后回调仍持续维护原会话的
+    // 实时状态；只有 loadError 这类"只属于当前视图"的提示才需要 isStillActive
     const isStillActive = () => activeSessionNameRef.current === name
     setDraft("")
     setLoadError("")
-    setMessages((prev) => [
+    setSessionMessages(name, (prev) => [
       ...prev,
-      { id: `local-${Date.now()}`, role: "user", content: text, timestamp: new Date().toISOString(), mode },
+      {
+        id: `${LOCAL_USER_MESSAGE_ID_PREFIX}${Date.now()}`,
+        role: "user",
+        content: text,
+        timestamp: new Date().toISOString(),
+        mode,
+      },
     ])
 
     if (mode === "command") {
       setSendingFor(name, true)
       try {
         const data = await apiPost(`/api/sessions/${encodeURIComponent(name)}/run`, { command: text })
-        if (isStillActive()) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `result-${Date.now()}`,
-              role: "system",
-              content: String(data.output || ""),
-              timestamp: new Date().toISOString(),
-              mode: "command",
-              exitCode: data.exitCode as number,
-            },
-          ])
-        }
+        setSessionMessages(name, (prev) => [
+          ...prev,
+          {
+            id: `result-${Date.now()}`,
+            role: "system",
+            content: String(data.output || ""),
+            timestamp: new Date().toISOString(),
+            mode: "command",
+            exitCode: data.exitCode as number,
+          },
+        ])
       } catch (err) {
         if (isStillActive()) setLoadError(err instanceof Error ? err.message : "命令执行失败")
       } finally {
@@ -892,7 +928,7 @@ export function WorkspacePanel({
 
     setSendingFor(name, true)
     const traceEvents: TraceEvent[] = []
-    setMessages((prev) => [
+    setSessionMessages(name, (prev) => [
       ...prev,
       {
         id: STREAMING_TRACE_ID,
@@ -915,10 +951,21 @@ export function WorkspacePanel({
     ])
     try {
       await apiStream(`/api/sessions/${encodeURIComponent(name)}/agent/stream`, { prompt: text }, (event) => {
-        if (!isStillActive()) return
-        if (event.type === "trace") {
+        if (event.type === "meta") {
+          // 服务端为本轮 user/trace 消息预生成了持久化 id：第一时间把本地乐观占位
+          // 换成服务端 id，之后轮询对账时 React key 才能对上，消息列表 DOM 不会
+          // 整体重建（否则移动端代码块的横向滚动位置/文字选区会被清零）
+          if (event.userMessageId !== undefined || event.traceMessageId !== undefined) {
+            setSessionMessages(name, (prev) =>
+              applyServerMessageIds(prev, {
+                userMessageId: event.userMessageId,
+                traceMessageId: event.traceMessageId,
+              })
+            )
+          }
+        } else if (event.type === "trace") {
           if (event.traceEvent) traceEvents.push(event.traceEvent)
-          setMessages((prev) =>
+          setSessionMessages(name, (prev) =>
             prev.map((message) =>
               message.id === STREAMING_TRACE_ID
                 ? { ...message, traceEvents: traceEvents.slice() }
@@ -926,51 +973,48 @@ export function WorkspacePanel({
             )
           )
         } else if (event.type === "content_delta") {
-          setMessages((prev) =>
+          setSessionMessages(name, (prev) =>
             prev.map((message) =>
               message.id === STREAMING_MESSAGE_ID ? { ...message, content: event.content } : message
             )
           )
         } else if (event.type === "result") {
-          setMessages((prev) =>
-            prev
-              .map((message) =>
-                message.id === STREAMING_TRACE_ID ? { ...message, pending: false } : message
-              )
-              .map((message) =>
-                message.id === STREAMING_MESSAGE_ID
-                  ? {
-                      ...message,
-                      content: event.output,
-                      pending: false,
-                      interrupted: event.interrupted,
-                      exitCode: event.exitCode,
-                    }
-                  : message
-              )
-          )
-        } else if (event.type === "error") {
-          setLoadError(event.error)
-          setMessages((prev) =>
-            prev.filter(
-              (message) => message.id !== STREAMING_MESSAGE_ID && message.id !== STREAMING_TRACE_ID
+          setSessionMessages(name, (prev) =>
+            // 先按占位 id 完成本地字段更新，最后再统一把占位 id 换成服务端 id——
+            // 顺序反了的话第二步就找不到要更新的消息了
+            applyServerMessageIds(
+              prev
+                .map((message) =>
+                  message.id === STREAMING_TRACE_ID ? { ...message, pending: false } : message
+                )
+                .map((message) =>
+                  message.id === STREAMING_MESSAGE_ID
+                    ? {
+                        ...message,
+                        content: event.output,
+                        pending: false,
+                        interrupted: event.interrupted,
+                        exitCode: event.exitCode,
+                      }
+                    : message
+                ),
+              { replyMessageId: event.replyMessageId }
             )
           )
+        } else if (event.type === "error") {
+          if (isStillActive()) setLoadError(event.error)
+          setSessionMessages(name, (prev) => removeLocalPendingPlaceholders(prev))
         }
       })
     } catch (err) {
-      if (isStillActive()) {
-        setLoadError(err instanceof Error ? err.message : "发送失败")
-        setMessages((prev) =>
-          prev.filter(
-            (message) => message.id !== STREAMING_MESSAGE_ID && message.id !== STREAMING_TRACE_ID
-          )
-        )
-        // 本地 stream 中断不代表服务端那一轮真的停了（可能只是网络抖动/标签页
-        // 被节流）；这里删掉本地占位消息后立刻跟服务端对一次账，服务端如果
-        // 仍在跑，返回的消息会带着 pending 标记，交给 useAgentRecoveryPoll 接手轮询
-        loadMessages(true)
-      }
+      if (isStillActive()) setLoadError(err instanceof Error ? err.message : "发送失败")
+      // 请求没能在服务端落地（409 冲突 / 网络失败）：清除本轮全部本地占位
+      //（含乐观 user 消息），否则会留下一条永远没有回复的幽灵消息
+      setSessionMessages(name, (prev) => removeLocalPendingPlaceholders(prev))
+      // 本地 stream 中断不代表服务端那一轮真的停了（可能只是网络抖动/标签页
+      // 被节流）；删掉本地占位后立刻跟服务端对一次账，服务端如果仍在跑，
+      // 返回的消息会带着 pending 标记，交给 useAgentRecoveryPoll 接手轮询
+      loadMessages(true)
     } finally {
       setSendingFor(name, false)
       onAfterSend()
@@ -984,6 +1028,12 @@ export function WorkspacePanel({
       await apiPost(`/api/sessions/${encodeURIComponent(activeSession.name)}/agent/stop`, {})
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "停止失败")
+    } finally {
+      // 无论成功失败都立即对一次账：成功时服务端 patch 可能晚于 stop 响应
+      //（useAgentRecoveryPoll 轮询兜底收尾）；失败（如 serve 重启后的孤儿
+      // 任务 404）时服务端已把残留 pending 标记为中断，对账后输入随之解锁
+      loadMessages(true)
+      loadDetail()
     }
   }
 
@@ -1058,7 +1108,9 @@ export function WorkspacePanel({
             <p className="text-sm text-muted-foreground">正在创建 AGENT...</p>
           </div>
         ) : view === "activity" ? (
-          messagesLoading ? (
+          // 首次进入该会话（无缓存）才用加载态占位；切换回来时直接显示缓存的
+          // 消息，后台刷新到位后无感更新——先转圈再弹内容会把界面闪空白
+          messagesLoading && !hasCachedMessages ? (
             <div className="flex h-full items-center justify-center">
               <Spinner className="size-6" />
             </div>
@@ -1100,7 +1152,7 @@ export function WorkspacePanel({
           onStop={handleStop}
           mode={mode}
           onModeChange={setMode}
-          disabled={!activeSession || messagesLoading}
+          disabled={!activeSession || (messagesLoading && !hasCachedMessages)}
           sending={activeAgentRunning}
           session={activeSession}
           onOpenCliTemplate={() => setCliDialogOpen(true)}
