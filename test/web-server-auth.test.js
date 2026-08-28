@@ -2611,7 +2611,7 @@ process.exit(2);
                         return 'demo\tUp 2 minutes\tlocalhost/xcanwin/manyoyo:1.0.0-full\n';
                     }
                     if (Array.isArray(args) && args[0] === 'inspect') {
-                        return 'codex --dangerously-bypass-approvals-and-sandbox\n';
+                        return '/demo\tcodex --dangerously-bypass-approvals-and-sandbox\n';
                     }
                     return '';
                 }
@@ -5833,6 +5833,79 @@ process.exit(0);
                     expect(matchingDelta.content).toBe(item.expectedDeltas[i]);
                 }
             }
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    // 回归用例：listWebManyoyoContainers 曾经对每个容器单独同步跑一次 docker
+    // inspect（N+1），容器一多就把整个事件循环阻塞住，表现为 serve 所有接口
+    // （包括正在流式输出的 agent/stream）严重超时。修复为单次批量 inspect。
+    test('GET /api/sessions batches container inspect into a single docker call instead of N+1', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sessions-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        const containers = [
+            {
+                name: 'my-c1',
+                status: 'Up 2 hours',
+                image: 'localhost/xcanwin/manyoyo:1.0.0',
+                defaultCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            },
+            {
+                name: 'my-c2',
+                status: 'Exited (0) 1 hour ago',
+                image: 'localhost/xcanwin/manyoyo:1.0.0',
+                defaultCommand: 'codex --dangerously-bypass-approvals-and-sandbox exec {prompt}'
+            },
+            {
+                name: 'my-c3',
+                status: 'Up 10 minutes',
+                image: 'localhost/xcanwin/manyoyo:1.0.0',
+                defaultCommand: 'gemini --yolo -p {prompt}'
+            }
+        ];
+
+        const dockerCalls = [];
+        const dockerExecArgs = args => {
+            dockerCalls.push(args);
+            if (args[0] === 'ps') {
+                return containers.map(c => `${c.name}\t${c.status}\t${c.image}`).join('\n');
+            }
+            if (args[0] === 'inspect') {
+                const names = args.slice(3);
+                return names
+                    .map(name => {
+                        const c = containers.find(item => item.name === name);
+                        return `/${name}\t${c ? c.defaultCommand : ''}`;
+                    })
+                    .join('\n');
+            }
+            return '';
+        };
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, { dockerExecArgs }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const listRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            expect(listRes.response.status).toBe(200);
+
+            const inspectCalls = dockerCalls.filter(args => args[0] === 'inspect');
+            expect(inspectCalls.length).toBe(1);
+            expect(inspectCalls[0].slice(3).slice().sort()).toEqual(containers.map(c => c.name).sort());
+
+            const sessionsByContainer = Object.fromEntries(
+                listRes.json.sessions.map(s => [s.containerName, s])
+            );
+            expect(sessionsByContainer['my-c1'].agentProgram).toBe('claude');
+            expect(sessionsByContainer['my-c2'].agentProgram).toBe('codex');
+            expect(sessionsByContainer['my-c3'].agentProgram).toBe('gemini');
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
