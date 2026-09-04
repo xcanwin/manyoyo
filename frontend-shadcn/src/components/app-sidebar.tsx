@@ -61,6 +61,22 @@ import {
 
 type NavLevel = "containers" | "agents"
 
+// 点击侧边栏"容器"行只切 navLevel/navContainer 这两个纯 UI 导航状态
+// （见 goToAgents），本身不会触发 selectSession，主聊天区不会跟着切换。
+// 这里算出 goToAgents 之后该自动选中哪个 session，交给调用方补上
+// selectSession(...) 这一步：已经在这个容器里就保持原选中，否则选第一个
+// 非 synthetic 的真实 AGENT，容器下只有 synthetic 占位就退回选它。
+export function pickDefaultSessionForContainer(
+  sessions: SessionSummary[],
+  activeSessionName: string | null
+): SessionSummary | null {
+  const activeMatch = sessions.find((s) => s.name === activeSessionName)
+  if (activeMatch) return activeMatch
+  const real = sessions.find((s) => s.synthetic !== true)
+  if (real) return real
+  return sessions[0] ?? null
+}
+
 // 与旧版前端 loadSidebarNavState/persistSidebarNavState 对齐：记住上次停留的
 // 容器/AGENT 两级导航位置，刷新页面或重开页面后能直接回到原来的上下文
 const SIDEBAR_NAV_STORAGE_KEY = "manyoyo.web.sidebarNav.v1"
@@ -527,7 +543,12 @@ export function AppSidebar({
                       <SidebarMenuButton
                         size="lg"
                         isActive={group.containerName === activeContainerName}
-                        onClick={() => goToAgents(group.containerName)}
+                        onClick={() => {
+                          goToAgents(group.containerName)
+                          selectSession(
+                            pickDefaultSessionForContainer(group.sessions, activeSessionName)
+                          )
+                        }}
                         className="h-auto flex-col items-start gap-1 py-2.5"
                       >
                         <span className="flex w-full items-center gap-1.5">
@@ -696,7 +717,11 @@ export function AppSidebar({
         open={searchOpen}
         onOpenChange={setSearchOpen}
         containers={containers}
-        onSelectContainer={goToAgents}
+        onSelectContainer={(containerName) => {
+          goToAgents(containerName)
+          const group = containers.find((g) => g.containerName === containerName)
+          selectSession(pickDefaultSessionForContainer(group?.sessions ?? [], activeSessionName))
+        }}
         onSelectAgent={(containerName, session) => {
           goToAgents(containerName)
           selectSession(session)
