@@ -5913,4 +5913,111 @@ process.exit(0);
             fs.rmSync(tempHost, { recursive: true, force: true });
         }
     });
+
+    // DIAG_LOG：临时诊断日志功能的回归用例，排查完 serve 超时/流式卡顿问题后，
+    // 这个 describe 块可以跟 lib/web/server.js 里的 DIAG_LOG 代码一起整体删除。
+    describe('DIAG_LOG diagnostic logging', () => {
+        function buildDiagTestLogger(logFilePath) {
+            function formatValue(value) {
+                if (typeof value === 'object' && value !== null) {
+                    return JSON.stringify(value);
+                }
+                return String(value);
+            }
+            function write(level, message, extra) {
+                const ts = new Date().toISOString();
+                const parts = [`[${ts}]`, `[pid:${process.pid}]`, `[${String(level || 'INFO').toUpperCase()}]`, formatValue(message)];
+                if (extra !== undefined) {
+                    parts.push(formatValue(extra));
+                }
+                fs.appendFileSync(logFilePath, `${parts.join(' ')}\n`);
+            }
+            return {
+                path: logFilePath,
+                info: (m, e) => write('INFO', m, e),
+                warn: (m, e) => write('WARN', m, e),
+                error: (m, e) => write('ERROR', m, e)
+            };
+        }
+
+        function todayDateTag() {
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        }
+
+        test('GET /api/diag/logs surfaces http_request and docker_exec entries with filtering', async () => {
+            const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-diag-log-'));
+            const port = await getFreePort();
+            const logDir = path.join(tempHost, 'logs', 'serve');
+            fs.mkdirSync(logDir, { recursive: true });
+            const logFilePath = path.join(logDir, `serve-${todayDateTag()}.log`);
+            const logger = buildDiagTestLogger(logFilePath);
+
+            let handle = null;
+            try {
+                handle = await startWebServer(buildServerOptions(tempHost, port, {
+                    logger,
+                    dockerExecArgs: args => (Array.isArray(args) && args[0] === 'ps' ? '' : '')
+                }));
+                const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+                const authCookie = await loginAndGetCookie(baseUrl);
+
+                const sessionsRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+                expect(sessionsRes.response.status).toBe(200);
+
+                const httpLogsRes = await request(`${baseUrl}/api/diag/logs?category=http_request`, {
+                    headers: { Cookie: authCookie }
+                });
+                expect(httpLogsRes.response.status).toBe(200);
+                const httpEntry = httpLogsRes.json.entries.find(e => e.extra.path === '/api/sessions');
+                expect(httpEntry).toBeTruthy();
+                expect(httpEntry.extra.method).toBe('GET');
+                expect(httpEntry.extra.status).toBe(200);
+                expect(typeof httpEntry.extra.durationMs).toBe('number');
+
+                const dockerLogsRes = await request(`${baseUrl}/api/diag/logs?category=docker_exec`, {
+                    headers: { Cookie: authCookie }
+                });
+                expect(dockerLogsRes.response.status).toBe(200);
+                const dockerEntry = dockerLogsRes.json.entries.find(e => Array.isArray(e.extra.args) && e.extra.args[0] === 'ps');
+                expect(dockerEntry).toBeTruthy();
+                expect(typeof dockerEntry.extra.durationMs).toBe('number');
+
+                const keywordRes = await request(`${baseUrl}/api/diag/logs?keyword=does-not-exist-keyword`, {
+                    headers: { Cookie: authCookie }
+                });
+                expect(keywordRes.json.entries).toEqual([]);
+            } finally {
+                if (handle && typeof handle.close === 'function') {
+                    await handle.close();
+                }
+                fs.rmSync(tempHost, { recursive: true, force: true });
+            }
+        });
+
+        test('GET /logs requires auth and returns the diagnostic viewer page once logged in', async () => {
+            const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-diag-log-page-'));
+            const port = await getFreePort();
+            let handle = null;
+            try {
+                handle = await startWebServer(buildServerOptions(tempHost, port));
+                const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+
+                const unauth = await request(`${baseUrl}/logs`);
+                expect(unauth.response.status).toBe(401);
+
+                const authCookie = await loginAndGetCookie(baseUrl);
+                const authed = await request(`${baseUrl}/logs`, { headers: { Cookie: authCookie } });
+                expect(authed.response.status).toBe(200);
+                expect(authed.text).toContain('诊断日志');
+                expect(authed.text).toContain('/api/diag/logs');
+            } finally {
+                if (handle && typeof handle.close === 'function') {
+                    await handle.close();
+                }
+                fs.rmSync(tempHost, { recursive: true, force: true });
+            }
+        });
+    });
 });
