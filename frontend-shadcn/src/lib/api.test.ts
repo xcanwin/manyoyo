@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 
 import {
   applyServerMessageIds,
+  applyTraceEventUpdate,
   LOCAL_USER_MESSAGE_ID_PREFIX,
   mergeToolTraceEvents,
   mergeTraceIntoReply,
@@ -278,6 +279,41 @@ describe("applyServerMessageIds", () => {
     ]
     const result = applyServerMessageIds(messages, { userMessageId: "server-user-9" })
     expect(result.map((m) => m.id)).toEqual([`${LOCAL_USER_MESSAGE_ID_PREFIX}0`, "server-user-9"])
+  })
+})
+
+// 回归用例：meta 事件到达后会把 trace 占位消息的 id 从 STREAMING_TRACE_ID
+// 换成服务端持久化 id（见 applyServerMessageIds），发送方页面因此在整个流式
+// 过程中从来不会出现"执行过程"折叠面板——handleSend 里后续的 trace/result
+// 事件处理如果继续拿 STREAMING_TRACE_ID 这个常量去匹配 messages，会匹配不到
+// 任何消息，traceEvents 永远停在初始空数组，TraceBlock 因为 !merged.length
+// 直接 return null。这里验证 applyTraceEventUpdate 必须按调用方传入的
+// "当前有效 id"匹配，不能依赖写死的本地乐观 id。
+describe("applyTraceEventUpdate", () => {
+  test("meta 换 id 之后，仍按调用方传入的当前 id 命中并更新 traceEvents", () => {
+    const messages = [
+      { id: "server-trace-9", role: "assistant" as const, content: "[执行过程]", streamTrace: true, traceEvents: [] as unknown[], pending: true, timestamp: "t2" },
+      { id: STREAMING_MESSAGE_ID, role: "assistant" as const, content: "流式回复", pending: true, timestamp: "t3" },
+    ]
+    const result = applyTraceEventUpdate(messages, "server-trace-9", { traceEvents: [{ kind: "tool" }] })
+    expect(result[0].traceEvents).toEqual([{ kind: "tool" }])
+    expect(result[1]).toEqual(messages[1])
+  })
+
+  test("继续用已经失效的本地乐观 id 匹配的话，什么都更新不到（复现修复前的 bug）", () => {
+    const messages = [
+      { id: "server-trace-9", role: "assistant" as const, content: "[执行过程]", streamTrace: true, traceEvents: [] as unknown[], pending: true, timestamp: "t2" },
+    ]
+    const result = applyTraceEventUpdate(messages, STREAMING_TRACE_ID, { traceEvents: [{ kind: "tool" }] })
+    expect(result[0].traceEvents).toEqual([])
+  })
+
+  test("meta 还没到达时，用初始的 STREAMING_TRACE_ID 也能正常命中", () => {
+    const messages = [
+      { id: STREAMING_TRACE_ID, role: "assistant" as const, content: "[执行过程]", streamTrace: true, traceEvents: [] as unknown[], pending: true, timestamp: "t2" },
+    ]
+    const result = applyTraceEventUpdate(messages, STREAMING_TRACE_ID, { pending: false })
+    expect(result[0].pending).toBe(false)
   })
 })
 

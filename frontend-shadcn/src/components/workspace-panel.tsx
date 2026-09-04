@@ -7,6 +7,7 @@ import {
   apiPost,
   apiStream,
   applyServerMessageIds,
+  applyTraceEventUpdate,
   LOCAL_USER_MESSAGE_ID_PREFIX,
   mergeTraceIntoReply,
   removeLocalPendingPlaceholders,
@@ -928,6 +929,13 @@ export function WorkspacePanel({
 
     setSendingFor(name, true)
     const traceEvents: TraceEvent[] = []
+    // meta 事件到达后会把这条占位消息的 id 从 STREAMING_TRACE_ID 换成服务端
+    // 持久化 id（见下面 meta 分支），后续 trace/result 事件必须按这个"当前
+    // 有效 id"去匹配 messages，不能再硬编码 STREAMING_TRACE_ID——否则换 id
+    // 之后收到的每条 trace 事件都会静默丢失，traceEvents 永远停在初始空数组，
+    // "执行过程"折叠面板因此永远不会出现，pending 也永远清不掉（停止按钮
+    // 完成后不会变回发送）
+    let traceMessageId: string | number = STREAMING_TRACE_ID
     setSessionMessages(name, (prev) => [
       ...prev,
       {
@@ -962,15 +970,14 @@ export function WorkspacePanel({
                 traceMessageId: event.traceMessageId,
               })
             )
+            if (event.traceMessageId !== undefined) {
+              traceMessageId = event.traceMessageId
+            }
           }
         } else if (event.type === "trace") {
           if (event.traceEvent) traceEvents.push(event.traceEvent)
           setSessionMessages(name, (prev) =>
-            prev.map((message) =>
-              message.id === STREAMING_TRACE_ID
-                ? { ...message, traceEvents: traceEvents.slice() }
-                : message
-            )
+            applyTraceEventUpdate(prev, traceMessageId, { traceEvents: traceEvents.slice() })
           )
         } else if (event.type === "content_delta") {
           setSessionMessages(name, (prev) =>
@@ -983,10 +990,7 @@ export function WorkspacePanel({
             // 先按占位 id 完成本地字段更新，最后再统一把占位 id 换成服务端 id——
             // 顺序反了的话第二步就找不到要更新的消息了
             applyServerMessageIds(
-              prev
-                .map((message) =>
-                  message.id === STREAMING_TRACE_ID ? { ...message, pending: false } : message
-                )
+              applyTraceEventUpdate(prev, traceMessageId, { pending: false })
                 .map((message) =>
                   message.id === STREAMING_MESSAGE_ID
                     ? {

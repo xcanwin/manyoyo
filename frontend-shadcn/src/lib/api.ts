@@ -144,6 +144,23 @@ export function applyServerMessageIds(
   return result
 }
 
+// trace/result 事件到达时，用调用方传入的"当前有效 trace 消息 id"去匹配
+// messages 数组——meta 事件会把这条本地占位的 id 从 STREAMING_TRACE_ID 换成
+// 服务端持久化 id（见 applyServerMessageIds），调用方必须在 meta 到达后同步
+// 更新自己持有的这个 id，再传给这里；如果继续硬编码 STREAMING_TRACE_ID，
+// 换 id 之后收到的每一条 trace 事件都会匹配不到任何消息而静默丢失，
+// traceEvents 永远停在初始空数组，"执行过程"折叠面板因此永远不会出现
+// （TraceBlock 里 !merged.length 直接 return null）
+export function applyTraceEventUpdate<T extends { id: string | number }>(
+  messages: T[],
+  currentTraceMessageId: string | number,
+  patch: Partial<T>
+): T[] {
+  return messages.map((message) =>
+    message.id === currentTraceMessageId ? { ...message, ...patch } : message
+  )
+}
+
 // loadMessages 响应回写前的守卫：请求发起后状态可能已经变化——
 // - 用户已切换到别的会话：旧会话的响应写进去会把 A 的消息糊到 B 的界面上
 // - 本标签页开始为该会话跑 stream：晚到的旧快照会把刚 append 的乐观 user
