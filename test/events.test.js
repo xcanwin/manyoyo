@@ -4,6 +4,8 @@ const {
     createControlEvent,
     validateControlEvent,
     selectEventsAfterCursor,
+    emptyProjection,
+    applyEventToProjection,
     projectSessionEvents
 } = require('../lib/core/events');
 
@@ -86,5 +88,37 @@ describe('ControlEvent contract', () => {
             status: 'running',
             childSessions: [{ id: 'child-1', agentProgram: 'claude', status: 'completed' }]
         }));
+    });
+
+    test('applyEventToProjection folds one event at a time to the same result as projectSessionEvents', () => {
+        const events = [
+            createControlEvent({ type: 'agent.turn.started', aggregateId: 'parent', seq: 1 }),
+            createControlEvent({
+                type: 'agent.child.observed',
+                aggregateId: 'parent',
+                seq: 2,
+                data: { childSessionId: 'child-1', agentProgram: 'claude' }
+            }),
+            createControlEvent({
+                type: 'agent.child.completed',
+                aggregateId: 'parent',
+                seq: 3,
+                data: { childSessionId: 'child-1' }
+            })
+        ];
+
+        const folded = events.reduce(applyEventToProjection, emptyProjection());
+        expect(folded).toEqual(projectSessionEvents(events));
+    });
+
+    test('applyEventToProjection does not mutate the projection it was given', () => {
+        const previous = emptyProjection('demo');
+        const next = applyEventToProjection(
+            previous,
+            createControlEvent({ type: 'session.ready', aggregateId: 'demo', seq: 1 })
+        );
+
+        expect(previous).toEqual(emptyProjection('demo'));
+        expect(next).toEqual(expect.objectContaining({ status: 'running', lastSeq: 1 }));
     });
 });

@@ -196,6 +196,18 @@ export function removeLocalPendingPlaceholders(messages: ChatMessage[]): ChatMes
   )
 }
 
+// error 事件 / 流异常中断（ERR_HTTP2_PROTOCOL_ERROR 等）分支的兜底：清掉本地
+// 占位后，仍标记 pending 的消息说明 meta 已经把它换成了服务端持久化 id（trace/
+// 回复已经开始落盘），removeLocalPendingPlaceholders 按本地占位 id 过滤对它们
+// 完全无效，会带着 pending:true 永久卡在"进行中"，"停止"按钮也无法复位它。
+// 这里直接把仍然 pending 的消息标记为已中断，不依赖后续 loadMessages/
+// useAgentRecoveryPoll 的轮询对账"最终"纠正——后端拥堵时那套兜底可能要等很久
+export function interruptDanglingStreamMessages(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) =>
+    message.pending === true ? { ...message, pending: false, interrupted: true } : message
+  )
+}
+
 // 与 lib/web/frontend/chat-behavior.js 的 mergeTraceIntoReply 对齐：
 // 把"执行过程"消息（streamTrace: true）合并进紧随其后的正式回复，
 // 供 UI 把执行过程渲染成回复气泡上方的可折叠块

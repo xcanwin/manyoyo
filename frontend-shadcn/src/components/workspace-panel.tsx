@@ -8,6 +8,7 @@ import {
   apiStream,
   applyServerMessageIds,
   applyTraceEventUpdate,
+  interruptDanglingStreamMessages,
   LOCAL_USER_MESSAGE_ID_PREFIX,
   mergeTraceIntoReply,
   removeLocalPendingPlaceholders,
@@ -1007,14 +1008,18 @@ export function WorkspacePanel({
           )
         } else if (event.type === "error") {
           if (isStillActive()) setLoadError(event.error)
-          setSessionMessages(name, (prev) => removeLocalPendingPlaceholders(prev))
+          // 先清掉仍是本地占位 id 的幽灵消息，再把 meta 已经把 id 换成服务端 id
+          // 的 trace/回复消息（仍标记 pending）就地标成已中断，UI 不会永久卡在
+          // "进行中"
+          setSessionMessages(name, (prev) => interruptDanglingStreamMessages(removeLocalPendingPlaceholders(prev)))
         }
       })
     } catch (err) {
       if (isStillActive()) setLoadError(err instanceof Error ? err.message : "发送失败")
       // 请求没能在服务端落地（409 冲突 / 网络失败）：清除本轮全部本地占位
-      //（含乐观 user 消息），否则会留下一条永远没有回复的幽灵消息
-      setSessionMessages(name, (prev) => removeLocalPendingPlaceholders(prev))
+      //（含乐观 user 消息），否则会留下一条永远没有回复的幽灵消息；meta 已到达
+      // 后仍标记 pending 的 trace/回复消息同样就地标成已中断（见上面 error 分支）
+      setSessionMessages(name, (prev) => interruptDanglingStreamMessages(removeLocalPendingPlaceholders(prev)))
       // 本地 stream 中断不代表服务端那一轮真的停了（可能只是网络抖动/标签页
       // 被节流）；删掉本地占位后立刻跟服务端对一次账，服务端如果仍在跑，
       // 返回的消息会带着 pending 标记，交给 useAgentRecoveryPoll 接手轮询

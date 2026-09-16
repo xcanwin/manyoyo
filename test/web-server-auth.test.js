@@ -4513,6 +4513,103 @@ process.exit(0);
         }
     });
 
+    test('should throttle intermediate history writes during rapid streaming without losing final content', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-throttle-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        const deltaCount = 24;
+        const deltaLines = Array.from({ length: deltaCount }, (_, index) => `
+  setTimeout(() => {
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"第${index + 1}段回复。"}]}}\\n');
+  }, ${(index + 1) * 6});`).join('');
+        fs.writeFileSync(
+            fakeDockerPath,
+            `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  process.stdout.write('{"type":"system","subtype":"init","session_id":"claude-session"}\\n');${deltaLines}
+  setTimeout(() => {
+    process.stdout.write('{"type":"result","subtype":"success","session_id":"claude-session"}\\n');
+    process.exit(0);
+  }, ${(deltaCount + 1) * 6});
+  return;
+}
+process.exit(0);
+`,
+            'utf-8'
+        );
+        fs.chmodSync(fakeDockerPath, 0o755);
+
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        const historyFilePath = path.join(webHistoryDir, 'demo.json');
+        fs.writeFileSync(
+            historyFilePath,
+            JSON.stringify({
+                containerName: 'demo',
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+
+        const realWriteFileSync = fs.writeFileSync.bind(fs);
+        const writeSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation((...args) => realWriteFileSync(...args));
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            let contentDeltaCount = 0;
+            const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: '请快速连续输出' })
+            }, async payload => {
+                if (payload && payload.type === 'content_delta') {
+                    contentDeltaCount += 1;
+                }
+            });
+
+            expect(streamRes.response.status).toBe(200);
+            expect(contentDeltaCount).toBe(deltaCount);
+
+            const historyWriteCount = writeSpy.mock.calls.filter(call => call[0] === historyFilePath).length;
+            // 节流生效前，每个事件（content_delta 的 patchWebSessionMessage +
+            // emitStreamEvent 触发的 appendWebSessionControlEvent）都各自整份重写
+            // 一次历史 JSON，写入次数会随 deltaCount 线性增长；节流之后写入次数
+            // 应该基本恒定（一份固定的请求生命周期开销 + 节流窗口内最多几次放行），
+            // 不随密集事件数量线性增长——这里把 deltaCount 调大到 24，如果历史写入
+            // 次数还随之线性增长，说明节流没生效
+            expect(historyWriteCount).toBeGreaterThan(0);
+            expect(historyWriteCount).toBeLessThan(deltaCount);
+
+            const finalHistoryRes = await request(`${baseUrl}/api/sessions/demo/messages`, {
+                headers: { Cookie: authCookie }
+            });
+            expect(finalHistoryRes.response.status).toBe(200);
+            expect((finalHistoryRes.json.messages || []).some(message => message && message.pending === true)).toBe(false);
+            expect((finalHistoryRes.json.messages || []).some(message => message && message.streamingReply === true)).toBe(false);
+        } finally {
+            writeSpy.mockRestore();
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should stop running agent stream on demand', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-agent-stop-'));
         const port = await getFreePort();
@@ -5906,6 +6003,68 @@ process.exit(0);
             expect(sessionsByContainer['my-c1'].agentProgram).toBe('claude');
             expect(sessionsByContainer['my-c2'].agentProgram).toBe('codex');
             expect(sessionsByContainer['my-c3'].agentProgram).toBe('gemini');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('listWebManyoyoContainers result is reused across GET /api/sessions and /detail within the TTL window', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sessions-cache-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        const containers = [
+            {
+                name: 'my-cached',
+                status: 'Up 2 hours',
+                image: 'localhost/xcanwin/manyoyo:1.0.0',
+                defaultCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }
+        ];
+
+        const dockerCalls = [];
+        const dockerExecArgs = args => {
+            dockerCalls.push(args);
+            if (args[0] === 'ps') {
+                return containers.map(c => `${c.name}\t${c.status}\t${c.image}`).join('\n');
+            }
+            if (args[0] === 'inspect') {
+                const names = args.slice(3);
+                return names
+                    .map(name => {
+                        const c = containers.find(item => item.name === name);
+                        return `/${name}\t${c ? c.defaultCommand : ''}`;
+                    })
+                    .join('\n');
+            }
+            return '';
+        };
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerExecArgs,
+                containerExists: () => true,
+                getContainerStatus: () => 'running'
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const listRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            expect(listRes.response.status).toBe(200);
+            const detailRes = await request(`${baseUrl}/api/sessions/my-cached/detail`, { headers: { Cookie: authCookie } });
+            expect(detailRes.response.status).toBe(200);
+            const secondListRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            expect(secondListRes.response.status).toBe(200);
+
+            // 三次请求（/api/sessions ×2 + /detail ×1）在 TTL 窗口内应该只触发一次
+            // docker ps 和一次 docker inspect，而不是每个请求各自的一份
+            const psCalls = dockerCalls.filter(args => args[0] === 'ps');
+            const inspectCalls = dockerCalls.filter(args => args[0] === 'inspect');
+            expect(psCalls.length).toBe(1);
+            expect(inspectCalls.length).toBe(1);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();

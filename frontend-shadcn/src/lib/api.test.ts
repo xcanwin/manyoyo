@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest"
 import {
   applyServerMessageIds,
   applyTraceEventUpdate,
+  interruptDanglingStreamMessages,
   LOCAL_USER_MESSAGE_ID_PREFIX,
   mergeToolTraceEvents,
   mergeTraceIntoReply,
@@ -357,5 +358,30 @@ describe("removeLocalPendingPlaceholders", () => {
     const old1 = { id: `${LOCAL_USER_MESSAGE_ID_PREFIX}1`, role: "user" as const, content: "旧", timestamp: "t1" }
     const new1 = { id: `${LOCAL_USER_MESSAGE_ID_PREFIX}2`, role: "user" as const, content: "新", timestamp: "t2" }
     expect(removeLocalPendingPlaceholders([old1, new1])).toEqual([old1])
+  })
+})
+
+// 回归用例：对应"流式连接被 ERR_HTTP2_PROTOCOL_ERROR 等异常中断，且中断发生在
+// meta 事件之后"的 bug——此时 trace/回复消息的 id 已经是服务端持久化 id，
+// removeLocalPendingPlaceholders 按本地占位 id 过滤对它们无效，会带着
+// pending:true 永久卡住
+describe("interruptDanglingStreamMessages", () => {
+  test("meta 已到达（trace/回复是服务端 id）：仍能被标记为已中断", () => {
+    const trace = { id: "server-trace", role: "assistant" as const, content: "[执行过程]", streamTrace: true, pending: true, timestamp: "t" }
+    const reply = { id: "server-reply", role: "assistant" as const, content: "部分回复", pending: true, timestamp: "t" }
+    expect(interruptDanglingStreamMessages([trace, reply])).toEqual([
+      { ...trace, pending: false, interrupted: true },
+      { ...reply, pending: false, interrupted: true },
+    ])
+  })
+
+  test("meta 未到达（还是本地占位 id）：同样能被标记为已中断", () => {
+    const trace = { id: STREAMING_TRACE_ID, role: "assistant" as const, content: "[执行过程]", streamTrace: true, pending: true, timestamp: "t" }
+    expect(interruptDanglingStreamMessages([trace])).toEqual([{ ...trace, pending: false, interrupted: true }])
+  })
+
+  test("没有 pending 消息时原样返回内容不变", () => {
+    const done = { id: "s1", role: "assistant" as const, content: "已完成", pending: false, timestamp: "t" }
+    expect(interruptDanglingStreamMessages([done])).toEqual([done])
   })
 })

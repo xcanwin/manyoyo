@@ -78,4 +78,31 @@ describe('FileEventStore', () => {
     test('remove() is a no-op when nothing exists for the aggregateId', () => {
         expect(() => store.remove('never-existed')).not.toThrow();
     });
+
+    test('append() reuses an in-memory cache instead of re-reading the log from disk every time', () => {
+        const aggregateId = 'cache-demo';
+        store.append(createControlEvent({ type: 'session.ready', aggregateId, seq: 1 }));
+
+        const readSpy = jest.spyOn(store, 'read');
+        store.append(createControlEvent({ type: 'process.stdout', aggregateId, seq: 2 }));
+        store.append(createControlEvent({ type: 'process.stdout', aggregateId, seq: 3 }));
+
+        expect(readSpy).not.toHaveBeenCalled();
+        expect(store.read(aggregateId)).toHaveLength(3);
+        expect(store.loadProjection(aggregateId)).toEqual(expect.objectContaining({
+            status: 'running',
+            lastSeq: 3
+        }));
+        readSpy.mockRestore();
+    });
+
+    test('remove() invalidates the append cache so the same instance can restart seq from 1', () => {
+        const aggregateId = 'cache-reset';
+        store.append(createControlEvent({ type: 'session.ready', aggregateId, seq: 1 }));
+        store.remove(aggregateId);
+
+        expect(() => store.append(createControlEvent({ type: 'session.ready', aggregateId, seq: 1 })))
+            .not.toThrow();
+        expect(store.read(aggregateId)).toHaveLength(1);
+    });
 });
