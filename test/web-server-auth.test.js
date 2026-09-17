@@ -6313,6 +6313,43 @@ setTimeout(() => {
     });
 });
 
+describe('Web Server Robustness', () => {
+    // 回归：诊断打点里的 decodeURIComponent 没有 try/catch，畸形百分号编码会抛
+    // URIError；它在 res 的 'finish' 回调里，冒泡成 uncaughtException 后
+    // bin/manyoyo.js 的处理器会直接 process.exit(1)。而这个打点注册在全局认证
+    // 网关之前，等于一条未认证 curl 就能把 serve 打挂
+    test('畸形百分号编码的 URL 不能让 serve 抛出未捕获异常', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-malformed-url-'));
+        const port = await getFreePort();
+        let handle = null;
+        const uncaught = [];
+        const onUncaught = err => uncaught.push(err);
+        process.on('uncaughtException', onUncaught);
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+
+            // 未认证也会走到打点逻辑
+            const malformed = await request(`${baseUrl}/api/sessions/%E0%A4%A`);
+            expect(malformed.response.status).toBe(401);
+            // 'finish' 回调是异步的，等一拍再断言
+            await new Promise(resolve => setTimeout(resolve, 200));
+            expect(uncaught.map(err => `${err && err.name}: ${err && err.message}`)).toEqual([]);
+
+            // 进程没死，仍能正常服务
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const after = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            expect(after.response.status).toBe(200);
+        } finally {
+            process.off('uncaughtException', onUncaught);
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('Web Server Session List Performance', () => {
     test('GET /api/sessions 对同一容器的历史文件只读一次，不按 agent 数量重复读', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sessions-nplus1-'));
