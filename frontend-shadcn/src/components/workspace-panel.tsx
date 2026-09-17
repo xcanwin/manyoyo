@@ -8,10 +8,12 @@ import {
   apiStream,
   applyServerMessageIds,
   applyTraceEventUpdate,
+  formatComposerModeLabel,
   isStreamConnectionError,
   LOCAL_USER_MESSAGE_ID_PREFIX,
   mergeTraceIntoReply,
   removeLocalPendingPlaceholders,
+  resolveComposerBlockReason,
   shouldDiscardMessagesResponse,
   STREAMING_MESSAGE_ID,
   STREAMING_TRACE_ID,
@@ -556,10 +558,11 @@ function Composer({
 }) {
   const isMobile = useIsMobile()
   const [optionsOpen, setOptionsOpen] = React.useState(false)
-  // 与旧版前端一致：Agent 模式下，如果当前会话本身不支持 Agent 输入，禁用发送
-  const agentUnavailable = mode === "agent" && Boolean(session) && !session?.agentEnabled
+  // 拦截理由集中在 resolveComposerBlockReason 里算（含容器级运行锁：同容器别的
+  // AGENT 在跑时这个 AGENT 也发不出去，提前禁用而不是点了才吃 409）
+  const blockReason = session ? resolveComposerBlockReason(session, mode) : ""
   const archived = Boolean(session?.archived)
-  const inputDisabled = disabled || agentUnavailable || archived
+  const inputDisabled = disabled || blockReason !== ""
   // 空输入/纯空白时发送按钮直接置灰，而不是点了没反应
   const sendDisabled = inputDisabled || draft.trim() === ""
 
@@ -569,13 +572,15 @@ function Composer({
         placeholder={
           disabled
             ? "请先在左侧选择一个容器 / AGENT"
-            : archived
+            : blockReason === "archived"
               ? "该 AGENT 已被删除，仅可查看历史消息"
-              : agentUnavailable
-              ? "当前会话不支持 Agent 模式"
-              : mode === "command"
-                ? "输入容器命令，例如: ls -la"
-                : "输入要发给 AGENT 的内容"
+              : blockReason === "container-busy"
+                ? "同容器的另一个 AGENT 正在执行任务，请等它结束或先停止"
+                : blockReason === "agent-unavailable"
+                  ? "当前会话未配置 CLI，点「选项 → CLI」设置后即可对话"
+                  : mode === "command"
+                    ? "输入容器命令，例如: ls -la"
+                    : "输入要发给 AGENT 的内容"
         }
         className="min-h-16 resize-none"
         value={draft}
@@ -594,8 +599,18 @@ function Composer({
       />
       <div className="mt-2 flex items-center justify-between gap-2">
         <Popover open={optionsOpen} onOpenChange={setOptionsOpen}>
-          <PopoverTrigger render={<Button variant="outline" className="px-4" disabled={disabled} />}>
-            选项
+          {/* 模式必须常驻可见：只靠输入框 placeholder 提示的话，一打字就看不见了，
+              很容易在"系统命令"模式下把整段话当 shell 命令发出去 */}
+          <PopoverTrigger
+            render={
+              <Button
+                variant={mode === "command" ? "secondary" : "outline"}
+                className="px-4"
+                disabled={disabled}
+              />
+            }
+          >
+            {formatComposerModeLabel(mode)}
           </PopoverTrigger>
           <PopoverContent align="start" className="w-44 p-1">
             <div className="flex flex-col gap-1">
@@ -723,9 +738,12 @@ export function WorkspacePanel({
   }, [sendingNames])
 
   // 切换 AGENT 时清空未发送的草稿——否则在 A 会话里打的字会原样留在输入框，
-  // 切到 B 会话后如果没注意到就直接点发送，会把 A 的草稿当成 B 的消息发出去
+  // 切到 B 会话后如果没注意到就直接点发送，会把 A 的草稿当成 B 的消息发出去。
+  // 发送模式同理必须一起重置：在 A 里切到"系统命令"后切到 B，B 也会停在系统命令，
+  // 用户以为在跟 agent 说话，实际整段文字被当 shell 命令丢进容器执行
   React.useEffect(() => {
     setDraft("")
+    setMode("agent")
   }, [activeSession?.name])
 
   const activeSessionMessages = activeSession ? messagesBySession[activeSession.name] : undefined

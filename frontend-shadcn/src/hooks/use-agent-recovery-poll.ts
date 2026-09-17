@@ -1,8 +1,6 @@
 import * as React from "react"
 
-import type { ChatMessage, SessionSummary } from "@/lib/api"
-
-const POLL_INTERVAL_MS = 1500
+import { nextRecoveryPollDelay, type ChatMessage, type SessionSummary } from "@/lib/api"
 
 function hasPendingMessage(messages: ChatMessage[]): boolean {
   return messages.some((message) => message.pending === true)
@@ -36,9 +34,12 @@ export function useAgentRecoveryPoll(
     if (!session || !isPending || isAgentRunActive) return
     let cancelled = false
     let timer = 0
+    let attempt = 0
 
     function scheduleNext() {
       if (cancelled || !hasPendingMessage(messagesRef.current)) return
+      const delay = nextRecoveryPollDelay(attempt)
+      attempt += 1
       timer = window.setTimeout(async () => {
         if (cancelled) return
         try {
@@ -47,7 +48,7 @@ export function useAgentRecoveryPoll(
           // 静默失败，等待下一轮轮询
         }
         if (!cancelled) scheduleNext()
-      }, POLL_INTERVAL_MS)
+      }, delay)
     }
 
     scheduleNext()

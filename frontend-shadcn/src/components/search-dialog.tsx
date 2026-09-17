@@ -9,7 +9,7 @@ import {
   CommandInput,
   CommandList,
 } from "@/components/ui/command"
-import type { ContainerGroup, SessionSummary } from "@/lib/api"
+import { scoreSearchCandidate, type ContainerGroup, type SessionSummary } from "@/lib/api"
 
 export function SearchDialog({
   open,
@@ -28,7 +28,7 @@ export function SearchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-lg">
         <DialogTitle className="sr-only">搜索容器 / AGENT</DialogTitle>
-        <Command className="rounded-lg">
+        <Command className="rounded-lg" filter={scoreSearchCandidate}>
           {/* 默认右上角关闭按钮是 absolute top-2 right-2，跟输入框同一行会挡住末尾文字，
               给输入框本身留出右侧空间 */}
           <CommandInput className="pr-8" placeholder="按容器名、工作目录、AGENT 名称 / 备注搜索..." autoFocus />

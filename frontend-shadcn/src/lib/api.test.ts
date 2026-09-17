@@ -3,11 +3,16 @@ import { describe, expect, test } from "vitest"
 import {
   applyServerMessageIds,
   applyTraceEventUpdate,
+  formatComposerModeLabel,
+  isSessionOfContainer,
   isStreamConnectionError,
   LOCAL_USER_MESSAGE_ID_PREFIX,
   mergeToolTraceEvents,
   mergeTraceIntoReply,
+  nextRecoveryPollDelay,
   removeLocalPendingPlaceholders,
+  resolveComposerBlockReason,
+  scoreSearchCandidate,
   shouldDiscardMessagesResponse,
   STREAMING_MESSAGE_ID,
   STREAMING_TRACE_ID,
@@ -383,5 +388,118 @@ describe("isStreamConnectionError", () => {
     expect(isStreamConnectionError(new Error("当前容器已有运行中的 agent 任务，请等它结束或先停止"))).toBe(false)
     expect(isStreamConnectionError(new Error("prompt 不能为空"))).toBe(false)
     expect(isStreamConnectionError(null)).toBe(false)
+  })
+})
+
+// 回归：删除容器时用 activeSessionName.startsWith(containerName) 判断"当前会话
+// 是否属于这个容器"，漏掉了 `~` 分隔符。克隆功能生成的名字正好是 `<name>-copy1`，
+// 于是删掉 foo 会把正在 foo-copy1 里聊天的会话一起踢掉
+describe("isSessionOfContainer", () => {
+  test("默认 AGENT（会话名就是容器名）属于该容器", () => {
+    expect(isSessionOfContainer("foo", "foo")).toBe(true)
+  })
+
+  test("带 agentId 的会话属于该容器", () => {
+    expect(isSessionOfContainer("foo~agent-2", "foo")).toBe(true)
+  })
+
+  test("名字以该容器名为前缀的另一个容器不算", () => {
+    expect(isSessionOfContainer("foo-copy1", "foo")).toBe(false)
+    expect(isSessionOfContainer("foo-copy1~agent-2", "foo")).toBe(false)
+    expect(isSessionOfContainer("foobar~default", "foo")).toBe(false)
+  })
+
+  test("空值不匹配", () => {
+    expect(isSessionOfContainer(null, "foo")).toBe(false)
+    expect(isSessionOfContainer("foo", "")).toBe(false)
+  })
+})
+
+// 回归：切换 AGENT 时草稿会清空（怕把 A 的内容发给 B），但"系统命令 / Agent 对话"
+// 模式不会——唯一的提示是输入框 placeholder，一打字就看不见了，很容易在以为
+// 跟 agent 说话时把整段文字当 shell 命令丢进容器执行
+describe("composer 模式", () => {
+  test("模式标签要能在按钮上直接看见，而不是只藏在 placeholder 里", () => {
+    expect(formatComposerModeLabel("agent")).toBe("Agent对话")
+    expect(formatComposerModeLabel("command")).toBe("系统命令")
+  })
+})
+
+// 回归：容器级运行锁 + agent 级界面。同容器里别的 AGENT 在跑任务时，
+// 当前 AGENT 的输入框此前完全看不出来，点发送必定 409
+describe("resolveComposerBlockReason", () => {
+  const base = { agentEnabled: true, archived: false, containerBusy: false, agentRunning: false }
+
+  test("一切正常时不拦", () => {
+    expect(resolveComposerBlockReason({ ...base }, "agent")).toBe("")
+  })
+
+  test("就是自己在跑：不拦（按钮会显示停止）", () => {
+    expect(
+      resolveComposerBlockReason({ ...base, containerBusy: true, agentRunning: true }, "agent")
+    ).toBe("")
+  })
+
+  test("同容器别的 AGENT 在跑：拦住并说明原因", () => {
+    expect(
+      resolveComposerBlockReason({ ...base, containerBusy: true, agentRunning: false }, "agent")
+    ).toBe("container-busy")
+  })
+
+  test("系统命令模式同样受容器级锁影响", () => {
+    expect(
+      resolveComposerBlockReason({ ...base, containerBusy: true, agentRunning: false }, "command")
+    ).toBe("container-busy")
+  })
+
+  test("已删除的 AGENT 优先提示已归档", () => {
+    expect(resolveComposerBlockReason({ ...base, archived: true, containerBusy: true }, "agent")).toBe(
+      "archived"
+    )
+  })
+
+  test("未配置 CLI 时只在 agent 模式下拦", () => {
+    expect(resolveComposerBlockReason({ ...base, agentEnabled: false }, "agent")).toBe("agent-unavailable")
+    expect(resolveComposerBlockReason({ ...base, agentEnabled: false }, "command")).toBe("")
+  })
+})
+
+// 回归：孤儿 pending（serve 重启后残留的运行标记）会让恢复轮询以固定 1.5 秒
+// 无限跑下去，没有上限也没有退避。改成随轮次退避，长时间没人收尾时降到低频
+describe("nextRecoveryPollDelay", () => {
+  test("前几轮保持灵敏", () => {
+    expect(nextRecoveryPollDelay(0)).toBe(1500)
+    expect(nextRecoveryPollDelay(1)).toBe(1500)
+  })
+
+  test("随轮次退避", () => {
+    expect(nextRecoveryPollDelay(4)).toBeGreaterThan(1500)
+    expect(nextRecoveryPollDelay(10)).toBeGreaterThan(nextRecoveryPollDelay(4))
+  })
+
+  test("有上限，不会无限拉长", () => {
+    expect(nextRecoveryPollDelay(1000)).toBe(15000)
+  })
+})
+
+// 回归：搜索框用的是 cmdk 默认的子序列模糊打分，容器名全是相似时间戳时噪音很大
+// ——输 "20260917" 会把 "my-easy-20260915-092716"、"my-easy-20260916-044237"
+// 也一并排进来（它们都能按子序列匹配上）
+describe("scoreSearchCandidate", () => {
+  test("子串命中才算匹配", () => {
+    expect(scoreSearchCandidate("container:my-easy-20260917-091138", "20260917")).toBe(1)
+  })
+
+  test("只能按子序列匹配上的不算", () => {
+    expect(scoreSearchCandidate("container:my-easy-20260915-092716", "20260917")).toBe(0)
+    expect(scoreSearchCandidate("container:my-easy-20260916-044237", "20260917")).toBe(0)
+  })
+
+  test("大小写不敏感", () => {
+    expect(scoreSearchCandidate("agent:AGENT 1 demo", "agent 1")).toBe(1)
+  })
+
+  test("空搜索词全部命中", () => {
+    expect(scoreSearchCandidate("container:whatever", "")).toBe(1)
   })
 })

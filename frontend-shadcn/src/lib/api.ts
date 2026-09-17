@@ -18,6 +18,10 @@ export type SessionSummary = {
   containerPath: string
   synthetic?: boolean
   archived?: boolean
+  // 容器级运行锁的状态：containerBusy 表示这个容器里有 agent 任务在跑，
+  // agentRunning 表示跑的就是这个 AGENT 自己
+  containerBusy?: boolean
+  agentRunning?: boolean
 }
 
 export type TraceEvent = {
@@ -355,6 +359,62 @@ export function isStreamConnectionError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   const message = error.message.toLowerCase()
   return STREAM_CONNECTION_ERROR_PATTERNS.some((pattern) => message.includes(pattern))
+}
+
+// 会话名是 `containerName` 或 `containerName~agentId`。必须带上分隔符判断，
+// 否则 `foo-copy1~default`.startsWith('foo') 也成立——克隆出来的容器正好叫
+// `<name>-copy1`，删掉 foo 会误伤正在 foo-copy1 里进行的会话
+export function isSessionOfContainer(
+  sessionName: string | null | undefined,
+  containerName: string
+): boolean {
+  if (!sessionName || !containerName) return false
+  return sessionName === containerName || sessionName.startsWith(`${containerName}~`)
+}
+
+export type ComposerMode = "agent" | "command"
+
+export function formatComposerModeLabel(mode: ComposerMode): string {
+  return mode === "command" ? "系统命令" : "Agent对话"
+}
+
+export type ComposerBlockReason = "" | "archived" | "container-busy" | "agent-unavailable"
+
+// 输入框该不该拦、拦的理由是什么。container-busy 这条来自服务端的容器级运行锁：
+// 同容器里别的 AGENT 在跑任务时这个 AGENT 也发不出去，提前拦住比点了才吃 409 好
+export function resolveComposerBlockReason(
+  session: {
+    agentEnabled?: boolean
+    archived?: boolean
+    containerBusy?: boolean
+    agentRunning?: boolean
+  },
+  mode: ComposerMode
+): ComposerBlockReason {
+  if (session.archived === true) return "archived"
+  if (session.containerBusy === true && session.agentRunning !== true) return "container-busy"
+  if (mode === "agent" && session.agentEnabled === false) return "agent-unavailable"
+  return ""
+}
+
+// 恢复轮询的间隔：前两轮保持 1.5s 灵敏，之后逐步退避到 15s 封顶。
+// 正常任务几轮内就收尾了；真正需要退避的是 serve 重启留下的孤儿 pending——
+// 它永远等不到收尾，固定 1.5s 会一直高频打 /messages + /detail
+const RECOVERY_POLL_BASE_MS = 1500
+const RECOVERY_POLL_MAX_MS = 15000
+
+export function nextRecoveryPollDelay(attempt: number): number {
+  const steps = Math.max(0, attempt - 1)
+  return Math.min(RECOVERY_POLL_BASE_MS * 2 ** steps, RECOVERY_POLL_MAX_MS)
+}
+
+// 搜索框的匹配规则。cmdk 默认是子序列模糊打分，而 manyoyo 的容器名基本都是
+// `my-easy-<时间戳>` 这种高度相似的串，模糊匹配会把一堆无关容器排进结果里
+//（输 20260917 连 20260915-092716 都能匹配上）。这里换成大小写不敏感的子串匹配
+export function scoreSearchCandidate(value: string, search: string): number {
+  const keyword = search.trim().toLowerCase()
+  if (!keyword) return 1
+  return value.toLowerCase().includes(keyword) ? 1 : 0
 }
 
 export async function apiStream(

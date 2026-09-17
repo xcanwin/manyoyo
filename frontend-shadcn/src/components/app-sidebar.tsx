@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import {
   apiGet,
   apiPost,
+  isSessionOfContainer,
   type ContainerGroup,
   type SessionSummary,
 } from "@/lib/api"
@@ -251,8 +252,26 @@ export function AppSidebar({
     if (session && session.name !== activeSessionName) {
       if (!(await confirmLeaveIfDirty())) return
     }
+    applySelectedSession(session)
+  }
+
+  // 新建/克隆流程在入口已经问过一次"有未保存的修改要不要保存"了，收尾时直接选中
+  // 新会话，不要再走 selectSession——选"不保存"并不会清掉编辑器的 isDirty，
+  // 会被同一个弹窗连问两遍；第二遍点取消还会导致 agent 已创建但界面不跳过去
+  function applySelectedSession(session: SessionSummary | null) {
     onSelectSession(session)
     if (session && isMobile) setOpenMobile(false)
+  }
+
+  // 新建成功但会话列表没刷新出来时必须明说：refresh 失败只会返回空数组、不抛错，
+  // 否则表现为"点了新建什么都没发生"（服务端其实已经建好了）
+  function selectCreatedSession(freshSessions: SessionSummary[], matcher: (s: SessionSummary) => boolean) {
+    const created = freshSessions.find(matcher)
+    if (created) {
+      applySelectedSession(created)
+      return
+    }
+    setActionError("已创建成功，但会话列表刷新失败，请稍后重试或刷新页面")
   }
 
   React.useEffect(() => {
@@ -271,10 +290,7 @@ export function AppSidebar({
     try {
       const freshSessions = await onRefresh()
       goToAgents(name)
-      const created =
-        freshSessions.find((s) => s.name === name) ||
-        freshSessions.find((s) => s.containerName === name)
-      if (created) selectSession(created)
+      selectCreatedSession(freshSessions, (s) => s.name === name || s.containerName === name)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "刷新会话列表失败")
     }
@@ -343,8 +359,7 @@ export function AppSidebar({
       const newName = typeof data.name === "string" ? data.name : ""
       const freshSessions = await onRefresh()
       goToAgents(containerName)
-      const created = freshSessions.find((s) => s.name === newName)
-      if (created) selectSession(created)
+      selectCreatedSession(freshSessions, (s) => s.name === newName)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "新建 AGENT 失败")
     } finally {
@@ -370,10 +385,10 @@ export function AppSidebar({
     const freshSessions = await onRefresh()
     const newContainerName = String(data.name)
     goToAgents(newContainerName)
-    const created =
-      freshSessions.find((s) => s.name === newContainerName) ||
-      freshSessions.find((s) => s.containerName === newContainerName)
-    if (created) selectSession(created)
+    selectCreatedSession(
+      freshSessions,
+      (s) => s.name === newContainerName || s.containerName === newContainerName
+    )
   }
 
   async function removeContainer(containerName: string) {
@@ -389,7 +404,7 @@ export function AppSidebar({
         removeHistory,
       })
       if (navContainer === containerName) goToContainers()
-      if (activeSessionName && activeSessionName.startsWith(containerName)) {
+      if (isSessionOfContainer(activeSessionName, containerName)) {
         onSelectSession(null)
       }
       await onRefresh()
@@ -416,7 +431,7 @@ export function AppSidebar({
     const agentLabel = session.agentRemark || session.agentName
     const choice = await confirmRemoveChoice(
       "删除 AGENT",
-      `确认删除 AGENT ${agentLabel}？可以选择是否同时删除它的历史记录（消息与事件日志）。`
+      `确认删除 ${agentLabel}？可以选择是否同时删除它的历史记录（消息与事件日志）。`
     )
     if (!choice) return
     const removeHistory = choice === "with-history"
