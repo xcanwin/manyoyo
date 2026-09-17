@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest"
 import {
   applyServerMessageIds,
   applyTraceEventUpdate,
+  isStreamConnectionError,
   LOCAL_USER_MESSAGE_ID_PREFIX,
   mergeToolTraceEvents,
   mergeTraceIntoReply,
@@ -357,5 +358,30 @@ describe("removeLocalPendingPlaceholders", () => {
     const old1 = { id: `${LOCAL_USER_MESSAGE_ID_PREFIX}1`, role: "user" as const, content: "旧", timestamp: "t1" }
     const new1 = { id: `${LOCAL_USER_MESSAGE_ID_PREFIX}2`, role: "user" as const, content: "新", timestamp: "t2" }
     expect(removeLocalPendingPlaceholders([old1, new1])).toEqual([old1])
+  })
+})
+
+// agent 静默超过反向代理的空闲读超时（nginx 默认 60s）时，浏览器会把这条 h2 流
+// 当成中途重置，fetch 抛出的是浏览器自己的原话（Chrome "network error" /
+// "Failed to fetch"，Safari "Load failed"，Firefox "NetworkError ..."）。
+// 服务端那一轮任务其实还在容器里正常跑，不该把这串裸错误直接贴给用户看
+describe("isStreamConnectionError", () => {
+  test("浏览器各家的 fetch 网络失败原话都算连接中断", () => {
+    expect(isStreamConnectionError(new TypeError("network error"))).toBe(true)
+    expect(isStreamConnectionError(new TypeError("Failed to fetch"))).toBe(true)
+    expect(isStreamConnectionError(new TypeError("Load failed"))).toBe(true)
+    expect(
+      isStreamConnectionError(new TypeError("NetworkError when attempting to fetch resource."))
+    ).toBe(true)
+  })
+
+  test("流读完却没见过终态事件，同样属于连接中断", () => {
+    expect(isStreamConnectionError(new Error("Agent 流式响应未返回结果"))).toBe(true)
+  })
+
+  test("服务端明确返回的业务错误不算连接中断，必须原样展示给用户", () => {
+    expect(isStreamConnectionError(new Error("当前容器已有运行中的 agent 任务，请等它结束或先停止"))).toBe(false)
+    expect(isStreamConnectionError(new Error("prompt 不能为空"))).toBe(false)
+    expect(isStreamConnectionError(null)).toBe(false)
   })
 })

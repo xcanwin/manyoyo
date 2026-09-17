@@ -8,6 +8,7 @@ import {
   apiStream,
   applyServerMessageIds,
   applyTraceEventUpdate,
+  isStreamConnectionError,
   LOCAL_USER_MESSAGE_ID_PREFIX,
   mergeTraceIntoReply,
   removeLocalPendingPlaceholders,
@@ -690,6 +691,19 @@ export function WorkspacePanel({
   // 否则切到另一个 agent 时，输入框/发送按钮会继续显示上一个 agent 的状态
   const [sendingNames, setSendingNames] = React.useState<Set<string>>(() => new Set())
   const [loadError, setLoadError] = React.useState("")
+  // 当前这条 loadError 是不是"连接断了但服务端还在跑"——是的话等 pending 消失
+  // （useAgentRecoveryPoll 把这一轮收尾）就自动撤掉提示，不要一直挂在输入框上方
+  const [loadErrorRecoverable, setLoadErrorRecoverable] = React.useState(false)
+  const showLoadError = React.useCallback((message: string, recoverable = false) => {
+    setLoadError(message)
+    setLoadErrorRecoverable(message ? recoverable : false)
+  }, [])
+  // 每成功套用一次服务端消息快照就 +1。断线提示要等"断线之后至少对账过一次"
+  // 才允许自动撤掉，否则本地占位刚被清掉、服务端快照还没回来的那一瞬间
+  // pending 恰好是空的，提示会一闪而过
+  const [messagesSyncTick, setMessagesSyncTick] = React.useState(0)
+  const messagesSyncTickRef = React.useRef(0)
+  const recoverableErrorSyncTickRef = React.useRef(-1)
   const [cliDialogOpen, setCliDialogOpen] = React.useState(false)
   const [modelDialogOpen, setModelDialogOpen] = React.useState(false)
   const [sessionDetail, setSessionDetail] = React.useState<SessionDetail | null>(null)
@@ -764,7 +778,7 @@ export function WorkspacePanel({
         return Promise.resolve()
       }
       if (!silent) {
-        setLoadError("")
+        showLoadError("")
         setMessagesLoading(true)
       }
       return apiGet(`/api/sessions/${encodeURIComponent(activeSession.name)}/messages`)
@@ -785,9 +799,11 @@ export function WorkspacePanel({
             activeSession.name,
             () => (Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [])
           )
+          messagesSyncTickRef.current += 1
+          setMessagesSyncTick(messagesSyncTickRef.current)
         })
         .catch((err) => {
-          if (!silent) setLoadError(err instanceof Error ? err.message : "加载消息失败")
+          if (!silent) showLoadError(err instanceof Error ? err.message : "加载消息失败")
         })
         .finally(() => {
           if (!silent) setMessagesLoading(false)
@@ -831,6 +847,16 @@ export function WorkspacePanel({
     }, [loadMessages, loadDetail]),
     sending
   )
+
+  // "连接中断，正在重新同步"这类提示只在对账期间有意义：断线后只要跟服务端对过账
+  // 且这一轮的 pending 已经消失（recovery poll 把结果补回来了），提示就必须自己
+  // 撤掉，否则任务早就完成了、横幅还一直挂在输入框上方
+  const hasPendingMessage = messages.some((message) => message.pending === true)
+  React.useEffect(() => {
+    if (!loadErrorRecoverable || sending || hasPendingMessage) return
+    if (messagesSyncTick <= recoverableErrorSyncTickRef.current) return
+    showLoadError("")
+  }, [loadErrorRecoverable, sending, hasPendingMessage, messagesSyncTick, showLoadError])
 
   // 与旧版前端 visibilitychange/focus 触发的对账对齐，并补上多设备/多标签页
   // 同时打开同一会话的同步：只靠 visibilitychange/focus 事件只能覆盖"从隐藏切回
@@ -890,7 +916,7 @@ export function WorkspacePanel({
     // 实时状态；只有 loadError 这类"只属于当前视图"的提示才需要 isStillActive
     const isStillActive = () => activeSessionNameRef.current === name
     setDraft("")
-    setLoadError("")
+    showLoadError("")
     setSessionMessages(name, (prev) => [
       ...prev,
       {
@@ -918,7 +944,7 @@ export function WorkspacePanel({
           },
         ])
       } catch (err) {
-        if (isStillActive()) setLoadError(err instanceof Error ? err.message : "命令执行失败")
+        if (isStillActive()) showLoadError(err instanceof Error ? err.message : "命令执行失败")
       } finally {
         setSendingFor(name, false)
         onAfterSend()
@@ -985,6 +1011,16 @@ export function WorkspacePanel({
               message.id === STREAMING_MESSAGE_ID ? { ...message, content: event.content } : message
             )
           )
+        } else if (event.type === "content_chunk") {
+          // token 级增量：只发新增片段，这里做追加。reset 表示换了一条 assistant
+          // 消息，从空白重新开始（与服务端 content_delta 的整条覆盖语义一致）
+          setSessionMessages(name, (prev) =>
+            prev.map((message) =>
+              message.id === STREAMING_MESSAGE_ID
+                ? { ...message, content: event.reset ? "" : `${message.content}${event.text}` }
+                : message
+            )
+          )
         } else if (event.type === "result") {
           setSessionMessages(name, (prev) =>
             // 先按占位 id 完成本地字段更新，最后再统一把占位 id 换成服务端 id——
@@ -1006,12 +1042,24 @@ export function WorkspacePanel({
             )
           )
         } else if (event.type === "error") {
-          if (isStillActive()) setLoadError(event.error)
+          if (isStillActive()) showLoadError(event.error)
           setSessionMessages(name, (prev) => removeLocalPendingPlaceholders(prev))
         }
       })
     } catch (err) {
-      if (isStillActive()) setLoadError(err instanceof Error ? err.message : "发送失败")
+      // 连接层断开（代理空闲超时把流掐了、网络抖动）时服务端那一轮其实还在容器里
+      // 跑完，直接把浏览器的裸错误（Chrome 的 "network error" 等）贴出来会让人
+      // 以为任务失败了。这里换成"正在重新同步"，并在下面 pending 消失后自动撤掉
+      const recoverable = isStreamConnectionError(err)
+      recoverableErrorSyncTickRef.current = messagesSyncTickRef.current
+      if (isStillActive()) {
+        showLoadError(
+          recoverable
+            ? "与服务端的实时连接中断，任务仍在容器里继续执行，正在重新同步…"
+            : err instanceof Error ? err.message : "发送失败",
+          recoverable
+        )
+      }
       // 请求没能在服务端落地（409 冲突 / 网络失败）：清除本轮全部本地占位
       //（含乐观 user 消息），否则会留下一条永远没有回复的幽灵消息
       setSessionMessages(name, (prev) => removeLocalPendingPlaceholders(prev))
@@ -1031,7 +1079,7 @@ export function WorkspacePanel({
     try {
       await apiPost(`/api/sessions/${encodeURIComponent(activeSession.name)}/agent/stop`, {})
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "停止失败")
+      showLoadError(err instanceof Error ? err.message : "停止失败")
     } finally {
       // 无论成功失败都立即对一次账：成功时服务端 patch 可能晚于 stop 响应
       //（useAgentRecoveryPoll 轮询兜底收尾）；失败（如 serve 重启后的孤儿

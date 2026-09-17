@@ -3609,7 +3609,7 @@ process.exit(0);
             });
             expect(claudeRes.response.status).toBe(200);
             expect(String(claudeRes.json.output || '')).toMatch(
-                /claude --verbose --output-format stream-json --dangerously-skip-permissions -p/
+                /claude --verbose --output-format stream-json --include-partial-messages --dangerously-skip-permissions -p/
             );
             expect(String(claudeRes.json.output || '')).not.toContain('--session-id');
             expect(String(claudeRes.json.output || '')).toContain("'hello'");
@@ -5096,7 +5096,7 @@ process.exit(0);
                 resumeSucceeded: true
             }));
             expect(String(turn2.json.output || '')).toContain(
-                `claude --verbose --output-format stream-json -r ${sessionId} -p 'who am i'`
+                `claude --verbose --output-format stream-json --include-partial-messages -r ${sessionId} -p 'who am i'`
             );
             expect(String(turn2.json.output || '')).not.toContain('以下是当前会话最近对话历史');
             expect(String(turn2.json.output || '')).not.toContain('--session-id');
@@ -6019,5 +6019,344 @@ process.exit(0);
                 fs.rmSync(tempHost, { recursive: true, force: true });
             }
         });
+    });
+});
+
+describe('Web Server Agent Stream Realtime', () => {
+    function writeFakeClaudeDocker(fakeDockerPath, bodyScript) {
+        fs.writeFileSync(fakeDockerPath, `#!/usr/bin/env node
+const fs = require('fs');
+const args = process.argv.slice(2);
+if (args[0] !== 'exec') {
+  process.exit(0);
+}
+const command = args[args.length - 1] || '';
+${bodyScript}
+`, 'utf-8');
+        fs.chmodSync(fakeDockerPath, 0o755);
+    }
+
+    function writeClaudeHistory(webHistoryDir, containerName) {
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, `${containerName}.json`),
+            JSON.stringify({
+                containerName,
+                updatedAt: null,
+                messages: [],
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+    }
+
+    test('claude agent 命令必须带 --include-partial-messages，否则只能等整条消息生成完才有输出', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-partial-flag-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        const commandLogPath = path.join(tempHost, 'command.log');
+        writeFakeClaudeDocker(fakeDockerPath, `
+fs.writeFileSync(${JSON.stringify(commandLogPath)}, command, 'utf-8');
+process.stdout.write('{"type":"result","subtype":"success"}\\n');
+process.exit(0);
+`);
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        writeClaudeHistory(webHistoryDir, 'demo');
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: '你好' })
+            });
+            expect(streamRes.response.status).toBe(200);
+
+            const executedCommand = fs.readFileSync(commandLogPath, 'utf-8');
+            expect(executedCommand).toContain('--include-partial-messages');
+            expect(executedCommand).toContain('--output-format stream-json');
+            expect(executedCommand).toContain('--verbose');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('claude 的 stream_event 文本增量应逐条转成 content_delta，而不是等整条 assistant 消息', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-partial-delta-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        writeFakeClaudeDocker(fakeDockerPath, `
+process.stdout.write('{"type":"system","subtype":"init","session_id":"sid-1"}\\n');
+process.stdout.write('{"type":"stream_event","event":{"type":"message_start","message":{"role":"assistant"}}}\\n');
+process.stdout.write('{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"慢"}}}\\n');
+process.stdout.write('{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"悠"}}}\\n');
+process.stdout.write('{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"悠"}}}\\n');
+process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"慢悠悠"}]}}\\n');
+process.stdout.write('{"type":"result","subtype":"success"}\\n');
+process.exit(0);
+`);
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        writeClaudeHistory(webHistoryDir, 'demo');
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: '你叫什么' })
+            });
+            expect(streamRes.response.status).toBe(200);
+
+            // 关键：中间态必须出现，用户才能看到逐字增长而不是最后一次性刷出来。
+            // 下发的是增量片段而不是累计全文——否则一轮几千个增量就是 O(n^2) 流量
+            const chunkEvents = streamRes.events.filter(event => event && event.type === 'content_chunk');
+            expect(chunkEvents[0]).toEqual({ type: 'content_chunk', text: '', reset: true });
+            expect(chunkEvents.slice(1).map(event => event.text)).toEqual(['慢', '悠', '悠']);
+            // 整条 assistant 消息落地后仍用 content_delta 下发权威全文做一次对齐
+            const deltaContents = streamRes.events
+                .filter(event => event && event.type === 'content_delta')
+                .map(event => event.content);
+            expect(deltaContents).toContain('慢悠悠');
+
+            // stream_event 不应污染"执行过程"面板
+            const traceTexts = streamRes.events
+                .filter(event => event && event.type === 'trace')
+                .map(event => String(event.text || ''));
+            expect(traceTexts.some(text => text.includes('stream_event'))).toBe(false);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('一轮里有多条 assistant 消息（正文→工具→正文）时，增量拼出来的气泡必须和权威全文一致', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-partial-multi-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        writeFakeClaudeDocker(fakeDockerPath, `
+const w = s => process.stdout.write(s + '\\n');
+w('{"type":"system","subtype":"init","session_id":"sid"}');
+w('{"type":"stream_event","event":{"type":"message_start","message":{"role":"assistant"}}}');
+for (const t of ['我', '先', '看', '看']) {
+  w(JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: t } } }));
+}
+w('{"type":"assistant","message":{"content":[{"type":"text","text":"我先看看"},{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]}}');
+w('{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"a.txt"}]}}');
+w('{"type":"stream_event","event":{"type":"message_start","message":{"role":"assistant"}}}');
+for (const t of ['结', '论', '是', 'A']) {
+  w(JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: t } } }));
+}
+w('{"type":"assistant","message":{"content":[{"type":"text","text":"结论是A"}]}}');
+w('{"type":"result","subtype":"success"}');
+process.exit(0);
+`);
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        writeClaudeHistory(webHistoryDir, 'demo');
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: '看一下' })
+            });
+
+            // 按前端的规则重放：content_chunk 追加 / reset 清空，content_delta 整体覆盖。
+            // 每次 content_delta 到达时，增量拼出来的气泡必须已经和权威全文相等——
+            // 不相等就说明用户会看到内容跳变或串台
+            let bubble = '';
+            const checkpoints = [];
+            for (const event of streamRes.events) {
+                if (event.type === 'content_chunk') {
+                    bubble = event.reset === true ? '' : `${bubble}${event.text}`;
+                } else if (event.type === 'content_delta') {
+                    checkpoints.push({ streamed: bubble, authoritative: event.content });
+                    bubble = event.content;
+                }
+            }
+            expect(checkpoints).toEqual([
+                { streamed: '我先看看', authoritative: '我先看看' },
+                { streamed: '结论是A', authoritative: '结论是A' }
+            ]);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('token 级增量不应逐条写入会话控制事件日志（否则每个 token 都要落一次盘）', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-partial-events-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        writeFakeClaudeDocker(fakeDockerPath, `
+process.stdout.write('{"type":"stream_event","event":{"type":"message_start","message":{"role":"assistant"}}}\\n');
+for (let i = 0; i < 40; i += 1) {
+  process.stdout.write('{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"x"}}}\\n');
+}
+process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"' + 'x'.repeat(40) + '"}]}}\\n');
+process.stdout.write('{"type":"result","subtype":"success"}\\n');
+process.exit(0);
+`);
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        writeClaudeHistory(webHistoryDir, 'demo');
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: '写一段话' })
+            });
+
+            const auditRes = await request(`${baseUrl}/api/sessions/demo/audit`, { headers: { Cookie: authCookie } });
+            expect(auditRes.response.status).toBe(200);
+            const deltaEvents = (auditRes.json.events || [])
+                .filter(event => event && event.type === 'agent.turn.delta');
+            // 40 个 token 只应留下 assistant 整条消息那一条 delta 事件
+            expect(deltaEvents.length).toBeLessThanOrEqual(2);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('agent 长时间无输出时应持续下发心跳，避免反向代理按空闲超时掐断流', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-stream-heartbeat-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        writeFakeClaudeDocker(fakeDockerPath, `
+process.stdout.write('{"type":"system","subtype":"init","session_id":"sid-1"}\\n');
+setTimeout(() => {
+  process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"done"}]}}\\n');
+  process.stdout.write('{"type":"result","subtype":"success"}\\n');
+  process.exit(0);
+}, 900);
+`);
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        writeClaudeHistory(webHistoryDir, 'demo');
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir,
+                agentStreamHeartbeatMs: 100
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const streamRes = await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: '慢慢想' })
+            });
+            expect(streamRes.response.status).toBe(200);
+
+            const pings = streamRes.events.filter(event => event && event.type === 'ping');
+            expect(pings.length).toBeGreaterThanOrEqual(3);
+            // 心跳只是保活，不应写进会话事件日志
+            const auditRes = await request(`${baseUrl}/api/sessions/demo/audit`, { headers: { Cookie: authCookie } });
+            expect(auditRes.text).not.toContain('"ping"');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('Web Server Session List Performance', () => {
+    test('GET /api/sessions 对同一容器的历史文件只读一次，不按 agent 数量重复读', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sessions-nplus1-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        const historyPath = path.join(webHistoryDir, 'demo.json');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(historyPath, JSON.stringify({
+            containerName: 'demo',
+            updatedAt: '2025-01-01T00:00:00.000Z',
+            agentPromptCommand: '',
+            agents: {
+                default: { agentId: 'default', agentName: 'AGENT 1', messages: [] },
+                'agent-2': { agentId: 'agent-2', agentName: 'AGENT 2', messages: [] },
+                'agent-3': { agentId: 'agent-3', agentName: 'AGENT 3', messages: [] },
+                'agent-4': { agentId: 'agent-4', agentName: 'AGENT 4', messages: [] }
+            }
+        }, null, 4), 'utf-8');
+
+        let handle = null;
+        const readSpy = jest.spyOn(fs, 'readFileSync');
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                webHistoryDir
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            readSpy.mockClear();
+            const listRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            expect(listRes.response.status).toBe(200);
+            expect(listRes.json.sessions).toHaveLength(4);
+
+            const historyReads = readSpy.mock.calls
+                .filter(call => String(call[0] || '') === historyPath);
+            expect(historyReads).toHaveLength(1);
+        } finally {
+            readSpy.mockRestore();
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
     });
 });

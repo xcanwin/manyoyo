@@ -328,9 +328,34 @@ export type StreamEvent =
       traceMessageId?: string
     }
   | { type: "trace"; text: string; traceEvent?: TraceEvent }
+  // content_delta 是权威全文（每条 assistant 消息落地时下发一次），
+  // content_chunk 是 token 级增量片段：追加到当前流式回复上，reset 表示
+  // 换了一条 assistant 消息、从空白重新开始
   | { type: "content_delta"; content: string }
+  | { type: "content_chunk"; text: string; reset?: boolean }
+  // 服务端保活心跳，仅用于喂饱反向代理的空闲读超时，前端忽略即可
+  | { type: "ping" }
   | { type: "result"; exitCode: number; output: string; interrupted?: boolean; replyMessageId?: string }
   | { type: "error"; error: string }
+
+// 流被"连接层"打断（而不是服务端明确报错）的判定。典型触发：agent 静默时间超过
+// 反向代理的空闲读超时，nginx 把这条 h2 流 RST 掉，浏览器侧 fetch/reader 抛出各家
+// 自己的原话。这种情况下服务端那一轮任务其实还在容器里跑，界面应提示"正在重新
+// 同步"并交给 useAgentRecoveryPoll 兜底，而不是把裸错误当成失败贴给用户
+const STREAM_CONNECTION_ERROR_PATTERNS = [
+  "network error",
+  "failed to fetch",
+  "load failed",
+  "networkerror",
+  "connection closed",
+  "agent 流式响应未返回结果",
+]
+
+export function isStreamConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const message = error.message.toLowerCase()
+  return STREAM_CONNECTION_ERROR_PATTERNS.some((pattern) => message.includes(pattern))
+}
 
 export async function apiStream(
   url: string,
