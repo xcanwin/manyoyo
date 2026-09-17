@@ -6244,6 +6244,219 @@ describe('Web Server Robustness', () => {
     });
 });
 
+describe('Web Server Agent Run Lock', () => {
+    // 假 docker：每次 exec 都落一个文件，用来数真正被拉起的 agent 进程数
+    function writeCountingDocker(fakeDockerPath, runMarkerDir) {
+        fs.mkdirSync(runMarkerDir, { recursive: true });
+        fs.writeFileSync(fakeDockerPath, `#!/usr/bin/env node
+const fs = require('fs');
+const path = require('path');
+const args = process.argv.slice(2);
+if (args[0] !== 'exec') {
+  process.exit(0);
+}
+fs.writeFileSync(path.join(${JSON.stringify(runMarkerDir)}, 'run-' + process.pid + '-' + Date.now()), '');
+setTimeout(() => {
+  process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"done"}]}}\\n');
+  process.stdout.write('{"type":"result","subtype":"success"}\\n');
+  process.exit(0);
+}, 400);
+`, 'utf-8');
+        fs.chmodSync(fakeDockerPath, 0o755);
+    }
+
+    function writeClaudeHistoryFile(webHistoryDir, containerName) {
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, `${containerName}.json`),
+            JSON.stringify({
+                containerName,
+                messages: [],
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+    }
+
+    // 回归：容器级锁的"检查"在路由入口，"上锁"却要等 prepareWebAgentExecution
+    // （含 ensureWebContainer 拉起容器）跑完，中间隔着多个 await。容器处于已停止
+    // 状态时点发送要等好几秒，这期间第二次发送会穿过 409 检查，同一个容器里真的
+    // 跑起两个 agent 进程；而且 state.agentRuns 按容器名存单个 runState，
+    // 后者会覆盖前者，第一个进程再也停不掉
+    test('容器启动期间的第二次发送必须被 409 挡住，不能真的跑起两个 agent 进程', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-run-lock-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        const runMarkerDir = path.join(tempHost, 'runs');
+        writeCountingDocker(fakeDockerPath, runMarkerDir);
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        writeClaudeHistoryFile(webHistoryDir, 'demo');
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                webHistoryDir,
+                // 容器不存在 → 走 ensureWebContainer 创建 + 等待就绪，制造真实的慢准备阶段
+                containerExists: () => false,
+                getContainerStatus: () => 'running',
+                waitForContainerReady: async () => {
+                    await new Promise(resolve => setTimeout(resolve, 400));
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const send = prompt => requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+            });
+
+            const first = send('第一个');
+            await new Promise(resolve => setTimeout(resolve, 120));
+            const second = send('第二个');
+            const [firstRes, secondRes] = await Promise.all([first, second]);
+
+            expect(firstRes.response.status).toBe(200);
+            expect(secondRes.response.status).toBe(409);
+            expect(fs.readdirSync(runMarkerDir)).toHaveLength(1);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    // 锁是容器级的，但界面是 agent 级的：同容器里另一个 AGENT 的输入框此前完全
+    // 看不出容器在忙，点发送必定 409。会话摘要要把这个状态暴露出来
+    test('GET /api/sessions 要暴露容器忙碌状态，区分"就是这个 AGENT 在跑"和"同容器别人在跑"', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-busy-flag-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        const runMarkerDir = path.join(tempHost, 'runs');
+        writeCountingDocker(fakeDockerPath, runMarkerDir);
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, 'demo.json'),
+            JSON.stringify({
+                containerName: 'demo',
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}',
+                agents: {
+                    default: { agentId: 'default', agentName: 'AGENT 1', messages: [] },
+                    'agent-2': { agentId: 'agent-2', agentName: 'AGENT 2', messages: [] }
+                }
+            }, null, 4),
+            'utf-8'
+        );
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                webHistoryDir,
+                containerExists: () => true,
+                getContainerStatus: () => 'running'
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const idle = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            expect(idle.json.sessions.every(item => item.containerBusy === false)).toBe(true);
+
+            // 一边跑 agent，一边查列表
+            let busySnapshot = null;
+            await requestNdjsonStream(
+                `${baseUrl}/api/sessions/demo/agent/stream`,
+                {
+                    method: 'POST',
+                    headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: '跑一会' })
+                },
+                async (event) => {
+                    if (busySnapshot || !event || event.type !== 'meta') {
+                        return;
+                    }
+                    const res = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+                    busySnapshot = res.json.sessions;
+                }
+            );
+
+            expect(busySnapshot).not.toBeNull();
+            const running = busySnapshot.find(item => item.name === 'demo');
+            const sibling = busySnapshot.find(item => item.name === 'demo~agent-2');
+            // 正在跑的那个 AGENT：自己在跑，输入框该显示"停止"
+            expect(running).toEqual(expect.objectContaining({ containerBusy: true, agentRunning: true }));
+            // 同容器的另一个 AGENT：容器忙，但不是它在跑，输入框该禁用并说明原因
+            expect(sibling).toEqual(expect.objectContaining({ containerBusy: true, agentRunning: false }));
+
+            // 跑完之后要能恢复
+            const after = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            expect(after.json.sessions.every(item => item.containerBusy === false)).toBe(true);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('Web Server Create Defaults', () => {
+    // 回归：新建容器对话框的 hostPath 预填来自 /api/config 的 defaults.hostPath，
+    // 而它就是 serve 启动时的 -d。当 serve 以 $HOME（例如 root 用户的 /root）启动时，
+    // validateHostPathOrThrow 明确拒绝挂载 home 目录——于是对话框预填了一个
+    // 必定创建失败的值，不改路径直接点"创建并进入"一定报错
+    test('defaults.hostPath 不应预填会被 validateHostPath 拒绝的目录', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-defaults-'));
+        const port = await getFreePort();
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                hostPath: os.homedir(),
+                validateHostPath: () => {},
+                webHistoryDir: path.join(tempHost, 'web-history')
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const res = await request(`${baseUrl}/api/config`, { headers: { Cookie: authCookie } });
+            expect(res.response.status).toBe(200);
+            // 预填成空串，让用户必须自己选一个目录（对话框里有"选择"目录选择器）
+            expect(res.json.defaults.hostPath).toBe('');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('正常目录仍然照常预填', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-defaults-ok-'));
+        const port = await getFreePort();
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                hostPath: tempHost,
+                webHistoryDir: path.join(tempHost, 'web-history')
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const res = await request(`${baseUrl}/api/config`, { headers: { Cookie: authCookie } });
+            expect(res.json.defaults.hostPath).toBe(tempHost);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('Web Server Session List Performance', () => {
     test('GET /api/sessions 对同一容器的历史文件只读一次，不按 agent 数量重复读', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sessions-nplus1-'));
