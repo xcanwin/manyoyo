@@ -66,6 +66,9 @@ manyoyo.example.json     # 配置文件模板
 ```bash
 npm run test:unit        # 开发阶段（快）
 npm test                 # 提交前（含覆盖率）
+                         # 注意：test/manyoyo.test.js 里 Container Mode ×3 和
+                         # doctor --json ×1 会真的调 docker/podman 二进制，
+                         # 没装容器运行时的环境上这 4 个必失败，不是你改坏的
 
 # 文档：必须先 ci 安装再构建，不能并行
 npm ci --include=optional
@@ -132,12 +135,36 @@ npx jest --testNamePattern="关键词"
 - 入口点为 `tail -f /dev/null`，默认命令存储在容器标签 `manyoyo.default_cmd`
 - 容器就绪等待：指数退避 100ms→2000ms，最多 30 次
 
-### lib/web/server.js
+### lib/web/server.js（6000+ 行单文件）
+
+与 `bin/manyoyo.js` 一样无分区注释，靠函数名定位：`Grep "^function <名>"`。
+它是仓库里最大的文件，改动前先确认要落在哪一层（HTTP 路由 / 会话历史读写 /
+容器执行 / 流式协议），不要在路由 handler 里堆业务逻辑。
 
 - `resolveYoloCommand()` 委托到 `lib/agent-adapters/index.js`，与 `bin/manyoyo.js` 共用同一份映射，无需分别维护
 - Web 鉴权：所有路由默认认证，匿名白名单仅限 `/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`；新增接口必须走全局认证网关
 - Agent 会话恢复参数：Claude/Gemini → `-r`，Codex → `resume`，OpenCode → `-c`
 - 会话控制事件：`/agent/stream`、`/agent/stop` 通过 `createWebStreamEmitter()`/`appendWebSessionControlEvent()` 写入 `lib/core/event-store.js`（`FileEventStore`），`GET /api/sessions/:name/audit` 导出该会话的事件与投影
+- **`/agent/stream` 的 NDJSON 事件协议是跨三处的契约**，改一处必须同步另两处：
+  服务端 `lib/web/server.js`、新前端 `frontend-shadcn/src/lib/api.ts` 的 `StreamEvent`
+  + `workspace-panel.tsx` 的事件分支、旧前端 `lib/web/frontend/app.js`
+  - `content_chunk`：token 级增量，前端**追加**；`reset: true` 表示换了一条 assistant
+    消息、从空白重新开始。只发新增片段，不要改成重发累计全文（几千个增量就是 O(n²) 流量）
+  - `content_delta`：每条 assistant 消息落地时下发一次的权威全文，前端**整体覆盖**
+  - `ping`：保活心跳，前端忽略。`DEFAULT_AGENT_STREAM_HEARTBEAT_MS` 必须明显小于
+    反向代理的空闲读超时（nginx `proxy_read_timeout` 默认 60s），否则 agent 静默期间
+    流会被 RST，浏览器侧表现为输入框上方冒出 `network error`
+  - token 级增量**不写**事件日志、历史落盘按 `AGENT_STREAM_PARTIAL_PERSIST_INTERVAL_MS`
+    节流；新增逐事件的落盘/日志动作前先想清楚它会不会被每个 token 触发一次
+- `GET /api/sessions` 是**同步 IO 大户**：逐容器 `readFileSync` + `JSON.parse` 整份历史。
+  前端每标签页 6s 轮询一次，它阻塞多久事件循环就卡多久，正在跑的 `/agent/stream`
+  只能在空隙里把输出攒着分批推。往这条路径上加同步操作前务必实测耗时；
+  `buildSessionSummary()` 已支持传入调用方加载好的 history，不要再重复读。
+  （`docker ps -a` + 批量 `inspect` 实测仅约 90ms，不是瓶颈，别被旧注释误导）
+- 请求处理链路上注册在**全局认证网关之前**的代码（如 `res.on('finish')` 之类的
+  钩子）必须自带 try/catch：那里抛异常会冒泡成 `uncaughtException`，而
+  `bin/manyoyo.js` 的处理器直接 `process.exit(1)`——等于未认证请求可打挂 serve。
+  回归用例见 `test/web-server-auth.test.js` 的 `Web Server Robustness`
 
 ### lib/web/frontend/
 
@@ -167,6 +194,14 @@ npx jest --testNamePattern="关键词"
 - 命令执行：`spawnSync()` + 参数数组，禁止 shell 字符串拼接
 - 敏感数据：`lib/serve-log.js` 的 `sanitizeSensitiveData()` 掩码含 KEY/TOKEN/SECRET/PASSWORD/AUTH/CREDENTIAL 的值（前4+后4位）
 - 日志：新增 `~/.manyoyo/logs/` 文件必须按子命令分目录（`serve/`、`build/`、`run/`），勿堆根目录
+- 日志量：`lib/log-path.js` 只按天分文件，**没有轮转、没有保留期、没有大小上限**。
+  不要按"每个 HTTP 请求 / 每个子进程调用 / 每个流式事件"逐条写盘（曾经这么干过，
+  实测约 55000 条、20MB/天），高频路径上只记 warn/error
+- 在线查看日志的接口一律**不要全量 `readFileSync` + `split('\n')`**：同步读会阻塞事件循环，
+  文件越长越糟；日期/路径类查询参数必须白名单校验（`^\d{4}-\d{2}-\d{2}$` 之类），
+  否则会被拼出目录穿越
+- 日志内容渲染到 HTML 必须逐字段转义后再进 DOM。日志里含用户 prompt 等任意文本，
+  用字符串拼 `innerHTML` 等于把 prompt 当代码执行
 
 ## 常用模式
 
