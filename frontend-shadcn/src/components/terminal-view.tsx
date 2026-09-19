@@ -5,6 +5,7 @@ import "@xterm/xterm/css/xterm.css"
 
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { applyModifiers, buildMobileSubmitPayload } from "@/lib/terminal-input"
 import type { SessionSummary } from "@/lib/api"
 
 const MIN_COLS = 40
@@ -49,21 +50,6 @@ const KEYBAR_KEYS: Array<{ label: string; data: string }> = [
   { label: "▶", data: "\x1b[C" },
 ]
 
-// 单字符输入按当前修饰键状态转换：ctrl 走控制字符，alt 走 ESC 前缀。
-// 物理键盘（xterm onData）和移动端输入条共用同一套规则
-function applyModifiers(data: string, ctrl: boolean, alt: boolean): string {
-  if (data.length !== 1) return data
-  if (ctrl) {
-    const code = data.charCodeAt(0)
-    if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122)) {
-      return String.fromCharCode(code & 0x1f)
-    }
-    return data
-  }
-  if (alt) return "\x1b" + data
-  return data
-}
-
 export function TerminalView({ session }: { session: SessionSummary | null }) {
   const containerRef = React.useRef<HTMLDivElement | null>(null)
   const socketRef = React.useRef<WebSocket | null>(null)
@@ -80,6 +66,9 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
   const [altMode, setAltMode] = React.useState(false)
   const ctrlModeRef = React.useRef(false)
   const altModeRef = React.useRef(false)
+  // 输入法是否正在组词（拼音候选未上屏）。form 的 onSubmit 里读不到 isComposing，
+  // 只能自己记一份
+  const composingRef = React.useRef(false)
   React.useEffect(() => {
     ctrlModeRef.current = ctrlMode
   }, [ctrlMode])
@@ -91,11 +80,15 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
   // 不应该自动建立终端连接（否则会静默触发后端新建容器）
   const historyOnly = session?.status === "history"
 
-  function sendInput(data: string) {
+  // 返回值表示"真的发出去了"：连接不在时不能假装发过，否则调用方会照常把
+  // 输入框清空，用户打的内容就这么没了
+  function sendInput(data: string): boolean {
     const socket = socketRef.current
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: "input", data }))
+      return true
     }
+    return false
   }
 
   // 移动端的实际输入口是下方的输入条（xterm 的隐藏 textarea 被禁用了），
@@ -112,13 +105,15 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
   }
 
   function submitMobileInput() {
-    if (mobileInput.length === 1 && (ctrlMode || altMode)) {
-      // 修饰键组合（如 ctrl + c）是一个控制字符，不该再补回车
-      sendInput(applyModifiers(mobileInput, ctrlMode, altMode))
-    } else {
-      // 空输入按发送等价于敲一次回车，用来确认 TUI 里的各种提示
-      sendInput(mobileInput ? `${mobileInput}\r` : "\r")
-    }
+    // 输入法组词期间的回车是"确认候选词"，不是提交：这时候提交会把还没上屏的
+    // 内容连同输入框一起清掉，用户看到的就是"打的字被删了，终端只换了一行"
+    if (composingRef.current) return
+    // 取 DOM 里的实时值而不是 React state：IME 提交候选词的那一拍，onChange
+    // 可能还没跑，state 落后于输入框里真正显示的内容
+    const value = mobileInputRef.current?.value ?? mobileInput
+    const sent = sendInput(buildMobileSubmitPayload(value, ctrlMode, altMode))
+    // 没发出去（连接断了）就把内容留在输入框里，别让用户白打一遍
+    if (!sent) return
     setMobileInput("")
     mobileInputRef.current?.focus()
   }
@@ -311,18 +306,38 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
             event.preventDefault()
             submitMobileInput()
           }}
+          // submitMobileInput 内部还会再挡一次组词中的回车，见 composingRef
         >
           <input
             ref={mobileInputRef}
             value={mobileInput}
             onChange={(event) => setMobileInput(event.target.value)}
+            onCompositionStart={() => {
+              composingRef.current = true
+            }}
+            onCompositionEnd={() => {
+              composingRef.current = false
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return
+              // keyCode 229 是部分浏览器对"这次回车属于输入法"的兼容标记，
+              // 和 isComposing 一样要放行给输入法自己处理
+              if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                // 同时拦掉表单默认提交：否则组词中的回车照样会触发 onSubmit
+                event.preventDefault()
+                return
+              }
+            }}
             placeholder="输入内容，回车发送"
             enterKeyHint="send"
             autoCapitalize="off"
             autoCorrect="off"
             autoComplete="off"
             spellCheck={false}
-            className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
+            // 字号必须 >=16px：iOS Safari 聚焦字号更小的输入框时会把整页放大，
+            // 表现就是一点输入框、整个界面突然被拉大（shadcn 的 Input/Textarea
+            // 用 text-base md:text-sm 也是为这个）
+            className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-base text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
           />
           <button
             type="submit"

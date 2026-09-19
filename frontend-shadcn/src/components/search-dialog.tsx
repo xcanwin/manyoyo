@@ -31,7 +31,13 @@ export function SearchDialog({
         <Command className="rounded-lg" filter={scoreSearchCandidate}>
           {/* 默认右上角关闭按钮是 absolute top-2 right-2，跟输入框同一行会挡住末尾文字，
               给输入框本身留出右侧空间 */}
-          <CommandInput className="pr-8" placeholder="按容器名、工作目录、AGENT 名称 / 备注搜索..." autoFocus />
+          {/* text-base md:text-sm：CommandInput 默认是 14px，iOS Safari 聚焦
+              小于 16px 的输入框会把整页放大（ui/input、ui/textarea 都是这么处理的） */}
+          <CommandInput
+            className="pr-8 text-base md:text-sm"
+            placeholder="按容器名、工作目录、AGENT 名称 / 备注搜索..."
+            autoFocus
+          />
           <CommandList>
             <CommandEmpty>没有匹配结果</CommandEmpty>
             <CommandGroup heading="容器">
