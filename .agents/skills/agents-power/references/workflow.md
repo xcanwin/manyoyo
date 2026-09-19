@@ -8,7 +8,7 @@
 ## 2) 条件分支判断
 - 若按忽略规则过滤后无有效文件：标记“空目录场景”。
 - 判断 Git 环境：`git rev-parse --is-inside-work-tree >/dev/null 2>&1`。
-- 仅在 Git 仓库中运行：`git log --oneline -n 30`。
+- 仅在 Git 仓库中运行：`git log --oneline -n 30`；历史仅作补充证据，不覆盖已有指引、贡献文档、CI 或项目配置中的明确规则。
 - 非 Git 场景跳过提交风格提取，并在输出中明确证据缺失。
 
 ## 3) 模式执行
@@ -20,9 +20,9 @@
   - 用最小命令校验其中的命令、路径、流程是否与仓库事实一致。
   - 按技能规定模板输出“建议尽快改 / 可选补充 / 无需改动”。
 - `apply` / `audit-then-apply`：
-  - 提取可执行命令：`package.json scripts`、`Makefile` 目标、`tools/` 脚本。
+  - 提取可执行命令：`package.json scripts`、`Makefile` 目标、`tools/` 脚本；按需检查 CI 配置目录与一层嵌套的 `package.json`。
   - 观察现有代码风格与命名模式。
-  - 仅在 Git 历史存在时提取提交风格。
+  - 仅在 Git 历史存在且风格一致时，将其作为提交风格的补充证据；优先保留已有明示规则。
 
 ## 4) 生成或更新 AGENTS.md（仅 apply / audit-then-apply 模式）
 - 仅在本步骤读取：`assets/AGENTS.zh.template.md`。

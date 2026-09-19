@@ -14,6 +14,12 @@ git log -1 --pretty=format:'%H%n%s%n%b' || true
 echo
 echo
 
+echo "## WORKTREE_STATUS"
+if ! git status --short; then
+    true
+fi
+echo
+
 echo "## CHANGED_FILES"
 if ! git diff --name-only HEAD; then
     true
