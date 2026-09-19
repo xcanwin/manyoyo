@@ -31,56 +31,62 @@
 - `lib/global-config.js` + `lib/init-config.js`: 全局配置读写、imageVersion 同步与 `init` 初始化配置逻辑。
 - `lib/runtime-resolver.js` + `lib/runtime-normalizers.js` + `lib/worktrees.js`: 运行配置合并、参数归一化与 Git worktrees 挂载推导。
 - `lib/json5-text-edit.js`: JSON5 配置文本的局部定位与替换，供全局配置与 Web 配置编辑复用。
-- `lib/log-path.js` + `lib/serve-log.js`: 日志路径分目录规则、`serve` 日志脱敏与进程快照工具。
+- `lib/log-path.js` + `lib/serve-log.js` + `lib/serve-log-reader.js`: 日志路径分目录规则、`serve` 日志脱敏、进程快照与倒序分页读取工具。
+- `lib/capacity.js`: 基于镜像、容器可写层与宿主机磁盘空间的容量估算，供 Web 接口复用。
 - `lib/core/events.js` + `lib/core/event-store.js`: 会话控制事件的创建/校验/投影与 `FileEventStore`（JSONL 追加日志），供 `lib/web/server.js` 的会话审计导出复用；`lib/core/app-error.js` 暂未接入现有 `sendJson` 错误响应。
 - `lib/dev-release.js` + `scripts/dev-release.js`: 维护者发布向导与版本建议、提交文案清洗、标签选择等辅助逻辑。
 - `lib/plugin/index.js` + `lib/plugin/playwright.js`: 插件命令分发与 Playwright 插件主逻辑（场景配置、容器/宿主启动链路）。
 - `lib/plugin/playwright-assets/`: Playwright 容器场景 compose 与镜像资源模板。
 - `lib/web/server.js`: `serve` 网页服务、全局认证网关与 API 路由。
-- `lib/web/frontend/`: 网页前端静态资源（`app/login/markdown/file-browser/CodeMirror` 的 `html/css/js`）；`chat-behavior.js` 是抽出的纯函数模块（滚动跟随判定、执行过程摘要、composer 展开判定），仿 `markdown-renderer.js` 的 `window.Manyoyo*` + Node `vm` 单测模式。
+- `frontend-shadcn/`: 默认 Web 主题的 Vite + React + TypeScript 源码与 Vitest 测试；`npm run build:web-shadcn` 将单文件产物写入 `lib/web/frontend/shadcn.html`。
+- `lib/web/frontend/`: shadcn 单文件构建产物及旧版 `/legacy` 前端静态资源（`app/login/markdown/file-browser/CodeMirror` 的 `html/css/js`）；`chat-behavior.js` 是抽出的纯函数模块，仿 `markdown-renderer.js` 的 `window.Manyoyo*` + Node `vm` 单测模式。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`/app/vendor/xterm.js`、`/app/vendor/xterm-addon-fit.js`）由 `lib/web/server.js` 从 `@xterm/*` 依赖映射提供。
 - `docker/manyoyo.Dockerfile` + `docker/cache/`: 镜像构建与缓存目录，涉及工具或镜像版本时更新。
 - `docker/res/`: 各 Agent 默认配置、Playwright 资源与 supervisor 模板。
 - `docs/`: VitePress 文档；中文主目录 `docs/zh/`，英文 `docs/en/`；结构需保持一致。
-- `test/`: Jest 测试，文件名 `*.test.js`（如 `test/manyoyo.test.js`、`test/web-server-auth.test.js`）。
+- `test/`: Node 侧 Jest 测试，文件名 `*.test.js`（如 `test/manyoyo.test.js`、`test/web-server-auth.test.js`）。
+- `frontend-shadcn/src/`: 前端 Vitest 测试，文件名 `*.test.ts` 或 `*.test.tsx`。
 - `assets/` 与 `manyoyo.example.json`: 资源与配置模板。
 
 ## 目录速查
 - `docs/zh/guide/` `docs/zh/configuration/` `docs/zh/reference/` `docs/zh/advanced/` `docs/zh/troubleshooting/`
 - `docs/en/guide/` `docs/en/configuration/` `docs/en/reference/` `docs/en/advanced/` `docs/en/troubleshooting/`
 - `docs/guide/` `docs/configuration/` `docs/reference/` `docs/advanced/` `docs/troubleshooting/`
-- `lib/web/` `lib/web/frontend/`
+- `lib/web/` `lib/web/frontend/` `frontend-shadcn/`
 - `docker/` `bin/` `scripts/` `test/` `assets/` `coverage/`
 
 ## 构建、测试与开发命令
 - `npm install`: 开发阶段安装/更新依赖（会更新 `package-lock.json`）。
 - `npm ci --include=optional`: 提交前与 CI 的可复现安装（CI 不再执行 `npm install`）。
-- `npm test`: 运行全部测试并生成覆盖率（输出到 `coverage/`）。
+- `npm test`: 运行 Node 侧 Jest 覆盖率测试（输出到 `coverage/`）及 `frontend-shadcn/` 的 Vitest 测试。
 - Jest 已忽略 `temp/` 工作目录，避免本地研究目录或临时副本干扰测试扫描。
 - `npm test` 也会执行入口文档示例版本检查（当前覆盖 `README.md`、`quick-start`、`basic-usage`、`cli-options`），要求其示例版本与 `package.json.imageVersion` 保持同一主版本号。
-- `npm run test:unit`: 仅跑 `test/` 下的单元测试。
+- `npm run test:unit`: 运行 `test/` 下的 Jest 单元测试及前端 Vitest 测试。
 - `npm run lint`: 占位的 lint 检查（不做风格约束）。
 - `npm run build:web-editor`: 从 `lib/web/frontend/codemirror-entry.js` 打包生成 `lib/web/frontend/codemirror.bundle.js`（已加入 `.gitignore`，`npm install` 的 `prepare` 钩子会自动执行，无需手动提交产物）。
+- `npm run build:web-shadcn`: 构建默认 shadcn Web 前端并生成 `lib/web/frontend/shadcn.html`；缺少前端依赖时会在 `frontend-shadcn/` 执行 `npm ci`。
+- `npm run dev:web-shadcn`: 启动 shadcn 前端的 Vite 开发服务器；`npm run test:web-shadcn`: 运行其 Vitest 测试。
 - `npm run docs:dev|build|preview`: 启动/构建/预览文档站点。提交前或文档校验时先执行 `npm ci --include=optional`，再执行 `npm run docs:build`（不要并行）。
 - `npm install -g .` / `npm link` / `npm run install-link`: 本地全局安装或软链 CLI。
 
 ## 编码风格与命名约定
-- Node.js >= 22，CommonJS `require`/`module.exports`，四空格缩进，分号结尾。
-- 不使用 ES Modules（`import` / `export`）。
+- Node.js 主项目使用 CommonJS `require`/`module.exports`，四空格缩进，分号结尾；不使用 ES Modules（`import` / `export`）。
+- `frontend-shadcn/` 是例外：使用 TypeScript、React 与 ES Modules，沿用该目录既有的格式和 Vite 工具链。
 - CLI 选项声明靠近 `bin/manyoyo.js`；运行配置合并与归一化优先维护 `lib/runtime-resolver.js`、`lib/runtime-normalizers.js`，worktrees 逻辑维护 `lib/worktrees.js`。
-- 命名清晰简短；测试文件遵循 `*.test.js`。
+- 命名清晰简短；Node 测试文件遵循 `*.test.js`，前端测试遵循 `*.test.ts` 或 `*.test.tsx`。
 - 优先小步改动，避免无关重构，保持改动小、范围清晰。
 
 ## 测试指引
-- 框架为 Jest（见 `package.json` 的 `jest` 配置）。
+- Node 侧框架为 Jest（见 `package.json` 的 `jest` 配置）；`frontend-shadcn/` 使用 Vitest。
 - 新增功能优先补充对应领域测试文件的关键分支与异常路径（CLI 优先 `test/manyoyo.test.js`，Web 优先 `test/web-server-auth.test.js`）。
 - 插件相关改动优先补充 `test/plugin-command.test.js`，至少覆盖 host/container 两类场景的关键分支（配置生成、参数透传、挂载或启动路径）。
 - 修复 bug 时必须至少加入一个回归测试，并注明 case；若无法先写失败测试，需在变更说明中写明原因与替代验证步骤。
 - 涉及网页服务认证时，至少验证未登录 `401`、登录成功可访问、登出后失效。
+- 涉及 shadcn 前端时，补充 `frontend-shadcn/src/` 对应 Vitest 用例，并通过 `npm run test:web-shadcn` 验证。
 
 ## TDD 模式
 - 默认适用：新增功能、行为变更、bug 修复；纯文档改动可例外。
-- Red：先写失败测试，按变更领域选最小 case（CLI 优先 `test/manyoyo.test.js`；Web 优先 `test/web-server-auth.test.js`）。
+- Red：先写失败测试，按变更领域选最小 case（CLI 优先 `test/manyoyo.test.js`；Node Web 优先 `test/web-server-auth.test.js`；shadcn 前端优先 `frontend-shadcn/src/` 对应 Vitest 用例）。
 - Green：只做最小代码改动让测试通过，避免顺手重构。
 - Refactor：在测试持续通过前提下再整理命名或重复逻辑，确保行为不变。
 - 开发阶段优先运行 `npm run test:unit`；提交前运行 `npm test`。
@@ -149,8 +155,9 @@
 - 配置模板见 `manyoyo.example.json`；用户配置默认在 `~/.manyoyo/`。
 - 新增配置项或 CLI 选项时，同步更新 `manyoyo.example.json`、`docs/zh/` 与 `docs/en/`；必要时同步 `README.md` 示例。
 - 新增网页接口/页面时，默认走全局认证网关；仅登录相关路由允许匿名访问。
+- `serve` 默认使用 shadcn 前端（`/`），`/shadcn` 仅作兼容别名；旧版前端保留在 `/legacy`。
 - 调整容器内 Playwright CLI 浏览器安装链路时，必须保证 `playwright-cli install-browser` 安装到全局 `@playwright/cli` 自带的 Playwright，而不是仓库本地 `node_modules/playwright`。
-- 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`）；其余路由默认要求认证。
+- 登录匿名放行路由需显式控制在 allowlist（当前为 `/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`、`/shadcn/auth/login`）；其余路由默认要求认证。
 - 禁止在业务路由里零散补认证，优先在统一入口做认证兜底，避免后续漏校验。
 - 网页前端默认避免常驻高开销视觉效果：不要在常驻元素使用 `animation: ... infinite`，避免大面积叠加 `backdrop-filter` / `filter` 模糊；确需使用时仅限短时场景，并提供 `prefers-reduced-motion` 降级。
 - 当使用 `serve 0.0.0.0:<port>` 对外监听时，必须设置强密码，并通过防火墙限制访问来源。

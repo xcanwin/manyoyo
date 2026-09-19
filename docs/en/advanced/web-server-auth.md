@@ -66,20 +66,21 @@ Current anonymous allowlist:
 - `/auth/logout`
 - `/auth/frontend/login.css`
 - `/auth/frontend/login.js`
-- `/shadcn/auth/login` (see the shadcn/ui preview frontend below)
+- `/shadcn/auth/login` (the default shadcn/ui frontend login page)
 
-## shadcn/ui Preview Frontend (Experimental)
+## Default shadcn/ui Frontend
 
-`serve` mode also ships an experimental shadcn/ui-based frontend, meant to gradually replace the existing frontend under `lib/web/frontend/`. Both coexist without affecting each other.
+`serve` mode uses the shadcn/ui frontend by default. The legacy static frontend remains available at `/legacy` as a fallback.
 
-- Preview URL: `http://127.0.0.1:3000/shadcn`; when not logged in it redirects to `http://127.0.0.1:3000/shadcn/auth/login`, then back to `/shadcn` after a successful login
+- Default URL: `http://127.0.0.1:3000/`; `/shadcn` is a compatibility alias. When unauthenticated, either route redirects to `http://127.0.0.1:3000/shadcn/auth/login`, then back to `/shadcn` after a successful login
+- Legacy frontend URL: `http://127.0.0.1:3000/legacy`
 - The login page reuses the same `/auth/login` endpoint and cookie as the existing frontend, so there's no separate account
-- Source lives in `frontend-shadcn/` at the repo root, a standalone Vite + React project that doesn't affect the rest of the project's CommonJS/no-build conventions
+- Source lives in `frontend-shadcn/` at the repo root, a standalone Vite + React + TypeScript project. It uses ES Modules; the rest of the Node project still follows CommonJS conventions
 
 Before working on it for the first time, install its own dependencies separately (it's a large, separate tree that won't slow down everyday `npm install`):
 
 ```bash
-cd frontend-shadcn && npm install && cd ..
+cd frontend-shadcn && npm ci && cd ..
 ```
 
 Then, depending on what you need:
