@@ -14,6 +14,7 @@ import {
   mergeTraceIntoReply,
   removeLocalPendingPlaceholders,
   resolveComposerBlockReason,
+  shouldDismissRecoveryNotice,
   shouldDiscardMessagesResponse,
   STREAMING_MESSAGE_ID,
   STREAMING_TRACE_ID,
@@ -877,15 +878,22 @@ export function WorkspacePanel({
     sending
   )
 
-  // "连接中断，正在重新同步"这类提示只在对账期间有意义：断线后只要跟服务端对过账
-  // 且这一轮的 pending 已经消失（recovery poll 把结果补回来了），提示就必须自己
-  // 撤掉，否则任务早就完成了、横幅还一直挂在输入框上方
-  const hasPendingMessage = messages.some((message) => message.pending === true)
+  // "连接中断，正在重新同步"只在真的还没同步上的时候才有意义：一旦断线后成功
+  // 跟服务端对上一次账（内容已经在正常刷新了），提示就该自己撤掉，不必等整轮
+  // 任务跑完——长任务里那条红色告警会一直挂在输入框上方好几分钟
   React.useEffect(() => {
-    if (!loadErrorRecoverable || sending || hasPendingMessage) return
-    if (messagesSyncTick <= recoverableErrorSyncTickRef.current) return
+    if (
+      !shouldDismissRecoveryNotice({
+        recoverable: loadErrorRecoverable,
+        sending,
+        syncTick: messagesSyncTick,
+        errorSyncTick: recoverableErrorSyncTickRef.current,
+      })
+    ) {
+      return
+    }
     showLoadError("")
-  }, [loadErrorRecoverable, sending, hasPendingMessage, messagesSyncTick, showLoadError])
+  }, [loadErrorRecoverable, sending, messagesSyncTick, showLoadError])
 
   // 与旧版前端 visibilitychange/focus 触发的对账对齐，并补上多设备/多标签页
   // 同时打开同一会话的同步：只靠 visibilitychange/focus 事件只能覆盖"从隐藏切回
@@ -1220,7 +1228,13 @@ export function WorkspacePanel({
       </div>
 
       {view === "activity" && loadError ? (
-        <Alert variant="destructive" className="mx-3 mb-2 min-w-0">
+        // Alert 自带 w-full，配 mx-3 会算成"父容器满宽再往右推 12px"，右边缘顶出屏幕；
+        // w-auto 交回给 margin 控制，左右才对称。
+        // 断线重连是能自愈的状态，用默认样式即可，destructive 的红色留给真正的失败
+        <Alert
+          variant={loadErrorRecoverable ? "default" : "destructive"}
+          className="mx-3 mb-2 w-auto min-w-0"
+        >
           <AlertDescription className="break-words">{loadError}</AlertDescription>
         </Alert>
       ) : null}

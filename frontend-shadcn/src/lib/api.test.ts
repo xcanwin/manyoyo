@@ -4,9 +4,11 @@ import {
   applyServerMessageIds,
   applyTraceEventUpdate,
   formatComposerModeLabel,
+  formatLogExtra,
   isSessionOfContainer,
   isStreamConnectionError,
   LOCAL_USER_MESSAGE_ID_PREFIX,
+  logLevelBadgeVariant,
   mergeToolTraceEvents,
   mergeTraceIntoReply,
   nextRecoveryPollDelay,
@@ -14,6 +16,7 @@ import {
   resolveComposerBlockReason,
   scoreSearchCandidate,
   shouldDiscardMessagesResponse,
+  shouldDismissRecoveryNotice,
   STREAMING_MESSAGE_ID,
   STREAMING_TRACE_ID,
   summarizeTraceFlow,
@@ -501,5 +504,65 @@ describe("scoreSearchCandidate", () => {
 
   test("空搜索词全部命中", () => {
     expect(scoreSearchCandidate("container:whatever", "")).toBe(1)
+  })
+})
+
+// 回归：断线提示原本要等整轮任务跑完（pending 消失）才撤掉。可是断线后恢复轮询
+// 立刻就把内容同步回来了，界面明明在正常更新，"正在重新同步…"却还挂在输入框上方
+// 好几分钟。应该是"断线之后成功对上一次账"就撤掉，而不是等任务结束
+describe("shouldDismissRecoveryNotice", () => {
+  const base = { recoverable: true, sending: false, syncTick: 5, errorSyncTick: 3 }
+
+  test("断线后成功对账过一次就撤掉提示", () => {
+    expect(shouldDismissRecoveryNotice({ ...base })).toBe(true)
+  })
+
+  // 判据里刻意不包含"是否还有 pending 消息"：任务跑多久都不该影响这条提示，
+  // 只要同步恢复了就撤。这也是这次回归的根因——原来要等 pending 清空
+  test("只看对账进度，不看任务有没有跑完", () => {
+    expect(shouldDismissRecoveryNotice({ ...base, syncTick: 4 })).toBe(true)
+    expect(shouldDismissRecoveryNotice({ ...base, syncTick: 999 })).toBe(true)
+  })
+
+  test("还没对上账就不撤，避免本地占位刚清掉的那一瞬间提示一闪而过", () => {
+    expect(shouldDismissRecoveryNotice({ ...base, syncTick: 3 })).toBe(false)
+    expect(shouldDismissRecoveryNotice({ ...base, syncTick: 2 })).toBe(false)
+  })
+
+  test("本标签页正在重新发送时不撤", () => {
+    expect(shouldDismissRecoveryNotice({ ...base, sending: true })).toBe(false)
+  })
+
+  test("不是可恢复类错误（如 409）不受此逻辑影响，要一直显示", () => {
+    expect(shouldDismissRecoveryNotice({ ...base, recoverable: false })).toBe(false)
+  })
+})
+
+// 运行日志视图的两个纯函数：级别配色必须用语义变体（跟随亮/暗主题），
+// 附加字段按 key=value 展开，对象兜底成 JSON 而不是 [object Object]
+describe("运行日志渲染", () => {
+  test("级别对应的 Badge 变体", () => {
+    expect(logLevelBadgeVariant("ERROR")).toBe("destructive")
+    expect(logLevelBadgeVariant("WARN")).toBe("outline")
+    expect(logLevelBadgeVariant("INFO")).toBe("secondary")
+    expect(logLevelBadgeVariant("")).toBe("secondary")
+  })
+
+  test("附加字段展开成 key=value", () => {
+    expect(
+      formatLogExtra({ session: "demo", elapsedMs: 1200, runContinues: true })
+    ).toEqual(["session=demo", "elapsedMs=1200", "runContinues=true"])
+  })
+
+  test("嵌套对象用 JSON 兜底，空值用占位符", () => {
+    expect(formatLogExtra({ applied: { a: 1 }, missing: null })).toEqual([
+      'applied={"a":1}',
+      "missing=—",
+    ])
+  })
+
+  test("没有附加字段时返回空数组", () => {
+    expect(formatLogExtra(undefined)).toEqual([])
+    expect(formatLogExtra({})).toEqual([])
   })
 })

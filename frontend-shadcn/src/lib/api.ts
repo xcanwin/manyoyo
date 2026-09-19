@@ -24,6 +24,40 @@ export type SessionSummary = {
   agentRunning?: boolean
 }
 
+export type ServeLogEntry = {
+  ts: string
+  pid: number
+  level: string
+  message: string
+  extra: Record<string, unknown>
+}
+
+export type ServeLogPage = {
+  date: string
+  entries: ServeLogEntry[]
+  nextEndOffset: number | null
+  limit: number
+}
+
+// 日志级别对应的 Badge 变体：error 用 destructive，warn 用 outline 提示但不刺眼，
+// 其余走 secondary。全部是语义色，亮色/暗色主题都自动跟随
+export function logLevelBadgeVariant(level: string): "secondary" | "destructive" | "outline" {
+  const normalized = String(level || "").toUpperCase()
+  if (normalized === "ERROR") return "destructive"
+  if (normalized === "WARN") return "outline"
+  return "secondary"
+}
+
+// 日志行的结构化附加字段渲染成 "key=value" 列表，对象/数组用 JSON 兜底
+export function formatLogExtra(extra: Record<string, unknown> | undefined): string[] {
+  if (!extra || typeof extra !== "object") return []
+  return Object.entries(extra).map(([key, value]) => {
+    if (value === null || value === undefined) return `${key}=—`
+    if (typeof value === "object") return `${key}=${JSON.stringify(value)}`
+    return `${key}=${String(value)}`
+  })
+}
+
 export type TraceEvent = {
   provider?: string
   kind: string
@@ -415,6 +449,22 @@ export function scoreSearchCandidate(value: string, search: string): number {
   const keyword = search.trim().toLowerCase()
   if (!keyword) return 1
   return value.toLowerCase().includes(keyword) ? 1 : 0
+}
+
+// 断线提示（"正在重新同步…"）什么时候该自己撤掉。
+// 判据是"断线之后有没有成功跟服务端对上一次账"，而不是"整轮任务跑没跑完"——
+// 恢复轮询通常一两秒就把内容同步回来了，界面肉眼可见在正常更新，这时候还挂着
+// 一条红色告警纯属吓人；反过来，对账一次都没成功前不能撤，否则本地占位刚被
+// 清掉、服务端快照还没回来的那一瞬间 pending 恰好为空，提示会一闪而过
+export function shouldDismissRecoveryNotice(params: {
+  recoverable: boolean
+  sending: boolean
+  syncTick: number
+  errorSyncTick: number
+}): boolean {
+  if (!params.recoverable) return false
+  if (params.sending) return false
+  return params.syncTick > params.errorSyncTick
 }
 
 export async function apiStream(

@@ -4,6 +4,7 @@ import {
   MessageCircleIcon,
   MoreHorizontalIcon,
   PlusIcon,
+  ScrollTextIcon,
   SearchIcon,
   SettingsIcon,
 } from "lucide-react"
@@ -28,6 +29,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { CloneNameDialog, type CloneMode } from "@/components/clone-name-dialog"
 import { CreateContainerDialog } from "@/components/create-container-dialog"
+import { LogsDialog } from "@/components/logs-dialog"
 import { PromptDialog } from "@/components/prompt-dialog"
 import { QuickChatSetupDialog } from "@/components/quick-chat-setup-dialog"
 import { SearchDialog } from "@/components/search-dialog"
@@ -149,6 +151,7 @@ export function AppSidebar({
   const [quickChatSetupOpen, setQuickChatSetupOpen] = React.useState(false)
   const [quickChatBusy, setQuickChatBusy] = React.useState(false)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const [logsOpen, setLogsOpen] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [actionError, setActionError] = React.useState("")
   const [remarkDialog, setRemarkDialog] = React.useState<{
@@ -451,7 +454,7 @@ export function AppSidebar({
   // base-ui 会复用这层已有的遮罩、不再单独虚化——手动给 Sheet 内容虚化+禁用交互，
   // 跟 create-container-dialog.tsx 里嵌套打开目录选择器时的处理方式保持一致
   const anyDialogOpen = Boolean(
-    searchOpen || quickChatSetupOpen || settingsOpen || createOpen || remarkDialog || cloneDialog || removeDialog
+    searchOpen || quickChatSetupOpen || settingsOpen || logsOpen || createOpen || remarkDialog || cloneDialog || removeDialog
   )
 
   return (
@@ -714,19 +717,29 @@ export function AppSidebar({
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="px-3 pb-3">
+      <SidebarFooter className="flex-row gap-2 px-3 pb-3">
         <Button
           variant="outline"
           size="lg"
-          className="w-full"
+          className="flex-1"
           onClick={() => setSettingsOpen(true)}
         >
           <SettingsIcon data-icon="inline-start" />
           系统设置
         </Button>
+        <Button
+          variant="outline"
+          size="lg"
+          className="flex-1"
+          onClick={() => setLogsOpen(true)}
+        >
+          <ScrollTextIcon data-icon="inline-start" />
+          运行日志
+        </Button>
       </SidebarFooter>
 
       <SystemSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <LogsDialog open={logsOpen} onOpenChange={setLogsOpen} />
 
       <SearchDialog
         open={searchOpen}

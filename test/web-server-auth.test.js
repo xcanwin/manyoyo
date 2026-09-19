@@ -6457,6 +6457,293 @@ describe('Web Server Create Defaults', () => {
     });
 });
 
+describe('Web Server Agent Stream Logging', () => {
+    // 临时诊断日志设施删掉之后，整个 web server 只剩 8 处日志，全是服务器级的
+    //（启动/关闭/监听失败/ws 错误/http 异常），agent 流式的生命周期一条都没有。
+    // 结果就是"用户报告某次跑到一半断流了"时，服务端日志里完全查不到这件事。
+    // 这里补的是每轮一条的低频记录，不是逐事件打点（见 CLAUDE.md 的日志量约束）
+    function buildCapturingLogger() {
+        const entries = [];
+        return {
+            entries,
+            info: (message, extra) => entries.push({ level: 'info', message, extra }),
+            warn: (message, extra) => entries.push({ level: 'warn', message, extra }),
+            error: (message, extra) => entries.push({ level: 'error', message, extra })
+        };
+    }
+
+    function writeSlowClaudeDocker(fakeDockerPath, holdMs) {
+        fs.writeFileSync(fakeDockerPath, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] !== 'exec') { process.exit(0); }
+process.stdout.write('{"type":"system","subtype":"init","session_id":"sid"}\\n');
+setTimeout(() => {
+  process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"done"}]}}\\n');
+  process.stdout.write('{"type":"result","subtype":"success"}\\n');
+  process.exit(0);
+}, ${holdMs});
+`, 'utf-8');
+        fs.chmodSync(fakeDockerPath, 0o755);
+    }
+
+    function writeClaudeHistoryFile(webHistoryDir, containerName) {
+        fs.mkdirSync(webHistoryDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(webHistoryDir, `${containerName}.json`),
+            JSON.stringify({
+                containerName,
+                messages: [],
+                agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
+            }, null, 4),
+            'utf-8'
+        );
+    }
+
+    test('一轮 agent 任务要在日志里留下开始与结束记录', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-log-turn-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        writeSlowClaudeDocker(fakeDockerPath, 100);
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        writeClaudeHistoryFile(webHistoryDir, 'demo');
+        const logger = buildCapturingLogger();
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                webHistoryDir,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                logger
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            await requestNdjsonStream(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: '你好' })
+            });
+
+            const started = logger.entries.find(e => e.message === 'agent turn started');
+            const finished = logger.entries.find(e => e.message === 'agent turn finished');
+            expect(started).toEqual(expect.objectContaining({
+                level: 'info',
+                extra: expect.objectContaining({ session: 'demo', agentProgram: 'claude' })
+            }));
+            expect(finished).toEqual(expect.objectContaining({
+                level: 'info',
+                extra: expect.objectContaining({ session: 'demo', exitCode: 0, interrupted: false })
+            }));
+            expect(typeof finished.extra.durationMs).toBe('number');
+            // prompt 内容不能进日志：会话内容属于用户数据，日志只记元信息
+            expect(JSON.stringify(logger.entries)).not.toContain('你好');
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('客户端中途断开（代理掐流/关页面）要记一条 warn，并写明任务仍在继续', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-log-abort-'));
+        const port = await getFreePort();
+        const fakeDockerPath = path.join(tempHost, 'fake-docker.js');
+        writeSlowClaudeDocker(fakeDockerPath, 1500);
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        writeClaudeHistoryFile(webHistoryDir, 'demo');
+        const logger = buildCapturingLogger();
+
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: fakeDockerPath,
+                webHistoryDir,
+                containerExists: () => true,
+                getContainerStatus: () => 'running',
+                logger
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            // 读到第一个事件就掐断连接，模拟反代空闲超时 / 用户关掉页面
+            const controller = new AbortController();
+            const response = await fetch(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: {
+                    Cookie: authCookie,
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ prompt: '慢慢想' }),
+                signal: controller.signal
+            });
+            const reader = response.body.getReader();
+            await reader.read();
+            controller.abort();
+
+            // 等服务端把这一轮跑完
+            await new Promise(resolve => setTimeout(resolve, 2500));
+
+            const aborted = logger.entries.find(e => e.message === 'agent stream client disconnected');
+            expect(aborted).toEqual(expect.objectContaining({
+                level: 'warn',
+                extra: expect.objectContaining({ session: 'demo', runContinues: true })
+            }));
+            expect(typeof aborted.extra.elapsedMs).toBe('number');
+            // 断连之后任务照样跑完，结束记录仍要有
+            expect(logger.entries.some(e => e.message === 'agent turn finished')).toBe(true);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('Web Server Log API', () => {
+    function seedServeLog(tempHost, lines) {
+        const logDir = path.join(tempHost, 'logs', 'serve');
+        fs.mkdirSync(logDir, { recursive: true });
+        const today = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const tag = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+        const file = path.join(logDir, `serve-${tag}.log`);
+        fs.writeFileSync(file, lines.map(l => `${l}\n`).join(''), 'utf-8');
+        return { file, tag };
+    }
+
+    function line(level, message, extra) {
+        const tail = extra === undefined ? '' : ` ${JSON.stringify(extra)}`;
+        return `[2026-09-18 14:46:08.123] [pid:1] [${level}] ${message}${tail}`;
+    }
+
+    test('未认证不能读日志', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-log-auth-'));
+        const port = await getFreePort();
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const res = await request(`http://127.0.0.1:${handle.port || port}/api/logs`);
+            expect(res.response.status).toBe(401);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('返回最新日志并支持级别筛选与翻页', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-log-api-'));
+        const port = await getFreePort();
+        const { file } = seedServeLog(tempHost, [
+            line('INFO', 'web server started', { port: 1 }),
+            line('INFO', 'agent turn started', { session: 'demo' }),
+            line('WARN', 'agent stream client disconnected', { session: 'demo', runContinues: true }),
+            line('INFO', 'agent turn finished', { session: 'demo', exitCode: 0 })
+        ]);
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                logger: { path: file, info: () => {}, warn: () => {}, error: () => {} }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const all = await request(`${baseUrl}/api/logs?limit=2`, { headers: { Cookie: authCookie } });
+            expect(all.response.status).toBe(200);
+            expect(all.json.entries.map(e => e.message)).toEqual([
+                'agent turn finished',
+                'agent stream client disconnected'
+            ]);
+            expect(typeof all.json.nextEndOffset).toBe('number');
+
+            const older = await request(
+                `${baseUrl}/api/logs?limit=2&endOffset=${all.json.nextEndOffset}`,
+                { headers: { Cookie: authCookie } }
+            );
+            expect(older.json.entries.map(e => e.message)).toEqual([
+                'agent turn started',
+                'web server started'
+            ]);
+
+            const warnOnly = await request(`${baseUrl}/api/logs?level=warn`, { headers: { Cookie: authCookie } });
+            expect(warnOnly.json.entries).toHaveLength(1);
+            expect(warnOnly.json.entries[0]).toEqual(expect.objectContaining({
+                level: 'WARN',
+                message: 'agent stream client disconnected',
+                extra: expect.objectContaining({ session: 'demo', runContinues: true })
+            }));
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('date 参数必须是 YYYY-MM-DD，挡住目录穿越', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-log-date-'));
+        const port = await getFreePort();
+        const { file, tag } = seedServeLog(tempHost, [line('INFO', 'ok')]);
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                logger: { path: file, info: () => {}, warn: () => {}, error: () => {} }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+
+            const ok = await request(`${baseUrl}/api/logs?date=${tag}`, { headers: { Cookie: authCookie } });
+            expect(ok.response.status).toBe(200);
+
+            const traversal = await request(
+                `${baseUrl}/api/logs?date=${encodeURIComponent('../../../../etc/passwd')}`,
+                { headers: { Cookie: authCookie } }
+            );
+            expect(traversal.response.status).toBe(400);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('返回可选日期列表，便于前端做日期下拉', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-log-dates-'));
+        const port = await getFreePort();
+        const logDir = path.join(tempHost, 'logs', 'serve');
+        fs.mkdirSync(logDir, { recursive: true });
+        fs.writeFileSync(path.join(logDir, 'serve-2026-09-17.log'), '', 'utf-8');
+        fs.writeFileSync(path.join(logDir, 'serve-2026-09-18.log'), '', 'utf-8');
+        fs.writeFileSync(path.join(logDir, 'unrelated.txt'), '', 'utf-8');
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                logger: {
+                    path: path.join(logDir, 'serve-2026-09-18.log'),
+                    info: () => {}, warn: () => {}, error: () => {}
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const res = await request(`${baseUrl}/api/logs/dates`, { headers: { Cookie: authCookie } });
+            expect(res.response.status).toBe(200);
+            expect(res.json.dates).toEqual(['2026-09-18', '2026-09-17']);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('Web Server Session List Performance', () => {
     test('GET /api/sessions 对同一容器的历史文件只读一次，不按 agent 数量重复读', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sessions-nplus1-'));
