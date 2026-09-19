@@ -41,7 +41,7 @@ description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频�
 | `--cp, --cont-path <path>` | 容器工作目录 |
 | `-m, --cont-mode <mode>` | 容器模式：`common` / `dind` / `sock` |
 | `--in, --image-name <name>` | 镜像名称 |
-| `--iv, --image-ver <version>` | 镜像版本，格式必须为 `x.y.z-后缀`，如 `1.9.1-common` |
+| `--iv, --image-ver <version>` | 镜像版本，格式必须为 `x.y.z-后缀`，如 `1.9.2-common` |
 | `-e, --env <env>` | 追加环境变量，可多次传入 |
 | `--ef, --env-file <file>` | 追加环境文件，仅支持绝对路径 |
 | `-v, --volume <volume>` | 追加挂载卷，可多次传入 |
