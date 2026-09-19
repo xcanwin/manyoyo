@@ -16,6 +16,8 @@
   - token 级增量**不写**事件日志、历史落盘按 `AGENT_STREAM_PARTIAL_PERSIST_INTERVAL_MS` 节流；新增逐事件的落盘/日志动作前先想清楚它会不会被每个 token 触发一次。
 - `GET /api/sessions` 是**同步 IO 大户**：逐容器 `readFileSync` + `JSON.parse` 整份历史。前端每标签页 6s 轮询一次，它阻塞多久事件循环就卡多久，正在跑的 `/agent/stream` 只能在空隙里把输出攒着分批推。往这条路径上加同步操作前务必实测耗时；`buildSessionSummary()` 已支持传入调用方加载好的 history，不要再重复读。（`docker ps -a` + 批量 `inspect` 实测仅约 90ms，不是瓶颈，别被旧注释误导）
 - 请求处理链路上注册在**全局认证网关之前**的代码（如 `res.on('finish')` 之类的钩子）必须自带 try/catch：那里抛异常会冒泡成 `uncaughtException`，而 `bin/manyoyo.js` 的处理器直接 `process.exit(1)`——等于未认证请求可打挂 serve。回归用例见 `test/web-server-auth.test.js` 的 `Web Server Robustness`。
+- **终端 WebSocket**：`/api/sessions/:name/terminal/ws`，在 `server.on('upgrade')` 里做 Origin 校验 + 认证 + 容器名校验，再交给 `bindTerminalWebSocket()`。上行 `input` / `ping` / `close`，下行 `output` / `status`（`ready` / `closed`）/ `error` / `pong`；实现是 `docker exec` 里用 `script` 或 python `pty` 引导出的伪 TTY，**不支持动态 resize**（`resize` 消息是预留的空实现，行列只在建连时由 query 参数定死）。并发上限 `WEB_TERMINAL_MAX_SESSIONS = 20`，每条连接对应一个 `ptyProcess`，`ws` 关闭即 `SIGTERM`——所以前端任何「卸载终端组件」的改动都等于杀掉用户正在跑的 shell。
+- 空闲保活是 `/agent/stream` 那条心跳规则的同类问题，**两个入口都要守**：终端侧服务端每 `WEB_TERMINAL_PING_INTERVAL_MS`（30s）发 WebSocket ping 帧，连续 `WEB_TERMINAL_MAX_MISSED_PONGS`（3 次，约 90s）无 pong 才判死；前端另发应用层 `ping`（浏览器 JS 发不出 ping 帧，上行需要自己造流量）。判死阈值不要收紧到一个周期：手机切后台会让连接短暂挂起，误杀等于用户的 shell 没了。升级后的 socket 还要 `setTimeout(0)` + `setKeepAlive`，解除 HTTP 侧空闲超时。
 - 终端 vendor 资源（`/app/vendor/xterm.css`、`xterm.js`、`xterm-addon-fit.js`）由本文件从 `@xterm/*` 依赖映射提供。
 - 新增接口/页面必须走全局认证网关，禁止在业务路由里零散补认证；匿名白名单见根 `AGENTS.md` 的安全约束。
 

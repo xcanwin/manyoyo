@@ -2,7 +2,7 @@
 
 MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 AI 编程助手（Claude Code、Gemini、Codex、OpenCode）的 YOLO/SOLO 模式提供隔离的 Docker/Podman 容器环境。核心原则：最小改动、可验证、中英文文档一致。新增功能前先明确范围与安全影响，再动手改代码。
 
-子目录另有就近生效的指引，改到对应目录时一并遵守：`lib/web/AGENTS.md`（Web 服务端与旧前端）、`frontend-shadcn/AGENTS.md`（默认 Web 前端与样式规范）。
+**动 `lib/web/` 或 `frontend-shadcn/` 之前，先读对应目录的 `AGENTS.md` 再看代码**——`lib/web/AGENTS.md`（Web 服务端与旧前端：流式协议、终端 WebSocket、同步 IO 与保活的既有结论）、`frontend-shadcn/AGENTS.md`（默认 Web 前端：组件地图、移动端与样式规范）。这两份写的都是读代码看不出来、踩过才知道的约束，跳过它们等于把同一个坑再踩一遍。
 
 - 运行环境：Node.js >= 22，容器运行时支持 `podman` 或 `docker`。
 - CLI 入口：`manyoyo` 与 `my` 指向同一可执行文件 `bin/manyoyo.js`。
@@ -29,8 +29,8 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `lib/core/`：会话控制事件的创建/校验/投影与 `FileEventStore`（JSONL 追加日志 + 快照）；`app-error.js` 暂未接入 `sendJson`。
 - `lib/doctor.js`、`capacity.js`、`codex-output.js`、`agent-resume.js`、`dev-release.js`：环境诊断、容量估算、Codex JSONL 解析、会话恢复参数推断、发布向导。
 - `lib/plugin/`：插件路由与 Playwright 插件（场景管理、MCP 集成、compose/Dockerfile 模板）。
-- `lib/web/`：`serve` 网页服务与前端静态资源。
-- `frontend-shadcn/`：默认 Web 前端（`/` 路由，`/shadcn` 为别名），独立 Vite + React + TS 项目。
+- `lib/web/`：`serve` 网页服务与前端静态资源；`server.js` 单文件 6100+ 行，靠 `Grep "^function <名>"` 定位，不要整文件读。
+- `frontend-shadcn/`：默认 Web 前端（`/` 路由，`/shadcn` 为别名），独立 Vite + React + TS 项目，约 70 个源文件；组件地图见该目录 `AGENTS.md`。
 - `docker/`：多阶段 `manyoyo.Dockerfile`、构建缓存 `cache/`（Node.js、JDT LSP、gopls，2 天有效）、各 Agent 默认配置与 supervisor 模板 `res/`。
 - `docs/`：VitePress 文档，中文主维护 `docs/zh/`，英文 `docs/en/`，结构须一致。
 - `test/`：Jest（`*.test.js`）；前端 Vitest 在 `frontend-shadcn/src/`（`*.test.ts(x)`，与源码同目录）。
@@ -58,10 +58,16 @@ npm run build:web-editor # 打包 codemirror.bundle.js（已 .gitignore，npm in
 npm run build:web-shadcn # 构建默认前端单文件产物 shadcn.html，随 npm run prepack 自动执行
 npm run dev:web-shadcn   # 默认前端本地开发；npm run test:web-shadcn 跑其 Vitest
 npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
-npm run lint             # 占位的 lint 检查（不做风格约束）
+npm run lint             # 根目录这条是占位 echo，不检查任何东西；前端的真检查是下面两条
+
+# 改 frontend-shadcn/ 必跑这两条（根目录的 npm test 不含它们）
+cd frontend-shadcn && npm run typecheck   # tsc --noEmit
+cd frontend-shadcn && npm run lint        # eslint；有既存报错，基线与规则说明见该目录 AGENTS.md
 ```
 
 Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版本与 `package.json.imageVersion` 同主版本号。
+
+没有容器运行时的机器上（`npm test` 里那 4 个用例必失败，甚至 `npx jest` 直接报 `jest-circus/build/runner.js ... was not found` 这类环境问题），前端改动用这组替代验证：`cd frontend-shadcn && npm run typecheck && npm run lint`，再回根目录 `npm run test:web-shadcn && npm run build:web-shadcn`；并在交付说明里写清楚哪些没验证。
 
 ## 编码风格
 
