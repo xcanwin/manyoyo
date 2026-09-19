@@ -2,7 +2,7 @@
     "name": "@xcanwin/manyoyo",
     "version": "7.1.5",
     "imageVersion": "1.9.2-common",
-    "playwrightCliVersion": "0.1.18",
+    "playwrightCliVersion": "0.1.21",
     "description": "AI Agent CLI Security Sandbox for Docker and Podman",
     "keywords": [
         "manyoyo",
@@ -60,20 +60,20 @@
         "manyoyo.example.json"
     ],
     "dependencies": {
-        "@playwright/mcp": "0.0.79",
+        "@playwright/mcp": "0.0.82",
         "commander": "^15.0.0",
         "json5": "^2.2.3",
-        "playwright": "1.62.1",
+        "playwright": "1.63.0",
         "ws": "^8.21.3"
     },
     "devDependencies": {
-        "jest": "^30.4.2",
+        "jest": "^30.5.2",
         "vitepress": "^1.6.4"
     },
     "overrides": {
         "glob": "^13.0.6",
         "minimatch": "^10.2.6",
-        "postcss": "^8.5.26",
+        "postcss": "^8.5.28",
         "test-exclude": "^8.0.0",
         "vite": "^6.4.3"
     },
