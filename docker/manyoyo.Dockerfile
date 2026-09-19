@@ -1,10 +1,14 @@
 # ==============================================================================
 # Stage 1: 缓存准备阶段 - 智能检测缓存或下载
 # ==============================================================================
+# 镜像源参数化（默认使用阿里云，可按需覆盖），两个阶段共享同一默认值
+ARG APT_MIRROR=https://mirrors.aliyun.com
+
 FROM ubuntu:24.04 AS cache-stage
 
 ARG TARGETARCH
 ARG TOOL="common"
+ARG APT_MIRROR
 
 # 复制缓存目录（可能为空）
 COPY ./docker/cache/ /cache/
@@ -18,14 +22,25 @@ RUN <<EOX
         *)     ARCH_NODE="$TARGETARCH"; ARCH_GO="$TARGETARCH" ;;
     esac
 
+    # 基础镜像不带 curl，仅在需要下载时按需安装
+    ensure_curl() {
+        if command -v curl > /dev/null 2>&1; then return 0; fi
+        echo "安装 curl（缓存缺失，需联网下载）"
+        sed -i "s|http://[^/]*\.ubuntu\.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
+        apt-get -o Acquire::https::Verify-Peer=false update -y
+        apt-get -o Acquire::https::Verify-Peer=false install -y --no-install-recommends curl ca-certificates
+    }
+
     # Node.js: 检测缓存，不存在则下载
     mkdir -p /opt/node
     if ls /cache/node/node-*-linux-${ARCH_NODE}.tar.gz 1> /dev/null 2>&1; then
         echo "使用 Node.js 缓存"
-        NODE_TAR=$(ls /cache/node/node-*-linux-${ARCH_NODE}.tar.gz | head -1)
+        # 缓存目录可能残留旧版本，取版本号最大的一个
+        NODE_TAR=$(ls /cache/node/node-*-linux-${ARCH_NODE}.tar.gz | sort -V | tail -1)
         tar -xzf ${NODE_TAR} -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE' --no-same-owner
     else
         echo "下载 Node.js"
+        ensure_curl
         NVM_NODEJS_ORG_MIRROR=https://mirrors.tencent.com/nodejs-release/
         NODE_TAR=$(curl -sL ${NVM_NODEJS_ORG_MIRROR}/latest-v24.x/SHASUMS256.txt | grep linux-${ARCH_NODE}.tar.gz | awk '{print $2}')
         curl -fsSL ${NVM_NODEJS_ORG_MIRROR}/latest-v24.x/${NODE_TAR} | tar -xz -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE'
@@ -39,6 +54,7 @@ RUN <<EOX
             tar -xzf /cache/jdtls/jdt-language-server-latest.tar.gz -C /opt/jdtls --no-same-owner
         else
             echo "下载 JDT LSP"
+            ensure_curl
             curl -fsSL https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz | tar -xz -C /opt/jdtls
         fi
     ;; esac
@@ -67,8 +83,8 @@ ARG TARGETARCH
 ARG NODE_VERSION=24
 ARG TOOL="common"
 
-# 镜像源参数化（默认使用阿里云，可按需覆盖）
-ARG APT_MIRROR=https://mirrors.aliyun.com
+# 镜像源参数化（APT_MIRROR 继承 FROM 之前的全局默认值）
+ARG APT_MIRROR
 ARG NPM_REGISTRY=https://mirrors.tencent.com/npm/
 ARG PIP_INDEX_URL=https://mirrors.tencent.com/pypi/simple
 # 轻量级文本解析依赖（可通过 --build-arg 覆盖）

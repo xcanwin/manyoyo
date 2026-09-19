@@ -16,4 +16,11 @@ describe('.dockerignore', () => {
             expect(content).toContain(entry);
         });
     });
+
+    test('放行 Dockerfile 需要 COPY 的构建缓存目录', () => {
+        const content = fs.readFileSync(dockerignorePath, 'utf-8');
+        ['!docker/cache/node', '!docker/cache/jdtls', '!docker/cache/gopls'].forEach(entry => {
+            expect(content.split('\n')).toContain(entry);
+        });
+    });
 });

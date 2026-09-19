@@ -15,8 +15,13 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+# 构建缓存：默认全部排除，仅放行 Dockerfile 会 COPY 的产物目录
+# （node/jdtls/gopls 由 lib/image-build.js 在构建前准备，缺失会触发镜像内下载）
 docker/cache/*
 !docker/cache/.gitkeep
+!docker/cache/node
+!docker/cache/jdtls
+!docker/cache/gopls
 docker/lib/
 nohup.out
 libpod/
