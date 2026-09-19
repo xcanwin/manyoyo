@@ -17,7 +17,13 @@ export function HtmlPreviewPanel({
 }) {
   return (
     <Sheet open={state !== null} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-3xl">
+      {/* SheetContent 默认是 data-[side=right]:w-3/4 + sm:max-w-sm，属性选择器的
+          特异性比裸的 w-full/sm:max-w-3xl 高，直接写会被盖掉（实测移动端只有 75% 宽）。
+          这里用同样的 data-[side=right]: 前缀才压得住：移动端全屏，桌面端占三分之二 */}
+      <SheetContent
+        side="right"
+        className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:w-2/3 data-[side=right]:sm:max-w-none"
+      >
         <SheetHeader className="border-b">
           <SheetTitle className="truncate">{state?.title || "HTML 预览"}</SheetTitle>
           <SheetDescription>沙箱环境渲染，无法访问站点数据</SheetDescription>

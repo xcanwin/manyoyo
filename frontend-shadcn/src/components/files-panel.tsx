@@ -201,7 +201,9 @@ export function FilesPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession?.name, historyOnly])
 
-  async function fetchFile(path: string, readOnly: boolean) {
+  // forceEdit：新建出来的文件即使是 md/html 也直接进编辑态——刚建的是空文件，
+  // 预览一个空白页没有意义，用户的意图就是要写内容
+  async function fetchFile(path: string, readOnly: boolean, forceEdit = false) {
     if (!activeSession) return
     if (!(await confirmLeaveIfDirty())) return
     setMobilePane("detail")
@@ -220,7 +222,7 @@ export function FilesPanel({
       const editable = Boolean(data.kind === "text" && data.editable && !readOnly)
       const isMd = data.kind === "text" && data.language === "markdown"
       const isHtmlFile = data.kind === "text" && data.language === "html"
-      if (editable && !isMd && !isHtmlFile) {
+      if (editable && (forceEdit || (!isMd && !isHtmlFile))) {
         // 纯文本文件打开即可编辑，不用先点一次"编辑"
         setEditContent(data.content || "")
         setMode("edit")
@@ -336,6 +338,11 @@ export function FilesPanel({
       path: target,
     })
     loadList(currentPath)
+    // 新建文件的意图就是要往里写东西：直接打开并进入编辑态，
+    // 省掉"回列表里再找一遍刚建的文件、点开、再点编辑"这三步
+    if (newDialog === "file") {
+      await fetchFile(target, false, true)
+    }
   }
 
   if (!activeSession) {

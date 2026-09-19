@@ -90,6 +90,13 @@ export const MarkdownContent = React.memo(
             "prose-ul:my-[0.6em] prose-ol:my-[0.6em] prose-blockquote:my-[0.6em]",
             // prose-sm 的 code 用 em 相对缩放，算下来比气泡正文还小，这里固定跟正文一样大
             "prose-code:text-sm prose-pre:text-sm prose-pre:my-[0.6em]",
+            // typography 插件默认给行内 code 补一对 ` 伪元素、并把字重提到 600，
+            // 于是 `foo` 在页面上就是"加粗的 foo 前后各挂一个反引号"，既不像代码
+            // 也没有底色区分。去掉伪元素与加粗，换成底色+圆角的常规行内代码样式；
+            // :not(pre)>code 把代码块内部的 code 排除在外，避免和 pre 的底色叠两层
+            "prose-code:before:content-none prose-code:after:content-none prose-code:font-normal",
+            "[&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-foreground/10 [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5",
+            "dark:[&_:not(pre)>code]:bg-foreground/15",
             // 代码块背景改用 foreground 的浅色叠加而不是 muted——跟气泡本身的 muted 底色太接近，
             // 混在一起分不清代码块的边界。prose-pre: 修饰符只改 typography 插件自己的
             // --tw-prose-pre-bg 变量，套不到实际渲染的 background-color 上，改用直接的

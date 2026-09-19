@@ -407,7 +407,10 @@ export function SystemSettingsDialog({
             <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">加载中...</div>
           ) : viewMode === "json" ? (
             <div className="h-full min-h-72">
-              <CodeMirrorEditor value={raw} language="json" readOnly={false} onChange={setRaw} />
+              {/* 配置文件是 JSON5：key 不带引号、可以写注释和尾逗号。用 json 模式解析
+                  会整片报错，缩进/高亮跟着失效——JSON5 本质就是 JS 对象字面量，
+                  用 javascript 模式才能正确缩进与高亮 */}
+              <CodeMirrorEditor value={raw} language="javascript" readOnly={false} onChange={setRaw} />
             </div>
           ) : (
             <Tabs
@@ -417,7 +420,8 @@ export function SystemSettingsDialog({
               orientation="vertical"
               className="h-full min-h-72"
             >
-              <TabsList variant="line" className="w-36 shrink-0">
+              {/* 移动端屏宽有限，分类栏收窄把空间让给右侧表单 */}
+              <TabsList variant="line" className="w-20 shrink-0 sm:w-36">
                 {CATEGORIES.map((category) => (
                   <TabsTrigger key={category.id} value={category.id}>
                     {category.label}

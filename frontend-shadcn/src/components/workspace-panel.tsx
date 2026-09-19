@@ -360,7 +360,10 @@ function CheckView({ detail }: { detail: SessionDetail | null }) {
   const workdirConfigured = Boolean(detail.applied.hostPath && detail.applied.containerPath)
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-auto p-4">
+    // 子项必须 shrink-0：flex 子项默认可压缩，卡片会被压扁到刚好塞满容器，
+    // 容器因此认为"没有溢出"而不出滚动条，卡片内部内容却被裁掉看不见
+    // （移动端高度有限时尤其明显）
+    <div className="flex h-full flex-col gap-3 overflow-auto p-4 [&>*]:shrink-0">
       <InfoCard
         title="运行检查"
         rows={[
@@ -426,7 +429,10 @@ function ConfigView({ detail }: { detail: SessionDetail | null }) {
   commandRows.push({ label: "yolo", value: applied.yolo || "—" })
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-auto p-4">
+    // 子项必须 shrink-0：flex 子项默认可压缩，卡片会被压扁到刚好塞满容器，
+    // 容器因此认为"没有溢出"而不出滚动条，卡片内部内容却被裁掉看不见
+    // （移动端高度有限时尤其明显）
+    <div className="flex h-full flex-col gap-3 overflow-auto p-4 [&>*]:shrink-0">
       <InfoCard
         title="基础配置"
         rows={[
@@ -463,7 +469,10 @@ function DetailView({ detail }: { detail: SessionDetail | null }) {
   const latestTimestampText = detail.latestTimestamp ? formatTime(detail.latestTimestamp) : "暂无"
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-auto p-4">
+    // 子项必须 shrink-0：flex 子项默认可压缩，卡片会被压扁到刚好塞满容器，
+    // 容器因此认为"没有溢出"而不出滚动条，卡片内部内容却被裁掉看不见
+    // （移动端高度有限时尤其明显）
+    <div className="flex h-full flex-col gap-3 overflow-auto p-4 [&>*]:shrink-0">
       <InfoCard
         title="会话概览"
         rows={[
@@ -582,7 +591,9 @@ function Composer({
                     ? "输入容器命令，例如: ls -la"
                     : "输入要发给 AGENT 的内容"
         }
-        className="min-h-16 resize-none"
+        // Textarea 自带 field-sizing-content（跟着内容自动长高）但没有上限，
+        // 粘进几十行就会把聊天内容整个顶出屏幕。加一个高度上限，超出后内部滚动
+        className="max-h-[40vh] min-h-16 resize-none overflow-y-auto"
         value={draft}
         disabled={inputDisabled}
         onChange={(event) => onDraftChange(event.target.value)}
