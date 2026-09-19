@@ -3,6 +3,7 @@
 ## 1) 最小探测（先做，不读取模板/清单）
 - 运行：`ls -la`
 - 运行：`rg --files -g '!.agents/**' -g '!temp/**' -g '!tmp/**' -g '!.tmp/**' | head -n 200`
+- 运行：`rg --files -g 'AGENTS.md' -g '!temp/**'`，掌握根文件与嵌套文件的分布。
 - 识别技术栈入口（如 `src/`、`package.json`、`pyproject.toml`、`Makefile`）。
 
 ## 2) 条件分支判断
@@ -28,6 +29,7 @@
 - 仅在本步骤读取：`assets/AGENTS.zh.template.md`。
 - 若 `AGENTS.md` 已存在，做原位增量更新，保留有效仓库特定内容。
 - 若不存在，基于模板生成并替换所有占位符。
+- 规则只在某个子目录生效时，写入该目录的 `AGENTS.md`，不要堆进根文件。
 
 ## 5) 写入前自检（仅 apply / audit-then-apply 模式）
 - 仅在本步骤读取：`references/quality-checklist.md`。
