@@ -25,6 +25,8 @@
 
 只剩一个文件：`shadcn.html`，是 `npm run build:web-shadcn` 的产物（已 `.gitignore`），由 `loadTemplate()` 在每次请求时读取。服务端不再托管其它前端静态资源，别往这个目录里放新的散装 js/css。
 
+目录里没有任何被跟踪的文件，而 git 不记录空目录——**全新检出（CI、别人第一次 clone）是没有 `lib/web/frontend/` 这个目录的**。任何往这里写文件的构建步骤都必须自己 `mkdir -p`（见 `frontend-shadcn/scripts/emit-shadcn-html.mjs`），否则本地有目录跑得好好的，CI 上直接 ENOENT。
+
 ## 测试
 
 Web 相关改动优先补 `test/web-server-auth.test.js`；涉及认证时至少验证未登录 `401`、登录成功可访问、登出后失效。
