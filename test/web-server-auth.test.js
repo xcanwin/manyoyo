@@ -6461,7 +6461,7 @@ describe('Web Server Agent Stream Logging', () => {
     // 临时诊断日志设施删掉之后，整个 web server 只剩 8 处日志，全是服务器级的
     //（启动/关闭/监听失败/ws 错误/http 异常），agent 流式的生命周期一条都没有。
     // 结果就是"用户报告某次跑到一半断流了"时，服务端日志里完全查不到这件事。
-    // 这里补的是每轮一条的低频记录，不是逐事件打点（见 CLAUDE.md 的日志量约束）
+    // 这里补的是每轮一条的低频记录，不是逐事件打点（见 AGENTS.md 的日志量约束）
     function buildCapturingLogger() {
         const entries = [];
         return {

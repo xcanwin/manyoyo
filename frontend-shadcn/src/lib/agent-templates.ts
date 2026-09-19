@@ -6,7 +6,7 @@ export const CLI_PROMPT_TEMPLATES: Record<string, string> = {
   opencode: "opencode run {prompt}",
 }
 
-// CLAUDE.md 里的 YOLO 别名映射：c/cc/claude、gm/g/gemini、cx/codex、oc/opencode
+// AGENTS.md 里的 YOLO 别名映射：c/cc/claude、gm/g/gemini、cx/codex、oc/opencode
 const YOLO_ALIASES: Record<string, string> = {
   c: "claude",
   cc: "claude",
