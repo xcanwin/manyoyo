@@ -33,7 +33,8 @@ const {
 } = require('../lib/serve-log');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_DEFAULT } = require('../package.json');
 const IMAGE_VERSION_BASE = String(IMAGE_VERSION_DEFAULT || '1.0.0').split('-')[0];
-const IMAGE_VERSION_HELP_EXAMPLE = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
+const GLOBAL_CONFIG_IMAGE_VERSION = String(readManyoyoConfig().config.imageVersion || '').trim();
+const IMAGE_VERSION_HELP_EXAMPLE = GLOBAL_CONFIG_IMAGE_VERSION || IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
 
 // Helper function to format date like bash $(date +%m%d-%H%M)
 function formatDate() {
