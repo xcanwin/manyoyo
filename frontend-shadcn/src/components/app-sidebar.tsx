@@ -10,10 +10,12 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { formatDateTime } from "@/lib/format"
 import {
   apiGet,
   apiPost,
   isSessionOfContainer,
+  pickSessionAfterRemoval,
   type ContainerGroup,
   type SessionSummary,
 } from "@/lib/api"
@@ -80,8 +82,7 @@ export function pickDefaultSessionForContainer(
   return sessions[0] ?? null
 }
 
-// 与旧版前端 loadSidebarNavState/persistSidebarNavState 对齐：记住上次停留的
-// 容器/AGENT 两级导航位置，刷新页面或重开页面后能直接回到原来的上下文
+// 记住上次停留的容器/AGENT 两级导航位置，刷新页面或重开页面后能直接回到原来的上下文
 const SIDEBAR_NAV_STORAGE_KEY = "manyoyo.web.sidebarNav.v1"
 
 function loadPersistedNavState(): { navLevel: NavLevel; navContainer: string } {
@@ -99,14 +100,10 @@ function loadPersistedNavState(): { navLevel: NavLevel; navContainer: string } {
 }
 
 function formatUpdatedAt(value: string): string {
-  if (!value) return "暂无更新"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString()
+  return formatDateTime(value) || "暂无更新"
 }
 
-// 与旧版前端的 suggestCloneContainerName 对齐：从 "-copy1" 起，
-// 避开已存在的容器名，找到最小可用的序号
+// 克隆容器的默认名：从 "-copy1" 起，避开已存在的容器名，找到最小可用的序号
 function suggestCloneContainerName(containers: ContainerGroup[], baseName: string): string {
   const taken = new Set(containers.map((group) => group.containerName))
   const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -169,7 +166,7 @@ export function AppSidebar({
     resolve: (choice: "keep-history" | "with-history" | null) => void
   } | null>(null)
 
-  // 与旧版前端的 confirmRemoveChoice 对齐：取消 / 仅移除保留历史 / 移除并删除历史 三选一
+  // 删除确认是三选一：取消 / 仅移除保留历史 / 移除并删除历史
   function confirmRemoveChoice(
     title: string,
     message: string
@@ -186,7 +183,6 @@ export function AppSidebar({
     })
   }
 
-  // 与旧版前端（app.js groupSessionsByContainer/renderAgentLevel）保持一致：
   // synthetic 是"从未真正对话过"的默认 AGENT 占位符，不计入 AGENT 数也不在列表里展示
   const agentCount = containers.reduce(
     (total, group) => total + group.sessions.filter((s) => s.synthetic !== true).length,
@@ -197,6 +193,14 @@ export function AppSidebar({
     () => (activeGroup?.sessions ?? []).filter((s) => s.synthetic !== true),
     [activeGroup]
   )
+
+  // AGENT 多到需要滚动时，刷新页面或从别处切回来，选中项可能落在可视区外面，
+  // 看起来像"什么都没选中"。block: "nearest" 只在真的看不见时才滚，已经可见
+  // 就不动，避免每次列表刷新都把侧边栏往回拽
+  const activeSessionRef = React.useRef<HTMLButtonElement>(null)
+  React.useEffect(() => {
+    activeSessionRef.current?.scrollIntoView({ block: "nearest" })
+  }, [activeSessionName, navContainer])
 
   React.useEffect(() => {
     try {
@@ -209,8 +213,7 @@ export function AppSidebar({
     }
   }, [navLevel, navContainer])
 
-  // 与旧版前端 pruneSidebarNavState 对齐：会话列表每次刷新后，如果持久化下来的
-  // navContainer 已经不存在了（容器被删除/改名），退回容器列表层级，避免停留在
+  // 会话列表每次刷新后，如果持久化下来的 navContainer 已经不存在了（容器被删除/改名），退回容器列表层级，避免停留在
   // 一个空的、找不到对应容器的 AGENT 列表页。渲染期间对比容器名单签名来判断
   // "是否发生了一次新的刷新"，而不是在 effect 里同步 setState；首次加载数据
   // 完成前（loading）签名固定为 null，不参与校验，避免 containers 还是空数组时
@@ -407,10 +410,14 @@ export function AppSidebar({
         removeHistory,
       })
       if (navContainer === containerName) goToContainers()
-      if (isSessionOfContainer(activeSessionName, containerName)) {
-        onSelectSession(null)
+      const wasActive = isSessionOfContainer(activeSessionName, containerName)
+      const freshSessions = await onRefresh()
+      if (wasActive) {
+        // 整个容器没了，同容器里挑不出接班的，直接取剩下最新创建的会话
+        onSelectSession(
+          pickSessionAfterRemoval(freshSessions, { name: "", containerName })
+        )
       }
-      await onRefresh()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "删除容器失败")
     }
@@ -443,8 +450,11 @@ export function AppSidebar({
       await apiPost(`/api/sessions/${encodeURIComponent(session.name)}/remove-with-history`, {
         removeHistory,
       })
-      if (activeSessionName === session.name) onSelectSession(null)
-      await onRefresh()
+      const wasActive = activeSessionName === session.name
+      const freshSessions = await onRefresh()
+      if (wasActive) {
+        onSelectSession(pickSessionAfterRemoval(freshSessions, session))
+      }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "删除 AGENT 失败")
     }
@@ -599,7 +609,7 @@ export function AppSidebar({
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           render={
-                            <SidebarMenuAction showOnHover>
+                            <SidebarMenuAction showOnHover title="更多操作" aria-label="更多操作">
                               <MoreHorizontalIcon />
                             </SidebarMenuAction>
                           }
@@ -659,6 +669,7 @@ export function AppSidebar({
                 : visibleAgentSessions.map((session) => (
                     <SidebarMenuItem key={session.name}>
                       <SidebarMenuButton
+                        ref={activeSessionName === session.name ? activeSessionRef : undefined}
                         size="lg"
                         isActive={activeSessionName === session.name}
                         onClick={() => selectSession(session)}
@@ -681,7 +692,7 @@ export function AppSidebar({
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           render={
-                            <SidebarMenuAction showOnHover>
+                            <SidebarMenuAction showOnHover title="更多操作" aria-label="更多操作">
                               <MoreHorizontalIcon />
                             </SidebarMenuAction>
                           }
@@ -717,7 +728,7 @@ export function AppSidebar({
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="flex-row gap-2 px-3 pb-3">
+      <SidebarFooter className="flex-row gap-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <Button
           variant="outline"
           size="lg"

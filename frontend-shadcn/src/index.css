@@ -135,6 +135,16 @@
   html, body {
     overscroll-behavior: none;
   }
+  /* 按钮/可点元素关掉双击缩放：终端按键条、发送按钮这类地方经常要连点两下，
+     浏览器默认会把它当成 double-tap zoom，画面突然放大一截。只作用在可点元素上，
+     页面其余部分的双指缩放照常可用（别整页 user-scalable=no，那是无障碍倒退） */
+  button,
+  [role="button"],
+  a,
+  summary,
+  label {
+    touch-action: manipulation;
+  }
   /* marked 生成的表格没有外层滚动容器，宽表格在窄屏下会撑破气泡——
      table 保留内部表格布局的同时把最外层变成可横向滚动的块 */
   .prose table {

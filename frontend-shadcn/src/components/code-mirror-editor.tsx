@@ -33,7 +33,7 @@ const darkGutterFix = EditorView.theme(
   { dark: true }
 )
 
-// 与 lib/web/frontend/codemirror-entry.js 的 resolveLanguageExtension 对齐
+// 按服务端 /fs/read 返回的 language 字段挑 CodeMirror 语言扩展
 function resolveLanguageExtension(language: string) {
   switch (String(language || "").trim()) {
     case "css":

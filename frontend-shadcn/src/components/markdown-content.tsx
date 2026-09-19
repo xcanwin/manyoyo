@@ -28,8 +28,7 @@ export function markdownContentPropsEqual(prev: MarkdownContentProps, next: Mark
   )
 }
 
-// 与旧版前端的 openExternalLinkModalView/confirmExternalLinkOpen 对齐：
-// Agent 回复内容可能包含 Agent 自己生成或从外部抓取的链接，直接点开有钓鱼风险，
+// 外链二次确认：Agent 回复里可能有它自己生成或从外部抓取的链接，直接点开有钓鱼风险，
 // 拦截点击后先展示真实 URL 二次确认，确认后才用 noopener/noreferrer 新标签打开。
 //
 // 用 React.memo + markdownContentPropsEqual——消息列表所在的 ActivityView 每次
@@ -84,7 +83,7 @@ export const MarkdownContent = React.memo(
           className={cn(
             "prose prose-sm dark:prose-invert max-w-none break-words",
             // prose-sm 是为长文档设计的排版参数（行高 ≈1.71、段落上下各留 16px），
-            // 套进聊天气泡显得松散；这里对齐旧版前端 markdown.css 的紧凑排版
+            // 套进聊天气泡显得松散；这里用更紧凑的排版
             // （行高 1.6、块级元素 margin 0.6em、列表项不额外加 margin）
             "prose-p:my-[0.6em] prose-p:leading-[1.6] prose-li:my-0",
             "prose-ul:my-[0.6em] prose-ol:my-[0.6em] prose-blockquote:my-[0.6em]",

@@ -62,19 +62,18 @@ manyoyo serve 127.0.0.1:3000 -U admin -P 'StrongPassword' -d --restart
 
 当前匿名放行路由：
 
-- `/auth/login`
+- `/auth/login`（`POST` 登录接口；`GET` 会跳转到登录页）
 - `/auth/logout`
-- `/auth/frontend/login.css`
-- `/auth/frontend/login.js`
-- `/shadcn/auth/login`（默认 shadcn/ui 前端的登录页）
+- `/shadcn/auth/login`（登录页）
 
-## shadcn/ui 默认前端
+未登录访问任何页面路径都会跳转到 `/shadcn/auth/login`，接口与 `/auth/*` 则直接返回 `401`。
 
-`serve` 模式默认使用基于 shadcn/ui 的前端；旧版静态前端仍保留在 `/legacy`，用于必要时的兜底。
+## shadcn/ui 前端
+
+`serve` 模式的 Web 界面由 shadcn/ui 前端提供。
 
 - 默认地址：`http://127.0.0.1:3000/`；`/shadcn` 是兼容别名。未登录访问两者都会跳转到 `http://127.0.0.1:3000/shadcn/auth/login`，登录成功后跳回 `/shadcn`
-- 旧版前端地址：`http://127.0.0.1:3000/legacy`
-- 登录页复用同一套 `/auth/login` 接口和 cookie，与旧版前端共享登录态，无需单独账号
+- 登录走 `/auth/login` 接口和 cookie
 - 源码在仓库根目录的 `frontend-shadcn/`，是独立的 Vite + React + TypeScript 项目；它使用 ES Modules，本项目其余 Node 代码仍遵循 CommonJS 约定
 
 首次参与开发需要单独装一次它自己的依赖（体积较大，与根目录 `npm install` 分开，不会拖慢日常开发）：

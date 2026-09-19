@@ -28,6 +28,18 @@ function buildTerminalWsUrl(sessionName: string, cols: number, rows: number): st
   return url.toString()
 }
 
+// 终端整块面板（含上下两条工具栏）是固定深色的，和应用的亮/暗主题无关——
+// 终端本来就该长这样，跟着变浅反而和里面 CLI 自己输出的 ANSI 配色打架。
+// 但前景色/光标/选区必须显式给：只设 background 的话这三样走 xterm 默认值，
+// 选中文字时的高亮尤其容易和背景糊在一起看不出选了什么
+const TERMINAL_THEME = {
+  background: "#09090b",
+  foreground: "#e4e4e7",
+  cursor: "#fafafa",
+  cursorAccent: "#09090b",
+  selectionBackground: "#3f3f46",
+} as const
+
 const KEYBAR_KEYS: Array<{ label: string; data: string }> = [
   { label: "esc", data: "\x1b" },
   { label: "tab", data: "\t" },
@@ -75,7 +87,7 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
     altModeRef.current = altMode
   }, [altMode])
 
-  // 与旧版前端 isActiveSessionHistoryOnly 对齐：仅历史会话没有可交互容器，
+  // 仅历史会话没有可交互容器，
   // 不应该自动建立终端连接（否则会静默触发后端新建容器）
   const historyOnly = session?.status === "history"
 
@@ -119,7 +131,7 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
       convertEol: true,
       fontSize: 13,
       cursorBlink: true,
-      theme: { background: "#09090b" },
+      theme: TERMINAL_THEME,
     })
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
@@ -166,7 +178,6 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
       setDisconnected(true)
     }
 
-    // 与旧版前端终端面板的 ctrl/alt 修饰键切换对齐
     const dataDisposable = term.onData((data) => {
       if (!data || socket.readyState !== WebSocket.OPEN) return
       const send = applyModifiers(data, ctrlModeRef.current, altModeRef.current)
@@ -295,7 +306,7 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
       />
       {isMobile ? (
         <form
-          className="flex shrink-0 items-center gap-2 border-t border-zinc-800 bg-zinc-900 px-2 py-1.5"
+          className="flex shrink-0 items-center gap-2 border-t border-zinc-800 bg-zinc-900 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]"
           onSubmit={(event) => {
             event.preventDefault()
             submitMobileInput()

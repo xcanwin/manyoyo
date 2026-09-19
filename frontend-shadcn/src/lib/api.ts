@@ -60,7 +60,11 @@ export function formatLogExtra(extra: Record<string, unknown> | undefined): stri
 
 export type TraceEvent = {
   provider?: string
+  // 结构化事件的 kind 来自服务端（tool / command / mcp / agent_message / status /
+  // error ...）；"output" 是前端兜底合成的，见 toTraceEvent
   kind: string
+  // 仅 kind="output" 有：这行原始输出来自 stdout 还是 stderr，决定显示成什么色
+  stream?: "stdout" | "stderr"
   eventType?: string
   itemType?: string
   text: string
@@ -234,7 +238,6 @@ export function removeLocalPendingPlaceholders(messages: ChatMessage[]): ChatMes
   )
 }
 
-// 与 lib/web/frontend/chat-behavior.js 的 mergeTraceIntoReply 对齐：
 // 把"执行过程"消息（streamTrace: true）合并进紧随其后的正式回复，
 // 供 UI 把执行过程渲染成回复气泡上方的可折叠块
 export function mergeTraceIntoReply(messages: ChatMessage[]): DisplayMessage[] {
@@ -254,6 +257,48 @@ export function mergeTraceIntoReply(messages: ChatMessage[]): DisplayMessage[] {
     result.push(msg)
   }
   return result
+}
+
+// 服务端的 trace 事件不保证带结构化 traceEvent：stderr 行（server.js 的
+// emitStderrTraceLine）和解析不出 JSON 的 stdout 行都只有 text。这类行必须照样
+// 展示——自定义 agentPromptCommand、四大 CLI 之外的 CLI、以及 CLI 报错时，
+// 整轮执行过程可能全是这种裸行，丢掉等于界面上一个字都没有，这里合成一条
+// kind="output" 的事件接住它。
+// 合成事件刻意不用 kind="error"：stderr 里大量是无害告警，判成 error 会让
+// summarizeTraceFlow 一直报"有错误"、面板每轮都自动展开
+export function toTraceEvent(event: {
+  text?: string
+  stream?: string
+  traceEvent?: TraceEvent
+}): TraceEvent | null {
+  if (event.traceEvent) return event.traceEvent
+  const text = String(event.text || "").trim()
+  if (!text) return null
+  return { kind: "output", stream: event.stream === "stderr" ? "stderr" : "stdout", text }
+}
+
+// meta 事件里对用户有意义的两件事：这一轮用的是哪种上下文模式、resume 有没有成功。
+// resume 失败时服务端会静默回退到"把历史重新注入 prompt"，上下文可能和 agent 自己
+// 记的对不上——这条必须让用户看见，否则只会觉得 agent 莫名其妙失忆了
+export function buildStreamMetaTraceEvents(meta: {
+  contextMode?: string
+  resumeAttempted?: boolean
+  resumeSucceeded?: boolean
+}): TraceEvent[] {
+  const events: TraceEvent[] = []
+  const contextMode = String(meta.contextMode || "").trim()
+  if (contextMode) {
+    events.push({ kind: "status", text: `[任务] 上下文模式: ${contextMode}` })
+  }
+  if (meta.resumeAttempted) {
+    events.push({
+      kind: "status",
+      text: meta.resumeSucceeded
+        ? "[任务] 会话恢复成功"
+        : "[任务] 会话恢复失败，已回退到历史注入",
+    })
+  }
+  return events
 }
 
 const MERGEABLE_TRACE_KINDS = new Set(["tool", "command", "mcp"])
@@ -365,7 +410,9 @@ export type StreamEvent =
       userMessageId?: string
       traceMessageId?: string
     }
-  | { type: "trace"; text: string; traceEvent?: TraceEvent }
+  // traceEvent 只在服务端能把这一行解析成结构化事件时才有；其余（stderr、
+  // 非 JSON 的 stdout）只有 text + stream，交给 toTraceEvent 兜底
+  | { type: "trace"; text: string; stream?: "stdout" | "stderr"; traceEvent?: TraceEvent }
   // content_delta 是权威全文（每条 assistant 消息落地时下发一次），
   // content_chunk 是 token 级增量片段：追加到当前流式回复上，reset 表示
   // 换了一条 assistant 消息、从空白重新开始
@@ -393,6 +440,50 @@ export function isStreamConnectionError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   const message = error.message.toLowerCase()
   return STREAM_CONNECTION_ERROR_PATTERNS.some((pattern) => message.includes(pattern))
+}
+
+// AGENT 名里的创建序号：default 记为 1，agent-N 记为 N，其余（含删容器时传进来的
+// 空 agentId）记 0，rank 为 0 表示"没有序号可比"，直接走按创建时间的兜底
+function agentCreationRank(session: { agentId?: string }): number {
+  const agentId = String(session.agentId || "")
+  if (!agentId) return 0
+  if (agentId === "default") return 1
+  const matched = agentId.match(/^agent-(\d+)$/)
+  return matched ? Number(matched[1]) || 0 : 0
+}
+
+function newestFirst(a: SessionSummary, b: SessionSummary): number {
+  return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+}
+
+// 删掉当前正在看的会话之后该接管到哪一个：优先同容器里"上一个"AGENT（创建序号
+// 更小的里最大的那个），没有就取序号更大的里最小的，再不行退回同容器最新创建的；
+// 整个容器都没了才跨容器取最新的一个。
+//
+// 不要图省事直接 onSelectSession(null)：删完一个 AGENT 就把工作台清空、还得自己
+// 再点一次，删多个时尤其难受。synthetic 占位不在侧边栏里显示，也不能选中它。
+export function pickSessionAfterRemoval(
+  sessions: SessionSummary[],
+  removed: { name: string; containerName: string; agentId?: string }
+): SessionSummary | null {
+  const candidates = sessions.filter((s) => s.name !== removed.name && s.synthetic !== true)
+  const sameContainer = candidates.filter((s) => s.containerName === removed.containerName)
+  if (sameContainer.length) {
+    const removedRank = agentCreationRank(removed)
+    if (removedRank > 0) {
+      const lower = sameContainer
+        .filter((s) => agentCreationRank(s) < removedRank)
+        .sort((a, b) => agentCreationRank(b) - agentCreationRank(a))
+      if (lower.length) return lower[0]
+      const higher = sameContainer
+        .filter((s) => agentCreationRank(s) > removedRank)
+        .sort((a, b) => agentCreationRank(a) - agentCreationRank(b))
+      if (higher.length) return higher[0]
+    }
+    return sameContainer.slice().sort(newestFirst)[0]
+  }
+  if (!candidates.length) return null
+  return candidates.slice().sort(newestFirst)[0]
 }
 
 // 会话名是 `containerName` 或 `containerName~agentId`。必须带上分隔符判断，
@@ -493,7 +584,7 @@ export async function apiStream(
   // 本身读完（done）不代表 agent 任务真的结束——网络抖动、代理/浏览器空闲超时、
   // 后台标签页被节流都可能让连接提前断开，而服务端那一轮任务（尤其是耗时更长的
   // 多 agent / 子 agent 任务）其实还在跑。没见过终态事件就把流当成功处理，会让
-  // 调用方误以为任务已结束。与旧版前端 app.js 的 finalResult 校验对齐
+  // 调用方误以为任务已结束
   let sawTerminalEvent = false
   function dispatch(event: StreamEvent) {
     if (event.type === "result" || event.type === "error") sawTerminalEvent = true

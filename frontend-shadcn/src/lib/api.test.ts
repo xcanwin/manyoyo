@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest"
 import {
   applyServerMessageIds,
   applyTraceEventUpdate,
+  buildStreamMetaTraceEvents,
   formatComposerModeLabel,
   formatLogExtra,
   isSessionOfContainer,
@@ -17,12 +18,12 @@ import {
   scoreSearchCandidate,
   shouldDiscardMessagesResponse,
   shouldDismissRecoveryNotice,
+  toTraceEvent,
   STREAMING_MESSAGE_ID,
   STREAMING_TRACE_ID,
   summarizeTraceFlow,
 } from "./api"
 
-// 与旧版前端 test/chat-behavior.test.js 的 mergeTraceIntoReply 用例对齐
 describe("mergeTraceIntoReply", () => {
   test("trace 紧跟着最终回复：合并成一条，携带 pairedTrace，时间用 trace 的时间", () => {
     const user = { id: "u1", role: "user" as const, content: "", timestamp: "" }
@@ -94,7 +95,41 @@ describe("mergeTraceIntoReply", () => {
   })
 })
 
-// 与旧版前端 test/chat-behavior.test.js 的 mergeToolTraceEvents 用例对齐
+describe("toTraceEvent", () => {
+  test("带结构化 traceEvent：原样返回，不做任何包装", () => {
+    const traceEvent = { kind: "tool", toolId: "toolu_1", text: "[工具开始] Bash" }
+    expect(toTraceEvent({ text: "[工具开始] Bash", traceEvent })).toBe(traceEvent)
+  })
+
+  test("只有 stdout 原始行：兜底成 kind=output 的事件，不丢", () => {
+    expect(toTraceEvent({ text: "Loading model...", stream: "stdout" })).toEqual({
+      kind: "output",
+      stream: "stdout",
+      text: "Loading model...",
+    })
+  })
+
+  test("stderr 行标成 stderr，但 kind 仍是 output——避免无害告警把整轮判成有错误", () => {
+    const event = toTraceEvent({ text: "[stderr] warning: deprecated flag", stream: "stderr" })
+    expect(event).toEqual({
+      kind: "output",
+      stream: "stderr",
+      text: "[stderr] warning: deprecated flag",
+    })
+    expect(summarizeTraceFlow([event!], false)).toBe("1 步 · 已完成")
+  })
+
+  test("缺省 stream 当 stdout 处理", () => {
+    expect(toTraceEvent({ text: "plain line" })?.stream).toBe("stdout")
+  })
+
+  test("空行/纯空白不产生事件", () => {
+    expect(toTraceEvent({ text: "" })).toBeNull()
+    expect(toTraceEvent({ text: "   ", stream: "stderr" })).toBeNull()
+    expect(toTraceEvent({})).toBeNull()
+  })
+})
+
 describe("mergeToolTraceEvents", () => {
   test("空输入不抛异常", () => {
     expect(mergeToolTraceEvents([])).toEqual([])
@@ -209,9 +244,6 @@ describe("mergeToolTraceEvents", () => {
   })
 })
 
-// summarizeTraceFlow 的签名与旧版 chat-behavior.js 不同（旧版返回 {count,label} 对象、
-// 接受 options.pending；shadcn 版直接返回拼好的字符串、pending 是位置参数），
-// 按 shadcn 实际实现改写用例，行为语义保持一致
 describe("summarizeTraceFlow", () => {
   test("包含错误事件：标记为有错误（优先级最高）", () => {
     const events = [{ kind: "command", text: "" }, { kind: "error", text: "" }, { kind: "tool", text: "" }]
@@ -564,5 +596,37 @@ describe("运行日志渲染", () => {
   test("没有附加字段时返回空数组", () => {
     expect(formatLogExtra(undefined)).toEqual([])
     expect(formatLogExtra({})).toEqual([])
+  })
+})
+
+describe("buildStreamMetaTraceEvents", () => {
+  test("上下文模式与 resume 成功各落一条 status", () => {
+    expect(
+      buildStreamMetaTraceEvents({ contextMode: "resume", resumeAttempted: true, resumeSucceeded: true })
+    ).toEqual([
+      { kind: "status", text: "[任务] 上下文模式: resume" },
+      { kind: "status", text: "[任务] 会话恢复成功" },
+    ])
+  })
+
+  test("resume 失败要明说回退到历史注入", () => {
+    const events = buildStreamMetaTraceEvents({ resumeAttempted: true, resumeSucceeded: false })
+    expect(events).toEqual([{ kind: "status", text: "[任务] 会话恢复失败，已回退到历史注入" }])
+  })
+
+  test("没尝试 resume 时不产生 resume 那条", () => {
+    expect(buildStreamMetaTraceEvents({ contextMode: "inject" })).toEqual([
+      { kind: "status", text: "[任务] 上下文模式: inject" },
+    ])
+  })
+
+  test("meta 里什么都没有时不产生任何事件（不给摘要凭空加步数）", () => {
+    expect(buildStreamMetaTraceEvents({})).toEqual([])
+    expect(buildStreamMetaTraceEvents({ contextMode: "   " })).toEqual([])
+  })
+
+  test("合成的 status 不会把整轮判成有错误", () => {
+    const events = buildStreamMetaTraceEvents({ contextMode: "resume" })
+    expect(summarizeTraceFlow(events, false)).toBe("1 步 · 已完成")
   })
 })

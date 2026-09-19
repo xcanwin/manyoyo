@@ -1,11 +1,11 @@
 # frontend-shadcn/ 协作指引
 
-根目录 `AGENTS.md` 的补充，仅在改动默认 Web 前端时适用。本目录是独立 Vite 项目：TypeScript + React + ES Modules，沿用目录内既有格式与工具链（根仓库的 CommonJS / 四空格约定不适用于此）。与 `lib/web/frontend/` 并存，不共用组件。
+根目录 `AGENTS.md` 的补充，仅在改动默认 Web 前端时适用。本目录是独立 Vite 项目：TypeScript + React + ES Modules，沿用目录内既有格式与工具链（根仓库的 CommonJS / 四空格约定不适用于此）。它是 `serve` 唯一的 Web 界面。
 
 - 开发：`npm run dev:web-shadcn`；构建：`npm run build:web-shadcn`（产出单文件 `lib/web/frontend/shadcn.html`，随 `npm run prepack` 自动执行）。
 - 测试：Vitest，用例与源码同目录（`*.test.ts` / `*.test.tsx`），`npm run test:web-shadcn` 运行，也随 `npm test` / `npm run test:unit` 自动执行。
-- `/agent/stream` 的 NDJSON 事件协议是跨三处的契约，本目录涉及 `src/lib/api.ts` 的 `StreamEvent` 与 `workspace-panel.tsx` 的事件分支，改动须同步服务端与旧前端，详见 `lib/web/AGENTS.md`。
-- 校验：`npm run typecheck`（`tsc --noEmit`）+ `npm run lint`（eslint），两条都不在根目录 `npm test` 里。lint 基线是 4 error + 2 warning 的既存问题（`app-sidebar`、`logs-dialog`、`markdown-content`、`workspace-panel`），以「数量没变多」为准，不要顺手去修无关文件。
+- `/agent/stream` 的 NDJSON 事件协议是跨前后端的契约，本目录涉及 `src/lib/api.ts` 的 `StreamEvent` 与 `workspace-panel.tsx` 的事件分支，改动须同步服务端，详见 `lib/web/AGENTS.md`。其中 `trace` 事件**不保证带结构化 `traceEvent`**（stderr、非 JSON 的 stdout 只有 `text`），一律先过 `toTraceEvent()` 兜底，别写 `if (event.traceEvent)` 这种会吞掉原始输出的分支。
+- 校验：`npm run typecheck`（`tsc -b --noEmit`，必须带 `-b`：根 tsconfig 是 `files: []` 的 solution 配置，裸 `tsc --noEmit` 一个源文件都不会检查）+ `npm run lint`（eslint），两条都不在根目录 `npm test` 里。lint 基线是 4 error + 2 warning 的既存问题（`app-sidebar`、`logs-dialog`、`markdown-content`、`workspace-panel`），以「数量没变多」为准，不要顺手去修无关文件。
 - eslint 用的是 React Compiler 规则集：`react-hooks/set-state-in-effect`（effect 里直接 setState）和 `react-hooks/refs`（渲染期读 ref）都报 error。状态由外部 props 驱动、确实只能在 effect 里对账时，`eslint-disable-next-line` 要贴在 **setState 那一行**，贴在 `React.useEffect(` 上不生效。
 
 ## 组件地图
@@ -20,7 +20,8 @@
 - `html-preview-panel.tsx`：`Sheet` 里的沙箱 iframe 预览（`allow-scripts` 且不给 `allow-same-origin`）。
 - 弹窗类：`system-settings-dialog` / `create-container-dialog` / `agent-template-dialog` / `model-dialog` / `logs-dialog` / `search-dialog` / `directory-picker-dialog` / `clone-name-dialog` / `prompt-dialog` / `quick-chat-setup-dialog`。
 - 消息渲染：`markdown-content.tsx` / `trace-block.tsx` + `lib/markdown-render.ts` / `lib/sanitize.ts`。
-- `lib/api.ts`：所有 HTTP 与流式调用的出口，`StreamEvent` 类型定义也在这里。
+- `lib/api.ts`：所有 HTTP 与流式调用的出口，`StreamEvent` 类型定义与会话/trace 相关纯函数也在这里。
+- `lib/format.ts`：时间与体积的统一格式化（`formatDateTime` 固定 zh-CN 24 小时制 `MM/DD HH:mm`、`formatBytes`）。新增展示时间/体积的地方一律用它，别再各写一个 `toLocaleString()`。
 - `hooks/`：`use-mobile`（移动端断点）、`use-sessions`、`use-agent-recovery-poll`、`use-resizable-width`、`use-confirm-dialog`、`use-unsaved-changes-dialog`。
 - `components/ui/`（26 个）：shadcn 原样组件，默认不改；要调样式先想能不能在调用处用 variant 解决。
 
@@ -32,6 +33,7 @@
 - shadcn 的 `Sheet` / `Dialog` 默认样式是按桌面分栏设计的（`data-[side=right]:w-3/4`、`data-[side=right]:border-l` 等），移动端全屏时这些宽度和**边框**都要显式压制，否则贴在屏幕边缘的边框会变成一条莫名其妙的竖线。压制必须带同样的 `data-[side=*]:` 前缀才够特异性，裸的 `w-full` / `border-l-0` 会被盖掉；只想在桌面端保留时配 `sm:` 变体（媒体查询规则排在后面，能压住无条件规则）。参考 `html-preview-panel.tsx`。
 - **xterm 在移动端接不住输入法**：合成阶段（候选词、联想）的内容不会进 `onData`，表现是键盘弹出、打字却什么都不显示。终端类输入不要指望它的隐藏 textarea，现在的做法是把那个 textarea 设成 `readOnly` + `inputmode="none"`（不再唤起会吞字的键盘），另给一条普通 `<input>` 输入条承接输入，见 `terminal-view.tsx`。
 - 虚拟键盘弹出会触发容器尺寸变化；依赖 `ResizeObserver` 的组件（如 xterm 的 `fitAddon`）要能接住这种抖动，并跳过尺寸为 0 的回调（标签页隐藏时是 `display:none`）。
+- 贴着屏幕底边的栏（composer、终端输入条、侧栏底部按钮）内边距写成 `pb-[max(<原值>,env(safe-area-inset-bottom))]`：`index.html` 的 viewport 带 `viewport-fit=cover`，加到主屏幕全屏运行时不避让会被 home 指示条压住；桌面端 `env()` 取 0，等价于原值。
 
 ## 样式规范
 

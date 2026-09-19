@@ -23,22 +23,16 @@ import { MarkdownContent } from "@/components/markdown-content"
 import { PromptDialog } from "@/components/prompt-dialog"
 import { ResizeHandle } from "@/components/resize-handle"
 import { Spinner } from "@/components/ui/spinner"
+import { formatBytes, formatDateTime } from "@/lib/format"
 
-// 与旧版前端 file-browser.js 的 FILE_EDIT_MAX_BYTES 对齐：>=2MB 的文件只提供只读全量预览
+// >=2MB 的文件只提供只读全量预览，不进编辑器
 const FILE_EDIT_MAX_BYTES = 2 * 1024 * 1024
 
 function joinPath(base: string, name: string): string {
   return `${base.replace(/\/$/, "")}/${name}`
 }
 
-function formatBytes(size: number): string {
-  if (!Number.isFinite(size)) return "未知大小"
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}
-
-// 与旧版前端 resolveMarkdownImageUrl 对齐：借一个假的 internal origin 把相对路径解析成
+// 借一个假的 internal origin 把相对路径解析成
 // 规范化的绝对路径，再拼到容器文件读取接口 fs/raw
 function resolveMarkdownImageUrl(sessionName: string, basePath: string, relativeHref: string): string {
   try {
@@ -102,7 +96,7 @@ export function FilesPanel({
   const historyOnly = activeSession?.status === "history"
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
   const isMobile = useIsMobile()
-  // 与旧版前端的移动端主从视图对齐：先看目录列表，点开文件后再切到内容页
+  // 移动端主从视图：先看目录列表，点开文件后再切到内容页
   const [mobilePane, setMobilePane] = React.useState<"list" | "detail">("list")
   const { width: listWidth, dragging: listDragging, onHandlePointerDown } = useResizableWidth({
     storageKey: "manyoyo:files-list-width",
@@ -379,17 +373,18 @@ export function FilesPanel({
             disabled={!parentPath}
             onClick={() => loadList(parentPath)}
             title="返回上一层目录"
+            aria-label="返回上一层目录"
           >
             <ArrowUpIcon />
           </Button>
           <PathBar value={sanitizeDisplayText(currentPath)} />
-          <Button variant="outline" size="icon-sm" onClick={() => loadList(currentPath)} title="刷新">
+          <Button variant="outline" size="icon-sm" onClick={() => loadList(currentPath)} title="刷新" aria-label="刷新">
             <RefreshCwIcon />
           </Button>
-          <Button variant="outline" size="icon-sm" onClick={() => setNewDialog("file")} title="新建文件">
+          <Button variant="outline" size="icon-sm" onClick={() => setNewDialog("file")} title="新建文件" aria-label="新建文件">
             <FilePlusIcon />
           </Button>
-          <Button variant="outline" size="icon-sm" onClick={() => setNewDialog("folder")} title="新建文件夹">
+          <Button variant="outline" size="icon-sm" onClick={() => setNewDialog("folder")} title="新建文件夹" aria-label="新建文件夹">
             <FolderPlusIcon />
           </Button>
         </div>
@@ -439,6 +434,16 @@ export function FilesPanel({
                       <FileIcon className="size-4 shrink-0 text-muted-foreground" />
                     )}
                     <span className="truncate">{sanitizeDisplayText(entry.name)}</span>
+                    {/* 体积/修改时间靠右显示：挑日志、找刚改过的文件时全靠这两个值，
+                        只有文件名的列表等于每个都得点开看。空间不够时优先保名字 */}
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {[
+                        entry.kind === "file" ? formatBytes(entry.size, "") : "",
+                        formatDateTime(entry.mtimeMs),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
                   </button>
                 ))}
               </>
@@ -455,11 +460,24 @@ export function FilesPanel({
             <div className="flex shrink-0 items-center justify-between gap-2 border-b p-2">
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 {isMobile ? (
-                  <Button variant="ghost" size="icon-sm" onClick={handleMobileBackToList} title="返回列表">
+                  <Button variant="ghost" size="icon-sm" onClick={handleMobileBackToList} title="返回列表" aria-label="返回列表">
                     <ArrowLeftIcon />
                   </Button>
                 ) : null}
                 <PathBar value={sanitizeDisplayText(selectedPath)} />
+                {/* 当前文件的体积/可编辑性/是否被截断：不写出来的话，"编辑"按钮为什么
+                    是灰的、内容为什么少了一截，都只能靠猜。窄屏放不下就整条隐藏 */}
+                {fileData ? (
+                  <span className="hidden shrink-0 text-xs whitespace-nowrap text-muted-foreground sm:inline">
+                    {[
+                      formatBytes(fileData.size, ""),
+                      fileData.kind === "text" ? (isEditable ? "可编辑" : "只读") : "",
+                      fileData.truncated ? "已截断" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                ) : null}
               </div>
               {fileData?.kind === "text" ? (
                 <div className="flex shrink-0 items-center gap-2">

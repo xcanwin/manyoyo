@@ -20,7 +20,7 @@ type ConfirmRequest = ConfirmOptions & {
   resolve: (confirmed: boolean) => void
 }
 
-// 通用的"确认后继续"弹窗（对齐旧版 confirmFn 的用法），返回 Promise<boolean>，
+// 通用的"确认后继续"弹窗，返回 Promise<boolean>，
 // 供符号链接访问确认、大文件只读预览确认等一次性二选一场景复用。
 // 用 Dialog 而不是 AlertDialog：base-ui 的 AlertDialog 默认不响应背景点击、也没有
 // 右上角关闭按钮（语义上要求必须点按钮才能关闭），这个项目里所有弹窗都要能背景点击关闭

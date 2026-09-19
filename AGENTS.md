@@ -2,7 +2,7 @@
 
 MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 AI 编程助手（Claude Code、Gemini、Codex、OpenCode）的 YOLO/SOLO 模式提供隔离的 Docker/Podman 容器环境。核心原则：最小改动、可验证、中英文文档一致。新增功能前先明确范围与安全影响，再动手改代码。
 
-**动 `lib/web/` 或 `frontend-shadcn/` 之前，先读对应目录的 `AGENTS.md` 再看代码**——`lib/web/AGENTS.md`（Web 服务端与旧前端：流式协议、终端 WebSocket、同步 IO 与保活的既有结论）、`frontend-shadcn/AGENTS.md`（默认 Web 前端：组件地图、移动端与样式规范）。这两份写的都是读代码看不出来、踩过才知道的约束，跳过它们等于把同一个坑再踩一遍。
+**动 `lib/web/` 或 `frontend-shadcn/` 之前，先读对应目录的 `AGENTS.md` 再看代码**——`lib/web/AGENTS.md`（Web 服务端：流式协议、终端 WebSocket、同步 IO 与保活的既有结论）、`frontend-shadcn/AGENTS.md`（默认 Web 前端：组件地图、移动端与样式规范）。这两份写的都是读代码看不出来、踩过才知道的约束，跳过它们等于把同一个坑再踩一遍。
 
 - 运行环境：Node.js >= 22，容器运行时支持 `podman` 或 `docker`。
 - CLI 入口：`manyoyo` 与 `my` 指向同一可执行文件 `bin/manyoyo.js`。
@@ -29,7 +29,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `lib/core/`：会话控制事件的创建/校验/投影与 `FileEventStore`（JSONL 追加日志 + 快照）；`app-error.js` 暂未接入 `sendJson`。
 - `lib/doctor.js`、`capacity.js`、`codex-output.js`、`agent-resume.js`、`dev-release.js`：环境诊断、容量估算、Codex JSONL 解析、会话恢复参数推断、发布向导。
 - `lib/plugin/`：插件路由与 Playwright 插件（场景管理、MCP 集成、compose/Dockerfile 模板）。
-- `lib/web/`：`serve` 网页服务与前端静态资源；`server.js` 单文件 6100+ 行，靠 `Grep "^function <名>"` 定位，不要整文件读。
+- `lib/web/`：`serve` 网页服务；`server.js` 单文件 6000+ 行，靠 `Grep "^function <名>"` 定位，不要整文件读。
 - `frontend-shadcn/`：默认 Web 前端（`/` 路由，`/shadcn` 为别名），独立 Vite + React + TS 项目，约 70 个源文件；组件地图见该目录 `AGENTS.md`。
 - `docker/`：多阶段 `manyoyo.Dockerfile`、构建缓存 `cache/`（Node.js、JDT LSP、gopls，2 天有效）、各 Agent 默认配置与 supervisor 模板 `res/`。
 - `docs/`：VitePress 文档，中文主维护 `docs/zh/`，英文 `docs/en/`，结构须一致。
@@ -54,14 +54,13 @@ npx jest --testNamePattern="关键词"       # 按测试名称匹配
 npm run docs:dev|build|preview   # build 会检查 dead links；dev 听 127.0.0.1:5173，preview 听 4173
 
 npm install -g . / npm link / npm run install-link   # 本地全局安装或软链 CLI
-npm run build:web-editor # 打包 codemirror.bundle.js（已 .gitignore，npm install 的 prepare 钩子自动执行）
 npm run build:web-shadcn # 构建默认前端单文件产物 shadcn.html，随 npm run prepack 自动执行
 npm run dev:web-shadcn   # 默认前端本地开发；npm run test:web-shadcn 跑其 Vitest
 npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
 npm run lint             # 根目录这条是占位 echo，不检查任何东西；前端的真检查是下面两条
 
 # 改 frontend-shadcn/ 必跑这两条（根目录的 npm test 不含它们）
-cd frontend-shadcn && npm run typecheck   # tsc --noEmit
+cd frontend-shadcn && npm run typecheck   # tsc -b --noEmit（必须 -b，否则一个文件都不检查）
 cd frontend-shadcn && npm run lint        # eslint；有既存报错，基线与规则说明见该目录 AGENTS.md
 ```
 
@@ -153,8 +152,8 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 日志量：`lib/log-path.js` 只按天分文件，**没有轮转、没有保留期、没有大小上限**。不要按「每个 HTTP 请求 / 每个子进程调用 / 每个流式事件」逐条写盘（曾经这么干过，实测约 55000 条、20MB/天），高频路径上只记 warn/error。
 - 在线查看日志的接口一律**不要全量 `readFileSync` + `split('\n')`**：同步读会阻塞事件循环，文件越长越糟；日期/路径类查询参数必须白名单校验（`^\d{4}-\d{2}-\d{2}$` 之类），否则会被拼出目录穿越。
 - 日志内容渲染到 HTML 必须逐字段转义后再进 DOM。日志里含用户 prompt 等任意文本，用字符串拼 `innerHTML` 等于把 prompt 当代码执行。
-- Web 鉴权：所有路由默认认证，匿名白名单仅限 `/auth/login`、`/auth/logout`、`/auth/frontend/login.css`、`/auth/frontend/login.js`、`/shadcn/auth/login`；新增接口/页面必须走全局认证网关，禁止在业务路由里零散补认证。
-- `serve` 默认使用 shadcn 前端（`/`），`/shadcn` 仅作兼容别名；旧版前端保留在 `/legacy`。
+- Web 鉴权：所有路由默认认证，匿名白名单仅限 `/auth/login`、`/auth/logout`、`/shadcn/auth/login`；新增接口/页面必须走全局认证网关，禁止在业务路由里零散补认证。未登录的页面请求一律 302 到 `/shadcn/auth/login`，`/api/*` 与 `/auth/*` 返回 401。
+- `serve` 的 Web 界面只有 `frontend-shadcn/` 一套（`/`，`/shadcn` 是兼容别名），服务端不再托管任何散装前端静态资源。
 - 使用 `serve 0.0.0.0:<port>` 对外监听时必须设置强密码，并通过防火墙限制访问来源。
 - 新增容器模式或挂载选项时不放宽安全校验；`sock` 模式需明确安全风险提示（可访问宿主机 Docker socket）。
 - 调整容器内 Playwright CLI 浏览器安装链路时，必须保证 `playwright-cli install-browser` 安装到全局 `@playwright/cli` 自带的 Playwright，而不是仓库本地 `node_modules/playwright`。

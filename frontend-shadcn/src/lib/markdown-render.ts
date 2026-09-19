@@ -23,7 +23,7 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
 
 export type RenderedMarkdown = { html: string; htmlBlocks: string[] }
 
-// 与旧版前端 markdown-renderer.js 对齐的核心渲染逻辑：抽成纯函数方便单测，
+// markdown 渲染的核心逻辑：抽成纯函数方便单测，
 // MarkdownContent 组件里只负责把 content/enableHtmlPreview 传进来、渲染结果
 // 塞进 dangerouslySetInnerHTML
 export function renderMarkdownToHtml(content: string, enableHtmlPreview: boolean): RenderedMarkdown {

@@ -1,8 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover：让页面铺到刘海屏/挖孔屏的整个物理区域，底部按钮与输入条
+         再用 env(safe-area-inset-*) 自己避让（见 index.css），否则加到主屏幕全屏运行时
+         会被 home 指示条压住。不加 user-scalable=no，双指缩放要留给用户 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>MANYOYO Web</title>
   </head>
   <body>

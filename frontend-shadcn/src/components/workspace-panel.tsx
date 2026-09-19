@@ -8,6 +8,7 @@ import {
   apiStream,
   applyServerMessageIds,
   applyTraceEventUpdate,
+  buildStreamMetaTraceEvents,
   formatComposerModeLabel,
   isStreamConnectionError,
   LOCAL_USER_MESSAGE_ID_PREFIX,
@@ -18,12 +19,14 @@ import {
   shouldDiscardMessagesResponse,
   STREAMING_MESSAGE_ID,
   STREAMING_TRACE_ID,
+  toTraceEvent,
   type ChatMessage,
   type SessionDetail,
   type SessionSummary,
   type TraceEvent,
 } from "@/lib/api"
 import { useAgentRecoveryPoll } from "@/hooks/use-agent-recovery-poll"
+import { formatDateTime } from "@/lib/format"
 import { isNearBottom } from "@/lib/chat-behavior"
 import { markdownToPlainText } from "@/lib/markdown-text"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -147,15 +150,12 @@ function InfoCard({ title, rows }: { title: string; rows: InfoRow[] }) {
 }
 
 function formatTime(value: string): string {
-  if (!value) return ""
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString()
+  return formatDateTime(value)
 }
 
 // markdown 为 undefined 时（用户输入 / 命令输出等非 markdown 消息）只提供一种
-// 复制方式，跟旧版一致；assistant 的 markdown 回复额外提供"复制文本"/"复制
-// Markdown"两个选项，对齐旧版 app.js 里 markdownNode.innerText 与 msg.content 的区分
+// 复制方式；assistant 的 markdown 回复额外提供"复制文本"/"复制 Markdown"两个
+// 选项，前者是渲染后的纯文本，后者是原始 markdown
 function CopyMessageButton({ text, markdown }: { text: string; markdown?: string }) {
   const [open, setOpen] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
@@ -177,6 +177,7 @@ function CopyMessageButton({ text, markdown }: { text: string; markdown?: string
         type="button"
         onClick={() => copy(text)}
         title="复制"
+        aria-label="复制"
         className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
       >
         {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
@@ -191,6 +192,7 @@ function CopyMessageButton({ text, markdown }: { text: string; markdown?: string
           <button
             type="button"
             title="复制"
+            aria-label="复制"
             className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           />
         }
@@ -264,7 +266,6 @@ function ActivityView({
     >
       <div className="flex flex-col gap-3 p-4">
         {displayMessages.map((message) => {
-          // 与旧版前端 body.agent-mode/.command-mode + msg.origin-* 对齐：
           // 切换发送模式时，历史里"另一种模式"产生的消息整体变淡，突出当前模式的上下文
           const origin = message.mode === "agent" || message.mode === "command" ? message.mode : ""
           const dimmed = origin !== "" && origin !== mode
@@ -305,7 +306,6 @@ function ActivityView({
                       // 流式期间只展示纯文本，避免每个 token 到达都触发一次全量
                       // marked.parse + DOMPurify.sanitize（性能开销 + 未闭合代码块/
                       // 标签导致的渲染抖动）；流结束后再一次性走 markdown 渲染，
-                      // 与旧版前端 shouldRenderMarkdown 的思路一致
                       message.pending ? (
                         <div className="whitespace-pre-wrap">{message.content || "…"}</div>
                       ) : (
@@ -350,7 +350,7 @@ function EmptyPane({ text }: { text: string }) {
   )
 }
 
-// 与旧版前端"检查"标签页的 renderCheckCard 对齐：容器状态 / Agent 输入 /
+// "检查"标签页：容器状态 / Agent 输入 /
 // Resume 健康 / 镜像版本 / 工作目录映射 + 最近问题（仅在有 resume 错误时展示）
 function CheckView({ detail }: { detail: SessionDetail | null }) {
   if (!detail) return <EmptyPane text="请先选择左侧的容器 / AGENT" />
@@ -410,7 +410,7 @@ function CheckView({ detail }: { detail: SessionDetail | null }) {
   )
 }
 
-// 与旧版前端"配置"标签页对齐：基础配置 / 路径与资源 / 命令与 Agent
+// "配置"标签页：基础配置 / 路径与资源 / 命令与 Agent
 function ConfigView({ detail }: { detail: SessionDetail | null }) {
   if (!detail) return <EmptyPane text="请先选择左侧的容器 / AGENT" />
 
@@ -459,7 +459,7 @@ function ConfigView({ detail }: { detail: SessionDetail | null }) {
   )
 }
 
-// 与旧版前端"详情"标签页对齐：会话概览 / Agent 运行 / 用量统计 / 最近活动
+// "详情"标签页：会话概览 / Agent 运行 / 用量统计 / 最近活动
 function DetailView({ detail }: { detail: SessionDetail | null }) {
   if (!detail) return <EmptyPane text="请先选择左侧的容器 / AGENT" />
 
@@ -576,8 +576,10 @@ function Composer({
   // 空输入/纯空白时发送按钮直接置灰，而不是点了没反应
   const sendDisabled = inputDisabled || draft.trim() === ""
 
+  // 底部内边距按安全区取大值：加到主屏幕全屏运行时，iOS 的 home 指示条会压在
+  // 输入框上；桌面端 env() 取值为 0，等价于原来的 p-3
   return (
-    <div className="border-t p-3">
+    <div className="border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <Textarea
         placeholder={
           disabled
@@ -593,8 +595,12 @@ function Composer({
                     : "输入要发给 AGENT 的内容"
         }
         // Textarea 自带 field-sizing-content（跟着内容自动长高）但没有上限，
-        // 粘进几十行就会把聊天内容整个顶出屏幕。加一个高度上限，超出后内部滚动
-        className="max-h-[40vh] min-h-16 resize-none overflow-y-auto"
+        // 粘进几十行就会把聊天内容整个顶出屏幕。加一个高度上限，超出后内部滚动。
+        // 系统命令模式下换等宽字体：敲的是 shell 命令，路径/引号/空格数量要对得齐
+        className={cn(
+          "max-h-[40vh] min-h-16 resize-none overflow-y-auto",
+          mode === "command" && "font-mono"
+        )}
         value={draft}
         disabled={inputDisabled}
         onChange={(event) => onDraftChange(event.target.value)}
@@ -793,7 +799,7 @@ export function WorkspacePanel({
   )
 
   const sending = activeSession ? sendingNames.has(activeSession.name) : false
-  // 与旧版前端 hasPendingAgentMessagesForSession 对齐：composer 是否可用不能只看
+  // composer 是否可用不能只看
   // 本标签页这一次 fetch 有没有结束——网络抖动/标签页节流可能让本地 stream 提前
   // 断开，但服务端那一轮 agent 任务（尤其是耗时更长的多 agent / 子 agent 任务）
   // 其实还在跑，这时消息列表里会留着一条 pending 的 agent 回复，据此继续禁用输入
@@ -882,7 +888,7 @@ export function WorkspacePanel({
     })
   }, [loadMessages, loadDetail])
 
-  // 与旧版前端 scheduleAgentRecoveryPoll 对齐：刷新页面/切回会话后，如果后端
+  // 刷新页面/切回会话后，如果后端
   // 仍在跑一次 Agent 回合（消息里还留着 pending 记录），持续轮询直到它结束；
   // 但如果本标签页自己正在为这个会话跑 stream，则不需要（也不应该）叠加轮询
   useAgentRecoveryPoll(
@@ -911,8 +917,8 @@ export function WorkspacePanel({
     showLoadError("")
   }, [loadErrorRecoverable, sending, messagesSyncTick, showLoadError])
 
-  // 与旧版前端 visibilitychange/focus 触发的对账对齐，并补上多设备/多标签页
-  // 同时打开同一会话的同步：只靠 visibilitychange/focus 事件只能覆盖"从隐藏切回
+  // visibilitychange/focus 触发对账，另外补上多设备/多标签页同时打开同一会话
+  // 的同步：只靠 visibilitychange/focus 事件只能覆盖"从隐藏切回
   // 可见"这一次状态跳变——如果手机和电脑两个窗口同时摆在眼前、都没有失去过
   // 焦点，双方都不会触发任何事件，一边发的消息不会自动出现在另一边，必须手动
   // 刷新或者随便发点内容才会重新拉取。这里在页面可见期间加一个轻量轮询，同时
@@ -1053,8 +1059,21 @@ export function WorkspacePanel({
               traceMessageId = event.traceMessageId
             }
           }
+          // meta 只在开跑时来一次，把上下文模式和 resume 结果落进执行过程里：
+          // resume 失败会静默回退成"历史注入"（上下文可能对不齐），不说一声的话
+          // 用户只会觉得 agent 突然失忆。一次性事件，不影响流式吞吐
+          const metaLines = buildStreamMetaTraceEvents(event)
+          if (metaLines.length) {
+            traceEvents.push(...metaLines)
+            setSessionMessages(name, (prev) =>
+              applyTraceEventUpdate(prev, traceMessageId, { traceEvents: traceEvents.slice() })
+            )
+          }
         } else if (event.type === "trace") {
-          if (event.traceEvent) traceEvents.push(event.traceEvent)
+          // 结构化事件优先，没有就兜底成一条 output 事件——不能只认 traceEvent，
+          // 否则 stderr / 非 JSON stdout 这类原始行会被静默丢掉（见 toTraceEvent）
+          const traceEvent = toTraceEvent(event)
+          if (traceEvent) traceEvents.push(traceEvent)
           setSessionMessages(name, (prev) =>
             applyTraceEventUpdate(prev, traceMessageId, { traceEvents: traceEvents.slice() })
           )
@@ -1166,7 +1185,7 @@ export function WorkspacePanel({
           </Button>
           <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
             <PopoverTrigger
-              render={<Button variant="ghost" size="icon-sm" title="更多标签页" />}
+              render={<Button variant="ghost" size="icon-sm" title="更多标签页" aria-label="更多标签页" />}
             >
               <EllipsisIcon />
             </PopoverTrigger>

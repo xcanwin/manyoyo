@@ -24,8 +24,7 @@ import { apiGet, apiPut, type SessionSummary } from "@/lib/api"
 import { CLI_PROMPT_TEMPLATES } from "@/lib/agent-templates"
 
 const CUSTOM_CLI = "custom"
-// 与旧版前端 agentCliSelect 的空值选项（"继承容器默认"）对齐：
-// 选中后按 getInheritedContainerTemplateText 的优先级回填预览文本，
+// "继承容器默认"这个空值选项：选中后按 getInheritedContainerTemplateText 的优先级回填预览文本，
 // 但保存时如果仍停留在这个选项，要显式清空覆盖字段，让它真正走继承
 const INHERIT_CLI = "__inherit__"
 

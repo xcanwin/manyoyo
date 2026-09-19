@@ -2,9 +2,9 @@ import { describe, expect, test } from "vitest"
 
 import { renderMarkdownToHtml } from "./markdown-render"
 
-// 对齐旧版前端 test/markdown-renderer.test.js 覆盖的行为（链接安全属性、外链图片
+// 覆盖 markdown 渲染的安全行为（链接安全属性、外链图片
 // 降级、XSS 防护），具体实现方式不同（shadcn 用 DOMPurify + React Dialog 二次确认，
-// 不是旧版手写转义 + window.confirm），按 shadcn 实际输出改写用例
+// 而不是手写转义 + window.confirm），用例按实际输出书写
 describe("renderMarkdownToHtml", () => {
   test("链接带上 noopener/noreferrer 与 no-referrer，防止 Referer 泄露", () => {
     const { html } = renderMarkdownToHtml("[OpenAI](https://openai.com)", false)

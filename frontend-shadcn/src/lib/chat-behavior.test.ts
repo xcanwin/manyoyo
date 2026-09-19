@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest"
 
 import { buildDocumentTitle, isNearBottom } from "./chat-behavior"
 
-// 与旧版前端 test/chat-behavior.test.js 的 isNearBottom 用例对齐
 describe("isNearBottom", () => {
   test("返回 true：滚动条已经在底部（distance = 0）", () => {
     expect(isNearBottom(160, 200, 40, 40)).toBe(true)
@@ -26,7 +25,6 @@ describe("isNearBottom", () => {
   })
 })
 
-// 与旧版前端 test/chat-behavior.test.js 的 buildDocumentTitle 用例对齐
 describe("buildDocumentTitle", () => {
   test("有 agent 名时拼接标题", () => {
     expect(buildDocumentTitle("AGENT 1")).toBe("AGENT 1 · MANYOYO Web")

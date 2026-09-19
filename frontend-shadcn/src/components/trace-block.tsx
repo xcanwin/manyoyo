@@ -7,6 +7,7 @@ import {
   OctagonAlertIcon,
   PlugIcon,
   TerminalIcon,
+  TriangleAlertIcon,
   WrenchIcon,
 } from "lucide-react"
 
@@ -43,8 +44,8 @@ function stringifyPretty(value: unknown): string {
   }
 }
 
-// 与旧版前端 createTraceEventCard 的 bodyParts 拼装逻辑对齐：按事件种类展示
-// 命令/工具/参数/结果/错误等字段，参数与结果都是 JSON.stringify(value, null, 2) 后的原文
+// 按事件种类展示命令/工具/参数/结果/错误等字段，参数与结果都是
+// JSON.stringify(value, null, 2) 后的原文
 function buildBodyParts(event: TraceEvent): BodyPart[] {
   const parts: BodyPart[] = []
   const push = (label: string, value: unknown) => {
@@ -100,6 +101,7 @@ function CopyBodyButton({ text }: { text: string }) {
       type="button"
       onClick={handleCopy}
       title="复制"
+      aria-label="复制"
       className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
     >
       {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
@@ -125,16 +127,38 @@ function TraceBodySection({ part }: { part: BodyPart }) {
 
 function TraceEventRow({ event }: { event: TraceEvent }) {
   const [open, setOpen] = React.useState(false)
-  const Icon = KIND_ICON[event.kind] || MessageSquareIcon
+  const isRawOutput = event.kind === "output"
+  const isStderr = isRawOutput && event.stream === "stderr"
+  const Icon = isStderr
+    ? TriangleAlertIcon
+    : isRawOutput
+      ? TerminalIcon
+      : KIND_ICON[event.kind] || MessageSquareIcon
   const isNarration = event.kind === "agent_message"
   const bodyParts = React.useMemo(() => buildBodyParts(event), [event])
   const expandable = isNarration || bodyParts.length > 0
 
   if (!expandable) {
     return (
+      // 原始输出行（stdout/stderr 兜底）用等宽字体照原样展示，stderr 标红；
+      // 行可能很长，截断后把全文放进 title 方便悬浮查看
       <div className="flex items-start gap-1.5 px-1.5 py-1 text-sm">
-        <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-        <span className="flex-1 truncate text-foreground">{event.text}</span>
+        <Icon
+          className={cn(
+            "mt-0.5 size-3.5 shrink-0",
+            isStderr ? "text-destructive" : "text-muted-foreground"
+          )}
+        />
+        <span
+          title={isRawOutput ? event.text : undefined}
+          className={cn(
+            "flex-1 truncate",
+            isRawOutput && "font-mono text-xs",
+            isStderr ? "text-destructive" : "text-foreground"
+          )}
+        >
+          {event.text}
+        </span>
       </div>
     )
   }
@@ -165,18 +189,23 @@ function TraceEventRow({ event }: { event: TraceEvent }) {
 }
 
 export function TraceBlock({ trace }: { trace: ChatMessage }) {
-  const [open, setOpen] = React.useState(false)
+  // null = 用户还没手动开合过，此时跟随"有错误就自动展开"：出错的那一轮
+  // 不该把错误藏在折叠面板里。用户手动点过之后以用户的选择为准，
+  // 不会因为后续又来一条 error 事件把面板重新掰开
+  const [userOpen, setUserOpen] = React.useState<boolean | null>(null)
   const merged = React.useMemo(
     () => mergeToolTraceEvents(trace.traceEvents || []),
     [trace.traceEvents]
   )
   if (!merged.length) return null
   const summary = summarizeTraceFlow(merged, trace.pending === true)
+  const hasError = merged.some((event) => event.kind === "error")
+  const open = userOpen ?? hasError
 
   return (
     <Collapsible
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={setUserOpen}
       className="w-full max-w-[75%]"
     >
       <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted">

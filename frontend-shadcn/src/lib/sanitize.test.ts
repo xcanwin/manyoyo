@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest"
 
 import { sanitizeDisplayText } from "./sanitize"
 
-// 与旧版前端 test/file-browser-sanitize.test.js 的用例对齐
 describe("sanitizeDisplayText", () => {
   test("leaves normal filenames untouched", () => {
     expect(sanitizeDisplayText("normal-file.txt")).toBe("normal-file.txt")

@@ -4,6 +4,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { apiGet } from "@/lib/api"
+import { formatBytes } from "@/lib/format"
 
 type CapacityReport = {
   runtimeCommand: string
@@ -12,19 +13,6 @@ type CapacityReport = {
   disk: { path: string; availableBytes: number | null }
   estimatedAdditionalContainers: number | null
   notes: string[]
-}
-
-function formatBytes(bytes: number | null): string {
-  if (bytes === null || !Number.isFinite(bytes)) return "未知"
-  if (bytes < 1024) return `${bytes} B`
-  const units = ["KB", "MB", "GB", "TB"]
-  let value = bytes
-  let unitIndex = -1
-  do {
-    value /= 1024
-    unitIndex += 1
-  } while (value >= 1024 && unitIndex < units.length - 1)
-  return `${value.toFixed(1)} ${units[unitIndex]}`
 }
 
 function StatRow({ label, value }: { label: string; value: string }) {

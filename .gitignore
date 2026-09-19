@@ -20,6 +20,5 @@ coverage/
 nohup.out
 libpod/
 .playwright-cli/
-lib/web/frontend/codemirror.bundle.js
 lib/web/frontend/shadcn.html
 .claude/

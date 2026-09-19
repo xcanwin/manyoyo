@@ -9,7 +9,7 @@
     "build:single": "npm run build && node scripts/emit-shadcn-html.mjs",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "preview": "vite preview"
   },
