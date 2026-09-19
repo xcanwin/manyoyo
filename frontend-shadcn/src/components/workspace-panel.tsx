@@ -705,6 +705,22 @@ export function WorkspacePanel({
   creatingAgent: boolean
 }) {
   const [view, setView] = React.useState<View>("activity")
+  const activeSessionName = activeSession?.name ?? null
+  // 终端一旦打开就常驻：切到聊天/文件等标签只是隐藏，不卸载——卸载会关掉
+  // WebSocket，容器里那个 shell 随之被回收，切回来只能是个全新的 shell，
+  // 正在跑的命令和屏幕内容全没了。这个状态记的是"终端当前挂在哪个会话上"，
+  // 离开终端标签后靠它判断该不该继续保活；换了会话就清空，免得回到原会话时
+  // 在后台又悄悄开一个没人要的 shell（还会顺带把容器拉起来）
+  const [terminalSessionName, setTerminalSessionName] = React.useState<string | null>(null)
+  // 标签页与当前会话都由外部（props / 上层状态）驱动，只能在 effect 里对账；
+  // 值没变时 setState 会被 React 直接短路，不会引起额外渲染
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTerminalSessionName((prev) => {
+      if (view === "terminal") return activeSessionName
+      return prev === activeSessionName ? prev : null
+    })
+  }, [view, activeSessionName])
   // 消息按会话名隔离，而不是单一全局数组：流式回调各自更新自己会话的 key，
   // 用户在 A 会话跑长任务时切到 B 再切回 A，A 的实时流式状态（用户消息、执行
   // 过程、增量回复）原样还在——单一数组在切换时会被加载响应覆盖，本地流式
@@ -1213,7 +1229,11 @@ export function WorkspacePanel({
             />
           )
         ) : null}
-        {view === "terminal" ? <TerminalView session={activeSession} /> : null}
+        {terminalSessionName && terminalSessionName === activeSessionName ? (
+          <div className={cn("h-full", view !== "terminal" && "hidden")}>
+            <TerminalView key={terminalSessionName} session={activeSession} />
+          </div>
+        ) : null}
         {view === "files" ? (
           <FilesPanel
             activeSession={activeSession}

@@ -19,10 +19,12 @@ export function HtmlPreviewPanel({
     <Sheet open={state !== null} onOpenChange={onOpenChange}>
       {/* SheetContent 默认是 data-[side=right]:w-3/4 + sm:max-w-sm，属性选择器的
           特异性比裸的 w-full/sm:max-w-3xl 高，直接写会被盖掉（实测移动端只有 75% 宽）。
-          这里用同样的 data-[side=right]: 前缀才压得住：移动端全屏，桌面端占三分之二 */}
+          这里用同样的 data-[side=right]: 前缀才压得住：移动端全屏，桌面端占三分之二。
+          border-l 同理：移动端全屏时这条左边框贴在屏幕最左侧，变成一条与预览内容
+          无关的竖线，只在桌面端（与主界面分栏时）才保留 */}
       <SheetContent
         side="right"
-        className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:w-2/3 data-[side=right]:sm:max-w-none"
+        className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:border-l-0 data-[side=right]:sm:w-2/3 data-[side=right]:sm:max-w-none data-[side=right]:sm:border-l"
       >
         <SheetHeader className="border-b">
           <SheetTitle className="truncate">{state?.title || "HTML 预览"}</SheetTitle>
