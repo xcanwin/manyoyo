@@ -147,7 +147,7 @@ Error: pinging container registry localhost failed
 
 ### Cause
 
-MANYOYO uses local images by default (`localhost/xcanwin/manyoyo`), which need to be built first.
+MANYOYO uses the `ghcr.io/xcanwin/manyoyo` image by default and pulls it automatically when it is missing locally; use `manyoyo build` only when you need a custom image.
 
 ### Solutions
 
@@ -469,7 +469,7 @@ export DOCKER_BUILDKIT=0  # Use traditional builder for more verbose output
 ```bash
 # Manually build to debug issues
 cd docker/
-podman build -t localhost/xcanwin/manyoyo:test-full \
+podman build -t ghcr.io/xcanwin/manyoyo:test-full \
     -f manyoyo.Dockerfile .. \
     --build-arg TOOL=full \
     --no-cache \

@@ -7,8 +7,10 @@ describe('error hints', () => {
         ['Cannot connect to Podman. Please verify your connection', 'PODMAN_MACHINE_UNAVAILABLE', 'podman machine start'],
         ['unable to connect to Podman socket: failed to connect', 'PODMAN_MACHINE_UNAVAILABLE', 'podman machine start'],
         ['Cannot connect to the Docker daemon at unix:///var/run/docker.sock', 'DOCKER_DAEMON_UNAVAILABLE', 'Docker Desktop'],
-        ['Error: pull access denied for foo, repository does not exist', 'IMAGE_PULL_FAILED', 'manyoyo build'],
-        ['pinging container registry localhost: Get "https://localhost/v2/"', 'IMAGE_PULL_FAILED', 'imageVersion'],
+        ['Error: pull access denied for foo, repository does not exist', 'IMAGE_NOT_FOUND', 'manyoyo build'],
+        ['manifest unknown: manifest unknown', 'IMAGE_NOT_FOUND', 'imageVersion'],
+        ['dial tcp 1.2.3.4:443: i/o timeout', 'IMAGE_PULL_FAILED', '网络'],
+        ['pinging container registry localhost: Get "https://localhost/v2/"', 'IMAGE_PULL_FAILED', 'manyoyo build'],
         ['Bind for 0.0.0.0:8080 failed: port is already allocated', 'PORT_IN_USE', '换一个端口'],
         ['listen EADDRINUSE: address already in use 127.0.0.1:3000', 'PORT_IN_USE', '换一个端口'],
         ['xcode-select: note: No developer tools were found', 'XCODE_CLT_MISSING', 'xcode-select --install']

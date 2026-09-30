@@ -67,6 +67,16 @@ describe("getReadiness", () => {
     expect(r.blockedReason).toContain("img:1")
   })
 
+  test("an image being pulled shows its progress line; a failed pull shows the reason", () => {
+    const pulling = getReadiness(status({ image: { status: "pulling", name: "img:1", message: "Copying blob 3/5" } }))
+    expect(pulling.items[1].state).toBe("doing")
+    expect(pulling.blockedReason).toContain("Copying blob 3/5")
+    const failed = getReadiness(status({ image: { status: "failed", name: "img:1", message: "镜像 img:1 不存在" } }))
+    expect(failed.items[1].state).toBe("failed")
+    expect(failed.ready).toBe(false)
+    expect(failed.blockedReason).toBe("镜像 img:1 不存在")
+  })
+
   test("runtime failure surfaces its message", () => {
     const r = getReadiness(status({ runtime: { status: "failed", message: "podman machine start 失败" }, image: { status: "unknown", name: "img:1" } }))
     expect(r.items[0].state).toBe("failed")

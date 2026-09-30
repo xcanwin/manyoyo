@@ -132,6 +132,18 @@ describe('MANYOYO CLI', () => {
             }).toThrow();
         });
 
+        test('default imageName is the prebuilt ghcr image, and build tags with the same name', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-default-image-'));
+            try {
+                const env = { ...process.env, HOME: tempHome };
+                const config = JSON.parse(execSync(`node ${BIN_PATH} config show`, { encoding: 'utf-8', env }));
+                expect(config.imageName).toBe('ghcr.io/xcanwin/manyoyo');
+                expect(fs.readFileSync(BIN_PATH, 'utf-8')).not.toContain('localhost/xcanwin/manyoyo"');
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
         test('config show should output valid JSON', () => {
             const output = execSync(`node ${BIN_PATH} config show`, { encoding: 'utf-8' });
             const config = JSON.parse(output);

@@ -315,7 +315,7 @@ manyoyo build --iba NODE_MIRROR=https://custom-mirror.com
 ```bash
 iv=1.8.0
 podman build \
-    -t localhost/xcanwin/manyoyo:$iv-full \
+    -t ghcr.io/xcanwin/manyoyo:$iv-full \
     -f docker/manyoyo.Dockerfile . \
     --build-arg TOOL=full \
     --no-cache
@@ -380,7 +380,7 @@ manyoyo -h
 docker images | grep manyoyo  # 或 podman images
 
 # 应该看到类似：
-# localhost/xcanwin/manyoyo  1.8.0-common  xxx  xxx  xxGB
+# ghcr.io/xcanwin/manyoyo  1.8.0-common  xxx  xxx  xxGB
 ```
 
 ### 3. 初始化 Agent 配置（推荐）

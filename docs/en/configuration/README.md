@@ -114,7 +114,7 @@ Example:
 | Override | `containerName` | Takes highest priority value | CLI `-n test` overrides `runs.<name>` or global value |
 | Override | `hostPath` | Takes highest priority value | Defaults to current directory |
 | Override | `containerPath` | Takes highest priority value | Defaults to same as hostPath |
-| Override | `imageName` | Takes highest priority value | Default `localhost/xcanwin/manyoyo` |
+| Override | `imageName` | Takes highest priority value | Default `ghcr.io/xcanwin/manyoyo` |
 | Override | `imageVersion` | Takes highest priority value | e.g., `1.8.0-common` |
 | Override | `containerMode` | Takes highest priority value | `common`, `dind`, `sock` |
 | Override | `yolo` | Takes highest priority value | `c`, `gm`, `cx`, `oc` |

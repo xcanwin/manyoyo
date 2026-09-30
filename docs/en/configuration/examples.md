@@ -14,7 +14,7 @@ mkdir -p ~/.manyoyo/
 
 cat > ~/.manyoyo/manyoyo.json << 'EOF2'
 {
-    "imageName": "localhost/xcanwin/manyoyo",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "1.8.0-common",
     "runs": {
         "claude": {
@@ -102,7 +102,7 @@ export OPENAI_MODEL="gpt-4-turbo"
 **`~/.manyoyo/manyoyo.json`**:
 ```json5
 {
-    "imageName": "localhost/xcanwin/manyoyo",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "1.8.0-common",
     "env": {
         "TZ": "Asia/Shanghai"

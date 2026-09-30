@@ -314,7 +314,7 @@ export function CreateContainerDialog({
                   <FieldLabel htmlFor="create-image-name">imageName</FieldLabel>
                   <Input
                     id="create-image-name"
-                    placeholder="localhost/xcanwin/manyoyo"
+                    placeholder="ghcr.io/xcanwin/manyoyo"
                     value={form.imageName}
                     onChange={(event) =>
                       setField("imageName", event.target.value)

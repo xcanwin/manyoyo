@@ -1732,7 +1732,7 @@ process.exit(2);
             }));
 
             expect(waitForContainerReady).toHaveBeenCalledWith('my-run-0330-1234');
-            const runArgs = dockerExecArgs.mock.calls[0][0];
+            const runArgs = dockerExecArgs.mock.calls.map(call => call[0]).find(args => args[0] === 'run');
             expect(runArgs).toEqual(expect.arrayContaining([
                 '--name',
                 'my-run-0330-1234',
@@ -1809,7 +1809,7 @@ process.exit(2);
             }));
             expect(waitForContainerReady).toHaveBeenCalledWith('my-web-create');
             expect(dockerExecArgs).toHaveBeenCalled();
-            const runArgs = dockerExecArgs.mock.calls[0][0];
+            const runArgs = dockerExecArgs.mock.calls.map(call => call[0]).find(args => args[0] === 'run');
             expect(Array.isArray(runArgs)).toBe(true);
             expect(runArgs).toEqual(expect.arrayContaining([
                 'run',
@@ -2057,7 +2057,7 @@ process.exit(2);
 
             expect(created.response.status).toBe(200);
             expect(dockerExecArgs).toHaveBeenCalled();
-            const runArgs = dockerExecArgs.mock.calls[0][0];
+            const runArgs = dockerExecArgs.mock.calls.map(call => call[0]).find(args => args[0] === 'run');
             expect(runArgs).toEqual(expect.arrayContaining([
                 '--volume',
                 `${path.join(os.homedir(), '.manyoyo/.cache/ms-playwright')}:/root/.cache/ms-playwright`
@@ -5882,6 +5882,91 @@ describe('Web Server Setup API', () => {
             const broken = await call('POST', '/api/setup/agent', { agent: 'codex', env: { OPENAI_API_KEY: 'k1234567' } });
             expect(broken.response.status).toBe(400);
             expect(fs.readFileSync(configPath, 'utf8')).toBe('{ broken');
+        });
+    });
+
+    describe('image auto pull', () => {
+        // pullOutcome: ok | notfound；fake docker 的 pull 会先吐一行进度再结束，并在成功时创建 marker
+        async function withPullServer(pullOutcome, run) {
+            let marker;
+            await withSetupServer(tempHost => {
+                marker = path.join(tempHost, 'pulled');
+                const fakeDocker = path.join(tempHost, 'fake-docker.sh');
+                fs.writeFileSync(fakeDocker, `#!/bin/sh
+if [ "$1" = "pull" ]; then
+  echo "Copying blob 3/5"
+  sleep 1
+  if [ "${pullOutcome}" = "ok" ]; then touch "${marker}"; exit 0; fi
+  echo "Error: manifest unknown" >&2; exit 1
+fi
+exit 1
+`, { mode: 0o755 });
+                return {
+                    dockerCmd: fakeDocker,
+                    autoPullImage: true,
+                    dockerExecArgs: args => {
+                        if (args[0] === 'image' && !fs.existsSync(marker)) throw new Error('no such image');
+                        return '';
+                    }
+                };
+            }, run);
+        }
+
+        const waitFor = async (check, attempts = 40) => {
+            for (let i = 0; i < attempts; i += 1) {
+                const value = await check();
+                if (value) return value;
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            throw new Error('condition not met');
+        };
+
+        test('serve start pulls a missing image in the background and reports progress', async () => {
+            await withPullServer('ok', async ({ call }) => {
+                const pulling = await waitFor(async () => {
+                    const { json } = await call('GET', '/api/setup/status');
+                    return json.image.status === 'pulling' ? json : null;
+                });
+                expect(pulling.image.message).toContain('Copying blob 3/5');
+
+                const ready = await waitFor(async () => {
+                    const { json } = await call('GET', '/api/setup/status');
+                    return json.image.status === 'ready' ? json : null;
+                }, 60);
+                expect(ready.image.status).toBe('ready');
+            });
+        });
+
+        test('creating a container pulls the missing image first and surfaces a friendly failure', async () => {
+            const dockerCalls = [];
+            await withSetupServer(tempHost => {
+                const fakeDocker = path.join(tempHost, 'fake-docker.sh');
+                fs.writeFileSync(fakeDocker, '#!/bin/sh\necho "Error: manifest unknown" >&2\nexit 1\n', { mode: 0o755 });
+                return {
+                    dockerCmd: fakeDocker,
+                    dockerExecArgs: args => {
+                        dockerCalls.push(args[0]);
+                        if (args[0] === 'image') throw new Error('no such image');
+                        return '';
+                    }
+                };
+            }, async ({ call, tempHost }) => {
+                const res = await call('POST', '/api/sessions', { createOptions: { hostPath: tempHost } });
+                expect(res.response.status).toBeGreaterThanOrEqual(400);
+                expect(JSON.stringify(res.json)).toContain('不存在');
+                expect(dockerCalls).not.toContain('run');
+            });
+        });
+
+        test('a pull failure is reported with the reason and next step', async () => {
+            await withPullServer('notfound', async ({ call }) => {
+                const failed = await waitFor(async () => {
+                    const { json } = await call('GET', '/api/setup/status');
+                    return json.image.status === 'failed' ? json : null;
+                }, 60);
+                expect(failed.image.message).toContain('不存在');
+                expect(failed.image.message).toContain('imageVersion');
+            });
         });
     });
 

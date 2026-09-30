@@ -18,7 +18,7 @@ MANYOYO 支持两种配置文件：
 **示例**：
 ```json5
 {
-    "imageName": "localhost/xcanwin/manyoyo",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "1.8.0-full"
 }
 ```
@@ -87,7 +87,7 @@ MANYOYO 支持两种配置文件：
 
 #### imageName
 - **类型**：字符串
-- **默认值**：`localhost/xcanwin/manyoyo`
+- **默认值**：`ghcr.io/xcanwin/manyoyo`
 - **说明**：镜像名称（不含版本号）
 - **示例**：
 ```json5
@@ -452,7 +452,7 @@ first.envFile: 全局 first.envFile + runs.<name>.first.envFile + 命令行 --fi
 // ~/.manyoyo/manyoyo.json
 {
     // 使用自定义镜像
-    "imageName": "localhost/xcanwin/manyoyo",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "1.8.0-full",
 
     // 全局环境变量

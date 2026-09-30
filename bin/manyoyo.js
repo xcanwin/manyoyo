@@ -14,6 +14,7 @@ const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = requ
 const { selectContainerRuntime, mergeRuntimeEnv } = require('../lib/container-runtime');
 const { describeError } = require('../lib/error-hints');
 const { ensureRuntimeReady } = require('../lib/runtime-heal');
+const { ensureImagePresent, pullImageProcess } = require('../lib/image-pull');
 const { getLoginTokenDir, issueLoginToken } = require('../lib/login-token');
 const { launchApp, getAppStatePath, openBrowser } = require('../lib/app-launcher');
 const { initAgentConfigs } = require('../lib/init-config');
@@ -73,7 +74,7 @@ const CONFIG = {
 let CONTAINER_NAME = `my-${formatDate()}`;
 let HOST_PATH = process.cwd();
 let CONTAINER_PATH = HOST_PATH;
-let IMAGE_NAME = "localhost/xcanwin/manyoyo";
+let IMAGE_NAME = "ghcr.io/xcanwin/manyoyo";
 let IMAGE_VERSION = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
 let EXEC_COMMAND = "";
 let EXEC_COMMAND_PREFIX = "";
@@ -684,9 +685,33 @@ function setContMode(mode) {
     }
 }
 
+// 本地没有镜像时自动拉取（终端显示拉取进度），失败给出原因与下一步
+async function ensureRunImage(runtime) {
+    const imageRef = `${runtime.imageName}:${runtime.imageVersion}`;
+    await ensureImagePresent({
+        imageRef,
+        command: DOCKER_CMD,
+        isPresent: () => {
+            try {
+                dockerExecArgs(['image', 'inspect', imageRef], { stdio: 'pipe' });
+                return true;
+            } catch (e) {
+                return false;
+            }
+        },
+        pull: () => pullImageProcess({
+            command: DOCKER_CMD,
+            env: DOCKER_ENV,
+            imageRef,
+            onOutput: (text, stream) => (stream === 'stderr' ? process.stderr : process.stdout).write(text)
+        }),
+        onStart: () => console.log(`${YELLOW}⏬ 本地没有镜像 ${imageRef}，正在拉取...${NC}`)
+    });
+}
+
 function showImagePullHint(err) {
     const info = describeError(getCommandFailureText(err), { imageRef: `${IMAGE_NAME}:${IMAGE_VERSION}` });
-    if (!info || info.code !== 'IMAGE_PULL_FAILED') {
+    if (!info || !['IMAGE_PULL_FAILED', 'IMAGE_NOT_FOUND'].includes(info.code)) {
         return;
     }
     console.log(`${YELLOW}💡 提示: ${info.reason}${NC}`);
@@ -1964,6 +1989,8 @@ async function createNewContainer(runtime) {
         process.exit(0);
     }
 
+    await ensureRunImage(runtime);
+
     // 使用数组参数执行命令（安全方式）
     try {
         const args = buildDockerRunArgs(runtime);
@@ -2187,6 +2214,7 @@ async function runWebServerMode(runtime) {
         dockerCmd: DOCKER_CMD,
         dockerEnv: DOCKER_ENV,
         runtimeState: RUNTIME_STATE,
+        autoPullImage: true,
         loginTokenDir: getLoginTokenDir(),
         hostPath: runtime.hostPath,
         containerPath: runtime.containerPath,

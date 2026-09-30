@@ -315,7 +315,7 @@ If you need more control, you can manually use Docker/Podman commands:
 ```bash
 iv=1.8.0
 podman build \
-    -t localhost/xcanwin/manyoyo:$iv-full \
+    -t ghcr.io/xcanwin/manyoyo:$iv-full \
     -f docker/manyoyo.Dockerfile . \
     --build-arg TOOL=full \
     --no-cache
@@ -380,7 +380,7 @@ manyoyo -h
 docker images | grep manyoyo  # or podman images
 
 # Should see something like:
-# localhost/xcanwin/manyoyo  1.8.0-common  xxx  xxx  xxGB
+# ghcr.io/xcanwin/manyoyo  1.8.0-common  xxx  xxx  xxGB
 ```
 
 ### 3. Initialize Agent Config (Recommended)

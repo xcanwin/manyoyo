@@ -16,7 +16,7 @@ export type SetupStatus = {
   configuredAgents: string[]
   configError: string | null
   runtime: { status: string; message: string }
-  image: { status: "ready" | "missing" | "unknown"; name: string }
+  image: { status: "ready" | "missing" | "unknown" | "pulling" | "failed"; name: string; message?: string }
   defaultHostPath: string
   platform: string
   runtimeKind: string
@@ -60,7 +60,13 @@ export function getReadiness(status: SetupStatus | null): Readiness {
   const runtimeState: ReadinessItem["state"] =
     status.runtime.status === "ready" ? "done" : status.runtime.status === "failed" ? "failed" : "doing"
   const imageState: ReadinessItem["state"] =
-    status.image.status === "ready" ? "done" : runtimeState === "done" ? "doing" : "waiting"
+    status.image.status === "ready"
+      ? "done"
+      : status.image.status === "failed"
+        ? "failed"
+        : runtimeState === "done"
+          ? "doing"
+          : "waiting"
   const items: ReadinessItem[] = [
     { key: "runtime", label: "容器环境", state: runtimeState },
     { key: "image", label: "运行镜像", state: imageState },
@@ -70,7 +76,10 @@ export function getReadiness(status: SetupStatus | null): Readiness {
   let blockedReason = ""
   if (runtimeState === "failed") blockedReason = status.runtime.message || "容器环境启动失败"
   else if (runtimeState !== "done") blockedReason = status.runtime.message || "正在启动容器环境"
-  else if (imageState !== "done") blockedReason = `正在准备运行镜像 ${status.image.name}`
+  else if (imageState === "failed") blockedReason = status.image.message || `运行镜像 ${status.image.name} 拉取失败`
+  else if (imageState !== "done") {
+    blockedReason = `正在准备运行镜像 ${status.image.name}${status.image.status === "pulling" && status.image.message ? `（${status.image.message}）` : ""}`
+  }
   return { ready, percent: Math.round((done / items.length) * 100), items, blockedReason }
 }
 

@@ -18,7 +18,7 @@ MANYOYO supports two types of configuration files:
 **Example**:
 ```json5
 {
-    "imageName": "localhost/xcanwin/manyoyo",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "1.8.0-full"
 }
 ```
@@ -87,7 +87,7 @@ Refer to `manyoyo.example.json` to view all configurable items. Below are detail
 
 #### imageName
 - **Type**: String
-- **Default**: `localhost/xcanwin/manyoyo`
+- **Default**: `ghcr.io/xcanwin/manyoyo`
 - **Description**: Image name (without version tag)
 - **Example**:
 ```json5
@@ -452,7 +452,7 @@ first.envFile: global first.envFile + runs.<name>.first.envFile + --first-env-fi
 // ~/.manyoyo/manyoyo.json
 {
     // Use custom image
-    "imageName": "localhost/xcanwin/manyoyo",
+    "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "1.8.0-full",
 
     // Global environment variables
