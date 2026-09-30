@@ -14,6 +14,8 @@ const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = requ
 const { selectContainerRuntime, mergeRuntimeEnv } = require('../lib/container-runtime');
 const { describeError } = require('../lib/error-hints');
 const { ensureRuntimeReady } = require('../lib/runtime-heal');
+const { getLoginTokenDir, issueLoginToken } = require('../lib/login-token');
+const { launchApp, getAppStatePath, openBrowser } = require('../lib/app-launcher');
 const { initAgentConfigs } = require('../lib/init-config');
 const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
@@ -1311,9 +1313,9 @@ Notes:
     // Docker CLI plugin mode - remove first arg if running as plugin
     normalizeDockerPluginArgv(process.argv);
 
-    // No args: show help instead of starting container
+    // No args: start (or reuse) the local web app and open the browser, already logged in
     if (process.argv.length <= 2) {
-        program.help();
+        await runAppLauncher();
     }
 
     // Pre-handle -x/--shell-full: treat all following args as a single command
@@ -2134,6 +2136,33 @@ async function handlePostExit(runtime, defaultCommand) {
     }
 }
 
+async function runAppLauncher() {
+    try {
+        await launchApp({
+            statePath: getAppStatePath(),
+            isProcessRunning,
+            spawnServe: port => {
+                // 登录走一次性令牌，密码只是让服务在无配置时不必自己生成并打印
+                const child = spawn(process.argv[0], [process.argv[1], 'serve', `127.0.0.1:${port}`], {
+                    detached: true,
+                    stdio: 'ignore',
+                    env: { ...process.env, MANYOYO_SERVER_PASS: crypto.randomBytes(12).toString('hex') }
+                });
+                child.unref();
+                return child;
+            },
+            issueToken: () => issueLoginToken(getLoginTokenDir()),
+            open: url => openBrowser(url),
+            log: line => console.log(line),
+            logPathHint: buildManyoyoLogPath('serve').path
+        });
+    } catch (e) {
+        console.error(`${RED}${e.message}${NC}`);
+        process.exit(1);
+    }
+    process.exit(0);
+}
+
 async function runWebServerMode(runtime) {
     if (!runtime.serverAuthUser || !runtime.serverAuthPass) {
         ensureWebServerAuthCredentials();
@@ -2158,6 +2187,7 @@ async function runWebServerMode(runtime) {
         dockerCmd: DOCKER_CMD,
         dockerEnv: DOCKER_ENV,
         runtimeState: RUNTIME_STATE,
+        loginTokenDir: getLoginTokenDir(),
         hostPath: runtime.hostPath,
         containerPath: runtime.containerPath,
         imageName: runtime.imageName,

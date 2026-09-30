@@ -7,6 +7,7 @@ const { execSync, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const net = require('net');
 const { imageVersion: PACKAGE_IMAGE_VERSION } = require('../package.json');
 
 const BIN_PATH = path.join(__dirname, '../bin/manyoyo.js');
@@ -46,10 +47,42 @@ describe('MANYOYO CLI', () => {
     // ==============================================================================
 
     describe('Basic Commands', () => {
-        test('no args should display help message', () => {
-            const output = execSync(`node ${BIN_PATH}`, { encoding: 'utf-8' });
+        test('--help should display help message', () => {
+            const output = execSync(`node ${BIN_PATH} --help`, { encoding: 'utf-8' });
             expect(output).toContain('Usage: manyoyo [options]');
             expect(output).toContain('MANYOYO');
+        });
+
+        test('no args should reuse the running local app and open a one-time login url', async () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-noargs-'));
+            const binDir = path.join(tempHome, 'bin');
+            const urlFile = path.join(tempHome, 'opened-url');
+            fs.mkdirSync(binDir, { recursive: true });
+            ['open', 'xdg-open'].forEach(name => writeExecutable(path.join(binDir, name), `#!/bin/sh\necho "$1" > "${urlFile}"\n`));
+            const server = net.createServer().listen(0, '127.0.0.1');
+            await new Promise(resolve => server.once('listening', resolve));
+            const { port } = server.address();
+            const serveDir = path.join(tempHome, '.manyoyo', 'serve');
+            fs.mkdirSync(serveDir, { recursive: true });
+            fs.writeFileSync(path.join(serveDir, 'app.json'), JSON.stringify({ host: '127.0.0.1', port, pid: process.pid }));
+            try {
+                const result = await new Promise(resolve => {
+                    require('child_process').execFile('node', [BIN_PATH], {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome, PATH: `${binDir}:${process.env.PATH}` }
+                    }, (error, stdout) => resolve({ error, stdout }));
+                });
+                expect(result.error).toBeNull();
+                expect(result.stdout).toContain(`已复用运行中的服务: http://127.0.0.1:${port}`);
+                expect(result.stdout).not.toContain('token=');
+                expect(fs.readFileSync(urlFile, 'utf-8').trim()).toMatch(new RegExp(`^http://127\\.0\\.0\\.1:${port}/auth/login\\?token=[0-9a-f]{64}$`));
+                const tokenDir = path.join(serveDir, 'login-tokens');
+                expect(fs.readdirSync(tokenDir)).toHaveLength(1);
+                expect(fs.statSync(tokenDir).mode & 0o777).toBe(0o700);
+            } finally {
+                server.close();
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
         });
 
         test('invoked as my should display my in help usage', () => {

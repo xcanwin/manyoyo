@@ -26,6 +26,7 @@ description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频�
 | `manyoyo install <name>` | 安装 manyoyo 命令（docker-cli-plugin） |
 | `manyoyo prune` | 清理悬空镜像和 `<none>` 镜像 |
 | `manyoyo doctor` | 诊断容器运行时、镜像、配置、Agent、模式、插件和端口 |
+| `manyoyo`（无参数） | 在 `127.0.0.1` 随机端口后台启动（或复用）网页服务，并打开浏览器自动登录；实例记录在 `~/.manyoyo/serve/app.json`。登录用一次性令牌（60 秒内有效、用后即删，存于 `~/.manyoyo/serve/login-tokens/`，仅回环监听启用）；再次执行 `manyoyo` 会签发新令牌。没有浏览器打开器时，会在终端打印一次性登录地址。`-h/--help` 仍显示帮助 |
 
 ## 参数归属
 

@@ -5587,3 +5587,96 @@ describe('Web Server Runtime State', () => {
         }
     });
 });
+
+describe('Web Server One-Time Login Token', () => {
+    const { getLoginTokenDir, issueLoginToken } = require('../lib/login-token');
+
+    async function withServer(overrides, run) {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-token-'));
+        const tokenDir = getLoginTokenDir(tempHost);
+        const port = await getFreePort();
+        const logs = [];
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                loginTokenDir: tokenDir,
+                logger: { info: m => logs.push(m), warn: m => logs.push(m), error: (m, d) => logs.push(`${m} ${JSON.stringify(d)}`) },
+                ...overrides
+            }));
+            await run({ baseUrl: `http://127.0.0.1:${handle.port || port}`, tokenDir, logs });
+        } finally {
+            if (handle && typeof handle.close === 'function') await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    }
+
+    const useToken = (baseUrl, token) => request(`${baseUrl}/auth/login?token=${token}`, { redirect: 'manual' });
+
+    test('token logs in once, grants API access, and dies on logout', async () => {
+        await withServer({}, async ({ baseUrl, tokenDir }) => {
+            const token = issueLoginToken(tokenDir);
+            const first = await useToken(baseUrl, token);
+            expect(first.response.status).toBe(302);
+            expect(first.response.headers.get('location')).toBe('/');
+            const cookie = (first.response.headers.get('set-cookie') || '').split(';')[0];
+            expect(cookie).toContain('manyoyo_web_auth=');
+
+            const sessions = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: cookie } });
+            expect(sessions.response.status).toBe(200);
+
+            const second = await useToken(baseUrl, token);
+            expect(second.response.status).toBe(302);
+            expect(second.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(second.response.headers.get('set-cookie')).toBeNull();
+
+            await request(`${baseUrl}/auth/logout`, { method: 'POST', headers: { Cookie: cookie } });
+            const after = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: cookie } });
+            expect(after.response.status).toBe(401);
+        });
+    });
+
+    test('expired and forged tokens do not log in', async () => {
+        await withServer({}, async ({ baseUrl, tokenDir }) => {
+            const token = issueLoginToken(tokenDir);
+            const file = path.join(tokenDir, fs.readdirSync(tokenDir)[0]);
+            const past = new Date(Date.now() - 61 * 1000);
+            fs.utimesSync(file, past, past);
+
+            const expired = await useToken(baseUrl, token);
+            expect(expired.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(expired.response.headers.get('set-cookie')).toBeNull();
+
+            const forged = await useToken(baseUrl, 'c'.repeat(64));
+            expect(forged.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(forged.response.headers.get('set-cookie')).toBeNull();
+        });
+    });
+
+    test('tokens are ignored when the server is not bound to loopback', async () => {
+        await withServer({ serverHost: '0.0.0.0' }, async ({ baseUrl, tokenDir }) => {
+            const token = issueLoginToken(tokenDir);
+            const res = await useToken(baseUrl, token);
+            expect(res.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(res.response.headers.get('set-cookie')).toBeNull();
+            expect(fs.readdirSync(tokenDir)).toHaveLength(1);
+        });
+    });
+
+    test('the token endpoint stays reachable without a token and needs no new anonymous route', async () => {
+        await withServer({}, async ({ baseUrl }) => {
+            const plain = await request(`${baseUrl}/auth/login`, { redirect: 'manual' });
+            expect(plain.response.headers.get('location')).toBe('/shadcn/auth/login');
+            const other = await request(`${baseUrl}/api/sessions?token=${'d'.repeat(64)}`);
+            expect(other.response.status).toBe(401);
+        });
+    });
+
+    test('logs never contain the token', async () => {
+        await withServer({}, async ({ baseUrl, tokenDir, logs }) => {
+            const token = issueLoginToken(tokenDir);
+            await useToken(baseUrl, token);
+            await useToken(baseUrl, token);
+            expect(logs.join('\n')).not.toContain(token);
+        });
+    });
+});
