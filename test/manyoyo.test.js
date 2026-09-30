@@ -1416,6 +1416,54 @@ exit 0
         });
     });
 
+    describe('Container Runtime Selection', () => {
+        const runWithHome = (homeDir, args) => require('child_process').spawnSync('node', [BIN_PATH, ...args], {
+            encoding: 'utf-8',
+            env: { ...process.env, HOME: homeDir }
+        });
+
+        test('config show reports containerRuntime, defaulting to auto', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-runtime-show-'));
+            try {
+                expect(JSON.parse(runWithHome(tempHome, ['config', 'show']).stdout).containerRuntime).toBe('auto');
+                writeGlobalConfig(tempHome, { containerRuntime: 'podman' });
+                expect(JSON.parse(runWithHome(tempHome, ['config', 'show']).stdout).containerRuntime).toBe('podman');
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('doctor --json reports a configured runtime as source config', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-runtime-config-'));
+            try {
+                writeGlobalConfig(tempHome, { containerRuntime: 'podman' });
+                const report = JSON.parse(runWithHome(tempHome, ['doctor', '--json']).stdout);
+                expect(report.runtimeCommand).toBe('podman');
+                expect(report.runtimeSource).toBe('config');
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('private podman is selected and receives its isolated env only', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-runtime-private-'));
+            try {
+                const privateBin = path.join(tempHome, '.manyoyo', 'runtime', 'podman', 'bin', 'podman');
+                fs.mkdirSync(path.dirname(privateBin), { recursive: true });
+                writeExecutable(privateBin, '#!/bin/sh\necho "conf=$CONTAINERS_CONF xdg=$XDG_DATA_HOME"\n');
+                const report = JSON.parse(runWithHome(tempHome, ['doctor', '--json']).stdout);
+
+                expect(report.runtimeCommand).toBe(privateBin);
+                expect(report.runtimeSource).toBe('private-podman');
+                const daemon = report.checks.find(check => check.code === 'DAEMON_AVAILABLE');
+                expect(daemon.detail).toContain(`conf=${path.join(tempHome, '.manyoyo', 'runtime', 'podman', 'containers.conf')}`);
+                expect(daemon.detail).toContain(`xdg=${path.join(tempHome, '.manyoyo', 'runtime', 'podman', 'data')}`);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+    });
+
     // ==============================================================================
     // 选项测试
     // ==============================================================================

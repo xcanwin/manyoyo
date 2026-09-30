@@ -11,11 +11,14 @@ const { Command } = require('commander');
 const { startWebServer } = require('../lib/web/server');
 const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/container-run');
 const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = require('../lib/global-config');
+const { selectContainerRuntime, mergeRuntimeEnv } = require('../lib/container-runtime');
+const { describeError } = require('../lib/error-hints');
+const { ensureRuntimeReady } = require('../lib/runtime-heal');
 const { initAgentConfigs } = require('../lib/init-config');
 const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
 const { resolveYoloCommand } = require('../lib/agent-adapters');
-const { runDoctorChecks } = require('../lib/doctor');
+const { runDoctorChecks, applyDoctorFixes } = require('../lib/doctor');
 const { resolveContainerMode } = require('../lib/container-modes');
 const { runPluginCommand, createPlugin } = require('../lib/plugin');
 const { buildManyoyoLogPath } = require('../lib/log-path');
@@ -105,6 +108,12 @@ const IMAGE_VERSION_TAG_PATTERN = /^(\d+\.\d+\.\d+)-([A-Za-z0-9][A-Za-z0-9_.-]*)
 
 // Docker command (will be set by ensure_docker)
 let DOCKER_CMD = 'docker';
+// 仅运行时子进程使用的完整 env（私有 Podman 才有值），不要写回 process.env
+let DOCKER_ENV;
+let CONTAINER_RUNTIME = null;
+// serve 的容器环境状态，供 GET /api/system/runtime 读取
+const RUNTIME_STATE = { status: 'ready', message: '' };
+const DOCKER_DAEMON_ERROR_CODES = new Set(['PODMAN_MACHINE_UNAVAILABLE', 'DOCKER_DAEMON_UNAVAILABLE', 'PORT_IN_USE']);
 const SUPPORTED_INIT_AGENTS = ['claude', 'codex', 'gemini', 'opencode'];
 
 function sleep(ms) {
@@ -312,6 +321,7 @@ function installServeProcessDiagnostics(logger) {
  * @property {Object.<string, Object>} [runs] - 运行配置映射（-r <name>）
  * @property {string} [yolo] - YOLO 模式
  * @property {string} [containerMode] - 容器模式
+ * @property {string} [containerRuntime] - 容器运行时（auto/docker/podman，默认 auto；仅全局配置生效）
  * @property {number} [cacheTTL] - 缓存过期天数
  * @property {string} [nodeMirror] - Node.js 镜像源
  */
@@ -673,16 +683,12 @@ function setContMode(mode) {
 }
 
 function showImagePullHint(err) {
-    const stderr = err && err.stderr ? err.stderr.toString() : '';
-    const stdout = err && err.stdout ? err.stdout.toString() : '';
-    const message = err && err.message ? err.message : '';
-    const combined = `${message}\n${stderr}\n${stdout}`;
-    if (!/localhost\/v2|pinging container registry localhost|connection refused|dial tcp .*:443/i.test(combined)) {
+    const info = describeError(getCommandFailureText(err), { imageRef: `${IMAGE_NAME}:${IMAGE_VERSION}` });
+    if (!info || info.code !== 'IMAGE_PULL_FAILED') {
         return;
     }
-    const image = `${IMAGE_NAME}:${IMAGE_VERSION}`;
-    console.log(`${YELLOW}💡 提示: 本地未找到镜像 ${image}，并且从 localhost 注册表拉取失败。${NC}`);
-    console.log(`${YELLOW}   你可以: (1) 更新 ~/.manyoyo/manyoyo.json 的 imageVersion。 (2) 或先执行 ${MANYOYO_NAME} build --iv <x.y.z-后缀> 构建镜像。${NC}`);
+    console.log(`${YELLOW}💡 提示: ${info.reason}${NC}`);
+    console.log(`${YELLOW}   ${info.action}${NC}`);
 }
 
 function getCommandFailureText(err) {
@@ -690,25 +696,6 @@ function getCommandFailureText(err) {
     const stdout = err && err.stdout ? err.stdout.toString() : '';
     const message = err && err.message ? err.message : '';
     return `${message}\n${stderr}\n${stdout}`;
-}
-
-function getContainerRuntimeUnavailableHint(command, err) {
-    const text = getCommandFailureText(err);
-    if (/Cannot connect to Podman|unable to connect to Podman socket|podman machine start|podman system connection/i.test(text)) {
-        return [
-            '',
-            `提示: 当前 ${command} 命令正在连接 Podman machine，但连接不可用。`,
-            '请先在宿主机执行: podman machine start'
-        ].join('\n');
-    }
-    if (/Cannot connect to the Docker daemon|docker daemon is not running|Is the docker daemon running/i.test(text)) {
-        return [
-            '',
-            `提示: 当前 ${command} 命令无法连接容器运行时。`,
-            '请先启动 Docker Desktop / Docker daemon，或确认 Podman machine 已启动。'
-        ].join('\n');
-    }
-    return '';
 }
 
 function runCmd(cmd, args, options = {}) {
@@ -739,11 +726,12 @@ function checkPortAvailability(port) {
 
 function dockerExecArgs(args, options = {}) {
     try {
-        return runCmd(DOCKER_CMD, args, options);
+        return runCmd(DOCKER_CMD, args, { env: DOCKER_ENV, ...options });
     } catch (e) {
-        const hint = getContainerRuntimeUnavailableHint(DOCKER_CMD, e);
-        if (hint && e && e.message && !e.message.includes(hint)) {
-            e.message = `${e.message}${hint}`;
+        const info = describeError(getCommandFailureText(e), { command: DOCKER_CMD });
+        if (info && DOCKER_DAEMON_ERROR_CODES.has(info.code) && e && e.message) {
+            const hint = `\n提示: ${info.reason}\n${info.action}`;
+            if (!e.message.includes(hint)) e.message = `${e.message}${hint}`;
         }
         throw e;
     }
@@ -764,19 +752,46 @@ function removeContainer(name) {
     if ( !(QUIET.crm || QUIET.full) ) console.log(`${GREEN}✅ 已彻底删除。${NC}`);
 }
 
-function ensureDocker() {
-    const commands = ['docker', 'podman'];
-    for (const cmd of commands) {
-        try {
-            runCmd(cmd, ['--version'], { stdio: 'pipe' });
-            DOCKER_CMD = cmd;
-            return true;
-        } catch (e) {
-            // Try next command
-        }
+// 运行时子进程执行器：env 只是增量，合并后仅传给这个子进程
+function runRuntimeCommand(command, args, options = {}) {
+    return runCmd(command, args, {
+        stdio: 'pipe',
+        timeout: options.timeout,
+        env: mergeRuntimeEnv(options.env)
+    });
+}
+
+function healContainerRuntime(onStatus) {
+    return ensureRuntimeReady({ runtime: CONTAINER_RUNTIME, run: runRuntimeCommand, onStatus });
+}
+
+// 选择阶段已确认 daemon 可用（info 通过）时无需再自愈
+function isRuntimeProven() {
+    return /-daemon$/.test(CONTAINER_RUNTIME.source);
+}
+
+async function ensureDocker(configuredRuntime, options = {}) {
+    try {
+        CONTAINER_RUNTIME = selectContainerRuntime({ configured: configuredRuntime });
+    } catch (e) {
+        console.error(e.message);
+        process.exit(1);
     }
-    console.error("docker/podman not found");
-    process.exit(1);
+    DOCKER_CMD = CONTAINER_RUNTIME.command;
+    DOCKER_ENV = mergeRuntimeEnv(CONTAINER_RUNTIME.env);
+    if (options.deferHeal || isRuntimeProven()) {
+        return true;
+    }
+
+    const result = await healContainerRuntime(state => {
+        if (state.status === 'starting') console.log(`${YELLOW}⏳ ${state.message}...${NC}`);
+    });
+    if (result.status === 'started') {
+        console.log(`${GREEN}✅ 容器环境已就绪${NC}`);
+    } else if (result.status !== 'ready') {
+        console.log(`${YELLOW}⚠️  ${result.message}${NC}`);
+    }
+    return true;
 }
 
 function installManyoyo(name) {
@@ -1273,6 +1288,7 @@ Notes:
         .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
         .option('--port <port>', '检查指定监听端口')
         .option('--json', '以 JSON 输出稳定诊断结果')
+        .option('--fix', '自动修复可修复项（启动容器环境、拉取镜像、生成默认配置，端口占用时给出建议端口）')
         .action(options => selectAction('doctor', { ...options, doctor: true }));
 
     program.command('update')
@@ -1335,7 +1351,7 @@ Notes:
         noDockerActions.add('serve');
     }
     if (!noDockerActions.has(selectedAction)) {
-        ensureDocker();
+        await ensureDocker(config.containerRuntime, { deferHeal: selectedAction === 'serve' });
     }
 
     if (options.update) {
@@ -1483,6 +1499,7 @@ Notes:
             worktreeRepoRoot: resolvedRuntime.worktreeRepoRoot,
             worktreeMainRepoRoot: resolvedRuntime.worktreeMainRepoRoot,
             containerMode: contModeValue || "",
+            containerRuntime: config.containerRuntime || "auto",
             shellPrefix: EXEC_COMMAND_PREFIX.trim(),
             shell: EXEC_COMMAND || "",
             shellSuffix: EXEC_COMMAND_SUFFIX || "",
@@ -1525,8 +1542,13 @@ Notes:
         const portStatus = Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535
             ? await checkPortAvailability(parsedPort)
             : undefined;
-        const report = runDoctorChecks({
-            runCommand: runCmd,
+        let doctorRuntime = null;
+        let report = runDoctorChecks({
+            selectRuntime: () => {
+                doctorRuntime = selectContainerRuntime({ configured: config.containerRuntime });
+                return doctorRuntime;
+            },
+            runCommand: runRuntimeCommand,
             configExists: fs.existsSync(getManyoyoConfigPath()),
             imageName: IMAGE_NAME,
             imageVersion: IMAGE_VERSION,
@@ -1535,11 +1557,43 @@ Notes:
             pluginConfig: config.plugins,
             portStatus
         });
+        if (options.fix) {
+            report = await applyDoctorFixes(report, {
+                startRuntime: async () => {
+                    const result = await ensureRuntimeReady({ runtime: doctorRuntime, run: runRuntimeCommand });
+                    return { fixed: result.status === 'started' || result.status === 'ready', message: result.message };
+                },
+                pullImage: () => {
+                    const image = `${IMAGE_NAME}:${IMAGE_VERSION}`;
+                    try {
+                        runRuntimeCommand(doctorRuntime.command, ['pull', image], { env: doctorRuntime.env });
+                    } catch (e) {
+                        throw new Error(`拉取 ${image} 失败；可执行 ${MANYOYO_NAME} build --iv ${IMAGE_VERSION} 本地构建`);
+                    }
+                    return { fixed: true, message: `已拉取 ${image}` };
+                },
+                createConfig: () => {
+                    const result = syncGlobalImageVersion(IMAGE_VERSION);
+                    return { fixed: result.reason === 'created', message: result.reason === 'created' ? `已生成 ${result.path}` : `未生成配置: ${result.reason}` };
+                },
+                suggestPort: async () => {
+                    for (let candidate = parsedPort + 1; candidate <= Math.min(parsedPort + 50, 65535); candidate += 1) {
+                        if (await checkPortAvailability(candidate) === 'available') {
+                            return { fixed: false, message: `建议使用空闲端口 ${candidate}` };
+                        }
+                    }
+                    return { fixed: false, message: '附近没有空闲端口，请手动指定' };
+                }
+            });
+        }
         if (options.json) {
             console.log(JSON.stringify(report, null, 4));
         } else {
             report.checks.forEach(check => {
                 console.log(`[${check.status.toUpperCase()}] ${check.code}: ${check.summary}${check.action ? ` (${check.action})` : ''}`);
+                if (check.fix && check.fix.attempted) {
+                    console.log(`    ${check.fix.fixed ? '已修复' : '未修复'}: ${check.fix.message}`);
+                }
             });
         }
         process.exit(report.ok ? 0 : 1);
@@ -1875,7 +1929,7 @@ function executeFirstCommand(runtime) {
         '-c',
         firstCommand
     ];
-    const firstExecResult = spawnSync(`${DOCKER_CMD}`, firstExecArgs, { stdio: 'inherit' });
+    const firstExecResult = spawnSync(`${DOCKER_CMD}`, firstExecArgs, { stdio: 'inherit', env: DOCKER_ENV });
     if (firstExecResult.error) {
         throw firstExecResult.error;
     }
@@ -2017,9 +2071,9 @@ function executeInContainer(runtime, defaultCommand) {
 
     // Execute command in container
     if (runtime.execCommand) {
-        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash', '-c', runtime.execCommand], { stdio: 'inherit' });
+        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash', '-c', runtime.execCommand], { stdio: 'inherit', env: DOCKER_ENV });
     } else {
-        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash'], { stdio: 'inherit' });
+        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash'], { stdio: 'inherit', env: DOCKER_ENV });
     }
 }
 
@@ -2088,6 +2142,12 @@ async function runWebServerMode(runtime) {
         runtime.serverAuthPassAuto = SERVER_AUTH_PASS_AUTO;
     }
 
+    const needRuntimeHeal = !isRuntimeProven();
+    if (needRuntimeHeal) {
+        RUNTIME_STATE.status = 'starting';
+        RUNTIME_STATE.message = '正在检查容器环境';
+    }
+
     const serverHandle = await startWebServer({
         serverHost: runtime.serverHost,
         serverPort: runtime.serverPort,
@@ -2096,6 +2156,8 @@ async function runWebServerMode(runtime) {
         authPassAuto: runtime.serverAuthPassAuto,
         serveTitle: runtime.serveTitle,
         dockerCmd: DOCKER_CMD,
+        dockerEnv: DOCKER_ENV,
+        runtimeState: RUNTIME_STATE,
         hostPath: runtime.hostPath,
         containerPath: runtime.containerPath,
         imageName: runtime.imageName,
@@ -2129,6 +2191,25 @@ async function runWebServerMode(runtime) {
         logger: runtime.logger
     });
     writeServePidFile(runtime, serverHandle);
+    if (needRuntimeHeal) {
+        healContainerRuntime(state => {
+            RUNTIME_STATE.status = state.status;
+            RUNTIME_STATE.message = state.message;
+            if (state.status === 'starting') console.log(`${YELLOW}⏳ ${state.message}...${NC}`);
+        }).then(result => {
+            if (result.status === 'ready' || result.status === 'started') {
+                RUNTIME_STATE.status = 'ready';
+                RUNTIME_STATE.message = '';
+            } else {
+                RUNTIME_STATE.status = 'failed';
+                RUNTIME_STATE.message = result.message;
+                console.log(`${YELLOW}⚠️  ${result.message}${NC}`);
+            }
+        }).catch(error => {
+            RUNTIME_STATE.status = 'failed';
+            RUNTIME_STATE.message = String(error && error.message || error);
+        });
+    }
     return serverHandle;
 }
 
@@ -2190,6 +2271,7 @@ async function main() {
                 yesMode: Boolean(modeState.yesMode),
                 updateAgents: Boolean(modeState.updateAgents),
                 dockerCmd: DOCKER_CMD,
+                dockerEnv: DOCKER_ENV,
                 rootDir: path.join(__dirname, '..'),
                 loadConfig,
                 runCmd,

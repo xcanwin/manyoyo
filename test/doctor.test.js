@@ -1,10 +1,11 @@
 'use strict';
 
-const { runDoctorChecks } = require('../lib/doctor');
+const { runDoctorChecks, applyDoctorFixes } = require('../lib/doctor');
 
 describe('doctor checks', () => {
     test('reports stable codes for runtime, daemon, image, config, agent, mode and plugin state', () => {
         const report = runDoctorChecks({
+            selectRuntime: () => ({ command: 'docker', env: {}, source: 'docker-daemon' }),
             runCommand: (command, args) => {
                 if (args[0] === '--version') return `${command} 1.0`;
                 if (args[0] === 'info') return 'daemon';
@@ -21,8 +22,10 @@ describe('doctor checks', () => {
         });
 
         expect(report.ok).toBe(true);
+        expect(report.runtimeCommand).toBe('docker');
+        expect(report.runtimeSource).toBe('docker-daemon');
         expect(report.checks).toEqual(expect.arrayContaining([
-            expect.objectContaining({ code: 'RUNTIME_AVAILABLE', status: 'ok' }),
+            expect.objectContaining({ code: 'RUNTIME_AVAILABLE', status: 'ok', summary: expect.stringContaining('docker-daemon') }),
             expect.objectContaining({ code: 'DAEMON_AVAILABLE', status: 'ok' }),
             expect.objectContaining({ code: 'IMAGE_AVAILABLE', status: 'ok' }),
             expect.objectContaining({ code: 'CONFIG_AVAILABLE', status: 'ok' }),
@@ -35,6 +38,7 @@ describe('doctor checks', () => {
 
     test('reports actionable errors without throwing when dependencies are unavailable', () => {
         const report = runDoctorChecks({
+            selectRuntime: () => { throw new Error('not found'); },
             runCommand: () => { throw new Error('not found'); },
             configExists: false,
             imageName: 'image',
@@ -54,5 +58,94 @@ describe('doctor checks', () => {
             expect.objectContaining({ code: 'PLUGIN_CONFIG_INVALID', status: 'warning' }),
             expect.objectContaining({ code: 'PORT_OCCUPIED', status: 'warning' })
         ]));
+    });
+
+    test('passes the selected runtime env to every runtime command', () => {
+        const seen = [];
+        runDoctorChecks({
+            selectRuntime: () => ({ command: '/p/podman', env: { CONTAINERS_CONF: '/p/c.conf' }, source: 'private-podman' }),
+            runCommand: (command, args, options) => {
+                seen.push({ command, env: options && options.env });
+                return 'ok';
+            },
+            imageName: 'image',
+            imageVersion: '1.0.0-common'
+        });
+
+        expect(seen.length).toBeGreaterThanOrEqual(3);
+        seen.forEach(call => {
+            expect(call.command).toBe('/p/podman');
+            expect(call.env).toEqual({ CONTAINERS_CONF: '/p/c.conf' });
+        });
+    });
+});
+
+describe('doctor --fix', () => {
+    const brokenReport = () => runDoctorChecks({
+        selectRuntime: () => ({ command: 'docker', env: {}, source: 'docker-daemon' }),
+        runCommand: (command, args) => {
+            if (args[0] === '--version') return 'v';
+            throw new Error('boom');
+        },
+        configExists: false,
+        imageName: 'img',
+        imageVersion: '1.0.0-common',
+        agentCommand: 'claude',
+        containerMode: 'common',
+        pluginConfig: {},
+        portStatus: 'occupied'
+    });
+
+    test('fixes daemon, image and config, and only suggests a port', async () => {
+        const order = [];
+        const fixed = await applyDoctorFixes(brokenReport(), {
+            startRuntime: async () => { order.push('runtime'); return { fixed: true, message: '已启动' }; },
+            pullImage: async () => { order.push('image'); return { fixed: true, message: '已拉取' }; },
+            createConfig: () => { order.push('config'); return { fixed: true, message: '已生成' }; },
+            suggestPort: () => { order.push('port'); return { fixed: false, message: '建议使用端口 3001' }; }
+        });
+        const fixOf = code => fixed.checks.find(c => c.code === code).fix;
+
+        expect(order).toEqual(['runtime', 'image', 'config', 'port']);
+        expect(fixOf('DAEMON_UNAVAILABLE')).toEqual({ attempted: true, fixed: true, message: '已启动' });
+        expect(fixOf('IMAGE_MISSING').fixed).toBe(true);
+        expect(fixOf('CONFIG_MISSING').fixed).toBe(true);
+        expect(fixOf('PORT_OCCUPIED')).toEqual({ attempted: true, fixed: false, message: '建议使用端口 3001' });
+        expect(fixed.ok).toBe(true);
+    });
+
+    test('skips the image pull when the runtime could not be repaired', async () => {
+        const pullImage = jest.fn();
+        const fixed = await applyDoctorFixes(brokenReport(), {
+            startRuntime: async () => ({ fixed: false, message: '超时' }),
+            pullImage
+        });
+        expect(pullImage).not.toHaveBeenCalled();
+        expect(fixed.checks.find(c => c.code === 'IMAGE_MISSING').fix.attempted).toBe(false);
+        expect(fixed.ok).toBe(false);
+    });
+
+    test('a throwing handler is reported instead of crashing, and missing handlers mean not attempted', async () => {
+        const fixed = await applyDoctorFixes(brokenReport(), {
+            startRuntime: () => { throw new Error('nope\ndetail'); }
+        });
+        expect(fixed.checks.find(c => c.code === 'DAEMON_UNAVAILABLE').fix).toEqual({ attempted: true, fixed: false, message: 'nope' });
+        expect(fixed.checks.find(c => c.code === 'CONFIG_MISSING').fix).toEqual({ attempted: false, fixed: false, message: '' });
+    });
+
+    test('healthy checks carry no fix field', async () => {
+        const report = runDoctorChecks({
+            selectRuntime: () => ({ command: 'docker', env: {}, source: 'config' }),
+            runCommand: () => 'ok',
+            configExists: true,
+            imageName: 'i',
+            imageVersion: '1.0.0-common',
+            agentCommand: 'claude',
+            containerMode: 'common',
+            pluginConfig: {},
+            portStatus: 'available'
+        });
+        const fixed = await applyDoctorFixes(report, {});
+        expect(fixed.checks.every(c => c.fix === undefined)).toBe(true);
     });
 });

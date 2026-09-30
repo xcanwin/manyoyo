@@ -130,6 +130,18 @@ Mode descriptions:
 - `dind` - Docker-in-Docker mode, secure nested containers
 - `sock` - Mount Docker Socket mode (dangerous, can access everything on host)
 
+#### containerRuntime
+- **Type**: String
+- **Values**: `auto`, `docker`, `podman`
+- **Default**: `auto`
+- **Description**: Container runtime. Global config only (`runs.<name>` is not supported). `auto` picks by priority: `~/.manyoyo/runtime/podman/bin/podman` (private Podman, used whenever it exists, with its own `XDG_CONFIG_HOME` / `XDG_DATA_HOME` / `CONTAINERS_CONF`) > docker whose `docker info` succeeds > podman whose `podman info` succeeds > the first one that only answers `--version`. Setting `docker` / `podman` explicitly uses that command without probing. `manyoyo doctor` shows the selected runtime and its source.
+- **Example**:
+```json5
+{
+    "containerRuntime": "podman"
+}
+```
+
 #### serverUser
 - **Type**: String
 - **Default**: `admin`

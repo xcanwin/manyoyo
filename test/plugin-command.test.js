@@ -171,6 +171,45 @@ describe('PlaywrightPlugin runtime filtering', () => {
         }
     });
 
+    test('container runtime should use containerRuntime from the root global config', () => {
+        const ensureCommandSpy = jest.spyOn(PlaywrightPlugin.prototype, 'ensureCommandAvailable')
+            .mockImplementation(() => false);
+
+        try {
+            const plugin = new PlaywrightPlugin({ rootGlobalConfig: { containerRuntime: 'podman' } });
+            expect(plugin.config.containerRuntime).toBe('podman');
+        } finally {
+            ensureCommandSpy.mockRestore();
+        }
+    });
+
+    test('container runtime should prefer private podman and keep its env out of process.env', () => {
+        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-plugin-private-podman-'));
+        const homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(tempHome);
+        try {
+            const privateBin = path.join(tempHome, '.manyoyo', 'runtime', 'podman', 'bin', 'podman');
+            fs.mkdirSync(path.dirname(privateBin), { recursive: true });
+            fs.writeFileSync(privateBin, '#!/bin/sh\n', { mode: 0o755 });
+
+            const plugin = new PlaywrightPlugin();
+            expect(plugin.config.containerRuntime).toBe(privateBin);
+            expect(plugin.runtimeEnv.CONTAINERS_CONF).toBe(path.join(tempHome, '.manyoyo', 'runtime', 'podman', 'containers.conf'));
+            expect(plugin.ensureCommandAvailable(privateBin)).toBe(true);
+            expect(process.env.CONTAINERS_CONF).toBeUndefined();
+        } finally {
+            homedirSpy.mockRestore();
+            fs.rmSync(tempHome, { recursive: true, force: true });
+        }
+    });
+
+    test('cli session integration treats a podman absolute path as podman', () => {
+        const plugin = new PlaywrightPlugin();
+        jest.spyOn(plugin, 'readSceneEndpoint').mockReturnValue({ port: 9000, wsPath: '/x' });
+        jest.spyOn(plugin, 'writeSceneCliAttachConfig').mockImplementation(() => {});
+        const integration = plugin.buildCliSessionIntegration('/home/u/.manyoyo/runtime/podman/bin/podman');
+        expect(integration.extraArgs).toEqual([]);
+    });
+
     test('runtime host only returns host scenes', () => {
         const plugin = new PlaywrightPlugin({
             globalConfig: {

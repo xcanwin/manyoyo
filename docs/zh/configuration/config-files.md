@@ -130,6 +130,18 @@ MANYOYO 支持两种配置文件：
 - `dind` - Docker-in-Docker 模式，安全的嵌套容器
 - `sock` - 挂载 Docker Socket 模式（危险，可访问宿主机一切）
 
+#### containerRuntime
+- **类型**：字符串
+- **可选值**：`auto`, `docker`, `podman`
+- **默认值**：`auto`
+- **说明**：容器运行时，仅全局配置生效（不支持 `runs.<name>`）。`auto` 按优先级选择：`~/.manyoyo/runtime/podman/bin/podman`（私有 Podman，存在即用，并使用独立的 `XDG_CONFIG_HOME` / `XDG_DATA_HOME` / `CONTAINERS_CONF`）> `docker info` 可用的 docker > `podman info` 可用的 podman > 仅 `--version` 可用的第一个。显式设为 `docker` / `podman` 时直接使用该命令，不再探测。`manyoyo doctor` 会显示选中的运行时与来源。
+- **示例**：
+```json5
+{
+    "containerRuntime": "podman"
+}
+```
+
 #### serverUser
 - **类型**：字符串
 - **默认值**：`admin`

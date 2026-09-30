@@ -5532,3 +5532,58 @@ describe('Web Server Session List Performance', () => {
         }
     });
 });
+
+describe('Web Server Runtime State', () => {
+    test('GET /api/system/runtime requires auth and reflects the live runtime state', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-runtime-state-'));
+        const port = await getFreePort();
+        const runtimeState = { status: 'starting', message: '正在启动容器环境' };
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, { runtimeState }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+
+            const unauth = await request(`${baseUrl}/api/system/runtime`);
+            expect(unauth.response.status).toBe(401);
+
+            const cookie = await loginAndGetCookie(baseUrl);
+            const starting = await request(`${baseUrl}/api/system/runtime`, { headers: { Cookie: cookie } });
+            expect(starting.response.status).toBe(200);
+            expect(starting.json).toEqual({ status: 'starting', message: '正在启动容器环境' });
+
+            runtimeState.status = 'ready';
+            runtimeState.message = '';
+            const ready = await request(`${baseUrl}/api/system/runtime`, { headers: { Cookie: cookie } });
+            expect(ready.json).toEqual({ status: 'ready', message: '' });
+
+            await request(`${baseUrl}/auth/logout`, { method: 'POST', headers: { Cookie: cookie } });
+            const afterLogout = await request(`${baseUrl}/api/system/runtime`, { headers: { Cookie: cookie } });
+            expect(afterLogout.response.status).toBe(401);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('defaults to ready when the caller provides no runtime state', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-runtime-default-'));
+        const port = await getFreePort();
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const cookie = await loginAndGetCookie(baseUrl);
+            const res = await request(`${baseUrl}/api/system/runtime`, { headers: { Cookie: cookie } });
+            expect(res.json).toEqual({ status: 'ready', message: '' });
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+});

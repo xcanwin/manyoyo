@@ -85,7 +85,8 @@ These commands share the same core runtime options:
 | --- | --- |
 | `-r, --run <name>` | Load run configuration before diagnosing |
 | `--port <port>` | Also check whether the given listening port is available |
-| `--json` | Print a stable JSON report (`ok` + `checks[]`) for scripting |
+| `--json` | Print a stable JSON report (`ok` + `checks[]`, including the selected `runtimeCommand` / `runtimeSource`) for scripting |
+| `--fix` | Repair what can be repaired: start the Podman machine / Docker Desktop on macOS, pull a missing image, create a default config; for an occupied port it only suggests a free one. Checks that did not pass carry `fix: {attempted, fixed, message}` |
 
 ### `playwright`
 
@@ -128,6 +129,7 @@ manyoyo config command -r claude
 # Diagnose the runtime environment
 manyoyo doctor
 manyoyo doctor --json
+manyoyo doctor --fix
 
 # Custom commands
 manyoyo run --rm-on-exit -x /bin/bash

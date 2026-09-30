@@ -8,6 +8,8 @@
     "imageName": "localhost/xcanwin/manyoyo",
     "imageVersion": "1.8.8-common",
     "containerMode": "common",
+    // 容器运行时：auto（默认，自动选择）/ docker / podman，仅全局配置生效
+    "containerRuntime": "auto",
 
     // 容器启动环境（env 按 key 合并覆盖；其余数组参数会累加）
     // 仅支持绝对路径，如 /abs/path.env

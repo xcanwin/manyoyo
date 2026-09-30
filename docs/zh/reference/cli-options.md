@@ -85,7 +85,8 @@ description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频�
 | --- | --- |
 | `-r, --run <name>` | 读取运行配置后再诊断 |
 | `--port <port>` | 额外检查指定监听端口是否可用 |
-| `--json` | 以 JSON 输出稳定诊断结果（`ok` + `checks[]`），便于脚本消费 |
+| `--json` | 以 JSON 输出稳定诊断结果（`ok` + `checks[]`，含选中的 `runtimeCommand` / `runtimeSource`），便于脚本消费 |
+| `--fix` | 自动修复可修复项：启动 Podman machine / macOS 上的 Docker Desktop、拉取缺失镜像、生成默认配置；端口占用时只给出建议端口。未通过的检查项带 `fix: {attempted, fixed, message}` |
 
 ### `playwright`
 
@@ -128,6 +129,7 @@ manyoyo config command -r claude
 # 诊断运行环境
 manyoyo doctor
 manyoyo doctor --json
+manyoyo doctor --fix
 
 # 自定义命令
 manyoyo run --rm-on-exit -x /bin/bash
