@@ -37,8 +37,8 @@
         "prepack": "npm run build:web-shadcn",
         "install-link": "npm link",
         "test": "jest --coverage && npm run test:web-shadcn",
-        "test:unit": "jest test/ && npm run test:web-shadcn",
-        "lint": "echo 'Lint check passed'",
+        "test:unit": "jest test/ --testPathIgnorePatterns '<rootDir>/temp/' '<rootDir>/test/integration/' && npm run test:web-shadcn",
+        "test:integration": "jest test/integration/",
         "docs:dev": "vitepress dev docs --host 127.0.0.1 --port 5173",
         "docs:build": "vitepress build docs",
         "docs:preview": "vitepress preview docs --host 127.0.0.1 --port 4173"

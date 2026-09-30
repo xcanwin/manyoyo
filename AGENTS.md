@@ -33,7 +33,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `frontend-shadcn/`：默认 Web 前端（`/` 路由，`/shadcn` 为别名），独立 Vite + React + TS 项目，约 70 个源文件；组件地图见该目录 `AGENTS.md`。
 - `docker/`：多阶段 `manyoyo.Dockerfile`、构建缓存 `cache/`（Node.js、JDT LSP、gopls，2 天有效）、各 Agent 默认配置与 supervisor 模板 `res/`。
 - `docs/`：VitePress 文档，中文主维护 `docs/zh/`，英文 `docs/en/`，结构须一致。
-- `test/`：Jest（`*.test.js`）；前端 Vitest 在 `frontend-shadcn/src/`（`*.test.ts(x)`，与源码同目录）。
+- `test/`：Jest（`*.test.js`），依赖真实容器运行时的用例在 `test/integration/`；前端 Vitest 在 `frontend-shadcn/src/`（`*.test.ts(x)`，与源码同目录）。
 - `scripts/`、`assets/`、`manyoyo.example.json`：构建与发布脚本、资源、配置模板。
 
 ## 构建、测试与开发命令
@@ -42,11 +42,11 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 npm install              # 开发阶段安装/更新依赖（会更新 package-lock.json）
 npm ci --include=optional # 提交前与 CI 的可复现安装（CI 不再执行 npm install）
 
-npm run test:unit        # 开发阶段（快）：test/ 下 Jest 单测 + 前端 Vitest
+npm run test:unit        # 开发阶段（快）：test/ 下 Jest 单测（不含 test/integration/）+ 前端 Vitest
 npm test                 # 提交前：Jest 覆盖率（输出 coverage/）+ frontend-shadcn Vitest
-                         # 注意：test/manyoyo.test.js 里 Container Mode ×3 和
-                         # doctor --json ×1 会真的调 docker/podman 二进制，
-                         # 没装容器运行时的环境上这 4 个必失败，不是你改坏的
+                         # 需要真实 docker/podman 的用例都在 test/integration/，
+                         # docker info / podman info 失败时自动跳过并打印原因
+npm run test:integration # 只跑 test/integration/（容器运行时集成测试）
 npx jest test/manyoyo.test.js            # 单个测试文件
 npx jest --testNamePattern="关键词"       # 按测试名称匹配
 
@@ -57,7 +57,7 @@ npm install -g . / npm link / npm run install-link   # 本地全局安装或软�
 npm run build:web-shadcn # 构建默认前端单文件产物 shadcn.html，随 npm run prepack 自动执行
 npm run dev:web-shadcn   # 默认前端本地开发；npm run test:web-shadcn 跑其 Vitest
 npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
-npm run lint             # 根目录这条是占位 echo，不检查任何东西；前端的真检查是下面两条
+# 根目录没有 lint 脚本；前端的真检查是下面两条
 
 # 改 frontend-shadcn/ 必跑这两条（根目录的 npm test 不含它们）
 cd frontend-shadcn && npm run typecheck   # tsc -b --noEmit（必须 -b，否则一个文件都不检查）
@@ -66,7 +66,7 @@ cd frontend-shadcn && npm run lint        # eslint；有既存报错，基线与
 
 Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版本与 `package.json.imageVersion` 同主版本号。
 
-没有容器运行时的机器上（`npm test` 里那 4 个用例必失败，甚至 `npx jest` 直接报 `jest-circus/build/runner.js ... was not found` 这类环境问题），前端改动用这组替代验证：`cd frontend-shadcn && npm run typecheck && npm run lint`，再回根目录 `npm run test:web-shadcn && npm run build:web-shadcn`；并在交付说明里写清楚哪些没验证。
+`npx jest` 若直接报 `jest-circus/build/runner.js ... was not found`，是 node_modules 损坏，先 `npm ci --include=optional` 重装；重装仍无法跑 Jest 时，前端改动用这组替代验证：`cd frontend-shadcn && npm run typecheck && npm run lint`，再回根目录 `npm run test:web-shadcn && npm run build:web-shadcn`；并在交付说明里写清楚哪些没验证。没有容器运行时不影响 `npm test`（集成测试自动跳过）。
 
 ## 编码风格
 
