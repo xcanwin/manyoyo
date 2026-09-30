@@ -46,6 +46,15 @@ describe('setup helpers', () => {
         });
     });
 
+    test('an explicit hostPath wins over the existing one', () => {
+        const profile = buildAgentRunProfile('codex', { OPENAI_API_KEY: 'k1234567' }, {
+            existingRun: { hostPath: '/old' },
+            defaultHostPath: '/w',
+            hostPath: '/new'
+        });
+        expect(profile.hostPath).toBe('/new');
+    });
+
     test('keeps unrelated fields and existing env of a previous run', () => {
         const profile = buildAgentRunProfile('codex', { OPENAI_MODEL: 'm2' }, {
             existingRun: { containerName: 'mine', volumes: ['/a:/b'], env: { OPENAI_API_KEY: 'old', OPENAI_MODEL: 'm1' } },

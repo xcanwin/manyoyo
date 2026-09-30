@@ -5816,6 +5816,40 @@ describe('Web Server Setup API', () => {
         });
     });
 
+    test('status exposes the default directory and runtime kind; agents expose the model key', async () => {
+        await withSetupServer(() => ({ dockerCmd: '/x/bin/podman' }), async ({ tempHost, call }) => {
+            const status = (await call('GET', '/api/setup/status')).json;
+            expect(status.defaultHostPath).toBe(path.join(tempHost, 'workpath'));
+            expect(status.runtimeKind).toBe('podman');
+            expect(status.platform).toBe(process.platform);
+            const agents = (await call('GET', '/api/setup/agents')).json.agents;
+            expect(agents.map(a => a.modelKey)).toEqual(['ANTHROPIC_MODEL', 'OPENAI_MODEL', 'GEMINI_MODEL', 'OPENAI_MODEL']);
+        });
+    });
+
+    test('a chosen hostPath is validated and stored; bad ones are rejected', async () => {
+        const rejected = [];
+        await withSetupServer(() => ({
+            validateHostPath: value => {
+                if (value === '/forbidden') throw new Error('不允许挂载');
+                rejected.push(value);
+            }
+        }), async ({ call, configPath }) => {
+            const env = { OPENAI_API_KEY: 'sk-openai-12345678' };
+            const ok = await call('POST', '/api/setup/agent', { agent: 'codex', env, hostPath: '/projects/app' });
+            expect(ok.response.status).toBe(200);
+            expect(JSON5.parse(fs.readFileSync(configPath, 'utf8')).runs.codex.hostPath).toBe('/projects/app');
+
+            const before = fs.readFileSync(configPath, 'utf8');
+            for (const hostPath of ['relative/dir', '/forbidden', 5]) {
+                const res = await call('POST', '/api/setup/agent', { agent: 'codex', env, hostPath });
+                expect(res.response.status).toBe(400);
+            }
+            expect(fs.readFileSync(configPath, 'utf8')).toBe(before);
+            expect(rejected).toContain('/projects/app');
+        });
+    });
+
     test('saving creates a minimal config when none exists (not the placeholder template)', async () => {
         await withSetupServer(() => ({}), async ({ call, configPath }) => {
             const res = await call('POST', '/api/setup/agent', { agent: 'codex', env: { OPENAI_API_KEY: 'sk-openai-12345678' } });

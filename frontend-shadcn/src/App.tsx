@@ -2,6 +2,7 @@ import * as React from "react"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { ResizeHandle } from "@/components/resize-handle"
+import { SetupWizard } from "@/components/setup-wizard"
 import { WorkspacePanel } from "@/components/workspace-panel"
 import { buildDocumentTitle } from "@/lib/chat-behavior"
 import { useResizableWidth } from "@/hooks/use-resizable-width"
@@ -10,6 +11,7 @@ import { useUnsavedChangesDialog } from "@/hooks/use-unsaved-changes-dialog"
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import type { FilesEditorState } from "@/components/files-panel"
 import type { SessionSummary } from "@/lib/api"
+import { fetchSetupStatus } from "@/lib/setup"
 
 // 侧边栏收起（offcanvas）后 Sidebar 本身平移出屏幕，但这根拖拽线之前是按 sidebarWidth
 // 独立定位的，跟收起状态无关——收起后线还留在原地、也还能拖，这里收起时直接不渲染
@@ -36,6 +38,21 @@ function SidebarResizeHandle({
 
 export function App() {
   const { sessions, containers, loading, error, refresh } = useSessions()
+  // 没有可用的 Agent 配置时先进首次向导；检查失败不拦用户，直接进主界面
+  const [setupPhase, setSetupPhase] = React.useState<"checking" | "wizard" | "done">("checking")
+  React.useEffect(() => {
+    let cancelled = false
+    fetchSetupStatus()
+      .then((status) => {
+        if (!cancelled) setSetupPhase(status.needsSetup ? "wizard" : "done")
+      })
+      .catch(() => {
+        if (!cancelled) setSetupPhase("done")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const { width: sidebarWidth, dragging: sidebarDragging, onHandlePointerDown } = useResizableWidth({
     storageKey: "manyoyo:sidebar-width",
     defaultWidth: 288,
@@ -77,6 +94,18 @@ export function App() {
     if (document.querySelector('meta[name="manyoyo-serve-title"]')) return
     document.title = buildDocumentTitle(activeSession?.agentRemark || activeSession?.agentName)
   }, [activeSession])
+
+  async function handleSetupFinished(containerName: string) {
+    const latest = await refresh()
+    const created = latest.find((s) => s.containerName === containerName)
+    if (created) setActiveSessionName(created.name)
+    setSetupPhase("done")
+  }
+
+  if (setupPhase === "checking") return <div className="min-h-svh" />
+  if (setupPhase === "wizard") {
+    return <SetupWizard onFinished={handleSetupFinished} onSkip={() => setSetupPhase("done")} />
+  }
 
   return (
     <SidebarProvider
