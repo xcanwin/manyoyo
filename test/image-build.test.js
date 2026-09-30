@@ -453,6 +453,25 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(options.log).toHaveBeenCalledWith(expect.stringContaining('跳过 gopls 本地缓存预下载'));
     });
 
+    test('gopls 在宿主机编译时必须带 -trimpath，避免把本机绝对路径编进二进制', async () => {
+        const options = createBaseOptions({
+            imageVersionTag: '1.8.0-go',
+            runCmd: jest.fn(() => '')
+        });
+
+        await buildImage(options).catch(() => {});
+
+        const goCall = options.runCmd.mock.calls.find(([cmd, args]) => cmd === 'go' && args[0] === 'install');
+        expect(goCall).toBeTruthy();
+        expect(goCall[1]).toEqual(['install', '-trimpath', 'golang.org/x/tools/gopls@latest']);
+    });
+
+    test('Dockerfile 里兜底的 go install 也带 -trimpath', () => {
+        const dockerfile = fs.readFileSync(path.join(__dirname, '../docker/manyoyo.Dockerfile'), 'utf8');
+        expect(dockerfile).toContain('go install -trimpath golang.org/x/tools/gopls@latest');
+        expect(dockerfile).not.toMatch(/go install golang\.org\/x\/tools\/gopls/);
+    });
+
     test('jdtls 下载 URL 应使用与架构匹配的 alpine 目录', async () => {
         const options = createBaseOptions({
             imageVersionTag: '1.8.0-full',

@@ -283,7 +283,7 @@ RUN <<EOX
             ln -sf /usr/local/share/manyoyo-gopls/gopls /usr/local/bin/gopls
         else
             # 下载编译
-            go install golang.org/x/tools/gopls@latest
+            go install -trimpath golang.org/x/tools/gopls@latest
             ln -sf ~/go/bin/gopls /usr/local/bin/gopls
             rm -rf /usr/local/share/manyoyo-gopls
         fi
