@@ -5680,3 +5680,243 @@ describe('Web Server One-Time Login Token', () => {
         });
     });
 });
+
+describe('Web Server Setup API', () => {
+    const JSON5 = require('json5');
+
+    async function withSetupServer(overrides, run) {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-setup-'));
+        const port = await getFreePort();
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, overrides(tempHost)));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const cookie = await loginAndGetCookie(baseUrl);
+            const call = (method, route, body) => request(`${baseUrl}${route}`, {
+                method,
+                headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+                body: body === undefined ? undefined : JSON.stringify(body)
+            });
+            await run({ tempHost, baseUrl, call, configPath: path.join(tempHost, 'manyoyo.json') });
+        } finally {
+            if (handle && typeof handle.close === 'function') await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    }
+
+    test('every setup endpoint requires auth', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-setup-auth-'));
+        const port = await getFreePort();
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            for (const [method, route] of [['GET', '/api/setup/status'], ['GET', '/api/setup/agents'], ['POST', '/api/setup/agent'], ['POST', '/api/setup/test-connection']]) {
+                const res = await request(`${baseUrl}${route}`, { method, headers: { 'Content-Type': 'application/json' }, body: method === 'POST' ? '{}' : undefined });
+                expect(res.response.status).toBe(401);
+            }
+            const cookie = await loginAndGetCookie(baseUrl);
+            expect((await request(`${baseUrl}/api/setup/agents`, { headers: { Cookie: cookie } })).response.status).toBe(200);
+            await request(`${baseUrl}/auth/logout`, { method: 'POST', headers: { Cookie: cookie } });
+            expect((await request(`${baseUrl}/api/setup/status`, { headers: { Cookie: cookie } })).response.status).toBe(401);
+        } finally {
+            if (handle && typeof handle.close === 'function') await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('status reflects config, runtime and image state', async () => {
+        let imageMissing = false;
+        const runtimeState = { status: 'ready', message: '' };
+        await withSetupServer(() => ({
+            runtimeState,
+            dockerExecArgs: args => {
+                if (args[0] === 'image' && imageMissing) throw new Error('no such image');
+                return '';
+            }
+        }), async ({ call, configPath }) => {
+            let res = await call('GET', '/api/setup/status');
+            expect(res.json).toEqual(expect.objectContaining({
+                needsSetup: true,
+                configuredAgents: [],
+                runtime: { status: 'ready', message: '' },
+                image: { status: 'ready', name: 'localhost/xcanwin/manyoyo:1.0.0-common' }
+            }));
+
+            imageMissing = true;
+            expect((await call('GET', '/api/setup/status')).json.image.status).toBe('missing');
+
+            runtimeState.status = 'starting';
+            runtimeState.message = '正在启动容器环境';
+            res = await call('GET', '/api/setup/status');
+            expect(res.json.runtime).toEqual({ status: 'starting', message: '正在启动容器环境' });
+            expect(res.json.image.status).toBe('unknown');
+
+            fs.writeFileSync(configPath, '{ runs: { claude: { env: { ANTHROPIC_AUTH_TOKEN: "sk-x" } } } }');
+            res = await call('GET', '/api/setup/status');
+            expect(res.json.needsSetup).toBe(false);
+            expect(res.json.configuredAgents).toEqual(['claude']);
+
+            fs.writeFileSync(configPath, '{ broken');
+            res = await call('GET', '/api/setup/status');
+            expect(res.json.configError).toEqual(expect.any(String));
+        });
+    });
+
+    test('agents lists the shared env schema', async () => {
+        await withSetupServer(() => ({}), async ({ call }) => {
+            const res = await call('GET', '/api/setup/agents');
+            const claude = res.json.agents.find(a => a.id === 'claude');
+            expect(res.json.agents.map(a => a.id)).toEqual(['claude', 'codex', 'gemini', 'opencode']);
+            expect(claude.env.find(e => e.name === 'ANTHROPIC_AUTH_TOKEN')).toEqual(expect.objectContaining({ secret: true }));
+            expect(claude.baseUrlPresets.length).toBeGreaterThan(0);
+        });
+    });
+
+    test('saving an agent keeps comments and other settings, and masks the response', async () => {
+        await withSetupServer(() => ({}), async ({ tempHost, call, configPath }) => {
+            fs.writeFileSync(configPath, `{
+    // 我的注释
+    "imageVersion": "1.9.2-common",
+    runs: {
+        other: { yolo: "gm" /* keep me */ }
+    }
+}
+`);
+            const token = 'sk-ant-abcdefgh12345678';
+            const res = await call('POST', '/api/setup/agent', {
+                agent: 'claude',
+                env: { ANTHROPIC_AUTH_TOKEN: token, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' }
+            });
+            expect(res.response.status).toBe(200);
+            expect(res.json.saved).toBe(true);
+            expect(JSON.stringify(res.json)).not.toContain(token);
+            expect(res.json.run.env.ANTHROPIC_AUTH_TOKEN).toBe('sk-a****5678');
+
+            const raw = fs.readFileSync(configPath, 'utf8');
+            expect(raw).toContain('// 我的注释');
+            expect(raw).toContain('/* keep me */');
+            const parsed = JSON5.parse(raw);
+            expect(parsed.runs.other.yolo).toBe('gm');
+            expect(parsed.runs.claude).toEqual({
+                containerName: 'my-claude-{now}',
+                yolo: 'c',
+                hostPath: path.join(tempHost, 'workpath'),
+                env: { ANTHROPIC_AUTH_TOKEN: token, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' }
+            });
+            expect(fs.statSync(path.join(tempHost, 'workpath')).isDirectory()).toBe(true);
+
+            // 再次保存只改一个变量：其它 env 与 run 里的自定义字段保留
+            parsed.runs.claude.volumes = ['/a:/b'];
+            fs.writeFileSync(configPath, JSON.stringify(parsed));
+            await call('POST', '/api/setup/agent', { agent: 'claude', env: { ANTHROPIC_MODEL: 'm1' } });
+            const again = JSON5.parse(fs.readFileSync(configPath, 'utf8')).runs.claude;
+            expect(again.volumes).toEqual(['/a:/b']);
+            expect(again.env).toEqual({ ANTHROPIC_AUTH_TOKEN: token, ANTHROPIC_BASE_URL: 'https://api.anthropic.com', ANTHROPIC_MODEL: 'm1' });
+        });
+    });
+
+    test('saving creates a minimal config when none exists (not the placeholder template)', async () => {
+        await withSetupServer(() => ({}), async ({ call, configPath }) => {
+            const res = await call('POST', '/api/setup/agent', { agent: 'codex', env: { OPENAI_API_KEY: 'sk-openai-12345678' } });
+            expect(res.response.status).toBe(200);
+            const parsed = JSON5.parse(fs.readFileSync(configPath, 'utf8'));
+            expect(Object.keys(parsed)).toEqual(['runs']);
+            expect(parsed.runs.codex.yolo).toBe('cx');
+        });
+    });
+
+    test('invalid input is rejected and the config stays untouched', async () => {
+        await withSetupServer(() => ({}), async ({ call, configPath }) => {
+            const original = '{ imageVersion: "1.9.2-common" }\n';
+            fs.writeFileSync(configPath, original);
+            const cases = [
+                { agent: 'nope', env: {} },
+                { agent: 'claude', env: { PATH: '/bin' } },
+                { agent: 'claude', env: { ANTHROPIC_AUTH_TOKEN: 'a;b' } },
+                { agent: 'claude', env: { ANTHROPIC_MODEL: 'm' } },
+                { agent: 'claude', env: 'x' }
+            ];
+            for (const body of cases) {
+                const res = await call('POST', '/api/setup/agent', body);
+                expect(res.response.status).toBe(400);
+                expect(res.json.error).toEqual(expect.any(String));
+            }
+            expect(fs.readFileSync(configPath, 'utf8')).toBe(original);
+
+            fs.writeFileSync(configPath, '{ broken');
+            const broken = await call('POST', '/api/setup/agent', { agent: 'codex', env: { OPENAI_API_KEY: 'k1234567' } });
+            expect(broken.response.status).toBe(400);
+            expect(fs.readFileSync(configPath, 'utf8')).toBe('{ broken');
+        });
+    });
+
+    describe('test-connection', () => {
+        const SECRET = 'sk-ant-verysecretvalue99';
+
+        async function runConnectionCase(mode, assertions) {
+            const dockerCalls = [];
+            await withSetupServer(tempHost => {
+                const fakeDocker = path.join(tempHost, 'fake-docker.sh');
+                fs.writeFileSync(fakeDocker, `#!/bin/sh
+case "${mode}" in
+  ok) echo OK; exit 0 ;;
+  auth) echo "Error 401 Unauthorized ${SECRET}" >&2; exit 1 ;;
+  network) echo "getaddrinfo ENOTFOUND api.anthropic.com" >&2; exit 1 ;;
+  other) echo "boom" >&2; exit 3 ;;
+  timeout) exit 124 ;;
+esac
+`, { mode: 0o755 });
+                return {
+                    dockerCmd: fakeDocker,
+                    dockerExecArgs: args => { dockerCalls.push(args); return ''; }
+                };
+            }, async ctxInfo => assertions({ ...ctxInfo, dockerCalls }));
+        }
+
+        test.each([
+            ['ok', 'success'],
+            ['auth', 'auth'],
+            ['network', 'network'],
+            ['timeout', 'network'],
+            ['other', 'other']
+        ])('mode %s is classified as %s and the temp container is always removed', async (mode, category) => {
+            await runConnectionCase(mode, async ({ call, dockerCalls }) => {
+                const res = await call('POST', '/api/setup/test-connection', { agent: 'claude', env: { ANTHROPIC_AUTH_TOKEN: SECRET } });
+                expect(res.response.status).toBe(200);
+                expect(res.json.category).toBe(category);
+                expect(JSON.stringify(res.json)).not.toContain(SECRET);
+
+                const runArgs = dockerCalls.find(a => a[0] === 'run');
+                expect(runArgs[runArgs.indexOf('--name') + 1]).toMatch(/^manyoyo-setup-test-[0-9a-f]{8}$/);
+                const rm = dockerCalls.find(a => a[0] === 'rm');
+                expect(rm).toEqual(['rm', '-f', runArgs[runArgs.indexOf('--name') + 1]]);
+            });
+        });
+
+        test('does not persist the tested values and validates input', async () => {
+            await runConnectionCase('ok', async ({ call, configPath }) => {
+                await call('POST', '/api/setup/test-connection', { agent: 'claude', env: { ANTHROPIC_AUTH_TOKEN: SECRET } });
+                expect(fs.existsSync(configPath)).toBe(false);
+                const bad = await call('POST', '/api/setup/test-connection', { agent: 'claude', env: { ANTHROPIC_AUTH_TOKEN: 'a;b' } });
+                expect(bad.response.status).toBe(400);
+            });
+        });
+
+        test('reports an unready image without creating a container', async () => {
+            const dockerCalls = [];
+            await withSetupServer(() => ({
+                dockerExecArgs: args => {
+                    dockerCalls.push(args);
+                    if (args[0] === 'image') throw new Error('missing');
+                    return '';
+                }
+            }), async ({ call }) => {
+                const res = await call('POST', '/api/setup/test-connection', { agent: 'claude', env: { ANTHROPIC_AUTH_TOKEN: SECRET } });
+                expect(res.json.category).toBe('other');
+                expect(res.json.message).toContain('尚未就绪');
+                expect(dockerCalls.some(a => a[0] === 'run')).toBe(false);
+            });
+        });
+    });
+});
