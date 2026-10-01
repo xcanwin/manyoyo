@@ -38,4 +38,12 @@ describe('image-publish workflow', () => {
     test('validates the image version format before building', () => {
         expect(text).toContain("^[0-9]+\\.[0-9]+\\.[0-9]+-[A-Za-z0-9][A-Za-z0-9_.-]*$");
     });
+
+    test('creates the (gitignored) docker/cache directory that the Dockerfile COPYs, before any build step', () => {
+        const mkdir = text.indexOf('mkdir -p docker/cache');
+        expect(mkdir).toBeGreaterThan(-1);
+        expect(mkdir).toBeLessThan(text.indexOf('docker/build-push-action'));
+        const dockerfile = fs.readFileSync(path.join(__dirname, '../docker/manyoyo.Dockerfile'), 'utf8');
+        expect(dockerfile).toContain('COPY ./docker/cache/ /cache/');
+    });
 });

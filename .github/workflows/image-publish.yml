@@ -27,6 +27,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Dockerfile 第一阶段 COPY docker/cache/（缓存可为空，但目录必须存在；
+      # 该目录被 .gitignore 忽略，全新 checkout 里没有，空目录让构建在容器内自行下载）
+      - name: Prepare empty build cache directory
+        run: mkdir -p docker/cache
+
       - name: Resolve image version
         id: version
         env:
