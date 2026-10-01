@@ -22,3 +22,4 @@ libpod/
 .playwright-cli/
 lib/web/frontend/shadcn.html
 .claude/
+dist-offline/

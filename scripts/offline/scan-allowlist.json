@@ -1,0 +1,35 @@
+[
+    {
+        "rule": "local-path",
+        "pathPattern": "^full/app/node/bin/node$",
+        "valuePattern": "^/Users/admin$",
+        "reason": "Node.js 官方二进制内嵌的上游构建机路径（nodejs.org 构建环境的通用账号 admin），与本项目构建机无关"
+    },
+    {
+        "rule": "email",
+        "pathPattern": "^full/app/node/(bin/node|LICENSE)$",
+        "reason": "Node.js 官方二进制与 LICENSE 里的第三方依赖作者邮箱"
+    },
+    {
+        "rule": "local-path",
+        "pathPattern": "^full/runtime/podman/(bin|lib)/[^/]+$",
+        "valuePattern": "^/(Users/(runner|usr|martin|slopezpa)|home/(user|paul|runner|root|rootMountWhereAfter\\.vhdx|--cpus))$",
+        "reason": "Podman 官方二进制内嵌的上游构建路径（GitHub Actions macOS runner 的通用账号 runner）与依赖库注释/示例路径，非本项目构建机"
+    },
+    {
+        "rule": "email",
+        "pathPattern": "^full/runtime/podman/(bin|lib)/[^/]+$",
+        "reason": "Podman 官方二进制里 Go 依赖的作者邮箱"
+    },
+    {
+        "rule": "local-path",
+        "pathPattern": "^full/app/manyoyo/node_modules/",
+        "valuePattern": "^/home/(playwright|pwuser)$",
+        "reason": "Playwright 官方 npm 包类型定义/打包代码里的示例路径（Docker 镜像用户名 playwright / pwuser）"
+    },
+    {
+        "rule": "email",
+        "pathPattern": "^full/app/manyoyo/node_modules/",
+        "reason": "第三方 npm 包 package.json / 许可证里的作者邮箱（manyoyo 自身代码在 app/manyoyo/lib 与 bin，不在此树，仍受扫描）"
+    }
+]

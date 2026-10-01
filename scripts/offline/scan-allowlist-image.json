@@ -1,0 +1,57 @@
+[
+    {
+        "rule": "email",
+        "pathPattern": "\\.tar!/(usr|var/lib/dpkg|var/cache/debconf|etc|root/\\.cache/ms-playwright|root/\\.claude/plugins|root/\\.codex/skills|root/\\.local|opt)/",
+        "reason": "镜像各层里的第三方内容：Debian 包的维护者邮箱（dpkg/debconf/usr/share/doc）、npm 全局包（Claude Code/Codex/Playwright）、Chrome 等二进制里的作者邮箱。只放行层内文件树，镜像配置与历史（层之外的 JSON）不在放行范围"
+    },
+    {
+        "rule": "local-path",
+        "pathPattern": "\\.tar!/(usr|var/lib/dpkg|var/cache/debconf|etc|root/\\.cache/ms-playwright|root/\\.claude/plugins|root/\\.codex/skills|root/\\.local|opt)/",
+        "reason": "第三方二进制（Chrome、codex、claude、Go/Rust 程序）内嵌的上游构建路径与示例路径（多为 GitHub runner 的 /home/runner、/Users/runner）；层之外的镜像配置与历史不放行"
+    },
+    {
+        "rule": "private-key",
+        "pathPattern": "\\.tar!/(usr|var/lib/dpkg|var/cache/debconf|etc|root/\\.cache/ms-playwright|root/\\.claude/plugins|root/\\.codex/skills|root/\\.local|opt)/",
+        "reason": "第三方库/文档里的 PEM 头字符串（libgnutls、claude/codex 二进制、file 的 magic 库），不是真实私钥"
+    },
+    {
+        "rule": "token",
+        "pathPattern": "\\.tar!/usr/local/lib/node_modules/@openai/codex/",
+        "reason": "codex 官方二进制内的示例性 sk- 字符串（文档/测试数据），非真实凭据"
+    },
+    {
+        "rule": "sensitive-filename",
+        "pathPattern": "\\.tar!/(etc/ssl/certs|usr/share/ca-certificates|usr/local/share/ca-certificates)/[^/]+\\.(pem|crt)$",
+        "reason": "系统公共 CA 根证书（公开数据）"
+    },
+    {
+        "rule": "sensitive-filename",
+        "pathPattern": "\\.tar!/root/\\.claude/plugins/marketplaces/[^/]+/\\.git$",
+        "reason": "构建时 `claude plugin install` 克隆的官方插件市场仓库的 .git 目录（公开仓库，不含维护者信息）；若后续清理该目录可删除本条"
+    },
+    {
+        "rule": "email",
+        "pathPattern": "\\.tar!/root/\\.(claude|gemini|codex)/skills/",
+        "reason": "`playwright-cli install --skills` 安装的第三方技能文档，里面是示例邮箱（如 user@example.com）"
+    },
+    {
+        "rule": "email",
+        "pathPattern": "\\.tar!/var/log/bootstrap\\.log$",
+        "reason": "Ubuntu 基础镜像自带的 debootstrap 日志（含 Debian 包版权里的维护者邮箱），非本项目产生"
+    },
+    {
+        "rule": "sensitive-filename",
+        "pathPattern": "\\.tar!/(usr/lib/ssl/cert\\.pem|usr/lib/python3/dist-packages/pip/_vendor/certifi/cacert\\.pem)$",
+        "reason": "公共 CA 证书包（公开数据）"
+    },
+    {
+        "rule": "sensitive-filename",
+        "pathPattern": "\\.tar!/(usr/local/lib/node_modules/npm/\\.npmrc|root/\\.claude/plugins/marketplaces/[^/]+/external_plugins/[^/]+/\\.npmrc)$",
+        "reason": "第三方包自带的 .npmrc（npm 自身与官方插件仓库里的），内容仍受 token 规则扫描"
+    },
+    {
+        "rule": "sensitive-filename",
+        "pathPattern": "\\.tar!/root/\\.npmrc$",
+        "reason": "Dockerfile 的 `npm config set registry` / allow-scripts 生成（已核对内容只有 registry 与 allow-scripts，无凭据）；内容仍受 token 规则扫描，将来混入凭据会被抓到"
+    }
+]

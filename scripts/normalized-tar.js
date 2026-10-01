@@ -8,7 +8,12 @@ const { spawnSync } = require('child_process');
 const DEFAULT_MTIME = '2020-01-01T00:00:00Z';
 const EXCLUDES = ['._*', '.DS_Store'];
 
-function detectTarFlavor(tarBin = 'tar') {
+// 默认用 PATH 里的 tar；macOS 自带 bsdtar 缺 --mtime/--sort，CI 里用 MANYOYO_TAR 指向 GNU tar 以获得可复现的归档
+function tarBinary() {
+    return process.env.MANYOYO_TAR || 'tar';
+}
+
+function detectTarFlavor(tarBin = tarBinary()) {
     const result = spawnSync(tarBin, ['--version'], { encoding: 'utf-8' });
     const text = `${result.stdout || ''}${result.stderr || ''}`;
     if (/bsdtar|libarchive/i.test(text)) return 'bsd';
@@ -59,7 +64,7 @@ function buildNormalizedTarArgs(options) {
 
 function createNormalizedTar(options) {
     const { flavor, args } = buildNormalizedTarArgs(options);
-    const result = spawnSync('tar', args, {
+    const result = spawnSync(tarBinary(), args, {
         encoding: 'utf-8',
         // macOS 的 tar 会把资源派生文件打成 ._*，COPYFILE_DISABLE 从源头关掉
         env: { ...process.env, COPYFILE_DISABLE: '1' }

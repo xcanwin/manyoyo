@@ -207,9 +207,12 @@ async function scanTargets(targets, options = {}) {
     async function expandArchive(filePath, display, kind, depth) {
         const dir = fs.mkdtempSync(path.join(tmpRoot, 'manyoyo-scan-'));
         try {
-            const extracted = spawnSync('tar', ['-xf', filePath, '-C', dir, '--no-same-owner', '--no-same-permissions'], {
-                encoding: 'utf-8'
-            });
+            const untar = extraArgs => spawnSync('tar', ['-xf', filePath, '-C', dir, ...extraArgs], { encoding: 'utf-8' });
+            let extracted = untar(['--no-same-owner', '--no-same-permissions']);
+            // 个别 tar 实现（如 macOS bsdtar）不认这两个选项：退回最朴素的解包
+            if (extracted.status !== 0 && /nrecognized|nknown option|illegal option|invalid option/i.test(String(extracted.stderr))) {
+                extracted = untar([]);
+            }
             const entries = fs.readdirSync(dir);
             if (extracted.error || (extracted.status !== 0 && entries.length === 0)) {
                 if (kind === 'gzip') {
@@ -313,7 +316,10 @@ function formatReport(result, printInventory) {
         });
     }
     if (result.allowed.length > 0) lines.push(`允许列表放行 ${result.allowed.length} 处`);
-    result.warnings.forEach(warning => lines.push(`警告: ${warning}`));
+    // 镜像里成千上万个 .gz（changelog 等）会触发“嵌套过深”告警，合并成一行，其余原样列出
+    const deepWarnings = result.warnings.filter(warning => warning.startsWith('嵌套层数超过'));
+    if (deepWarnings.length > 0) lines.push(`警告: ${deepWarnings.length} 个文件嵌套层数超过上限未展开（例: ${deepWarnings[0].split(': ').slice(1).join(': ')}）`);
+    result.warnings.filter(warning => !warning.startsWith('嵌套层数超过')).forEach(warning => lines.push(`警告: ${warning}`));
     if (printInventory) {
         lines.push('', '产物清单 (sha256  大小  路径):');
         result.inventory.forEach(item => lines.push(`  ${item.sha256 || '-'.repeat(64)}  ${item.size}  ${item.path}`));

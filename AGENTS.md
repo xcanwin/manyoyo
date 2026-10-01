@@ -35,7 +35,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `docker/`：多阶段 `manyoyo.Dockerfile`、构建缓存 `cache/`（Node.js、JDT LSP、gopls，2 天有效）、各 Agent 默认配置与 supervisor 模板 `res/`。
 - `docs/`：VitePress 文档，中文主维护 `docs/zh/`，英文 `docs/en/`，结构须一致。
 - `test/`：Jest（`*.test.js`），依赖真实容器运行时的用例在 `test/integration/`；前端 Vitest 在 `frontend-shadcn/src/`（`*.test.ts(x)`，与源码同目录）。
-- `scripts/`、`assets/`、`manyoyo.example.json`：构建与发布脚本、资源、配置模板。
+- `scripts/`、`assets/`、`manyoyo.example.json`：构建与发布脚本、资源、配置模板。`scripts/offline/`（离线包构建：下载校验、无 pkgutil 的 `.pkg` 解包、krunkit 补丁、`.run` 打包与分卷）与 `scripts/scan-release-artifacts.js`（发布产物隐私扫描）只在 CI 运行，发布产物不要在本机构建；`dist-offline/` 已被 `.gitignore` 忽略。
 
 ## 构建、测试与开发命令
 
