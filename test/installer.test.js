@@ -293,6 +293,14 @@ describe('offline installer (sh)', () => {
         expect(fs.existsSync(path.join(home, '.zprofile'))).toBe(false);
     });
 
+    test('bash with only ~/.profile: block goes into .profile and no .bash_profile is created (it would shadow .profile)', () => {
+        fs.writeFileSync(path.join(home, '.profile'), 'export KEEP=1\n');
+        install(writePayload(path.join(root, 'payload')), { MANYOYO_TEST_SHELL: '/bin/bash', MANYOYO_TEST_SKIP_MACHINE: '1' });
+        expect(read(path.join(home, '.profile'))).toContain('# >>> manyoyo >>>');
+        expect(read(path.join(home, '.profile'))).toContain('export KEEP=1');
+        expect(fs.existsSync(path.join(home, '.bash_profile'))).toBe(false);
+    });
+
     test('PATH block per shell: bash gets .bash_profile/.bashrc, unknown shells only get a hint, user content is kept', () => {
         fs.writeFileSync(path.join(home, '.bash_profile'), 'export FOO=1'); // 没有结尾换行
         const bash = install(writePayload(path.join(root, 'payload')), { MANYOYO_TEST_SHELL: '/bin/bash', MANYOYO_TEST_SKIP_MACHINE: '1' });

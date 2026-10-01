@@ -55,7 +55,7 @@ When installation finishes the browser opens already signed in. Follow the four 
 1. Pick an agent (Claude Code / Codex / Gemini / OpenCode)
 2. Enter your API key (or a compatible service's Base URL) and optionally click "Test connection"
 3. Choose the working directory (the agent can only see this)
-4. Save and start chatting
+4. Set a login password (required the first time, at least 8 characters, username `admin`; running `manyoyo` on this Mac still signs you in automatically, the password is for after signing out or for other browsers / devices), then save and start chatting
 
 The progress bar at the top shows the container runtime and image preparation; you can fill in the first three steps while it is still running.
 

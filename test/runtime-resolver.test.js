@@ -196,6 +196,37 @@ describe('runtime resolver', () => {
         expect(resolved.serverPassAuto).toBe(true);
     });
 
+    test('serverPass from the global config wins over MANYOYO_SERVER_PASS and is not auto', () => {
+        const resolved = resolveRuntimeConfig({
+            cliOptions: { server: true },
+            globalConfig: { serverPass: 'from-config-123' },
+            runConfig: {},
+            globalFirstConfig: {},
+            runFirstConfig: {},
+            defaults: {
+                hostPath: '/host',
+                containerName: 'default-name',
+                containerPath: '/container',
+                imageName: 'localhost/xcanwin/manyoyo',
+                imageVersion: '1.9.0-common'
+            },
+            envVars: { MANYOYO_SERVER_PASS: 'from-env' },
+            argv: ['node', 'bin/manyoyo.js', 'serve'],
+            isServerMode: true,
+            isServerStopMode: false,
+            pickConfigValue,
+            resolveContainerNameTemplate: value => value,
+            normalizeCommandSuffix,
+            normalizeJsonEnvMap,
+            normalizeCliEnvMap,
+            mergeArrayConfig,
+            normalizeVolume,
+            parseServerListen
+        });
+        expect(resolved.serverPass).toBe('from-config-123');
+        expect(resolved.serverPassAuto).toBe(false);
+    });
+
     test('should append worktree mounts and expose worktree metadata', () => {
         const resolved = resolveRuntimeConfig({
             cliOptions: {

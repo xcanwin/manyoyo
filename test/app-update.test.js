@@ -121,6 +121,18 @@ describe('versions', () => {
     });
 });
 
+describe('fetchLatestRelease asset URL allowlist', () => {
+    test('with the default API base, assets outside this repo\'s release path are ignored', async () => {
+        const body = { tag_name: 'v9.9.9', assets: [
+            { name: 'a.tar.gz', browser_download_url: 'https://github.com/xcanwin/manyoyo/releases/download/v9.9.9/a.tar.gz' },
+            { name: 'evil.tar.gz', browser_download_url: 'https://evil.example.com/evil.tar.gz' }
+        ] };
+        const fetchImpl = async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => body });
+        const release = await fetchLatestRelease({ fetchImpl });
+        expect(Object.keys(release.assets)).toEqual(['a.tar.gz']);
+    });
+});
+
 describe('fetchLatestRelease', () => {
     test('reads the tag and assets with a fixed header set that carries no local information', async () => {
         await startServer();

@@ -20,6 +20,8 @@ export type SetupStatus = {
   defaultHostPath: string
   platform: string
   runtimeKind: string
+  serverUser: string
+  passwordSet: boolean
 }
 export type ConnectionCategory = "success" | "network" | "auth" | "other"
 export type ConnectionResult = { category: ConnectionCategory; message: string; detail: string }
@@ -154,3 +156,33 @@ export const testConnection = async (agent: string, env: Record<string, string>)
 export const saveAgent = (agent: string, env: Record<string, string>, hostPath: string) =>
   apiPost("/api/setup/agent", { agent, env, hostPath })
 export const createAgentSession = async (run: string) => String((await apiPost("/api/sessions", { run })).name)
+
+export const PASSWORD_MIN_LENGTH = 8
+export const PASSWORD_MAX_LENGTH = 128
+
+// 返回空串表示通过
+export function validatePassword(password: string, confirm: string): string {
+  if (password.length < PASSWORD_MIN_LENGTH) return `密码至少 ${PASSWORD_MIN_LENGTH} 位`
+  if (password.length > PASSWORD_MAX_LENGTH) return `密码不能超过 ${PASSWORD_MAX_LENGTH} 位`
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(password)) return "密码不能包含换行、制表符等控制字符"
+  if (password !== confirm) return "两次输入的密码不一致"
+  return ""
+}
+
+export type PasswordStrength = { level: "weak" | "medium" | "strong"; label: string }
+
+// 只是提示，不阻止提交：长度 + 字符种类的粗略打分
+export function passwordStrength(password: string): PasswordStrength {
+  const kinds = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter((re) => re.test(password)).length
+  if (password.length >= 12 && kinds >= 3) return { level: "strong", label: "强度：强" }
+  if (password.length >= 8 && kinds >= 2) return { level: "medium", label: "强度：中，建议再长一些或混用字母、数字、符号" }
+  return { level: "weak", label: "强度：弱，建议混用字母、数字、符号" }
+}
+
+export const savePassword = (password: string) => apiPost("/api/setup/password", { password })
+
+// 容器环境/镜像失败后重新尝试（服务端只在失败态才会重启自愈或重拉镜像）
+export function retrySetupRuntime(): Promise<unknown> {
+  return apiPost("/api/system/runtime/retry")
+}

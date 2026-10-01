@@ -1731,7 +1731,7 @@ process.exit(2);
                 })
             }));
 
-            expect(waitForContainerReady).toHaveBeenCalledWith('my-run-0330-1234');
+            expect(waitForContainerReady).toHaveBeenCalledWith('my-run-0330-1234', { throwOnFailure: true });
             const runArgs = dockerExecArgs.mock.calls.map(call => call[0]).find(args => args[0] === 'run');
             expect(runArgs).toEqual(expect.arrayContaining([
                 '--name',
@@ -1807,7 +1807,7 @@ process.exit(2);
                 name: 'my-web-create',
                 applied: expect.objectContaining({ portCount: 2, agentEnabled: true })
             }));
-            expect(waitForContainerReady).toHaveBeenCalledWith('my-web-create');
+            expect(waitForContainerReady).toHaveBeenCalledWith('my-web-create', { throwOnFailure: true });
             expect(dockerExecArgs).toHaveBeenCalled();
             const runArgs = dockerExecArgs.mock.calls.map(call => call[0]).find(args => args[0] === 'run');
             expect(Array.isArray(runArgs)).toBe(true);
@@ -5649,6 +5649,19 @@ describe('Web Server One-Time Login Token', () => {
 
     const useToken = (baseUrl, token) => request(`${baseUrl}/auth/login?token=${token}`, { redirect: 'manual' });
 
+    test('a throttled password login does not block the one-time token path', async () => {
+        await withServer({}, async ({ baseUrl, tokenDir }) => {
+            for (let i = 0; i < 8; i += 1) {
+                await request(`${baseUrl}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'webadmin', password: 'nope' }) });
+            }
+            const blocked = await request(`${baseUrl}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'webadmin', password: 'topsecret' }) });
+            expect(blocked.response.status).toBe(429);
+            const viaToken = await useToken(baseUrl, issueLoginToken(tokenDir));
+            expect(viaToken.response.status).toBe(302);
+            expect(viaToken.response.headers.get('location')).toBe('/');
+        });
+    });
+
     test('token logs in once, grants API access, and dies on logout', async () => {
         await withServer({}, async ({ baseUrl, tokenDir }) => {
             const token = issueLoginToken(tokenDir);
@@ -5922,8 +5935,114 @@ describe('Web Server Setup API', () => {
         });
     });
 
+    describe('config file permissions', () => {
+        test('setup endpoints write the config 0600 (it holds API keys and the login password)', async () => {
+            await withSetupServer(() => ({ authPassAuto: true }), async ({ call, configPath }) => {
+                const saved = await call('POST', '/api/setup/agent', { agent: 'claude', env: { ANTHROPIC_AUTH_TOKEN: 'sk-test-12345678' } });
+                expect(saved.response.status).toBe(200);
+                expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
+
+                fs.chmodSync(configPath, 0o644);
+                const pass = await call('POST', '/api/setup/password', { password: 'abcdefgh1' });
+                expect(pass.response.status).toBe(200);
+                expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
+                expect(fs.readdirSync(path.dirname(configPath)).filter(name => name.endsWith('.tmp'))).toEqual([]);
+            });
+        });
+    });
+
+    describe('serve identity marker', () => {
+        test('even an unauthenticated 401 carries X-Manyoyo-Serve so the launcher can recognise serve', async () => {
+            const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-marker-'));
+            const port = await getFreePort();
+            let handle = null;
+            try {
+                handle = await startWebServer(buildServerOptions(tempHost, port));
+                const res = await request(`http://127.0.0.1:${handle.port || port}/api/sessions`, { method: 'GET' });
+                expect(res.response.status).toBe(401);
+                expect(res.response.headers.get('x-manyoyo-serve')).toBe('1');
+            } finally {
+                if (handle && typeof handle.close === 'function') await handle.close();
+                fs.rmSync(tempHost, { recursive: true, force: true });
+            }
+        });
+    });
+
+    describe('login failure throttling', () => {
+        async function withClockServer(run) {
+            const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-throttle-'));
+            const port = await getFreePort();
+            let handle = null;
+            let clock = 1000000;
+            try {
+                handle = await startWebServer(buildServerOptions(tempHost, port, { nowMs: () => clock }));
+                const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+                const login = password => request(`${baseUrl}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'webadmin', password })
+                });
+                await run({ login, advance: ms => { clock += ms; } });
+            } finally {
+                if (handle && typeof handle.close === 'function') await handle.close();
+                fs.rmSync(tempHost, { recursive: true, force: true });
+            }
+        }
+
+        test('after 5 wrong passwords even the right one gets 429 with Retry-After, and it backs off exponentially', async () => {
+            await withClockServer(async ({ login, advance }) => {
+                for (let i = 0; i < 5; i += 1) {
+                    expect((await login('wrong')).response.status).toBe(401);
+                }
+                const sixth = await login('wrong');
+                expect(sixth.response.status).toBe(401); // 第 6 次失败触发 1 秒封禁
+                const blocked = await login('topsecret');
+                expect(blocked.response.status).toBe(429);
+                expect(Number(blocked.response.headers.get('retry-after'))).toBeGreaterThanOrEqual(1);
+
+                advance(1500);
+                expect((await login('wrong')).response.status).toBe(401); // 第 7 次失败 -> 封 2 秒
+                advance(1500);
+                expect((await login('topsecret')).response.status).toBe(429);
+                advance(1000);
+                expect((await login('topsecret')).response.status).toBe(200);
+            });
+        });
+
+        test('a successful login clears the failure count', async () => {
+            await withClockServer(async ({ login }) => {
+                for (let i = 0; i < 4; i += 1) await login('wrong');
+                expect((await login('topsecret')).response.status).toBe(200);
+                for (let i = 0; i < 5; i += 1) {
+                    expect((await login('wrong')).response.status).toBe(401);
+                }
+            });
+        });
+    });
+
+    describe('runtime retry', () => {
+        test('requires auth; failed runtime can be retried, other states are not restarted', async () => {
+            const retry = jest.fn(() => true);
+            const runtimeState = { status: 'failed', message: 'podman machine start 失败: x' };
+            await withSetupServer(() => ({ runtimeState, retryRuntimeHeal: retry }), async ({ baseUrl, call }) => {
+                const anon = await request(`${baseUrl}/api/system/runtime/retry`, { method: 'POST' });
+                expect(anon.response.status).toBe(401);
+
+                const res = await call('POST', '/api/system/runtime/retry');
+                expect(res.response.status).toBe(202);
+                expect(retry).toHaveBeenCalledTimes(1);
+
+                runtimeState.status = 'starting';
+                await call('POST', '/api/system/runtime/retry');
+                runtimeState.status = 'ready';
+                await call('POST', '/api/system/runtime/retry');
+                expect(retry).toHaveBeenCalledTimes(1);
+            });
+        });
+    });
+
     describe('offline image import in progress', () => {
-        test('status reports the import as progress, and creating a container waits instead of pulling', async () => {
+        test('status reports the import as progress, and creating a container answers 409 right away instead of hanging or pulling', async () => {
             const dockerCalls = [];
             let importing = true;
             const importState = () => ({ active: importing, message: '正在导入离线镜像' });
@@ -5938,10 +6057,15 @@ describe('Web Server Setup API', () => {
                 const status = (await call('GET', '/api/setup/status')).json;
                 expect(status.image).toEqual(expect.objectContaining({ status: 'pulling', message: '正在导入离线镜像' }));
 
-                const creating = call('POST', '/api/sessions', { createOptions: { hostPath: tempHost } });
-                await new Promise(resolve => setTimeout(resolve, 300));
+                const started = Date.now();
+                const blocked = await call('POST', '/api/sessions', { createOptions: { hostPath: tempHost } });
+                expect(Date.now() - started).toBeLessThan(2000);
+                expect(blocked.response.status).toBe(409);
+                expect(blocked.json.imagePreparing).toBe(true);
+                expect(dockerCalls).not.toContain('run');
+
                 importing = false; // 安装器后台导入结束，镜像已就位
-                const res = await creating;
+                const res = await call('POST', '/api/sessions', { createOptions: { hostPath: tempHost } });
                 expect(res.response.status).toBe(200);
                 expect(dockerCalls).toContain('run');
                 expect(dockerCalls).not.toContain('pull');
@@ -6077,6 +6201,41 @@ esac
             });
         });
 
+        test('a container that exits right away does not kill serve and is still removed', async () => {
+            const dockerCalls = [];
+            let waited = null;
+            await withSetupServer(() => ({
+                waitForContainerReady: async (name, options) => {
+                    waited = options;
+                    throw Object.assign(new Error('容器启动后立即退出'), { containerExited: true });
+                },
+                dockerExecArgs: args => { dockerCalls.push(args); return ''; }
+            }), async ({ call }) => {
+                const res = await call('POST', '/api/setup/test-connection', { agent: 'claude', env: { ANTHROPIC_AUTH_TOKEN: SECRET } });
+                expect(res.response.status).toBe(200);
+                expect(res.json.category).toBe('other');
+                expect(waited).toEqual({ throwOnFailure: true });
+                expect(dockerCalls.some(a => a[0] === 'rm' && a[1] === '-f' && /^manyoyo-setup-test-/.test(a[2]))).toBe(true);
+                const alive = await call('GET', '/api/setup/status');
+                expect(alive.response.status).toBe(200);
+            });
+        });
+
+        test('serve start removes leftover setup-test containers (only the prefixed ones)', async () => {
+            const asyncCalls = [];
+            await withSetupServer(() => ({
+                dockerExecAsync: async args => {
+                    asyncCalls.push(args);
+                    if (args[0] === 'ps') return 'manyoyo-setup-test-abcd1234\nmy-claude-1\nmanyoyo-setup-test-bad name\n';
+                    return '';
+                }
+            }), async () => {
+                await new Promise(resolve => setTimeout(resolve, 300));
+                const removed = asyncCalls.filter(a => a[0] === 'rm').map(a => a[2]);
+                expect(removed).toEqual(['manyoyo-setup-test-abcd1234']);
+            });
+        });
+
         test('does not persist the tested values and validates input', async () => {
             await runConnectionCase('ok', async ({ call, configPath }) => {
                 await call('POST', '/api/setup/test-connection', { agent: 'claude', env: { ANTHROPIC_AUTH_TOKEN: SECRET } });
@@ -6100,6 +6259,159 @@ esac
                 expect(res.json.message).toContain('尚未就绪');
                 expect(dockerCalls.some(a => a[0] === 'run')).toBe(false);
             });
+        });
+    });
+
+    describe('login password', () => {
+        test('password endpoint requires auth', async () => {
+            const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-pass-auth-'));
+            const port = await getFreePort();
+            let handle = null;
+            try {
+                handle = await startWebServer(buildServerOptions(tempHost, port));
+                const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+                const res = await request(`${baseUrl}/api/setup/password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'abcdefgh1' }) });
+                expect(res.response.status).toBe(401);
+            } finally {
+                if (handle && typeof handle.close === 'function') await handle.close();
+                fs.rmSync(tempHost, { recursive: true, force: true });
+            }
+        });
+
+        test('saves serverPass keeping comments, switches the live password, never echoes it', async () => {
+            await withSetupServer(() => ({ authPassAuto: true }), async ({ baseUrl, call, configPath }) => {
+                fs.writeFileSync(configPath, '{\n    // 我的注释\n    "imageVersion": "1.9.2-common"\n}\n');
+                const before = (await call('GET', '/api/setup/status')).json;
+                expect(before.passwordSet).toBe(false);
+                expect(before.serverUser).toBe('webadmin');
+
+                const password = 'new-Pass-12345';
+                const res = await call('POST', '/api/setup/password', { password });
+                expect(res.response.status).toBe(200);
+                expect(res.json.saved).toBe(true);
+                expect(JSON.stringify(res.json)).not.toContain(password);
+
+                const raw = fs.readFileSync(configPath, 'utf-8');
+                expect(raw).toContain('// 我的注释');
+                expect(JSON5.parse(raw)).toEqual({ imageVersion: '1.9.2-common', serverPass: password });
+
+                expect((await call('GET', '/api/setup/status')).json.passwordSet).toBe(true);
+
+                const oldLogin = await request(`${baseUrl}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'webadmin', password: 'topsecret' }) });
+                expect(oldLogin.response.status).toBe(401);
+                const newLogin = await request(`${baseUrl}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'webadmin', password }) });
+                expect(newLogin.response.status).toBe(200);
+                // 已登录会话保持有效
+                expect((await call('GET', '/api/setup/status')).response.status).toBe(200);
+            });
+        });
+
+        test('rejects weak or malformed passwords without touching the config', async () => {
+            await withSetupServer(() => ({}), async ({ call, configPath }) => {
+                for (const password of [undefined, 123, '', 'short7!', 'a'.repeat(129), 'abcdefgh\n1', 'abcdefgh\u00001']) {
+                    const res = await call('POST', '/api/setup/password', { password });
+                    expect(res.response.status).toBe(400);
+                }
+                expect(fs.existsSync(configPath)).toBe(false);
+                expect((await call('POST', '/api/setup/password', { password: 'abcdefgh' })).response.status).toBe(200);
+            });
+        });
+
+        test('a broken config is not overwritten', async () => {
+            await withSetupServer(() => ({}), async ({ call, configPath }) => {
+                fs.writeFileSync(configPath, '{ broken');
+                const res = await call('POST', '/api/setup/password', { password: 'abcdefgh1' });
+                expect(res.response.status).toBe(400);
+                expect(fs.readFileSync(configPath, 'utf-8')).toBe('{ broken');
+            });
+        });
+
+        test('passwordSet is true when the password was not auto generated', async () => {
+            await withSetupServer(() => ({ authPassAuto: false }), async ({ call }) => {
+                expect((await call('GET', '/api/setup/status')).json.passwordSet).toBe(true);
+            });
+        });
+    });
+});
+
+describe('Web Server doctor API', () => {
+    async function withDoctorServer(overrides, run) {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-doctor-'));
+        const port = await getFreePort();
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, overrides));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const cookie = await loginAndGetCookie(baseUrl);
+            const call = (method, route) => request(`${baseUrl}${route}`, { method, headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: method === 'POST' ? '{}' : undefined });
+            await run({ baseUrl, call });
+        } finally {
+            if (handle && typeof handle.close === 'function') await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    }
+
+    const report = () => ({
+        version: 1,
+        runtimeCommand: 'podman',
+        runtimeSource: 'private',
+        ok: false,
+        checks: [
+            { code: 'RUNTIME_AVAILABLE', status: 'ok', summary: '容器运行时: podman', action: '', detail: 'podman version 6 /Users/someone/.manyoyo' },
+            { code: 'DAEMON_UNAVAILABLE', status: 'error', summary: 'podman daemon 不可用', action: '启动 podman daemon 后重试。', detail: 'Cannot connect ANTHROPIC_AUTH_TOKEN=sk-ant-abcdefgh12345678' },
+            { code: 'PORT_NOT_CHECKED', status: 'warning', summary: '未检查监听端口', action: '', detail: '' },
+            { code: 'AGENT_NOT_CONFIGURED', status: 'warning', summary: '未配置 Agent 命令', action: '', detail: '' }
+        ]
+    });
+
+    test('both endpoints require auth', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-doctor-auth-'));
+        const port = await getFreePort();
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, { doctorCheck: async () => report() }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            expect((await request(`${baseUrl}/api/system/doctor`)).response.status).toBe(401);
+            expect((await request(`${baseUrl}/api/system/doctor/fix`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).response.status).toBe(401);
+        } finally {
+            if (handle && typeof handle.close === 'function') await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('GET returns only relevant checks, drops detail of passing checks and masks secrets', async () => {
+        await withDoctorServer({ doctorCheck: async () => report() }, async ({ call }) => {
+            const res = await call('GET', '/api/system/doctor');
+            expect(res.response.status).toBe(200);
+            expect(res.json.checks.map(c => c.code)).toEqual(['RUNTIME_AVAILABLE', 'DAEMON_UNAVAILABLE']);
+            expect(res.json.checks[0].detail).toBe('');
+            expect(JSON.stringify(res.json)).not.toContain('sk-ant-abcdefgh12345678');
+            expect(res.json.ok).toBe(false);
+        });
+    });
+
+    test('GET reports 503 when the checker is not available', async () => {
+        await withDoctorServer({}, async ({ call }) => {
+            expect((await call('GET', '/api/system/doctor')).response.status).toBe(503);
+        });
+    });
+
+    test('POST fix runs the handlers, returns fix results and refuses concurrent runs', async () => {
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        const startRuntime = jest.fn(async () => { await gate; return { fixed: true, message: '已启动' }; });
+        await withDoctorServer({ doctorCheck: async () => report(), doctorStartRuntime: startRuntime }, async ({ call }) => {
+            const first = call('POST', '/api/system/doctor/fix');
+            await new Promise(resolve => setTimeout(resolve, 100));
+            const second = await call('POST', '/api/system/doctor/fix');
+            expect(second.response.status).toBe(409);
+            release();
+            const res = await first;
+            expect(res.response.status).toBe(200);
+            const daemon = res.json.checks.find(c => c.code === 'DAEMON_UNAVAILABLE');
+            expect(daemon.fix).toEqual({ attempted: true, fixed: true, message: '已启动' });
+            expect(res.json.ok).toBe(true);
+            expect(startRuntime).toHaveBeenCalledTimes(1);
         });
     });
 });

@@ -66,7 +66,8 @@ describe('MANYOYO CLI', () => {
             const urlFile = path.join(tempHome, 'opened-url');
             fs.mkdirSync(binDir, { recursive: true });
             ['open', 'xdg-open'].forEach(name => writeExecutable(path.join(binDir, name), `#!/bin/sh\necho "$1" > "${urlFile}"\n`));
-            const server = net.createServer().listen(0, '127.0.0.1');
+            // 复用前启动器会 HTTP 探测 X-Manyoyo-Serve 标记，裸 TCP 端口不算 manyoyo serve
+            const server = require('http').createServer((req, res) => { res.setHeader('X-Manyoyo-Serve', '1'); res.writeHead(401); res.end('{}'); }).listen(0, '127.0.0.1');
             await new Promise(resolve => server.once('listening', resolve));
             const { port } = server.address();
             const serveDir = path.join(tempHome, '.manyoyo', 'serve');

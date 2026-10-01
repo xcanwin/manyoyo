@@ -114,4 +114,22 @@ describe('global-config', () => {
             fs.rmSync(homeDir, { recursive: true, force: true });
         }
     });
+
+    test('writes manyoyo.json 0600 inside a 0700 ~/.manyoyo, also when rewriting a world-readable one', () => {
+        const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-global-config-perm-'));
+        const configPath = getManyoyoConfigPath(homeDir);
+        try {
+            syncGlobalImageVersion('1.8.8-common', { homeDir });
+            expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
+            expect(fs.statSync(path.dirname(configPath)).mode & 0o777).toBe(0o700);
+
+            fs.chmodSync(configPath, 0o644);
+            fs.chmodSync(path.dirname(configPath), 0o755);
+            syncGlobalImageVersion('1.8.9-common', { homeDir });
+            expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
+            expect(fs.statSync(path.dirname(configPath)).mode & 0o777).toBe(0o700);
+        } finally {
+            fs.rmSync(homeDir, { recursive: true, force: true });
+        }
+    });
 });

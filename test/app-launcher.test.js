@@ -3,7 +3,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { getAppStatePath, readAppState, launchApp, openBrowser } = require('../lib/app-launcher');
+const http = require('http');
+const { getAppStatePath, readAppState, launchApp, openBrowser, probeManyoyoServe } = require('../lib/app-launcher');
 
 describe('app launcher', () => {
     let home;
@@ -16,7 +17,13 @@ describe('app launcher', () => {
     });
     afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
 
-    const baseDeps = (over = {}) => ({
+    // probe 默认沿用 canConnect（真实实现多一步 HTTP 身份探测，单独在下面测）
+    const baseDeps = (over = {}) => {
+        const deps = baseDeps0(over);
+        if (!over.probe) deps.probe = (host, port) => deps.canConnect(host, port);
+        return deps;
+    };
+    const baseDeps0 = (over = {}) => ({
         statePath,
         isProcessRunning: () => false,
         canConnect: async () => true,
@@ -102,5 +109,78 @@ describe('app launcher', () => {
         expect(run).toHaveBeenLastCalledWith('xdg-open', ['http://x']);
         expect(openBrowser('http://x', { platform: 'win32', run })).toBe(false);
         expect(openBrowser('http://x', { platform: 'linux', run: () => ({ error: new Error('ENOENT') }) })).toBe(false);
+    });
+
+    test('two launchers at once start exactly one serve; the second reuses it', async () => {
+        const alive = pid => pid === process.pid || pid === 4242;
+        const slow = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const spawnServe = jest.fn(() => ({ pid: 4242 }));
+        const mk = () => baseDeps({ isProcessRunning: alive, spawnServe, pickPort: async () => { await slow(50); return 45678; }, sleep: () => slow(10) });
+        const [a, b] = await Promise.all([launchApp(mk()), launchApp(mk())]);
+        expect(spawnServe).toHaveBeenCalledTimes(1);
+        expect([a.reused, b.reused].sort()).toEqual([false, true]);
+        expect(fs.existsSync(path.join(path.dirname(statePath), 'app.lock'))).toBe(false);
+    });
+
+    test('a lock left behind by a dead launcher is cleared', async () => {
+        const lock = path.join(path.dirname(statePath), 'app.lock');
+        fs.mkdirSync(lock, { recursive: true });
+        fs.writeFileSync(path.join(lock, 'pid'), '999999\n');
+        const deps = baseDeps({ isProcessRunning: () => false });
+        const result = await launchApp(deps);
+        expect(result.reused).toBe(false);
+        expect(fs.existsSync(lock)).toBe(false);
+    });
+
+    test('does not reuse (and never sends a token to) a port that is not manyoyo serve', async () => {
+        fs.mkdirSync(path.dirname(statePath), { recursive: true });
+        fs.writeFileSync(statePath, JSON.stringify({ host: '127.0.0.1', port: 3111, pid: 99 }));
+        const probe = jest.fn(async (host, port) => port !== 3111);
+        const deps = baseDeps({ isProcessRunning: pid => pid === 99, probe });
+        const result = await launchApp(deps);
+        expect(result.reused).toBe(false);
+        expect(deps.spawnServe).toHaveBeenCalledWith(45678);
+        expect(deps.open.mock.calls[0][0]).toContain(':45678/');
+    });
+
+    test('reports a spawn failure instead of waiting for the full timeout', async () => {
+        const spawnServe = jest.fn(() => ({
+            pid: undefined,
+            on: (event, handler) => { if (event === 'error') setImmediate(() => handler(new Error('spawn ENOENT'))); }
+        }));
+        await expect(launchApp(baseDeps({ spawnServe, logPathHint: '/logs/serve.log' }))).rejects.toThrow(/无法启动本机服务.*ENOENT/);
+        expect(fs.existsSync(path.join(path.dirname(statePath), 'app.lock'))).toBe(false);
+    });
+
+    test('retries once with a new port when serve exits right away (port taken between pick and bind)', async () => {
+        const ports = [45001, 45002];
+        const spawnServe = jest.fn(port => ({
+            pid: 4000 + (port % 10),
+            on: (event, handler) => { if (event === 'exit' && port === 45001) setImmediate(() => handler(1)); }
+        }));
+        const probe = jest.fn(async (host, port) => port === 45002);
+        const result = await launchApp(baseDeps({ spawnServe, probe, pickPort: async () => ports.shift(), sleep: () => new Promise(resolve => setTimeout(resolve, 5)) }));
+        expect(spawnServe).toHaveBeenCalledTimes(2);
+        expect(result.baseUrl).toBe('http://127.0.0.1:45002');
+    });
+
+    describe('probeManyoyoServe', () => {
+        const listen = handler => new Promise(resolve => {
+            const server = http.createServer(handler);
+            server.listen(0, '127.0.0.1', () => resolve(server));
+        });
+
+        test('true only when the response carries the manyoyo marker (even a 401)', async () => {
+            const mine = await listen((req, res) => { res.setHeader('X-Manyoyo-Serve', '1'); res.writeHead(401); res.end('{}'); });
+            const foreign = await listen((req, res) => { res.writeHead(200); res.end('hi'); });
+            try {
+                expect(await probeManyoyoServe('127.0.0.1', mine.address().port)).toBe(true);
+                expect(await probeManyoyoServe('127.0.0.1', foreign.address().port)).toBe(false);
+            } finally {
+                mine.close();
+                foreign.close();
+            }
+            expect(await probeManyoyoServe('127.0.0.1', 1)).toBe(false);
+        });
     });
 });

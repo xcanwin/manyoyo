@@ -55,7 +55,7 @@ sh manyoyo-*-macos-arm64.run
 1. 选择 Agent（Claude Code / Codex / Gemini / OpenCode）
 2. 填 API Key（或兼容服务的 Base URL），可以点「测试连接」
 3. 选择工作目录（Agent 只能看到这里）
-4. 保存，直接进入对话
+4. 设置登录密码（首次必填，至少 8 位，用户名是 `admin`；本机执行 `manyoyo` 仍会自动登录，密码用于登出后或其他浏览器 / 设备），然后保存，直接进入对话
 
 顶部进度条显示容器环境与镜像的准备进度，准备好之前可以先填前三步。
 

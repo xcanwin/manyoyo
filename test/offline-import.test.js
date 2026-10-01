@@ -19,7 +19,9 @@ describe('offline image import state', () => {
     test('active only while the recorded process is alive', () => {
         expect(readImportState(home)).toEqual({ active: false, message: '' });
         writeMarker(JSON.stringify({ pid: process.pid, message: '正在导入离线镜像' }));
-        expect(readImportState(home)).toEqual({ active: true, message: '正在导入离线镜像' });
+        expect(readImportState(home, { isImporter: () => true })).toEqual({ active: true, message: '正在导入离线镜像' });
+        // pid 活着但不是导入脚本（pid 被复用）：不能当作“正在导入”
+        expect(readImportState(home, { isImporter: () => false }).active).toBe(false);
         writeMarker(JSON.stringify({ pid: 2 ** 22 + 12345 }));
         expect(readImportState(home).active).toBe(false);
     });

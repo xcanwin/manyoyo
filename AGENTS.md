@@ -27,6 +27,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `lib/container-runtime.js` / `runtime-heal.js` / `error-hints.js`：容器运行时选择（配置 > 私有 Podman > daemon 可用的 docker/podman，返回 `{command, env, source}`，`env` 只传给运行时子进程）、daemon 不可用时的自愈（`podman machine start` / macOS `open -a Docker`）、原始错误到“原因 + 下一步”的映射。
 - `lib/container-run.js` / `container-modes.js` / `image-build.js`：容器运行参数构造、common/dind/sock 模式解析、镜像构建与缓存。
 - `lib/runtime-resolver.js` / `runtime-normalizers.js` / `worktrees.js`：配置四层合并、参数归一化（`parseEnvEntry` / `normalizeVolume`）、Git worktrees 挂载推导（`--wt` / `--wtr`）。
+- `lib/secure-file.js`：含凭据的配置写入（文件 0600、`.manyoyo` 目录 0700、临时文件 + rename 原子替换），`manyoyo.json` 的所有写入点都走它。
 - `lib/global-config.js` / `init-config.js` / `json5-text-edit.js`：`~/.manyoyo/manyoyo.json` 读写与 `imageVersion` 同步、`init` 初始化、JSON5 局部定位替换。
 - `lib/log-path.js` / `serve-log.js` / `serve-log-reader.js`：日志分目录规则、脱敏与进程快照、倒序分页读取。
 - `lib/core/`：会话控制事件的创建/校验/投影与 `FileEventStore`（JSONL 追加日志 + 快照）；`app-error.js` 暂未接入 `sendJson`。

@@ -6,6 +6,8 @@ import {
   getDirectoryHint,
   getReadiness,
   isValidBaseUrl,
+  passwordStrength,
+  validatePassword,
   validateStep,
   type SetupAgent,
   type SetupForm,
@@ -42,6 +44,8 @@ const status = (over: Partial<SetupStatus> = {}): SetupStatus => ({
   defaultHostPath: "/Users/me/.manyoyo/workpath",
   platform: "linux",
   runtimeKind: "docker",
+  serverUser: "admin",
+  passwordSet: true,
   ...over,
 })
 
@@ -154,5 +158,21 @@ describe("getDirectoryHint", () => {
     expect(getDirectoryHint("/srv", status())).toBe("")
     expect(getDirectoryHint("", mac)).toBe("")
     expect(getDirectoryHint("/x", null)).toBe("")
+  })
+})
+
+describe("validatePassword / passwordStrength", () => {
+  test("validates length, control characters and confirmation", () => {
+    expect(validatePassword("short", "short")).toContain("至少 8 位")
+    expect(validatePassword("a".repeat(129), "a".repeat(129))).toContain("不能超过")
+    expect(validatePassword("abcdefg\n1", "abcdefg\n1")).toContain("控制字符")
+    expect(validatePassword("abcdefgh1", "abcdefgh2")).toContain("不一致")
+    expect(validatePassword("abcdefgh1", "abcdefgh1")).toBe("")
+  })
+
+  test("strength is only a hint: weak, medium, strong", () => {
+    expect(passwordStrength("aaaaaaaa").level).toBe("weak")
+    expect(passwordStrength("abc12345").level).toBe("medium")
+    expect(passwordStrength("Abc123!xyz789").level).toBe("strong")
   })
 })

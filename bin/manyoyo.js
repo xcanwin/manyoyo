@@ -11,9 +11,10 @@ const { Command } = require('commander');
 const { startWebServer } = require('../lib/web/server');
 const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/container-run');
 const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = require('../lib/global-config');
+const { resolveUpdateImageVersion } = require('../lib/image-version-policy');
 const { selectContainerRuntime, mergeRuntimeEnv } = require('../lib/container-runtime');
 const { describeError } = require('../lib/error-hints');
-const { ensureRuntimeReady } = require('../lib/runtime-heal');
+const { ensureRuntimeReady, runCommandAsync } = require('../lib/runtime-heal');
 const { ensureImagePresent, pullImageProcess } = require('../lib/image-pull');
 const { readImportState, waitForImport } = require('../lib/offline-import');
 const { pruneDanglingImages: pruneDanglingImagesSafely } = require('../lib/image-prune');
@@ -802,8 +803,13 @@ function runRuntimeCommand(command, args, options = {}) {
     });
 }
 
-function healContainerRuntime(onStatus) {
-    return ensureRuntimeReady({ runtime: CONTAINER_RUNTIME, run: runRuntimeCommand, onStatus });
+// serve 里的自愈用异步执行器：machine start 最长 120s，同步执行会冻住整个事件循环（向导进度、登录页都没响应）
+function runRuntimeCommandAsync(command, args, options = {}) {
+    return runCommandAsync(command, args, { timeout: options.timeout, env: mergeRuntimeEnv(options.env) });
+}
+
+function healContainerRuntime(onStatus, options = {}) {
+    return ensureRuntimeReady({ runtime: CONTAINER_RUNTIME, run: options.async ? runRuntimeCommandAsync : runRuntimeCommand, onStatus });
 }
 
 // 选择阶段已确认 daemon 可用（info 通过）时无需再自愈
@@ -917,7 +923,18 @@ async function updateOfflineInstall(mode, options, globalConfig) {
 
     // 新版本要求的镜像不存在就拉取；仍用旧镜像的容器只列出来，不动
     const imageName = String(globalConfig.imageName || 'ghcr.io/xcanwin/manyoyo');
-    const imageVersion = String(globalConfig.imageVersion || result.manifest.imageVersion || '');
+    const versionPolicy = resolveUpdateImageVersion({
+        configured: globalConfig.imageVersion,
+        previousDefault: require('../package.json').imageVersion,
+        nextDefault: result.manifest.imageVersion
+    });
+    const imageVersion = versionPolicy.imageVersion;
+    if (versionPolicy.advance) {
+        const synced = syncGlobalImageVersion(imageVersion);
+        console.log(`${CYAN}ℹ️  配置里的 imageVersion（${globalConfig.imageVersion}）是旧版本默认值，已随新版本更新为 ${imageVersion}${synced.updated ? '' : '（写入配置失败，请手动修改）'}${NC}`);
+    } else if (versionPolicy.pinned) {
+        console.log(`${YELLOW}ℹ️  你在配置里固定了 imageVersion=${imageVersion}，新版本默认是 ${result.manifest.imageVersion}；如需使用新镜像请修改 ~/.manyoyo/manyoyo.json${NC}`);
+    }
     if (imageVersion && await prepareRuntimeForUpdate(globalConfig.containerRuntime)) {
         const imageRef = `${imageName}:${imageVersion}`;
         try {
@@ -1704,7 +1721,7 @@ Notes:
             ? await checkPortAvailability(parsedPort)
             : undefined;
         let doctorRuntime = null;
-        let report = runDoctorChecks({
+        let report = await runDoctorChecks({
             selectRuntime: () => {
                 doctorRuntime = selectContainerRuntime({ configured: config.containerRuntime });
                 return doctorRuntime;
@@ -1724,10 +1741,16 @@ Notes:
                     const result = await ensureRuntimeReady({ runtime: doctorRuntime, run: runRuntimeCommand });
                     return { fixed: result.status === 'started' || result.status === 'ready', message: result.message };
                 },
-                pullImage: () => {
+                pullImage: async () => {
                     const image = `${IMAGE_NAME}:${IMAGE_VERSION}`;
                     try {
-                        runRuntimeCommand(doctorRuntime.command, ['pull', image], { env: doctorRuntime.env });
+                        console.error(`正在拉取 ${image} ...`);
+                        await pullImageProcess({
+                            command: doctorRuntime.command,
+                            env: mergeRuntimeEnv(doctorRuntime.env),
+                            imageRef: image,
+                            onOutput: text => process.stderr.write(text)
+                        });
                     } catch (e) {
                         throw new Error(`拉取 ${image} 失败；可执行 ${MANYOYO_NAME} build --iv ${IMAGE_VERSION} 本地构建`);
                     }
@@ -2031,8 +2054,9 @@ function relaunchServeDetached(runtime) {
 /**
  * 等待容器就绪（使用指数退避算法）
  * @param {string} containerName - 容器名称
+ * @param {{throwOnFailure?: boolean}} [options] serve 路径传 true：失败抛错而不是 process.exit，调用方才能清理容器
  */
-async function waitForContainerReady(containerName) {
+async function waitForContainerReady(containerName, options = {}) {
     const MAX_RETRIES = CONFIG.CONTAINER_READY_MAX_RETRIES;
     let retryDelay = CONFIG.CONTAINER_READY_INITIAL_DELAY;
 
@@ -2045,6 +2069,9 @@ async function waitForContainerReady(containerName) {
             }
 
             if (status === 'exited') {
+                if (options.throwOnFailure) {
+                    throw Object.assign(new Error('容器启动后立即退出'), { containerExited: true });
+                }
                 console.log(`${RED}⚠️  错误: 容器启动后立即退出。${NC}`);
                 dockerExecArgs(['logs', containerName], { stdio: 'inherit' });
                 process.exit(1);
@@ -2053,11 +2080,15 @@ async function waitForContainerReady(containerName) {
             await sleep(retryDelay);
             retryDelay = Math.min(retryDelay * 2, CONFIG.CONTAINER_READY_MAX_DELAY);
         } catch (e) {
+            if (e && e.containerExited) throw e;
             await sleep(retryDelay);
             retryDelay = Math.min(retryDelay * 2, CONFIG.CONTAINER_READY_MAX_DELAY);
         }
     }
 
+    if (options.throwOnFailure) {
+        throw new Error('容器启动超时');
+    }
     console.log(`${RED}⚠️  错误: 容器启动超时。${NC}`);
     process.exit(1);
 }
@@ -2303,11 +2334,10 @@ async function runAppLauncher() {
             statePath: getAppStatePath(),
             isProcessRunning,
             spawnServe: port => {
-                // 登录走一次性令牌，密码只是让服务在无配置时不必自己生成并打印
+                // 登录走一次性令牌；未配置密码时 serve 自己生成随机密码（标记为自动生成，向导据此让用户设置）
                 const child = spawn(process.argv[0], [process.argv[1], 'serve', `127.0.0.1:${port}`], {
                     detached: true,
-                    stdio: 'ignore',
-                    env: { ...process.env, MANYOYO_SERVER_PASS: crypto.randomBytes(12).toString('hex') }
+                    stdio: 'ignore'
                 });
                 child.unref();
                 return child;
@@ -2346,6 +2376,35 @@ async function runWebServerMode(runtime) {
         RUNTIME_STATE.message = '正在检查容器环境';
     }
 
+    // 自愈失败/超时不是终态：用户手动修好（或点向导里的“重试”）后可以再来一次
+    let runtimeHealing = false;
+    function startServeRuntimeHeal() {
+        if (runtimeHealing) return false;
+        runtimeHealing = true;
+        RUNTIME_STATE.status = 'starting';
+        RUNTIME_STATE.message = '正在检查容器环境';
+        healContainerRuntime(state => {
+            RUNTIME_STATE.status = state.status;
+            RUNTIME_STATE.message = state.message;
+            if (state.status === 'starting') console.log(`${YELLOW}⏳ ${state.message}...${NC}`);
+        }, { async: true }).then(result => {
+            if (result.status === 'ready' || result.status === 'started') {
+                RUNTIME_STATE.status = 'ready';
+                RUNTIME_STATE.message = '';
+            } else {
+                RUNTIME_STATE.status = 'failed';
+                RUNTIME_STATE.message = result.message;
+                console.log(`${YELLOW}⚠️  ${result.message}${NC}`);
+            }
+        }).catch(error => {
+            RUNTIME_STATE.status = 'failed';
+            RUNTIME_STATE.message = String(error && error.message || error);
+        }).finally(() => {
+            runtimeHealing = false;
+        });
+        return true;
+    }
+
     const serverHandle = await startWebServer({
         serverHost: runtime.serverHost,
         serverPort: runtime.serverPort,
@@ -2356,10 +2415,29 @@ async function runWebServerMode(runtime) {
         dockerCmd: DOCKER_CMD,
         dockerEnv: DOCKER_ENV,
         runtimeState: RUNTIME_STATE,
+        retryRuntimeHeal: () => (needRuntimeHeal ? startServeRuntimeHeal() : false),
         autoPullImage: true,
         importState: () => readImportState(),
         updateInfo: () => updateChecker.getInfo(),
         loginTokenDir: getLoginTokenDir(),
+        doctorCheck: async () => runDoctorChecks({
+            selectRuntime: () => CONTAINER_RUNTIME,
+            runCommand: runRuntimeCommandAsync,
+            configExists: fs.existsSync(getManyoyoConfigPath()),
+            imageName: runtime.imageName,
+            imageVersion: runtime.imageVersion,
+            containerMode: 'common',
+            pluginConfig: {}
+        }),
+        doctorStartRuntime: async () => {
+            const result = await ensureRuntimeReady({ runtime: CONTAINER_RUNTIME, run: runRuntimeCommandAsync });
+            const fixed = result.status === 'started' || result.status === 'ready';
+            if (fixed) {
+                RUNTIME_STATE.status = 'ready';
+                RUNTIME_STATE.message = '';
+            }
+            return { fixed, message: result.message };
+        },
         hostPath: runtime.hostPath,
         containerPath: runtime.containerPath,
         imageName: runtime.imageName,
@@ -2379,6 +2457,7 @@ async function runWebServerMode(runtime) {
         getContainerStatus,
         waitForContainerReady,
         dockerExecArgs,
+        dockerExecAsync: (args, options = {}) => runCommandAsync(DOCKER_CMD, args, { env: DOCKER_ENV, timeout: options.timeout }),
         showImagePullHint,
         removeContainer,
         webHistoryDir: path.join(os.homedir(), '.manyoyo', 'web-history'),
@@ -2394,23 +2473,7 @@ async function runWebServerMode(runtime) {
     });
     writeServePidFile(runtime, serverHandle);
     if (needRuntimeHeal) {
-        healContainerRuntime(state => {
-            RUNTIME_STATE.status = state.status;
-            RUNTIME_STATE.message = state.message;
-            if (state.status === 'starting') console.log(`${YELLOW}⏳ ${state.message}...${NC}`);
-        }).then(result => {
-            if (result.status === 'ready' || result.status === 'started') {
-                RUNTIME_STATE.status = 'ready';
-                RUNTIME_STATE.message = '';
-            } else {
-                RUNTIME_STATE.status = 'failed';
-                RUNTIME_STATE.message = result.message;
-                console.log(`${YELLOW}⚠️  ${result.message}${NC}`);
-            }
-        }).catch(error => {
-            RUNTIME_STATE.status = 'failed';
-            RUNTIME_STATE.message = String(error && error.message || error);
-        });
+        startServeRuntimeHeal();
     }
     return serverHandle;
 }

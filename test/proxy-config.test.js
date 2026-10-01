@@ -46,6 +46,7 @@ network_backend = "netavark"
     test('drops values that could break out of the generated TOML or the environment', () => {
         const parsed = parseUserContainersConf('[engine]\nenv = ["http_proxy=http://a:1\\"; rm -rf ~", "https_proxy=http://ok:1", "all_proxy=$(id)", "no_proxy=a`b`"]\n');
         expect(parsed.env).toEqual({ https_proxy: 'http://ok:1' });
+        expect(parsed.dropped.sort()).toEqual(['all_proxy', 'http_proxy', 'no_proxy']);
     });
 });
 
@@ -62,7 +63,24 @@ describe('collectProxySettings', () => {
     });
 
     test('no config and no variables means no proxy at all', () => {
-        expect(collectProxySettings({ homeDir: root, env: {} })).toEqual({ env: {}, passToContainers: null });
+        expect(collectProxySettings({ homeDir: root, env: {} })).toEqual({ env: {}, passToContainers: null, dropped: [] });
+    });
+});
+
+describe('dropped proxy entries are reported by name only', () => {
+    test('a proxy with an unsafe password is not copied but is reported (never printing the value)', () => {
+        const settings = collectProxySettings({ homeDir: root, env: { https_proxy: "http://u:pa$$w'd@proxy:1", http_proxy: 'http://ok:1' } });
+        expect(settings.env).toEqual({ http_proxy: 'http://ok:1' });
+        expect(settings.dropped).toEqual(['https_proxy']);
+        expect(JSON.stringify(settings.dropped)).not.toContain('pa$$');
+    });
+
+    test('a bad value that another source replaces with a safe one is not reported as dropped', () => {
+        fs.mkdirSync(path.join(root, '.config/containers'), { recursive: true });
+        fs.writeFileSync(path.join(root, '.config/containers/containers.conf'), '[engine]\nenv = ["http_proxy=http://file-ok:1"]\n');
+        const settings = collectProxySettings({ homeDir: root, env: { http_proxy: 'http://bad$x:1' } });
+        expect(settings.env).toEqual({ http_proxy: 'http://file-ok:1' });
+        expect(settings.dropped).toEqual([]);
     });
 });
 

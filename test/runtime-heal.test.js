@@ -1,6 +1,6 @@
 'use strict';
 
-const { ensureRuntimeReady } = require('../lib/runtime-heal');
+const { ensureRuntimeReady, runCommandAsync } = require('../lib/runtime-heal');
 
 // script: 按顺序描述每次 info 的结果；其余命令记录到 calls
 function makeHarness({ infoResults = [], machines, startFails = false, openFails = false }) {
@@ -130,5 +130,51 @@ describe('ensureRuntimeReady', () => {
         const result = await ensureRuntimeReady({ ...h.options, platform: 'linux', runtime: { command: 'docker' } });
         expect(result.status).toBe('unavailable');
         expect(h.calls.some(c => c.command === 'open')).toBe(false);
+    });
+
+    test('does not start again when the machine is already Starting, just polls', async () => {
+        const h = makeHarness({ infoResults: [false, false, true], machines: [{ Name: 'm', Default: true, Running: false, Starting: true }] });
+        const result = await ensureRuntimeReady({ ...h.options, runtime: { command: 'podman' } });
+        expect(result.status).toBe('started');
+        expect(h.calls.some(c => c.args[1] === 'start')).toBe(false);
+    });
+
+    test('re-probes once when machine start fails (concurrent start) and succeeds if info works', async () => {
+        const h = makeHarness({ infoResults: [false, true], machines: [{ Name: 'm', Default: true, Running: false }], startFails: true });
+        const result = await ensureRuntimeReady({ ...h.options, runtime: { command: 'podman' } });
+        expect(result.status).toBe('started');
+    });
+
+    test('awaits an async run() and separates a probe timeout from a plain failure', async () => {
+        const calls = [];
+        const run = async (command, args) => {
+            calls.push(args.join(' '));
+            await new Promise(resolve => setImmediate(resolve));
+            if (args[0] === 'info') { const e = new Error('timed out'); e.code = 'ETIMEDOUT'; throw e; }
+            if (args[1] === 'list') return JSON.stringify([{ Name: 'm', Running: true }]);
+            throw new Error('unexpected');
+        };
+        const result = await ensureRuntimeReady({ runtime: { command: 'podman' }, run, sleep: async () => {}, now: () => 0 });
+        expect(result.status).toBe('unavailable');
+        expect(result.message).toContain('响应超时');
+    });
+
+    test('probes info with a generous timeout (>= 10s)', async () => {
+        const h = makeHarness({ infoResults: [true] });
+        await ensureRuntimeReady({ ...h.options, runtime: { command: 'docker' } });
+        expect(h.calls[0].opts.timeout).toBeGreaterThanOrEqual(10000);
+    });
+
+    test('runCommandAsync does not block the event loop and reports exit codes and timeouts', async () => {
+        let ticks = 0;
+        const timer = setInterval(() => { ticks += 1; }, 10);
+        const ok = await runCommandAsync(process.execPath, ['-e', 'setTimeout(() => console.log("hi"), 200)'], { timeout: 5000 });
+        clearInterval(timer);
+        expect(ok.trim()).toBe('hi');
+        expect(ticks).toBeGreaterThan(5);
+
+        await expect(runCommandAsync(process.execPath, ['-e', 'process.exit(3)'], {})).rejects.toMatchObject({ status: 3 });
+        await expect(runCommandAsync(process.execPath, ['-e', 'setTimeout(() => {}, 5000)'], { timeout: 100 })).rejects.toMatchObject({ code: 'ETIMEDOUT' });
+        await expect(runCommandAsync('/nonexistent/cmd', [], {})).rejects.toMatchObject({ code: 'ENOENT' });
     });
 });

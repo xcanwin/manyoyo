@@ -13,12 +13,19 @@ describe('error hints', () => {
         ['pinging container registry localhost: Get "https://localhost/v2/"', 'IMAGE_PULL_FAILED', 'manyoyo build'],
         ['Bind for 0.0.0.0:8080 failed: port is already allocated', 'PORT_IN_USE', '换一个端口'],
         ['listen EADDRINUSE: address already in use 127.0.0.1:3000', 'PORT_IN_USE', '换一个端口'],
-        ['xcode-select: note: No developer tools were found', 'XCODE_CLT_MISSING', 'xcode-select --install']
+        ['xcode-select: note: No developer tools were found', 'XCODE_CLT_MISSING', 'xcode-select --install'],
+        ['xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools)', 'XCODE_CLT_MISSING', 'xcode-select --install'],
+        ['Error: toomanyrequests: You have reached your unauthenticated pull rate limit', 'IMAGE_PULL_RATE_LIMITED', '稍等'],
+        ['Error: unauthorized: authentication required', 'IMAGE_UNAUTHORIZED', 'login']
     ])('maps %j to %s', (raw, code, actionPart) => {
         const info = describeError(raw);
         expect(info.code).toBe(code);
         expect(info.reason).toEqual(expect.any(String));
         expect(info.action).toContain(actionPart);
+    });
+
+    test('mentioning xcode-select in unrelated output is not a CLT error', () => {
+        expect(describeError('hint: run xcode-select -p to print the path')).toBeNull();
     });
 
     test('interpolates the runtime command, image and port', () => {

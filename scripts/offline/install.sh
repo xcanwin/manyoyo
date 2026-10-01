@@ -119,10 +119,18 @@ install_app() {
     else
         log "▶ 安装应用 $MANYOYO_VERSION"
         mkdir -p "$ROOT/app"
-        rm -rf "$ROOT/app/.tmp-$MANYOYO_VERSION" "$app_dir"
+        rm -rf "$ROOT/app/.tmp-$MANYOYO_VERSION" "$ROOT/app/.old-$MANYOYO_VERSION"
         mv "$here/app" "$ROOT/app/.tmp-$MANYOYO_VERSION" || fail "无法写入 $ROOT/app。" "检查该目录的权限和磁盘空间。"
         printf '%s' "$MANIFEST_SHA" > "$ROOT/app/.tmp-$MANYOYO_VERSION/.installed"
-        mv "$ROOT/app/.tmp-$MANYOYO_VERSION" "$app_dir"
+        # 同版本重装：先挪开旧目录，新目录就位后再删；中途失败可以还原，不会留下 current 断链
+        if [ -e "$app_dir" ]; then
+            mv "$app_dir" "$ROOT/app/.old-$MANYOYO_VERSION" || fail "无法替换 ${app_dir}。" "检查该目录的权限，并关闭正在运行的 manyoyo 后重试。"
+        fi
+        if ! mv "$ROOT/app/.tmp-$MANYOYO_VERSION" "$app_dir"; then
+            [ -e "$ROOT/app/.old-$MANYOYO_VERSION" ] && mv "$ROOT/app/.old-$MANYOYO_VERSION" "$app_dir"
+            fail "无法写入 ${app_dir}。" "检查该目录的权限和磁盘空间。"
+        fi
+        rm -rf "$ROOT/app/.old-$MANYOYO_VERSION"
         clear_quarantine "$app_dir"
     fi
     ln -sfn "$MANYOYO_VERSION" "$ROOT/app/current"
@@ -194,7 +202,12 @@ setup_path() {
     user_shell="$(basename "${MANYOYO_TEST_SHELL:-${SHELL:-/bin/zsh}}")"
     case "$user_shell" in
         zsh) add_path_block "$HOME_DIR/.zprofile"; add_path_block "$HOME_DIR/.zshrc" ;;
-        bash) add_path_block "$HOME_DIR/.bash_profile"; add_path_block "$HOME_DIR/.bashrc" ;;
+        bash)
+            # bash 登录 shell 只读 .bash_profile / .bash_login / .profile 里第一个存在的；新建 .bash_profile 会让原有 .profile 失效
+            login_file="$HOME_DIR/.bash_profile"
+            [ -e "$login_file" ] || { [ -e "$HOME_DIR/.bash_login" ] && login_file="$HOME_DIR/.bash_login"; }
+            [ -e "$login_file" ] || { [ -e "$HOME_DIR/.profile" ] && login_file="$HOME_DIR/.profile"; }
+            add_path_block "$login_file"; add_path_block "$HOME_DIR/.bashrc" ;;
         *) log "• 没有为 $user_shell 自动写入 PATH，请手动加入：export PATH=\"\$HOME/.manyoyo/bin:\$PATH\"" ;;
     esac
 }
@@ -247,7 +260,8 @@ start_image_import() {
     mkdir -p "$IMPORT_DIR"
     if [ -f "$IMPORT_DIR/loading.json" ]; then
         pid="$(sed -n 's/.*"pid": *\([0-9][0-9]*\).*/\1/p' "$IMPORT_DIR/loading.json")"
-        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        # pid 必须确实是后台导入脚本（残留标记的 pid 可能已被别的进程复用）
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && ps -o command= -p "$pid" 2>/dev/null | grep -q 'finish\.sh'; then
             log "• 镜像导入已在后台进行（pid ${pid}）"
             return 0
         fi

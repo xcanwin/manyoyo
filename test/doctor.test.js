@@ -3,8 +3,8 @@
 const { runDoctorChecks, applyDoctorFixes } = require('../lib/doctor');
 
 describe('doctor checks', () => {
-    test('reports stable codes for runtime, daemon, image, config, agent, mode and plugin state', () => {
-        const report = runDoctorChecks({
+    test('reports stable codes for runtime, daemon, image, config, agent, mode and plugin state', async () => {
+        const report = await runDoctorChecks({
             selectRuntime: () => ({ command: 'docker', env: {}, source: 'docker-daemon' }),
             runCommand: (command, args) => {
                 if (args[0] === '--version') return `${command} 1.0`;
@@ -36,8 +36,8 @@ describe('doctor checks', () => {
         ]));
     });
 
-    test('reports actionable errors without throwing when dependencies are unavailable', () => {
-        const report = runDoctorChecks({
+    test('reports actionable errors without throwing when dependencies are unavailable', async () => {
+        const report = await runDoctorChecks({
             selectRuntime: () => { throw new Error('not found'); },
             runCommand: () => { throw new Error('not found'); },
             configExists: false,
@@ -60,12 +60,21 @@ describe('doctor checks', () => {
         ]));
     });
 
-    test('passes the selected runtime env to every runtime command', () => {
+    test('accepts an async command runner', async () => {
+        const report = await runDoctorChecks({
+            selectRuntime: () => ({ command: 'docker', env: {}, source: 'config' }),
+            runCommand: async () => { await new Promise(resolve => setImmediate(resolve)); return 'ok'; },
+            configExists: true, imageName: 'i', imageVersion: '1.0.0-common'
+        });
+        expect(report.checks.find(c => c.code === 'DAEMON_AVAILABLE').status).toBe('ok');
+    });
+
+    test('passes the selected runtime env and a timeout to every runtime command', async () => {
         const seen = [];
-        runDoctorChecks({
+        await runDoctorChecks({
             selectRuntime: () => ({ command: '/p/podman', env: { CONTAINERS_CONF: '/p/c.conf' }, source: 'private-podman' }),
             runCommand: (command, args, options) => {
-                seen.push({ command, env: options && options.env });
+                seen.push({ command, env: options && options.env, timeout: options && options.timeout });
                 return 'ok';
             },
             imageName: 'image',
@@ -76,12 +85,13 @@ describe('doctor checks', () => {
         seen.forEach(call => {
             expect(call.command).toBe('/p/podman');
             expect(call.env).toEqual({ CONTAINERS_CONF: '/p/c.conf' });
+            expect(call.timeout).toBeGreaterThan(0);
         });
     });
 });
 
 describe('doctor --fix', () => {
-    const brokenReport = () => runDoctorChecks({
+    const brokenReport = async () => runDoctorChecks({
         selectRuntime: () => ({ command: 'docker', env: {}, source: 'docker-daemon' }),
         runCommand: (command, args) => {
             if (args[0] === '--version') return 'v';
@@ -98,7 +108,7 @@ describe('doctor --fix', () => {
 
     test('fixes daemon, image and config, and only suggests a port', async () => {
         const order = [];
-        const fixed = await applyDoctorFixes(brokenReport(), {
+        const fixed = await applyDoctorFixes(await brokenReport(), {
             startRuntime: async () => { order.push('runtime'); return { fixed: true, message: '已启动' }; },
             pullImage: async () => { order.push('image'); return { fixed: true, message: '已拉取' }; },
             createConfig: () => { order.push('config'); return { fixed: true, message: '已生成' }; },
@@ -116,7 +126,7 @@ describe('doctor --fix', () => {
 
     test('skips the image pull when the runtime could not be repaired', async () => {
         const pullImage = jest.fn();
-        const fixed = await applyDoctorFixes(brokenReport(), {
+        const fixed = await applyDoctorFixes(await brokenReport(), {
             startRuntime: async () => ({ fixed: false, message: '超时' }),
             pullImage
         });
@@ -126,7 +136,7 @@ describe('doctor --fix', () => {
     });
 
     test('a throwing handler is reported instead of crashing, and missing handlers mean not attempted', async () => {
-        const fixed = await applyDoctorFixes(brokenReport(), {
+        const fixed = await applyDoctorFixes(await brokenReport(), {
             startRuntime: () => { throw new Error('nope\ndetail'); }
         });
         expect(fixed.checks.find(c => c.code === 'DAEMON_UNAVAILABLE').fix).toEqual({ attempted: true, fixed: false, message: 'nope' });
@@ -134,7 +144,7 @@ describe('doctor --fix', () => {
     });
 
     test('healthy checks carry no fix field', async () => {
-        const report = runDoctorChecks({
+        const report = await runDoctorChecks({
             selectRuntime: () => ({ command: 'docker', env: {}, source: 'config' }),
             runCommand: () => 'ok',
             configExists: true,

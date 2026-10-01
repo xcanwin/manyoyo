@@ -60,6 +60,7 @@ function harness(answers = [], extra = {}) {
             log: line => logs.push(line),
             run: (command, args, opts) => { commands.push({ command, args, opts }); return extra.runOutput ? extra.runOutput(command, args) : ''; },
             isManyoyoServe: () => true,
+            isImporter: () => true,
             kill: jest.fn(() => true),
             ...extra.options
         }
@@ -150,6 +151,22 @@ describe('runUninstall', () => {
         const h = harness(['y', '', ''], { options: { isManyoyoServe: () => false } });
         await runUninstall(h.options);
         expect(h.options.kill).not.toHaveBeenCalled();
+    });
+
+    test('never kills a recorded import pid that is not the import script (pid reuse)', async () => {
+        seedInstall();
+        fs.mkdirSync(path.join(m, 'runtime/import'), { recursive: true });
+        fs.writeFileSync(path.join(m, 'runtime/import/loading.json'), '{"pid": 4444}');
+        const h = harness(['y', '', ''], { options: { isImporter: () => false } });
+        await runUninstall(h.options);
+        expect(h.options.kill).not.toHaveBeenCalled();
+    });
+
+    test('--yes still warns that private Podman contents go away', async () => {
+        seedInstall();
+        const h = harness([], { options: { yes: true } });
+        await runUninstall(h.options);
+        expect(h.logs.join('\n')).toContain('私有 Podman 里的容器与镜像会随虚拟机一起删除');
     });
 
     test('a failing machine stop does not abort the uninstall', async () => {

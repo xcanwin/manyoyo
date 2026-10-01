@@ -2,6 +2,7 @@ import * as React from "react"
 import { CheckIcon, FolderIcon } from "lucide-react"
 
 import { DirectoryPickerDialog } from "@/components/directory-picker-dialog"
+import { DoctorPanel } from "@/components/doctor-panel"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,8 +20,12 @@ import {
   fetchSetupStatus,
   getDirectoryHint,
   getReadiness,
+  passwordStrength,
+  retrySetupRuntime,
   saveAgent,
+  savePassword,
   testConnection,
+  validatePassword,
   validateStep,
   type AccessMode,
   type ConnectionResult,
@@ -63,11 +68,16 @@ export function SetupWizard({
   const [testResult, setTestResult] = React.useState<ConnectionResult | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [pickerOpen, setPickerOpen] = React.useState(false)
+  const [password, setPassword] = React.useState("")
+  const [passwordConfirm, setPasswordConfirm] = React.useState("")
+  const [showDoctor, setShowDoctor] = React.useState(false)
 
   const readiness = getReadiness(status)
   const agent = agents.find((item) => item.id === form.agentId) ?? null
   const hostPath = form.hostPath || status?.defaultHostPath || ""
   const effectiveForm: SetupForm = { ...form, hostPath }
+  // 后台启动的服务密码是自动生成、用户看不到的；没设置过就在保存前要求设置一个
+  const needsPassword = status?.passwordSet === false
 
   React.useEffect(() => {
     let cancelled = false
@@ -146,9 +156,20 @@ export function SetupWizard({
 
   async function handleFinish() {
     if (!agent || saving || !readiness.ready) return
+    if (needsPassword) {
+      const message = validatePassword(password, passwordConfirm)
+      if (message) {
+        setError(message)
+        return
+      }
+    }
     setSaving(true)
     setError("")
     try {
+      if (needsPassword) {
+        await savePassword(password)
+        setStatus((prev) => (prev ? { ...prev, passwordSet: true } : prev))
+      }
       await saveAgent(agent.id, buildEnvBody(agent, effectiveForm), effectiveForm.hostPath)
       onFinished(await createAgentSession(agent.id))
     } catch (err) {
@@ -191,6 +212,25 @@ export function SetupWizard({
             {!readiness.ready && readiness.blockedReason ? (
               <p className="text-xs text-muted-foreground">{readiness.blockedReason}（完成前可先填写前三步）</p>
             ) : null}
+            {readiness.items.some((item) => item.state === "failed") ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      void retrySetupRuntime().then(() => fetchSetupStatus().then(setStatus)).catch(() => {})
+                    }}
+                  >
+                    重试
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setShowDoctor((prev) => !prev)}>
+                    {showDoctor ? "收起环境检查" : "检查环境"}
+                  </Button>
+                </div>
+                {showDoctor ? <DoctorPanel /> : null}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -203,7 +243,7 @@ export function SetupWizard({
               {step === 1 ? "选择你想在沙箱里运行的 Agent" : null}
               {step === 2 ? "填写访问模型服务所需的 Key，Key 只保存在本机配置里" : null}
               {step === 3 ? "Agent 只能看到你在这里选择的目录" : null}
-              {step === 4 ? "确认信息，保存后直接进入会话" : null}
+              {step === 4 ? (needsPassword ? "确认信息并设置登录密码，保存后直接进入会话" : "确认信息，保存后直接进入会话") : null}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -373,6 +413,37 @@ export function SetupWizard({
                   <dt className="text-muted-foreground">工作目录</dt>
                   <dd className="break-all">{hostPath}</dd>
                 </dl>
+                {needsPassword ? (
+                  <FieldGroup className="gap-3">
+                    <Field>
+                      <FieldLabel htmlFor="setup-password">登录密码</FieldLabel>
+                      <Input
+                        id="setup-password"
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder="至少 8 位"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                      />
+                      {password ? (
+                        <FieldDescription data-testid="password-strength">{passwordStrength(password).label}</FieldDescription>
+                      ) : null}
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="setup-password-confirm">再输入一次</FieldLabel>
+                      <Input
+                        id="setup-password-confirm"
+                        type="password"
+                        autoComplete="new-password"
+                        value={passwordConfirm}
+                        onChange={(event) => setPasswordConfirm(event.target.value)}
+                      />
+                      <FieldDescription>
+                        用于以后从其他浏览器或设备、或登出后登录，用户名是 {status?.serverUser || "admin"}。本机上执行 manyoyo 仍会自动登录。
+                      </FieldDescription>
+                    </Field>
+                  </FieldGroup>
+                ) : null}
                 {!readiness.ready ? (
                   <p className="text-xs text-muted-foreground">{readiness.blockedReason}，就绪后可保存并进入</p>
                 ) : null}

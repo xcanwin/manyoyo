@@ -5,7 +5,8 @@ const {
     getConfiguredAgents,
     buildAgentRunProfile,
     classifyConnectionResult,
-    redactSecrets
+    redactSecrets,
+    validateSetupPassword
 } = require('../lib/setup');
 const { AGENT_ENV_SCHEMA, agentEnvKeys } = require('../lib/init-config');
 
@@ -101,5 +102,19 @@ describe('setup helpers', () => {
         expect(result.detail).not.toContain('abcdefghijkl');
         expect(redactSecrets('token abcd here', ['abcd'])).toBe('token **** here');
         expect(redactSecrets('x', ['ab'])).toBe('x');
+    });
+});
+
+describe('validateSetupPassword', () => {
+    test('accepts 8–128 chars without control characters', () => {
+        expect(validateSetupPassword('abcdefgh')).toBe('');
+        expect(validateSetupPassword('密码密码密码密码密码')).toBe('');
+        expect(validateSetupPassword('a'.repeat(128))).toBe('');
+    });
+
+    test('rejects non-strings, short, long and control characters', () => {
+        for (const bad of [undefined, null, 12345678, 'abcdefg', 'a'.repeat(129), 'abcdefgh\n', 'abc\tdefgh', 'abcdefgh\u007f']) {
+            expect(validateSetupPassword(bad)).not.toBe('');
+        }
     });
 });

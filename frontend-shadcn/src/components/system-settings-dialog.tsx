@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { CapacityEstimateView } from "@/components/capacity-estimate-view"
 import { CodeMirrorEditor } from "@/components/code-mirror-editor"
+import { DoctorPanel } from "@/components/doctor-panel"
 import { QuickChatSettingsView } from "@/components/quick-chat-settings-view"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useTheme } from "@/components/theme-provider"
@@ -60,6 +61,7 @@ const CATEGORIES: ConfigCategory[] = [
   { id: "runs", label: "运行配置", keys: ["runs"] },
   { id: "quick-chat", label: "快捷对话", keys: [] },
   { id: "capacity", label: "容量预估", keys: [] },
+  { id: "doctor", label: "环境检查", keys: [] },
 ]
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -454,6 +456,8 @@ export function SystemSettingsDialog({
                       <RunsCategoryFields liveParsed={liveParsed} onCommit={handleLeafCommit} />
                     ) : category.id === "capacity" ? (
                       <CapacityEstimateView />
+                    ) : category.id === "doctor" ? (
+                      <DoctorPanel />
                     ) : category.id === "quick-chat" ? (
                       <QuickChatSettingsView />
                     ) : (

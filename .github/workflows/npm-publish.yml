@@ -12,8 +12,8 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -37,8 +37,8 @@ jobs:
       id-token: write  # Required for OIDC
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -59,7 +59,7 @@ jobs:
     permissions:
       contents: write  # Required to create releases
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Create GitHub Release
         run: |
           # 已经有同名 Release（例如先手动建好草稿）就不重复创建

@@ -34,6 +34,29 @@ describe('scan-release-artifacts', () => {
         expect(result.hits.find(h => h.rule === 'local-path').file).toBe('pkg/a.txt');
     });
 
+    test('fails closed: unreadable compressed archive is reported as unscanned and exits 1', async () => {
+        write('pkg/broken.tar.xz', Buffer.concat([Buffer.from([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00]), Buffer.from('not really xz data')]));
+        const result = await scanTargets([path.join(root, 'pkg')]);
+        expect(result.hits).toEqual([]);
+        expect(result.unscanned.map(item => item.file)).toEqual(['pkg/broken.tar.xz']);
+        const cli = spawnSync('node', [SCRIPT, path.join(root, 'pkg'), '--no-inventory'], { encoding: 'utf-8' });
+        expect(cli.status).toBe(1);
+        expect(cli.stdout).toContain('未能扫描');
+    });
+
+    test('gzip beyond max depth is still stream-scanned instead of skipped', async () => {
+        const zlib = require('zlib');
+        write('pkg/deep.txt.gz', zlib.gzipSync(`leak=${FAKE_TOKEN}\n`));
+        const result = await scanTargets([path.join(root, 'pkg')], { maxDepth: 1 });
+        expect(rules(result)).toEqual(['token']);
+        expect(result.unscanned).toEqual([]);
+    });
+
+    test('--exclude patterns must be anchored with ^', () => {
+        expect(() => parseArgs([root, '--exclude', 'images'])).toThrow(/\^/);
+        expect(parseArgs([root, '--exclude', '^full/images(/|$)']).excludes).toEqual(['^full/images(/|$)']);
+    });
+
     test('output never contains a full matched secret', async () => {
         write('pkg/a.txt', `${FAKE_TOKEN} ${FAKE_GHP} /Users/alicewonderland/x`);
         const result = await scanTargets([path.join(root, 'pkg')]);

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 import { SetupWizard } from "@/components/setup-wizard"
 import * as setupApi from "@/lib/setup"
+import * as doctorApi from "@/lib/doctor"
 import type { SetupAgent, SetupStatus } from "@/lib/setup"
 
 vi.mock("@/lib/setup", async (importOriginal) => {
@@ -15,9 +16,17 @@ vi.mock("@/lib/setup", async (importOriginal) => {
     fetchSetupStatus: vi.fn(),
     testConnection: vi.fn(),
     saveAgent: vi.fn(),
+    savePassword: vi.fn(),
+    retrySetupRuntime: vi.fn(),
     createAgentSession: vi.fn(),
   }
 })
+
+vi.mock("@/lib/doctor", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/doctor")>()),
+  fetchDoctor: vi.fn(),
+  runDoctorFix: vi.fn(),
+}))
 
 // 组件里用到的 DirectoryPickerDialog 只在打开时才发请求，这里不会触发
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -54,6 +63,8 @@ const readyStatus: SetupStatus = {
   defaultHostPath: "/Users/me/.manyoyo/workpath",
   platform: "linux",
   runtimeKind: "docker",
+  serverUser: "admin",
+  passwordSet: true,
 }
 
 const startingStatus: SetupStatus = {
@@ -261,5 +272,80 @@ describe("SetupWizard", () => {
     expect(text()).toContain("第 1 / 4 步")
     await click(button("跳过向导"))
     expect(onSkip).toHaveBeenCalled()
+  })
+
+  async function toStep4(status: SetupStatus) {
+    api.saveAgent.mockResolvedValue({})
+    api.savePassword.mockResolvedValue({})
+    api.createAgentSession.mockResolvedValue("my-claude-0101-0000")
+    const handlers = await mount(status)
+    await click(radio("Claude Code"))
+    await click(button("下一步"))
+    await type("setup-api-key", "sk-secret")
+    await click(button("下一步"))
+    await click(button("下一步"))
+    return handlers
+  }
+
+  test("no password fields when a password is already set", async () => {
+    await toStep4(readyStatus)
+    expect(container.querySelector("#setup-password")).toBeNull()
+  })
+
+  test("asks for a password before saving, validates it and shows strength and the username", async () => {
+    const { onFinished } = await toStep4({ ...readyStatus, passwordSet: false, serverUser: "webadmin" })
+    expect(text()).toContain("登录密码")
+    expect(text()).toContain("用户名是 webadmin")
+    expect((container.querySelector("#setup-password") as HTMLInputElement).type).toBe("password")
+
+    await click(button("保存并进入"))
+    expect(text()).toContain("密码至少 8 位")
+    expect(api.savePassword).not.toHaveBeenCalled()
+    expect(api.saveAgent).not.toHaveBeenCalled()
+
+    await type("setup-password", "abc12345")
+    expect(container.querySelector('[data-testid="password-strength"]')?.textContent).toContain("中")
+    await type("setup-password-confirm", "abc12346")
+    await click(button("保存并进入"))
+    expect(text()).toContain("两次输入的密码不一致")
+    expect(api.savePassword).not.toHaveBeenCalled()
+
+    await type("setup-password-confirm", "abc12345")
+    await click(button("保存并进入"))
+    expect(api.savePassword).toHaveBeenCalledWith("abc12345")
+    expect(api.saveAgent).toHaveBeenCalled()
+    expect(onFinished).toHaveBeenCalledWith("my-claude-0101-0000")
+    expect(text()).not.toContain("abc12345")
+  })
+
+  test("a failed password save stops before saving the agent", async () => {
+    await toStep4({ ...readyStatus, passwordSet: false })
+    api.savePassword.mockRejectedValue(new Error("配置写入失败"))
+    await type("setup-password", "abc12345")
+    await type("setup-password-confirm", "abc12345")
+    await click(button("保存并进入"))
+    expect(text()).toContain("配置写入失败")
+    expect(api.saveAgent).not.toHaveBeenCalled()
+  })
+
+  test("a failed runtime offers the environment check", async () => {
+    const doctor = vi.mocked(doctorApi)
+    doctor.fetchDoctor.mockResolvedValue({
+      ok: false,
+      checks: [{ code: "DAEMON_UNAVAILABLE", status: "error", summary: "podman daemon 不可用", action: "启动 podman daemon 后重试。", detail: "" }],
+    })
+    await mount({ ...readyStatus, runtime: { status: "failed", message: "虚拟机启动失败" } })
+    expect(container.querySelector('[data-testid="doctor-panel"]')).toBeNull()
+    await click(button("检查环境"))
+    await flush()
+    expect(text()).toContain("podman daemon 不可用")
+    expect(text()).toContain("下一步：启动 podman daemon 后重试。")
+  })
+
+  test("a failed runtime can be retried", async () => {
+    api.retrySetupRuntime.mockResolvedValue({})
+    await mount({ ...readyStatus, runtime: { status: "failed", message: "虚拟机启动失败" } })
+    await click(button("重试"))
+    expect(api.retrySetupRuntime).toHaveBeenCalledTimes(1)
   })
 })

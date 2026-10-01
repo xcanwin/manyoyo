@@ -41,4 +41,12 @@ describe('pruneDanglingImages never takes containers with it', () => {
         const dockerExecArgs = args => { if (args[0] === 'images') throw new Error('boom'); return ''; };
         expect(() => pruneDanglingImages({ dockerExecArgs })).not.toThrow();
     });
+
+    test('a failing first image prune (daemon down) is logged, not thrown', () => {
+        const logs = [];
+        const dockerExecArgs = jest.fn(() => { throw new Error('Cannot connect to the Docker daemon\nmore'); });
+        expect(() => pruneDanglingImages({ dockerExecArgs, log: line => logs.push(line) })).not.toThrow();
+        expect(dockerExecArgs).toHaveBeenCalledTimes(1);
+        expect(logs.join('\n')).toContain('image prune 失败');
+    });
 });

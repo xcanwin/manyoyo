@@ -12,7 +12,7 @@ const path = require('path');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const { pipeline } = require('stream/promises');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const CHUNK_BYTES = 4 * 1024 * 1024;
 const OVERLAP_BYTES = 512;
@@ -90,6 +90,8 @@ function findAllowEntry(allowlist, hit) {
     });
 }
 
+const DECOMPRESSORS = { gzip: null, xz: ['xz', '-dc'], zstd: ['zstd', '-dc'], bzip2: ['bzip2', '-dc'] };
+
 function detectArchiveKind(head) {
     if (head.length >= 2 && head[0] === 0x1f && head[1] === 0x8b) return 'gzip';
     if (head.length >= 6 && head.subarray(0, 6).equals(Buffer.from([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00]))) return 'xz';
@@ -163,13 +165,14 @@ async function scanTargets(targets, options = {}) {
     const excludes = (options.excludes || []).map(pattern => new RegExp(pattern));
     const isExcluded = display => excludes.some(pattern => pattern.test(display));
     const tmpRoot = options.tmpRoot || os.tmpdir();
-    const result = { hits: [], allowed: [], inventory: [], warnings: [], skipped: [] };
+    // unscanned：内容没能被检查的文件（解不开/解包失败/嵌套超限且无法流式扫描），一律视为失败，不能当作“通过”
+    const result = { hits: [], allowed: [], inventory: [], warnings: [], skipped: [], unscanned: [] };
 
     function addHit(rule, file, raw, offset) {
         const hit = { rule, file, offset, preview: raw ? mask(raw) : '', raw };
         const entry = findAllowEntry(allowlist, hit);
         if (entry) {
-            result.allowed.push({ rule, file, offset, reason: entry.reason });
+            result.allowed.push({ rule, file, offset, preview: raw ? mask(raw) : '', reason: entry.reason });
             return;
         }
         result.hits.push(hit);
@@ -194,7 +197,12 @@ async function scanTargets(targets, options = {}) {
         let expanded = false;
         if (kind) {
             if (depth >= maxDepth) {
-                result.warnings.push(`嵌套层数超过 ${maxDepth}，未展开: ${display}`);
+                // 嵌套超限：gzip 流式解压扫描内容（不落盘、不再嵌套），其它格式无法检查，计入 unscanned
+                if (kind in DECOMPRESSORS) {
+                    expanded = kind === 'gzip' ? await scanGunzipped(filePath, display) : await scanDecompressed(filePath, display, kind);
+                } else {
+                    result.unscanned.push({ file: display, reason: `嵌套层数超过 ${maxDepth}，${kind} 无法展开` });
+                }
             } else {
                 expanded = await expandArchive(filePath, display, kind, depth);
             }
@@ -221,13 +229,14 @@ async function scanTargets(targets, options = {}) {
                 if (kind === 'gzip') {
                     return await scanGunzipped(filePath, display);
                 }
-                result.warnings.push(kind !== 'tar'
-                    ? `无法解开 ${kind} 文件，仅按原始字节扫描: ${display}`
-                    : `tar 解包失败，仅按原始字节扫描: ${display}`);
+                if (kind !== 'tar' && kind in DECOMPRESSORS) {
+                    return await scanDecompressed(filePath, display, kind);
+                }
+                result.unscanned.push({ file: display, reason: kind !== 'tar' ? `无法解开 ${kind} 文件` : 'tar 解包失败' });
                 return false;
             }
             if (extracted.status !== 0) {
-                result.warnings.push(`tar 解包有告警（已尽量解开）: ${display}`);
+                result.unscanned.push({ file: display, reason: 'tar 解包不完整，部分内容未扫描' });
             }
             // 解出来的目录可能是 000/只读（容器层里常见），不先放开权限 readdir 会 EACCES
             spawnSync('chmod', ['-R', 'u+rwX', dir], { stdio: 'ignore' });
@@ -247,9 +256,29 @@ async function scanTargets(targets, options = {}) {
             await scanStreamContent(gunzip, rules, (rule, raw, offset) => addHit(rule, `${display}!gunzip`, raw, offset));
             return true;
         } catch (error) {
-            result.warnings.push(`gzip 解压失败，仅按原始字节扫描: ${display}`);
+            result.unscanned.push({ file: display, reason: 'gzip 解压失败' });
             return false;
         }
+    }
+
+    // xz/zstd/bzip2 但不是 tar：调用系统解压器，输出流直接扫描（不落盘）
+    async function scanDecompressed(filePath, display, kind) {
+        const [command, ...args] = DECOMPRESSORS[kind];
+        const child = spawn(command, [...args, filePath], { stdio: ['ignore', 'pipe', 'ignore'] });
+        const exited = new Promise(resolve => {
+            child.on('error', () => resolve(-1));
+            child.on('close', code => resolve(code));
+        });
+        try {
+            await scanStreamContent(child.stdout, rules, (rule, raw, offset) => addHit(rule, `${display}!${kind}`, raw, offset));
+        } catch (error) {
+            child.kill();
+        }
+        if (await exited !== 0) {
+            result.unscanned.push({ file: display, reason: `${kind} 解压失败（系统可能没有 ${command}）` });
+            return false;
+        }
+        return true;
     }
 
     async function walk(dir, prefix, depth) {
@@ -304,7 +333,11 @@ function parseArgs(argv) {
         if (arg === '--allowlist') args.allowlistPath = argv[++i] || '';
         else if (arg === '--build-user' || arg === '--build-host') args.denyStrings.push(argv[++i] || '');
         else if (arg === '--auto-identity') args.autoIdentity = true;
-        else if (arg === '--exclude') args.excludes.push(argv[++i] || '');
+        else if (arg === '--exclude') {
+            const pattern = argv[++i] || '';
+            if (!pattern.startsWith('^')) throw new Error(`--exclude 必须以 ^ 锚定（避免误跳过无关路径）: ${pattern}`);
+            args.excludes.push(pattern);
+        }
         else if (arg === '--json') args.json = true;
         else if (arg === '--no-inventory') args.inventory = false;
         else if (arg.startsWith('--')) throw new Error(`未知参数: ${arg}`);
@@ -317,13 +350,17 @@ function parseArgs(argv) {
 function formatReport(result, printInventory) {
     const lines = [];
     if (result.hits.length === 0) {
-        lines.push('扫描通过：没有命中任何规则');
+        lines.push(result.unscanned.length === 0 ? '扫描通过：没有命中任何规则' : '没有命中规则，但有文件未能扫描');
     } else {
         lines.push(`发现 ${result.hits.length} 处命中（内容已截断显示）:`);
         result.hits.forEach(hit => {
             const where = hit.offset === null ? '' : ` @${hit.offset}`;
             lines.push(`  [${hit.rule}] ${hit.file}${where}${hit.preview ? `  ${hit.preview}` : ''}`);
         });
+    }
+    if (result.unscanned.length > 0) {
+        lines.push(`未能扫描 ${result.unscanned.length} 个文件（按失败处理）:`);
+        result.unscanned.slice(0, 20).forEach(item => lines.push(`  ${item.file}  (${item.reason})`));
     }
     if (result.allowed.length > 0) lines.push(`允许列表放行 ${result.allowed.length} 处`);
     // 镜像里成千上万个 .gz（changelog 等）会触发“嵌套过深”告警，合并成一行，其余原样列出
@@ -346,7 +383,7 @@ async function main(argv) {
         const denyStrings = [...args.denyStrings, ...(args.autoIdentity ? autoIdentities() : [])];
         const result = await scanTargets(args.targets, { denyStrings, allowlist, excludes: args.excludes });
         console.log(args.json ? JSON.stringify(result, null, 2) : formatReport(result, args.inventory));
-        return result.hits.length === 0 ? 0 : 1;
+        return result.hits.length === 0 && result.unscanned.length === 0 ? 0 : 1;
     } catch (error) {
         console.error(`扫描失败: ${error.message}`);
         if (error.stack) console.error(error.stack);
