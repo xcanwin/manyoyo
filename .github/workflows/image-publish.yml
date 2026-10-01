@@ -1,5 +1,6 @@
 # 构建并发布预构建镜像 ghcr.io/xcanwin/manyoyo:<imageVersion>（linux/amd64 + linux/arm64），
 # 同时按架构产出镜像归档 artifact，供离线包组装使用。
+# 镜像源：GitHub runner 在海外，访问国内镜像仅约 120 kB/s，所以这里改用官方源（APT_MIRROR 置空即不改写 apt 源）。
 # 只能手动触发；不会被推送分支或 tag 触发。构建参数不含任何凭据。
 
 name: Publish Image
@@ -71,6 +72,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             TOOL=${{ steps.version.outputs.tool }}
+            APT_MIRROR=
+            NODEJS_MIRROR=https://nodejs.org/dist
+            NPM_REGISTRY=https://registry.npmjs.org/
+            PIP_INDEX_URL=https://pypi.org/simple
           tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.imageVersion }}
           push: true
           provenance: false
@@ -88,6 +93,10 @@ jobs:
           platforms: linux/amd64
           build-args: |
             TOOL=${{ steps.version.outputs.tool }}
+            APT_MIRROR=
+            NODEJS_MIRROR=https://nodejs.org/dist
+            NPM_REGISTRY=https://registry.npmjs.org/
+            PIP_INDEX_URL=https://pypi.org/simple
           tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.imageVersion }}
           outputs: type=docker,dest=out/manyoyo-${{ steps.version.outputs.imageVersion }}-amd64.tar
           provenance: false
@@ -101,6 +110,10 @@ jobs:
           platforms: linux/arm64
           build-args: |
             TOOL=${{ steps.version.outputs.tool }}
+            APT_MIRROR=
+            NODEJS_MIRROR=https://nodejs.org/dist
+            NPM_REGISTRY=https://registry.npmjs.org/
+            PIP_INDEX_URL=https://pypi.org/simple
           tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.imageVersion }}
           outputs: type=docker,dest=out/manyoyo-${{ steps.version.outputs.imageVersion }}-arm64.tar
           provenance: false
