@@ -466,6 +466,16 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(goCall[1]).toEqual(['install', '-trimpath', 'golang.org/x/tools/gopls@latest']);
     });
 
+    test('Dockerfile 在 apt 安装那一层删除 SSH 主机私钥（公开镜像不能带固定的私钥）', () => {
+        const dockerfile = fs.readFileSync(path.join(__dirname, '../docker/manyoyo.Dockerfile'), 'utf8');
+        const install = dockerfile.indexOf('dnsutils socat ncat ssh');
+        const removal = dockerfile.indexOf('rm -f /etc/ssh/ssh_host_*_key');
+        const nextRun = dockerfile.indexOf('\nRUN', install);
+        expect(removal).toBeGreaterThan(install);
+        // 必须在同一个 RUN 里删，否则私钥仍留在前一层
+        expect(nextRun === -1 || removal < nextRun).toBe(true);
+    });
+
     test('Dockerfile 里兜底的 go install 也带 -trimpath', () => {
         const dockerfile = fs.readFileSync(path.join(__dirname, '../docker/manyoyo.Dockerfile'), 'utf8');
         expect(dockerfile).toContain('go install -trimpath golang.org/x/tools/gopls@latest');

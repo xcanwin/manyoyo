@@ -121,6 +121,10 @@ RUN <<EOX
     # 更新 CA 证书
     update-ca-certificates
 
+    # ssh 元包会带上 openssh-server 并在安装时生成主机私钥；公开镜像里不能带每个人都一样的固定私钥，
+    # 删掉后用到 sshd 的人在容器里 ssh-keygen -A 自己生成
+    rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+
     # 安装 podman（条件）
     case ",$TOOL," in *,full,*|*,podman,*)
         apt-get install -y --no-install-recommends podman

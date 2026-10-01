@@ -462,6 +462,23 @@ describe('scan allowlists and offline workflow', () => {
         expect(result.hits.map(h => h.rule).sort()).toEqual(['email', 'local-path']);
     });
 
+    test('the image allowlist understands OCI blob layers, still flags SSH host keys, and keeps the config blob unallowed', async () => {
+        const layer = path.join(root, 'layer-src');
+        fs.mkdirSync(path.join(layer, 'etc/ssh'), { recursive: true });
+        fs.mkdirSync(path.join(layer, 'usr/share/doc/pkg'), { recursive: true });
+        fs.writeFileSync(path.join(layer, 'etc/ssh/ssh_host_rsa_key'), '-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n');
+        fs.writeFileSync(path.join(layer, 'usr/share/doc/pkg/copyright'), 'Maintainer: Someone <someone@example.org>');
+        const blobs = path.join(root, 'img/blobs/sha256');
+        fs.mkdirSync(blobs, { recursive: true });
+        const layerBlob = path.join(blobs, 'a'.repeat(64));
+        tar('-cf', layerBlob, '-C', layer, '.');
+        fs.writeFileSync(path.join(blobs, 'b'.repeat(64)), JSON.stringify({ history: [{ created_by: 'RUN echo /Users/alice' }] }));
+        const result = await scanTargets([path.join(root, 'img')], { allowlist: readJson('scripts/offline/scan-allowlist-image.json') });
+        const hits = result.hits.map(h => `${h.rule}:${h.file.split('!/').slice(1).join('!/') || h.file.split('/').pop().slice(0, 3)}`).sort();
+        expect(hits).toEqual(['local-path:bbb', 'private-key:etc/ssh/ssh_host_rsa_key'].sort());
+        expect(result.allowed.some(a => a.rule === 'email')).toBe(true);
+    });
+
     test('workflow: manual only, scans before uploading, explicit file list, no secrets, no Release', () => {
         const text = fs.readFileSync(path.join(__dirname, '../.github/workflows/offline-macos.yml'), 'utf8');
         const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\nenv:'));
