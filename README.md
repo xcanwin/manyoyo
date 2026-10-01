@@ -79,7 +79,7 @@ manyoyo run -r claude
 manyoyo serve 127.0.0.1:3000 -U admin -P 123456 # Web UI 模式
 ```
 
-默认镜像 `ghcr.io/xcanwin/manyoyo` 首次使用时自动拉取；需要自定义镜像时再执行 `manyoyo build --iv 1.9.2-common`。
+默认镜像 `ghcr.io/xcanwin/manyoyo` 首次使用时自动拉取；需要自定义镜像时再执行 `manyoyo build --iv 2.0.0-common`。
 
 系统要求：
 
@@ -162,13 +162,13 @@ manyoyo config command
 
 ```bash
 # common 版本
-manyoyo build --iv 1.9.2-common
+manyoyo build --iv 2.0.0-common
 
 # full 版本
-manyoyo build --iv 1.9.2-full
+manyoyo build --iv 2.0.0-full
 
 # 仅更新已有镜像内 Agent CLI 到 latest，不重建 Dockerfile
-manyoyo build --iv 1.9.2-full --update-agents --yes
+manyoyo build --iv 2.0.0-full --update-agents --yes
 
 # 自定义工具集
 manyoyo build --iba TOOL=go,codex,java,gemini
