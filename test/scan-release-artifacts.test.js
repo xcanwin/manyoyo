@@ -140,6 +140,27 @@ describe('scan-release-artifacts', () => {
         expect(() => validateAllowlist([{ rule: 'email', value: 'a@b.co', reason: '公开联系邮箱' }])).not.toThrow();
     });
 
+    test('--exclude skips matching paths (reported as skipped) but still scans the rest', async () => {
+        write('pkg/images/big.txt', FAKE_TOKEN);
+        write('pkg/app/own.txt', FAKE_TOKEN);
+        const result = await scanTargets([path.join(root, 'pkg')], { excludes: ['^pkg/images(/|$)'] });
+        expect(result.hits.map(h => h.file)).toEqual(['pkg/app/own.txt']);
+        expect(result.skipped).toEqual(['pkg/images']);
+        const cli = spawnSync('node', [SCRIPT, path.join(root, 'pkg'), '--no-inventory', '--exclude', '^pkg/(images|app)(/|$)'], { encoding: 'utf-8' });
+        expect(cli.status).toBe(0);
+        expect(cli.stdout).toContain('跳过 2 项');
+    });
+
+    test('directories extracted from archives with restrictive modes are still readable', async () => {
+        write('src/locked/secret.txt', FAKE_TOKEN);
+        fs.chmodSync(path.join(root, 'src/locked'), 0o500);
+        const archive = path.join(root, 'locked.tar');
+        expect(spawnSync('tar', ['-cf', archive, '-C', path.join(root, 'src'), 'locked']).status).toBe(0);
+        fs.chmodSync(path.join(root, 'src/locked'), 0o700);
+        const result = await scanTargets([archive]);
+        expect(result.hits.map(h => h.file)).toEqual(['locked.tar!/locked/secret.txt']);
+    });
+
     test('CLI exit codes: 0 clean, 1 hits, 2 usage errors', () => {
         write('clean/a.txt', 'nothing here');
         write('dirty/a.txt', FAKE_TOKEN);

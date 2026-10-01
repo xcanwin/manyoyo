@@ -159,8 +159,11 @@ async function scanTargets(targets, options = {}) {
     const rules = buildRules(options);
     const allowlist = validateAllowlist(options.allowlist || []);
     const maxDepth = options.maxDepth || DEFAULT_MAX_DEPTH;
+    // 不扫描的路径（正则，匹配展示路径）：用于“已有专门扫描/校验”的部分，如镜像归档与官方 VM 磁盘
+    const excludes = (options.excludes || []).map(pattern => new RegExp(pattern));
+    const isExcluded = display => excludes.some(pattern => pattern.test(display));
     const tmpRoot = options.tmpRoot || os.tmpdir();
-    const result = { hits: [], allowed: [], inventory: [], warnings: [] };
+    const result = { hits: [], allowed: [], inventory: [], warnings: [], skipped: [] };
 
     function addHit(rule, file, raw, offset) {
         const hit = { rule, file, offset, preview: raw ? mask(raw) : '', raw };
@@ -226,6 +229,8 @@ async function scanTargets(targets, options = {}) {
             if (extracted.status !== 0) {
                 result.warnings.push(`tar 解包有告警（已尽量解开）: ${display}`);
             }
+            // 解出来的目录可能是 000/只读（容器层里常见），不先放开权限 readdir 会 EACCES
+            spawnSync('chmod', ['-R', 'u+rwX', dir], { stdio: 'ignore' });
             await walk(dir, `${display}!`, depth + 1);
             return true;
         } finally {
@@ -252,6 +257,10 @@ async function scanTargets(targets, options = {}) {
         for (const name of names) {
             const fullPath = path.join(dir, name);
             const display = prefix ? `${prefix}/${name}` : name;
+            if (isExcluded(display)) {
+                result.skipped.push(display);
+                continue;
+            }
             const stat = fs.lstatSync(fullPath);
             if (stat.isSymbolicLink()) {
                 checkFilename(display);
@@ -289,12 +298,13 @@ function autoIdentities() {
 }
 
 function parseArgs(argv) {
-    const args = { targets: [], denyStrings: [], allowlistPath: '', json: false, inventory: true, autoIdentity: false };
+    const args = { targets: [], denyStrings: [], excludes: [], allowlistPath: '', json: false, inventory: true, autoIdentity: false };
     for (let i = 0; i < argv.length; i += 1) {
         const arg = argv[i];
         if (arg === '--allowlist') args.allowlistPath = argv[++i] || '';
         else if (arg === '--build-user' || arg === '--build-host') args.denyStrings.push(argv[++i] || '');
         else if (arg === '--auto-identity') args.autoIdentity = true;
+        else if (arg === '--exclude') args.excludes.push(argv[++i] || '');
         else if (arg === '--json') args.json = true;
         else if (arg === '--no-inventory') args.inventory = false;
         else if (arg.startsWith('--')) throw new Error(`未知参数: ${arg}`);
@@ -320,6 +330,7 @@ function formatReport(result, printInventory) {
     const deepWarnings = result.warnings.filter(warning => warning.startsWith('嵌套层数超过'));
     if (deepWarnings.length > 0) lines.push(`警告: ${deepWarnings.length} 个文件嵌套层数超过上限未展开（例: ${deepWarnings[0].split(': ').slice(1).join(': ')}）`);
     result.warnings.filter(warning => !warning.startsWith('嵌套层数超过')).forEach(warning => lines.push(`警告: ${warning}`));
+    if (result.skipped.length > 0) lines.push(`按 --exclude 跳过 ${result.skipped.length} 项: ${result.skipped.slice(0, 5).join(', ')}`);
     if (printInventory) {
         lines.push('', '产物清单 (sha256  大小  路径):');
         result.inventory.forEach(item => lines.push(`  ${item.sha256 || '-'.repeat(64)}  ${item.size}  ${item.path}`));
@@ -333,11 +344,12 @@ async function main(argv) {
         args = parseArgs(argv);
         const allowlist = args.allowlistPath ? JSON.parse(fs.readFileSync(args.allowlistPath, 'utf-8')) : [];
         const denyStrings = [...args.denyStrings, ...(args.autoIdentity ? autoIdentities() : [])];
-        const result = await scanTargets(args.targets, { denyStrings, allowlist });
+        const result = await scanTargets(args.targets, { denyStrings, allowlist, excludes: args.excludes });
         console.log(args.json ? JSON.stringify(result, null, 2) : formatReport(result, args.inventory));
         return result.hits.length === 0 ? 0 : 1;
     } catch (error) {
         console.error(`扫描失败: ${error.message}`);
+        if (error.stack) console.error(error.stack);
         return 2;
     }
 }

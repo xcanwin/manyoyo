@@ -191,6 +191,7 @@ if (require.main === module) {
         result.files.forEach(file => console.log(`${file.sha256}  ${String(file.size).padStart(11)}  ${file.name}`));
     }).catch(error => {
         console.error(`构建失败: ${error.message}`);
+        if (error.stack) console.error(error.stack);
         process.exit(1);
     });
 }
