@@ -35,8 +35,10 @@ const { resolveRuntimeConfig } = require('../lib/runtime-resolver');
 const { resolveWorktreeSupport } = require('../lib/worktrees');
 const {
     parseEnvEntry: parseEnvEntryOrThrow,
-    normalizeVolume
+    normalizeVolume,
+    normalizeMirrors
 } = require('../lib/runtime-normalizers');
+const { applyAptMirror } = require('../lib/mirrors');
 const {
     sanitizeSensitiveData,
     sanitizeServeLogText,
@@ -126,6 +128,8 @@ let DOCKER_ENV;
 let CONTAINER_RUNTIME = null;
 // 全局配置 updateCheck（默认 true）：serve 是否每天检查一次新版本
 let UPDATE_CHECK_ENABLED = true;
+// 全局配置 mirrors（apt/npm/pip 软件源，空 = 官方默认）：容器创建时在容器层生效，镜像不变
+let MIRRORS = { apt: '', npm: '', pip: '' };
 // serve 的容器环境状态，供 GET /api/system/runtime 读取
 const RUNTIME_STATE = { status: 'ready', message: '' };
 const DOCKER_DAEMON_ERROR_CODES = new Set(['PODMAN_MACHINE_UNAVAILABLE', 'DOCKER_DAEMON_UNAVAILABLE', 'PORT_IN_USE']);
@@ -337,6 +341,7 @@ function installServeProcessDiagnostics(logger) {
  * @property {string} [yolo] - YOLO 模式
  * @property {string} [containerMode] - 容器模式
  * @property {string} [containerRuntime] - 容器运行时（auto/docker/podman，默认 auto；仅全局配置生效）
+ * @property {{apt?: string, npm?: string, pip?: string}} [mirrors] - 容器内 apt/npm/pip 软件源（http/https URL，空/缺省为官方默认；仅全局配置生效）
  * @property {boolean} [updateCheck] - serve 是否每天检查一次新版本（默认 true；仅全局配置生效，请求不附带任何本机信息）
  * @property {number} [cacheTTL] - 缓存过期天数
  * @property {string} [nodeMirror] - Node.js 镜像源
@@ -1507,6 +1512,7 @@ Notes:
     }
 
     UPDATE_CHECK_ENABLED = config.updateCheck !== false;
+    MIRRORS = normalizeMirrors(config.mirrors);
     const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin', 'doctor', 'uninstall']);
     if (isServerStopMode) {
         noDockerActions.add('serve');
@@ -1678,6 +1684,7 @@ Notes:
             worktreeMainRepoRoot: resolvedRuntime.worktreeMainRepoRoot,
             containerMode: contModeValue || "",
             containerRuntime: config.containerRuntime || "auto",
+            mirrors: MIRRORS,
             shellPrefix: EXEC_COMMAND_PREFIX.trim(),
             shell: EXEC_COMMAND || "",
             shellSuffix: EXEC_COMMAND_SUFFIX || "",
@@ -1819,6 +1826,7 @@ function createRuntimeContext(modeState = {}) {
         contModeArgs: CONT_MODE_ARGS,
         containerExtraArgs: CONTAINER_EXTRA_ARGS,
         containerEnvs: CONTAINER_ENVS,
+        mirrors: MIRRORS,
         firstContainerEnvs: FIRST_CONTAINER_ENVS,
         containerVolumes: CONTAINER_VOLUMES,
         containerPorts: CONTAINER_PORTS,
@@ -2168,6 +2176,13 @@ async function createNewContainer(runtime) {
     // Wait for container to be ready
     await waitForContainerReady(runtime.containerName);
 
+    applyAptMirror({
+        dockerExecArgs,
+        containerName: runtime.containerName,
+        mirrors: runtime.mirrors,
+        warn: message => console.warn(`${YELLOW}⚠️ ${message}${NC}`)
+    });
+
     // Run one-time bootstrap command for newly created containers only.
     executeFirstCommand(runtime);
 
@@ -2190,6 +2205,7 @@ function buildDockerRunArgs(runtime) {
         containerEnvs: runtime.containerEnvs,
         containerVolumes: runtime.containerVolumes,
         containerPorts: runtime.containerPorts,
+        mirrors: runtime.mirrors,
         defaultCommand: runtime.execCommand
     });
 }

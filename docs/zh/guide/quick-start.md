@@ -21,7 +21,7 @@ description: 下载离线包，一条命令装好 MANYOYO 与容器环境，浏�
 - **完整包**约 1.8GB：自带 Node.js、容器运行环境（Podman 与虚拟机）和 MANYOYO 镜像，纯净的 Mac 直接可用。
 - **精简包**约 0.8GB：只带 Node.js、MANYOYO 和镜像，要求你已经装好并启动了 Docker Desktop / OrbStack / Podman。
 - 同时下载同一页上对应架构的 `SHA256SUMS-macos-<arch>`，用来校验文件完整。
-- 文件如果被拆成 `.run.001`、`.run.002` 等分卷，把它们放在同一个目录，执行 `cat manyoyo-*.run.* > manyoyo-合并.run` 合并后再继续（合并后同样可以校验）。
+- 文件如果被拆成 `.run.001`、`.run.002` 等分卷，把它们全部下载到同一个目录，后面的 `.run` 文件名换成 `.run.001`（例如 `sh manyoyo-*-macos-arm64.run.001`）即可，安装包会自己按序拼接并校验，缺卷或大小不对时会提示是哪一卷。备选：`cat manyoyo-*.run.* > manyoyo-合并.run` 手动合并后当普通 `.run` 使用。
 
 **国内下载提示**：文件较大，建议使用支持断点续传的方式，下载中断后可以接着下：
 

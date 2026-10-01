@@ -1766,6 +1766,41 @@ process.exit(2);
         }
     });
 
+    test('creating a container injects npm/pip mirrors as env and applies apt through env-only exec', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-mirrors-'));
+        const port = await getFreePort();
+        const dockerExecArgs = jest.fn(() => '');
+        let handle = null;
+        try {
+            fs.writeFileSync(path.join(tempHost, 'manyoyo.json'), JSON.stringify({
+                mirrors: { apt: 'https://mirrors.aliyun.com', npm: 'https://registry.npmmirror.com/', pip: 'http://10.0.0.2:3141/simple' }
+            }));
+            handle = await startWebServer(buildServerOptions(tempHost, port, { dockerExecArgs, waitForContainerReady: jest.fn(async () => {}) }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const created = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ createOptions: { containerName: 'my-web-mirror', hostPath: tempHost, imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.7.4-common', env: { NPM_CONFIG_REGISTRY_NOT: '1' } } })
+            });
+            expect(created.response.status).toBe(200);
+            const calls = dockerExecArgs.mock.calls.map(call => call[0]);
+            const runArgs = calls.find(args => args[0] === 'run');
+            expect(runArgs).toEqual(expect.arrayContaining([
+                '--env', 'NPM_CONFIG_REGISTRY=https://registry.npmmirror.com/',
+                '--env', 'PIP_INDEX_URL=http://10.0.0.2:3141/simple',
+                '--env', 'PIP_TRUSTED_HOST=10.0.0.2'
+            ]));
+            const aptExec = calls.find(args => args[0] === 'exec' && args.includes('MANYOYO_APT_MIRROR=https://mirrors.aliyun.com'));
+            expect(aptExec).toBeDefined();
+            expect(aptExec.slice(0, 3)).toEqual(['exec', '--user', 'root']);
+            expect(aptExec.join('\n').split('https://mirrors.aliyun.com').length - 1).toBe(1); // 地址只出现在 env 参数里，脚本里没有
+        } finally {
+            if (handle && typeof handle.close === 'function') await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('should create session with createOptions and keep legacy name compatibility', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-'));
         const port = await getFreePort();
@@ -5761,7 +5796,7 @@ describe('Web Server Setup API', () => {
         try {
             handle = await startWebServer(buildServerOptions(tempHost, port));
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
-            for (const [method, route] of [['GET', '/api/setup/status'], ['GET', '/api/setup/agents'], ['POST', '/api/setup/agent'], ['POST', '/api/setup/test-connection']]) {
+            for (const [method, route] of [['GET', '/api/setup/status'], ['GET', '/api/setup/agents'], ['POST', '/api/setup/agent'], ['POST', '/api/setup/mirrors'], ['POST', '/api/setup/test-connection']]) {
                 const res = await request(`${baseUrl}${route}`, { method, headers: { 'Content-Type': 'application/json' }, body: method === 'POST' ? '{}' : undefined });
                 expect(res.response.status).toBe(401);
             }
@@ -5786,6 +5821,9 @@ describe('Web Server Setup API', () => {
             }
         }), async ({ call, configPath }) => {
             let res = await call('GET', '/api/setup/status');
+            // 默认工作目录（向导里“选择”与保存都要求它存在）在展示前就已创建
+            expect(fs.statSync(res.json.defaultHostPath).isDirectory()).toBe(true);
+            expect(path.basename(res.json.defaultHostPath)).toBe('work');
             expect(res.json).toEqual(expect.objectContaining({
                 needsSetup: true,
                 configuredAgents: [],
@@ -5851,10 +5889,10 @@ describe('Web Server Setup API', () => {
             expect(parsed.runs.claude).toEqual({
                 containerName: 'my-claude-{now}',
                 yolo: 'c',
-                hostPath: path.join(tempHost, 'workpath'),
+                hostPath: path.join(tempHost, 'work'),
                 env: { ANTHROPIC_AUTH_TOKEN: token, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' }
             });
-            expect(fs.statSync(path.join(tempHost, 'workpath')).isDirectory()).toBe(true);
+            expect(fs.statSync(path.join(tempHost, 'work')).isDirectory()).toBe(true);
 
             // 再次保存只改一个变量：其它 env 与 run 里的自定义字段保留
             parsed.runs.claude.volumes = ['/a:/b'];
@@ -5869,7 +5907,7 @@ describe('Web Server Setup API', () => {
     test('status exposes the default directory and runtime kind; agents expose the model key', async () => {
         await withSetupServer(() => ({ dockerCmd: '/x/bin/podman' }), async ({ tempHost, call }) => {
             const status = (await call('GET', '/api/setup/status')).json;
-            expect(status.defaultHostPath).toBe(path.join(tempHost, 'workpath'));
+            expect(status.defaultHostPath).toBe(path.join(tempHost, 'work'));
             expect(status.runtimeKind).toBe('podman');
             expect(status.platform).toBe(process.platform);
             const agents = (await call('GET', '/api/setup/agents')).json.agents;
@@ -6258,6 +6296,47 @@ esac
                 expect(res.json.category).toBe('other');
                 expect(res.json.message).toContain('尚未就绪');
                 expect(dockerCalls.some(a => a[0] === 'run')).toBe(false);
+            });
+        });
+    });
+
+    describe('package mirrors', () => {
+        test('saves mirrors keeping comments, status and presets expose them', async () => {
+            await withSetupServer(() => ({}), async ({ call, configPath }) => {
+                fs.writeFileSync(configPath, '{\n    // 我的注释\n    "imageVersion": "1.9.2-common"\n}\n');
+                const agents = (await call('GET', '/api/setup/agents')).json;
+                expect(agents.mirrorPresets.npm.length).toBeGreaterThan(0);
+                expect((await call('GET', '/api/setup/status')).json.mirrors).toEqual({ apt: '', npm: '', pip: '' });
+
+                const res = await call('POST', '/api/setup/mirrors', { mirrors: { apt: 'https://mirrors.aliyun.com', npm: 'https://registry.npmmirror.com/', pip: '' } });
+                expect(res.response.status).toBe(200);
+                expect(res.json.saved).toBe(true);
+                const raw = fs.readFileSync(configPath, 'utf-8');
+                expect(raw).toContain('// 我的注释');
+                expect(JSON5.parse(raw)).toEqual({ imageVersion: '1.9.2-common', mirrors: { apt: 'https://mirrors.aliyun.com', npm: 'https://registry.npmmirror.com/', pip: '' } });
+                expect((fs.statSync(configPath).mode & 0o777).toString(8)).toBe('600');
+                expect((await call('GET', '/api/setup/status')).json.mirrors.npm).toBe('https://registry.npmmirror.com/');
+            });
+        });
+
+        test('all official defaults writes nothing; rejects bad values without touching the config', async () => {
+            await withSetupServer(() => ({}), async ({ call, configPath }) => {
+                const noop = await call('POST', '/api/setup/mirrors', { mirrors: { apt: '', npm: '', pip: '' } });
+                expect(noop.response.status).toBe(200);
+                expect(noop.json.saved).toBe(false);
+                expect(fs.existsSync(configPath)).toBe(false);
+                for (const mirrors of [{ npm: 'ftp://x' }, { pip: 'https://a.com/$(id)' }, { apt: 'https://a.com; rm' }, { gem: 'https://a.com' }]) {
+                    expect((await call('POST', '/api/setup/mirrors', { mirrors })).response.status).toBe(400);
+                }
+                expect(fs.existsSync(configPath)).toBe(false);
+            });
+        });
+
+        test('a broken config is not overwritten', async () => {
+            await withSetupServer(() => ({}), async ({ call, configPath }) => {
+                fs.writeFileSync(configPath, '{ broken');
+                expect((await call('POST', '/api/setup/mirrors', { mirrors: { npm: 'https://a.com/' } })).response.status).toBe(400);
+                expect(fs.readFileSync(configPath, 'utf-8')).toBe('{ broken');
             });
         });
     });

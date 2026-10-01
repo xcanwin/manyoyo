@@ -154,7 +154,7 @@ async function buildOfflinePackages(options, injected = {}) {
         const payload = path.join(workDir, `payload-${kind}.tar.gz`);
         createNormalizedTar({ output: payload, cwd: trees[kind], entries: fs.readdirSync(trees[kind]).sort(), compression: 'gzip', mtime });
         const runPath = path.join(outDir, `${base}${suffix}.run`);
-        await writeRunFile({ payloadPath: payload, outPath: runPath, name: `${base}${suffix}` });
+        await writeRunFile({ payloadPath: payload, outPath: runPath, name: `${base}${suffix}`, volumeBytes });
         fs.rmSync(payload, { force: true });
         for (const part of await splitFile(runPath, volumeBytes)) outputs.push(await fileRecord(path.basename(part), part));
     }

@@ -153,6 +153,21 @@ Mode descriptions:
 }
 ```
 
+#### mirrors
+- **Type**: Object with keys `apt` / `npm` / `pip`
+- **Default**: unset (each tool uses its official default source)
+- **Description**: Package sources inside containers. Values must be `http://` or `https://` URLs; an empty string or a missing key means the official default. Global config only, applied when a **new container is created**; the image itself does not change. `npm` injects the `NPM_CONFIG_REGISTRY` environment variable, `pip` injects `PIP_INDEX_URL` (plus `PIP_TRUSTED_HOST` for `http` sources), and `apt` rewrites the sources under `/etc/apt` after the container is created (give only the mirror host, such as `https://mirrors.aliyun.com`; the `/ubuntu` and `/ubuntu-ports` paths are kept). Variables you set yourself in `env` take precedence. The web setup wizard and "System Settings" can pick a preset or a custom source too.
+- **Example**:
+```json5
+{
+    "mirrors": {
+        "apt": "https://mirrors.aliyun.com",
+        "npm": "https://registry.npmmirror.com/",
+        "pip": "https://mirrors.aliyun.com/pypi/simple/"
+    }
+}
+```
+
 #### serverUser
 - **Type**: String
 - **Default**: `admin`

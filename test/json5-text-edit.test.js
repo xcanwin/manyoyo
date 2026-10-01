@@ -35,12 +35,12 @@ describe('json5 text edit helpers', () => {
     describe('upsertValueByPath', () => {
         test('creates every missing intermediate object when nothing on the path exists yet', () => {
             const text = '{\n    // 顶层注释\n    imageVersion: "1.0.0-common",\n}\n';
-            const result = upsertValueByPath(text, ['serve', 'quickChat', 'path'], JSON.stringify('~/.manyoyo/workpath/'));
+            const result = upsertValueByPath(text, ['serve', 'quickChat', 'path'], JSON.stringify('~/.manyoyo/work/'));
 
             expect(result).toContain('// 顶层注释');
             expect(result).toContain('imageVersion: "1.0.0-common"');
             const parsed = JSON5.parse(result);
-            expect(parsed.serve.quickChat.path).toBe('~/.manyoyo/workpath/');
+            expect(parsed.serve.quickChat.path).toBe('~/.manyoyo/work/');
         });
 
         test('adds a new key inside an existing object without touching sibling keys', () => {
@@ -64,11 +64,11 @@ describe('json5 text edit helpers', () => {
 
         test('applying two upserts in sequence produces both keys side by side', () => {
             const text = '{\n    imageVersion: "1.0.0-common",\n}\n';
-            let result = upsertValueByPath(text, ['serve', 'quickChat', 'path'], JSON.stringify('~/.manyoyo/workpath/'));
+            let result = upsertValueByPath(text, ['serve', 'quickChat', 'path'], JSON.stringify('~/.manyoyo/work/'));
             result = upsertValueByPath(result, ['serve', 'quickChat', 'run'], JSON.stringify('claude'));
 
             const parsed = JSON5.parse(result);
-            expect(parsed.serve.quickChat.path).toBe('~/.manyoyo/workpath/');
+            expect(parsed.serve.quickChat.path).toBe('~/.manyoyo/work/');
             expect(parsed.serve.quickChat.run).toBe('claude');
         });
 

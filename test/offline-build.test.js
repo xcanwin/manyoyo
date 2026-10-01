@@ -66,15 +66,17 @@ describe('downloadVerified', () => {
 });
 
 describe('.run packaging', () => {
-    async function makeRun(name = 'pkg') {
+    async function makeRun(name = 'pkg', volumeBytes = 0, bulkBytes = 0) {
         const src = path.join(root, 'src');
         fs.mkdirSync(path.join(src, 'install'), { recursive: true });
         fs.writeFileSync(path.join(src, 'install/install.sh'), '#!/bin/sh\necho "installer ran with: $*"\n', { mode: 0o755 });
         fs.writeFileSync(path.join(src, 'data.txt'), 'payload data\n');
+        // 不可压缩的填充，让分卷远大于头部（头必须完整落在第一卷里）
+        if (bulkBytes) fs.writeFileSync(path.join(src, 'bulk.bin'), Buffer.concat(Array.from({ length: Math.ceil(bulkBytes / 32) }, (_, i) => require('crypto').createHash('sha256').update(String(i)).digest())).subarray(0, bulkBytes));
         const payload = path.join(root, 'payload.tar.gz');
         tar('-czf', payload, '-C', src, '.');
         const runPath = path.join(root, `${name}.run`);
-        await writeRunFile({ payloadPath: payload, outPath: runPath, name });
+        await writeRunFile({ payloadPath: payload, outPath: runPath, name, volumeBytes });
         return runPath;
     }
     const sh = (...args) => spawnSync('sh', args, { encoding: 'utf-8' });
@@ -126,6 +128,87 @@ describe('.run packaging', () => {
         const joined = await joinVolumes(parts, path.join(root, 'joined.run'));
         expect(fs.readFileSync(joined).equals(original)).toBe(true);
         expect(sh(joined, '--check').status).toBe(0);
+    });
+
+    describe('running a split package directly from .run.001', () => {
+        async function makeSplit(name = 'vsp', parts = 3) {
+            const probe = fs.readFileSync(await makeRun(name, 0, 60000));
+            const volumeBytes = Math.ceil(probe.length / parts);
+            const run = await makeRun(name, volumeBytes, 60000);
+            const original = fs.readFileSync(run);
+            const files = await splitFile(run, volumeBytes);
+            return { original, files, first: files[0] };
+        }
+
+        test('sh pkg.run.001 verifies across all volumes and runs the installer without merging', async () => {
+            const { files, first } = await makeSplit();
+            expect(files).toHaveLength(3);
+            expect(sh(first, '--check').status).toBe(0);
+            expect(sh(first, '--list').stdout).toContain('install/install.sh');
+            const out = sh(first, '--yes', 'y');
+            expect(out.status).toBe(0);
+            expect(out.stdout).toContain('installer ran with: --yes y');
+            // 没有产生合并文件
+            expect(fs.readdirSync(root).filter(n => /^vsp\.run$/.test(n))).toEqual([]);
+        });
+
+        test('a missing volume stops with cause and next step, and the installer never runs', async () => {
+            const { files, first } = await makeSplit();
+            fs.rmSync(files[1]);
+            const result = sh(first);
+            expect(result.status).not.toBe(0);
+            expect(result.stderr).toContain('缺少分卷');
+            expect(result.stderr).toContain('vsp.run.002');
+            expect(result.stdout).not.toContain('installer ran');
+            fs.rmSync(files[2]);
+            expect(sh(first).stderr).toContain('缺少分卷');
+        });
+
+        test('a wrongly sized or tampered volume is rejected', async () => {
+            const { files, first } = await makeSplit();
+            const bytes = fs.readFileSync(files[1]);
+            fs.writeFileSync(files[1], bytes.subarray(0, bytes.length - 5));
+            const sized = sh(first);
+            expect(sized.status).not.toBe(0);
+            expect(sized.stderr).toContain('大小不对');
+            expect(sized.stdout).not.toContain('installer ran');
+
+            fs.writeFileSync(files[1], bytes);
+            const last = fs.readFileSync(files[2]);
+            last[last.length - 3] ^= 0xff;
+            fs.writeFileSync(files[2], last);
+            const tampered = sh(first);
+            expect(tampered.status).toBe(1);
+            expect(tampered.stderr).toContain('校验失败');
+            expect(tampered.stdout).not.toContain('installer ran');
+        });
+
+        test('a truncated last volume is caught by the recorded volume size / checksum', async () => {
+            const { files, first } = await makeSplit();
+            const last = fs.readFileSync(files[2]);
+            fs.writeFileSync(files[2], last.subarray(0, last.length - 4));
+            const result = sh(first);
+            expect(result.status).not.toBe(0);
+            expect(result.stdout).not.toContain('installer ran');
+        });
+
+        test('manual cat-merge still works and is byte-identical to the unsplit package', async () => {
+            const { original, files } = await makeSplit();
+            const joined = await joinVolumes(files, path.join(root, 'joined2.run'));
+            const merged = fs.readFileSync(joined);
+            expect(merged.equals(original)).toBe(true);
+            expect(sh(joined, '--check').status).toBe(0);
+            expect(sh(joined, '--yes').stdout).toContain('installer ran with: --yes');
+            expect((await verifyRunFile(joined)).ok).toBe(true);
+        });
+
+        test('header keeps the single-file layout when not split (VOLUMES=0001) and has no $VAR before non-ASCII', () => {
+            const header = renderRunHeader({ name: 'pkg', sha256: 'a'.repeat(64) });
+            expect(header).toMatch(/^VOLUMES=0001$/m);
+            expect(renderRunHeader({ name: 'pkg', sha256: 'a'.repeat(64), volumes: 3 })).toMatch(/^VOLUMES=0003$/m);
+            expect(renderRunHeader({ name: 'pkg', sha256: 'a'.repeat(64), volumes: 3 }).length).toBe(header.length);
+            expect(header.split('\n').filter(line => /\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7f]/.test(line))).toEqual([]);
+        });
     });
 
     test('a file under the limit is not split', async () => {

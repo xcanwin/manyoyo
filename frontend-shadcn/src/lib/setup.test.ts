@@ -41,7 +41,7 @@ const status = (over: Partial<SetupStatus> = {}): SetupStatus => ({
   configError: null,
   runtime: { status: "ready", message: "" },
   image: { status: "ready", name: "img:1" },
-  defaultHostPath: "/Users/me/.manyoyo/workpath",
+  defaultHostPath: "/Users/me/.manyoyo/work",
   platform: "linux",
   runtimeKind: "docker",
   serverUser: "admin",

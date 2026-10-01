@@ -21,7 +21,7 @@ Open [GitHub Releases](https://github.com/xcanwin/manyoyo/releases/latest) and p
 - The **full package** (about 1.8GB) bundles Node.js, the container runtime (Podman and its VM) and the MANYOYO image, and works on a clean Mac.
 - The **lite package** (about 0.8GB) bundles only Node.js, MANYOYO and the image, and requires Docker Desktop / OrbStack / Podman to be installed and running already.
 - Also download `SHA256SUMS-macos-<arch>` for your architecture from the same page to verify the file.
-- If a file is split into volumes (`.run.001`, `.run.002`, ...), put them in one directory and merge with `cat manyoyo-*.run.* > manyoyo-merged.run` before continuing (the merged file can be verified as well).
+- If a file is split into volumes (`.run.001`, `.run.002`, ...), download all of them into one directory and use `.run.001` wherever the commands below say `.run` (for example `sh manyoyo-*-macos-arm64.run.001`); the package joins and verifies the volumes itself and tells you which volume is missing or has the wrong size. Alternative: merge manually with `cat manyoyo-*.run.* > manyoyo-merged.run` and use it as a normal `.run`.
 
 **Download tip for slow networks**: the files are large, so use a resumable download and continue after an interruption:
 

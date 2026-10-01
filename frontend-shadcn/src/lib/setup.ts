@@ -22,6 +22,7 @@ export type SetupStatus = {
   runtimeKind: string
   serverUser: string
   passwordSet: boolean
+  mirrors?: { apt: string; npm: string; pip: string }
 }
 export type ConnectionCategory = "success" | "network" | "auth" | "other"
 export type ConnectionResult = { category: ConnectionCategory; message: string; detail: string }

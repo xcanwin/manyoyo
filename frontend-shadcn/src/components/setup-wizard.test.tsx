@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { SetupWizard } from "@/components/setup-wizard"
 import * as setupApi from "@/lib/setup"
 import * as doctorApi from "@/lib/doctor"
+import * as mirrorApi from "@/lib/mirrors"
 import type { SetupAgent, SetupStatus } from "@/lib/setup"
 
 vi.mock("@/lib/setup", async (importOriginal) => {
@@ -21,6 +22,16 @@ vi.mock("@/lib/setup", async (importOriginal) => {
     createAgentSession: vi.fn(),
   }
 })
+
+vi.mock("@/lib/mirrors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/mirrors")>()),
+  fetchMirrorPresets: vi.fn(async () => ({
+    apt: [{ label: "阿里云", value: "https://mirrors.aliyun.com" }],
+    npm: [{ label: "阿里云", value: "https://registry.npmmirror.com/" }],
+    pip: [{ label: "清华", value: "https://pypi.tuna.tsinghua.edu.cn/simple" }],
+  })),
+  saveMirrors: vi.fn(),
+}))
 
 vi.mock("@/lib/doctor", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/doctor")>()),
@@ -60,7 +71,7 @@ const readyStatus: SetupStatus = {
   configError: null,
   runtime: { status: "ready", message: "" },
   image: { status: "ready", name: "img:1" },
-  defaultHostPath: "/Users/me/.manyoyo/workpath",
+  defaultHostPath: "/Users/me/.manyoyo/work",
   platform: "linux",
   runtimeKind: "docker",
   serverUser: "admin",
@@ -227,17 +238,63 @@ describe("SetupWizard", () => {
     await type("setup-model", "claude-x")
     await click(button("下一步"))
     expect(text()).toContain("第 3 / 4 步")
-    expect((container.querySelector("#setup-host-path") as HTMLInputElement).value).toBe("/Users/me/.manyoyo/workpath")
+    expect((container.querySelector("#setup-host-path") as HTMLInputElement).value).toBe("/Users/me/.manyoyo/work")
     await click(button("下一步"))
     await click(button("保存并进入"))
 
     expect(api.saveAgent).toHaveBeenCalledWith(
       "claude",
       { ANTHROPIC_AUTH_TOKEN: "sk-secret", ANTHROPIC_MODEL: "claude-x" },
-      "/Users/me/.manyoyo/workpath"
+      "/Users/me/.manyoyo/work"
     )
     expect(api.createAgentSession).toHaveBeenCalledWith("claude")
     expect(onFinished).toHaveBeenCalledWith("my-claude-0101-0000")
+  })
+
+  test("software sources are optional: untouched means nothing is saved", async () => {
+    api.saveAgent.mockResolvedValue({})
+    api.createAgentSession.mockResolvedValue("c")
+    await mount(readyStatus)
+    await click(radio("Claude Code"))
+    await click(button("下一步"))
+    await type("setup-api-key", "sk-secret")
+    await type("setup-model", "m")
+    await click(button("下一步"))
+    expect(text()).toContain("软件源（可选）")
+    expect(container.querySelector("#setup-mirror-npm")).toBeNull()
+    await click(button("下一步"))
+    await click(button("保存并进入"))
+    expect(vi.mocked(mirrorApi).saveMirrors).not.toHaveBeenCalled()
+  })
+
+  test("a chosen software source is saved before the agent; an invalid custom one blocks saving", async () => {
+    api.saveAgent.mockResolvedValue({})
+    api.createAgentSession.mockResolvedValue("c")
+    await mount(readyStatus)
+    await click(radio("Claude Code"))
+    await click(button("下一步"))
+    await type("setup-api-key", "sk-secret")
+    await type("setup-model", "m")
+    await click(button("下一步"))
+    await click(button("软件源（可选）"))
+    const npm = container.querySelector("#setup-mirror-npm") as HTMLSelectElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(npm, "__custom__")
+      npm.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await type("setup-mirror-npm-custom", "not-a-url")
+    await click(button("下一步"))
+    await click(button("保存并进入"))
+    expect(text()).toContain("npm")
+    expect(vi.mocked(mirrorApi).saveMirrors).not.toHaveBeenCalled()
+    expect(api.saveAgent).not.toHaveBeenCalled()
+
+    await click(button("上一步"))
+    await type("setup-mirror-npm-custom", "https://my.corp/npm/")
+    await click(button("下一步"))
+    await click(button("保存并进入"))
+    expect(vi.mocked(mirrorApi).saveMirrors).toHaveBeenCalledWith({ apt: "", npm: "https://my.corp/npm/", pip: "" })
+    expect(api.saveAgent).toHaveBeenCalled()
   })
 
   test("a failed save shows the server error and does not finish", async () => {

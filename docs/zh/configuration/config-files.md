@@ -153,6 +153,21 @@ MANYOYO 支持两种配置文件：
 }
 ```
 
+#### mirrors
+- **类型**：对象，键为 `apt` / `npm` / `pip`
+- **默认值**：不设置（各工具使用官方默认源）
+- **说明**：容器内的软件源。值必须是 `http://` 或 `https://` 地址，空字符串或缺省表示官方默认源。仅全局配置生效，在**新建容器**时生效，镜像本身不变：`npm` 注入环境变量 `NPM_CONFIG_REGISTRY`，`pip` 注入 `PIP_INDEX_URL`（`http` 源会同时设置 `PIP_TRUSTED_HOST`），`apt` 在容器创建后改写 `/etc/apt` 里的源（只填镜像站主机，如 `https://mirrors.aliyun.com`，保留 `/ubuntu`、`/ubuntu-ports` 路径）。你在 `env` 里自己设置的同名变量优先。Web 向导和「系统设置」里也可以选择预设源或自定义。
+- **示例**：
+```json5
+{
+    "mirrors": {
+        "apt": "https://mirrors.aliyun.com",
+        "npm": "https://registry.npmmirror.com/",
+        "pip": "https://mirrors.aliyun.com/pypi/simple/"
+    }
+}
+```
+
 #### serverUser
 - **类型**：字符串
 - **默认值**：`admin`

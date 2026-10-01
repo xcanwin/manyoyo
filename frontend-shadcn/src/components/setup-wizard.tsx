@@ -3,6 +3,7 @@ import { CheckIcon, FolderIcon } from "lucide-react"
 
 import { DirectoryPickerDialog } from "@/components/directory-picker-dialog"
 import { DoctorPanel } from "@/components/doctor-panel"
+import { MirrorSettings } from "@/components/mirror-settings"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,6 +34,16 @@ import {
   type SetupForm,
   type SetupStatus,
 } from "@/lib/setup"
+import {
+  emptyMirrors,
+  emptyPresets,
+  fetchMirrorPresets,
+  isMirrorsEmpty,
+  saveMirrors,
+  validateMirrors,
+  type MirrorPresets,
+  type Mirrors,
+} from "@/lib/mirrors"
 
 const STEP_TITLES = ["选择 Agent", "接入方式", "工作目录", "保存并开始"]
 const POLL_INTERVAL_MS = 2000
@@ -71,6 +82,11 @@ export function SetupWizard({
   const [password, setPassword] = React.useState("")
   const [passwordConfirm, setPasswordConfirm] = React.useState("")
   const [showDoctor, setShowDoctor] = React.useState(false)
+  // 软件源（可选）：不碰就是官方默认，也不会写任何配置
+  const [mirrors, setMirrors] = React.useState<Mirrors>(emptyMirrors())
+  const [mirrorsTouched, setMirrorsTouched] = React.useState(false)
+  const [mirrorPresets, setMirrorPresets] = React.useState<MirrorPresets>(emptyPresets())
+  const [mirrorsOpen, setMirrorsOpen] = React.useState(false)
 
   const readiness = getReadiness(status)
   const agent = agents.find((item) => item.id === form.agentId) ?? null
@@ -92,6 +108,24 @@ export function SetupWizard({
       cancelled = true
     }
   }, [])
+
+  React.useEffect(() => {
+    let cancelled = false
+    fetchMirrorPresets()
+      .then((list) => {
+        if (!cancelled) setMirrorPresets(list)
+      })
+      .catch(() => {
+        // 拿不到预设时下拉里只有“官方默认”和“自定义”
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // 已经配置过的软件源带出来，用户没动之前以服务端为准
+  const configuredMirrors = status?.mirrors
+  const effectiveMirrors: Mirrors = mirrorsTouched ? mirrors : { ...emptyMirrors(), ...configuredMirrors }
 
   // 就绪前持续轮询 status 刷新进度条；就绪后停止
   const ready = readiness.ready
@@ -163,9 +197,19 @@ export function SetupWizard({
         return
       }
     }
+    if (mirrorsTouched) {
+      const mirrorMessage = validateMirrors(effectiveMirrors)
+      if (mirrorMessage) {
+        setError(mirrorMessage)
+        return
+      }
+    }
     setSaving(true)
     setError("")
     try {
+      if (mirrorsTouched && (!isMirrorsEmpty(effectiveMirrors) || configuredMirrors)) {
+        await saveMirrors(effectiveMirrors)
+      }
       if (needsPassword) {
         await savePassword(password)
         setStatus((prev) => (prev ? { ...prev, passwordSet: true } : prev))
@@ -394,6 +438,34 @@ export function SetupWizard({
                     <AlertDescription>{directoryHint}</AlertDescription>
                   </Alert>
                 ) : null}
+                <div className="flex flex-col gap-2" data-testid="setup-mirrors">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="self-start"
+                    aria-expanded={mirrorsOpen}
+                    onClick={() => setMirrorsOpen((open) => !open)}
+                  >
+                    软件源（可选）{mirrorsOpen ? "：收起" : "：默认官方源，点此修改"}
+                  </Button>
+                  {mirrorsOpen ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        容器里安装软件用的 apt / npm / pip 源。不改就用官方默认源；网络慢时可选镜像加速，只对之后新建的容器生效。
+                      </p>
+                      <MirrorSettings
+                        mirrors={effectiveMirrors}
+                        presets={mirrorPresets}
+                        onChange={(next) => {
+                          setMirrors(next)
+                          setMirrorsTouched(true)
+                        }}
+                        idPrefix="setup-mirror"
+                      />
+                    </>
+                  ) : null}
+                </div>
               </FieldGroup>
             ) : null}
 

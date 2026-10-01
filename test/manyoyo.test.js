@@ -619,6 +619,26 @@ describe('MANYOYO CLI', () => {
             }
         });
 
+        test('mirrors: config show lists them, config command injects npm/pip env, bad values are rejected', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-mirrors-'));
+            const fakeDocker = path.join(tempHome, 'docker');
+            fs.writeFileSync(fakeDocker, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "Docker version 26.0.0"; fi\nexit 0\n', { mode: 0o755 });
+            const env = { ...process.env, HOME: tempHome, PATH: `${tempHome}:${process.env.PATH}` };
+            try {
+                writeGlobalConfig(tempHome, { mirrors: { npm: 'https://registry.npmmirror.com/', pip: 'https://pypi.tuna.tsinghua.edu.cn/simple', apt: 'https://mirrors.ustc.edu.cn' } });
+                const shown = JSON.parse(execSync(`node ${BIN_PATH} config show`, { encoding: 'utf-8', env }));
+                expect(shown.mirrors).toEqual({ apt: 'https://mirrors.ustc.edu.cn', npm: 'https://registry.npmmirror.com/', pip: 'https://pypi.tuna.tsinghua.edu.cn/simple' });
+                const command = execSync(`node ${BIN_PATH} config command -n mirror-test`, { encoding: 'utf-8', env });
+                expect(command).toContain('NPM_CONFIG_REGISTRY=https://registry.npmmirror.com/');
+                expect(command).toContain('PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple');
+
+                writeGlobalConfig(tempHome, { mirrors: { npm: 'ftp://nope' } });
+                expect(() => execSync(`node ${BIN_PATH} config show`, { encoding: 'utf-8', env, stdio: 'pipe' })).toThrow(/mirrors\.npm/);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
         test('config command should include publish args from --port', () => {
             const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-show-command-'));
             const fakeDockerPath = path.join(tempDir, 'docker');

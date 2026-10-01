@@ -12,6 +12,13 @@
     "containerRuntime": "auto",
     // serve 是否每天检查一次新版本（默认 true；请求只带固定的 User-Agent，不附带任何本机信息），仅全局配置生效
     "updateCheck": true,
+    // 容器内 apt / npm / pip 软件源（http/https；留空或不写 = 各自的官方默认源），仅全局配置生效。
+    // apt 只填镜像站主机（保留 /ubuntu 路径），例如 https://mirrors.aliyun.com；镜像本身不变，新建容器时生效
+    "mirrors": {
+        "apt": "",
+        "npm": "",
+        "pip": ""
+    },
 
     // 容器启动环境（env 按 key 合并覆盖；其余数组参数会累加）
     // 仅支持绝对路径，如 /abs/path.env
@@ -56,7 +63,7 @@
     // "serve": {
     //     "title": "My MANYOYO",
     //     "quickChat": {
-    //         "path": "~/.manyoyo/workpath/",
+    //         "path": "~/.manyoyo/work/",
     //         "run": "claude"
     //     }
     // },

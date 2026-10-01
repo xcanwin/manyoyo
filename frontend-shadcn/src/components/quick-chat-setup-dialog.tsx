@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select"
 import { apiGet, apiPut } from "@/lib/api"
 
-const DEFAULT_QUICK_CHAT_PATH = "~/.manyoyo/workpath/"
+const DEFAULT_QUICK_CHAT_PATH = "~/.manyoyo/work/"
 
 export function QuickChatSetupDialog({
   open,
