@@ -22,6 +22,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 
 - `bin/manyoyo.js`：CLI 入口与主流程编排（2200+ 行单文件）。
 - `lib/agent-adapters/`：`resolveYoloCommand` 单一数据源，CLI 与 Web 共用，新增 YOLO 智能体只需改这里。
+- `lib/uninstall.js` / `proxy-config.js` / `offline-import.js`：`manyoyo uninstall`（精确移除带标记的 PATH 块、停服务与私有 machine、用户数据逐项询问）、安装时把用户的代理设置抄进私有 Podman 的 `containers.conf`、离线包后台导入镜像时的状态标记（serve/CLI 据此等待而不是去仓库拉）。安装脚本在 `scripts/offline/install.sh`（POSIX sh，只用 macOS 自带命令，测试见 `test/installer.test.js`）。
 - `lib/container-runtime.js` / `runtime-heal.js` / `error-hints.js`：容器运行时选择（配置 > 私有 Podman > daemon 可用的 docker/podman，返回 `{command, env, source}`，`env` 只传给运行时子进程）、daemon 不可用时的自愈（`podman machine start` / macOS `open -a Docker`）、原始错误到“原因 + 下一步”的映射。
 - `lib/container-run.js` / `container-modes.js` / `image-build.js`：容器运行参数构造、common/dind/sock 模式解析、镜像构建与缓存。
 - `lib/runtime-resolver.js` / `runtime-normalizers.js` / `worktrees.js`：配置四层合并、参数归一化（`parseEnvEntry` / `normalizeVolume`）、Git worktrees 挂载推导（`--wt` / `--wtr`）。
@@ -111,7 +112,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 网页认证配置：`serverUser`、`serverPass`（环境变量 `MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`），优先级为 命令行 > 运行配置 > 全局配置 > 环境变量 > 默认值。
 - 网页服务监听：`serve [listen]` 仅支持 `<ip:port>`（IPv6 写作 `[ip]:port`），默认 `127.0.0.1:3000`。
 - 镜像版本格式：`imageVersion` 与 `run/build --iv/--image-ver` 必须为 `x.y.z-后缀`（如 `1.8.1-common`）。
-- `--yes` 仅用于 `build` 与 `init` 子命令；CLI 仅支持子命令入口，传入未定义参数会报 `unknown option`。
+- `--yes` 仅用于 `build`、`init` 与 `uninstall` 子命令（`uninstall --yes` 只确认程序本身的卸载，绝不删除配置、历史、日志、工作目录和外部运行时里的容器与镜像）；CLI 仅支持子命令入口，传入未定义参数会报 `unknown option`。
 
 ## 测试与 TDD
 

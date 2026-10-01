@@ -47,6 +47,13 @@ describe('MANYOYO CLI', () => {
     // ==============================================================================
 
     describe('Basic Commands', () => {
+        test('MANYOYO_COMMAND_NAME decides the command name shown (used by the installer wrappers for my / manyoyo)', () => {
+            const run = name => execSync(`node ${BIN_PATH} --help`, { encoding: 'utf-8', env: { ...process.env, MANYOYO_COMMAND_NAME: name } });
+            expect(run('my')).toContain('Usage: my [options]');
+            // 不合法的值被忽略，退回按脚本名判断
+            expect(run('bad name; rm')).toContain('Usage: manyoyo');
+        });
+
         test('--help should display help message', () => {
             const output = execSync(`node ${BIN_PATH} --help`, { encoding: 'utf-8' });
             expect(output).toContain('Usage: manyoyo [options]');

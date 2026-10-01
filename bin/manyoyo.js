@@ -15,6 +15,8 @@ const { selectContainerRuntime, mergeRuntimeEnv } = require('../lib/container-ru
 const { describeError } = require('../lib/error-hints');
 const { ensureRuntimeReady } = require('../lib/runtime-heal');
 const { ensureImagePresent, pullImageProcess } = require('../lib/image-pull');
+const { readImportState, waitForImport } = require('../lib/offline-import');
+const { runUninstall } = require('../lib/uninstall');
 const { getLoginTokenDir, issueLoginToken } = require('../lib/login-token');
 const { launchApp, getAppStatePath, openBrowser } = require('../lib/app-launcher');
 const { initAgentConfigs } = require('../lib/init-config');
@@ -53,6 +55,10 @@ function formatDate() {
 }
 
 function detectCommandName() {
+    // 离线安装器生成的 manyoyo / my 包装脚本都指向同一个 manyoyo.js，用环境变量区分显示的命令名
+    const fromEnv = String(process.env.MANYOYO_COMMAND_NAME || '').trim();
+    if (/^[A-Za-z][A-Za-z0-9_-]*$/.test(fromEnv)) return fromEnv;
+
     const rawArgv1 = process.argv[1] || '';
     const baseName = path.basename(rawArgv1).replace(/\.(cjs|mjs|js)$/i, '');
 
@@ -688,6 +694,8 @@ function setContMode(mode) {
 // 本地没有镜像时自动拉取（终端显示拉取进度），失败给出原因与下一步
 async function ensureRunImage(runtime) {
     const imageRef = `${runtime.imageName}:${runtime.imageVersion}`;
+    // 离线安装器还在后台导入镜像时先等它，避免重复去仓库拉
+    await waitForImport({ onWait: state => console.log(`${YELLOW}⏳ ${state.message}，等待完成...${NC}`) });
     await ensureImagePresent({
         imageRef,
         command: DOCKER_CMD,
@@ -1305,6 +1313,11 @@ Notes:
         selectAction('config-command', options);
     });
 
+    program.command('uninstall')
+        .description('卸载离线包安装的 MANYOYO：停止服务，删除程序与 PATH 配置，用户数据逐项询问（--yes 不会删用户数据）')
+        .option('--yes', '确认卸载程序本身，不再询问（不会删除配置、历史、日志、工作目录和外部运行时里的容器镜像）')
+        .action(options => selectAction('uninstall', options));
+
     const initCommand = program.command('init [agents]').description('初始化 Agent 配置到 ~/.manyoyo');
     initCommand
         .option('--yes', '所有提示自动确认 (用于CI/脚本)')
@@ -1373,7 +1386,7 @@ Notes:
         throw new Error('serve --stop 与 --restart 不能同时使用');
     }
 
-    const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin', 'doctor']);
+    const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin', 'doctor', 'uninstall']);
     if (isServerStopMode) {
         noDockerActions.add('serve');
     }
@@ -1383,6 +1396,23 @@ Notes:
 
     if (options.update) {
         updateManyoyo();
+        process.exit(0);
+    }
+
+    if (selectedAction === 'uninstall') {
+        await runUninstall({
+            yes: yesMode,
+            ask: askQuestion,
+            log: line => console.log(line),
+            selectExternalRuntime: () => {
+                try {
+                    const selected = selectContainerRuntime({ configured: config.containerRuntime });
+                    return selected.source === 'private-podman' ? null : selected;
+                } catch (error) {
+                    return null;
+                }
+            }
+        });
         process.exit(0);
     }
 
@@ -2215,6 +2245,7 @@ async function runWebServerMode(runtime) {
         dockerEnv: DOCKER_ENV,
         runtimeState: RUNTIME_STATE,
         autoPullImage: true,
+        importState: () => readImportState(),
         loginTokenDir: getLoginTokenDir(),
         hostPath: runtime.hostPath,
         containerPath: runtime.containerPath,

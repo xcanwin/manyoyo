@@ -5885,6 +5885,33 @@ describe('Web Server Setup API', () => {
         });
     });
 
+    describe('offline image import in progress', () => {
+        test('status reports the import as progress, and creating a container waits instead of pulling', async () => {
+            const dockerCalls = [];
+            let importing = true;
+            const importState = () => ({ active: importing, message: '正在导入离线镜像' });
+            await withSetupServer(() => ({
+                importState,
+                dockerExecArgs: args => {
+                    dockerCalls.push(args[0]);
+                    if (args[0] === 'image' && importing) throw new Error('no such image yet');
+                    return '';
+                }
+            }), async ({ call, tempHost }) => {
+                const status = (await call('GET', '/api/setup/status')).json;
+                expect(status.image).toEqual(expect.objectContaining({ status: 'pulling', message: '正在导入离线镜像' }));
+
+                const creating = call('POST', '/api/sessions', { createOptions: { hostPath: tempHost } });
+                await new Promise(resolve => setTimeout(resolve, 300));
+                importing = false; // 安装器后台导入结束，镜像已就位
+                const res = await creating;
+                expect(res.response.status).toBe(200);
+                expect(dockerCalls).toContain('run');
+                expect(dockerCalls).not.toContain('pull');
+            });
+        });
+    });
+
     describe('image auto pull', () => {
         // pullOutcome: ok | notfound；fake docker 的 pull 会先吐一行进度再结束，并在成功时创建 marker
         async function withPullServer(pullOutcome, run) {

@@ -69,6 +69,18 @@ describe('ensureRuntimeReady', () => {
         expect(h.statuses[0].message).toContain('正在启动容器环境');
     });
 
+    test('prefers the installer\'s private machine over the default one', async () => {
+        const h = makeHarness({
+            infoResults: [false, true],
+            machines: [
+                { Name: 'podman-machine-default*', Default: true, Running: false },
+                { Name: 'podman-machine-manyoyo', Default: false, Running: false }
+            ]
+        });
+        await ensureRuntimeReady({ ...h.options, runtime: { command: '/p/bin/podman', env: {} } });
+        expect(h.calls.find(c => c.args[1] === 'start').args).toEqual(['machine', 'start', 'podman-machine-manyoyo']);
+    });
+
     test('reports failure when podman machine start fails', async () => {
         const h = makeHarness({
             infoResults: [false],

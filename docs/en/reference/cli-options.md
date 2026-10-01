@@ -26,6 +26,7 @@ This page follows the current `manyoyo --help` and subcommand `--help` output. I
 | `manyoyo install <name>` | Install the `manyoyo` command as a docker-cli-plugin |
 | `manyoyo prune` | Clean dangling and `<none>` images |
 | `manyoyo doctor` | Diagnose container runtime, image, config, agent, mode, plugin and port state |
+| `manyoyo uninstall` | Uninstall the offline-package install of MANYOYO: stop the background service and the private Podman machine, delete `~/.manyoyo/{bin,app,runtime}` and the PATH block in your shell config; config, session history, logs and `workpath/` are asked about one by one (kept by default). `--yes` only confirms removing the program itself and never deletes user data; when you reuse your own Docker/Podman it only asks whether to delete manyoyo's containers and images, never the runtime itself |
 | `manyoyo` (no arguments) | Start (or reuse) the web service in the background on a random `127.0.0.1` port and open the browser, already logged in; the instance is recorded in `~/.manyoyo/serve/app.json`. Login uses a one-time token (valid for 60 seconds, deleted on use, stored in `~/.manyoyo/serve/login-tokens/`, enabled only for loopback listening); running `manyoyo` again issues a fresh token. Without a browser opener, the one-time login URL is printed to the terminal. `-h/--help` still shows help |
 
 ## Option ownership

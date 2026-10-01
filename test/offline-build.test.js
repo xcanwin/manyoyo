@@ -354,6 +354,14 @@ describe('full assembly with stand-in components', () => {
         expect(manifest.components.image.sha256).toBe(sha(IMAGE_BYTES));
         expect(manifest.components.node.sha256).toMatch(/^[0-9a-f]{64}$/);
         expect(manifest.files.find(f => f.path === 'install/install.sh').executable).toBe(true);
+        expect(fullFiles).toEqual(expect.arrayContaining(['install/finish-import.sh', 'install/env.sh']));
+        const env = fs.readFileSync(path.join(full, 'install/env.sh'), 'utf8');
+        expect(env).toContain("MANYOYO_KIND='full'");
+        expect(env).toContain("MANYOYO_VM_FILE='vm/abc123.raw.zst'");
+        expect(env).toContain("MANYOYO_MACHINE_NAME='podman-machine-manyoyo'");
+        expect(env).toContain(`MANYOYO_IMAGE_SHA='${sha(IMAGE_BYTES)}'`);
+        // 打包出来的 install.sh 就是仓库里的那份（不是占位）
+        expect(fs.readFileSync(path.join(full, 'install/install.sh'), 'utf8')).toBe(fs.readFileSync(path.join(__dirname, '../scripts/offline/install.sh'), 'utf8'));
 
         // lite：没有 Podman 与 VM 磁盘，但有镜像
         const lite = extract(path.join(out, 'manyoyo-9.9.9-macos-arm64-lite.run'), path.join(root, 'x-lite'));
@@ -361,6 +369,9 @@ describe('full assembly with stand-in components', () => {
         expect(liteFiles.some(f => f.startsWith('runtime/') || f.startsWith('vm/'))).toBe(false);
         expect(liteFiles).toEqual(expect.arrayContaining(['images/manyoyo-9.9.9-common-arm64.tar.gz', 'app/node/bin/node']));
         expect(JSON.parse(fs.readFileSync(path.join(lite, 'manifest.json'), 'utf8')).components.podman).toBeUndefined();
+        const liteEnv = fs.readFileSync(path.join(lite, 'install/env.sh'), 'utf8');
+        expect(liteEnv).toContain("MANYOYO_KIND='lite'");
+        expect(liteEnv).toContain("MANYOYO_VM_FILE=''");
 
         // app：只有 Node + manyoyo
         const appDir = path.join(root, 'x-app');

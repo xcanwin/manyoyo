@@ -14,6 +14,7 @@ const { downloadVerified, sha256File } = require('./download');
 const stage = require('./stage');
 const { inventoryDir, buildManifest, formatSha256Sums } = require('./manifest');
 const { writeRunFile, splitFile, DEFAULT_VOLUME_BYTES } = require('./pack');
+const { renderInstallEnv } = require('./install-env');
 const { createNormalizedTar } = require('../normalized-tar');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
@@ -127,8 +128,11 @@ async function buildOfflinePackages(options, injected = {}) {
             linkTree(path.join(components, 'vm'), path.join(tree, 'vm'));
         }
         fs.mkdirSync(path.join(tree, 'install'), { recursive: true });
-        fs.copyFileSync(path.join(__dirname, 'install-placeholder.sh'), path.join(tree, 'install', 'install.sh'));
-        fs.chmodSync(path.join(tree, 'install', 'install.sh'), 0o755);
+        for (const script of ['install.sh', 'finish-import.sh']) {
+            fs.copyFileSync(path.join(__dirname, script), path.join(tree, 'install', script));
+            fs.chmodSync(path.join(tree, 'install', script), 0o755);
+        }
+        fs.writeFileSync(path.join(tree, 'install', 'env.sh'), renderInstallEnv({ version, imageVersion, arch, kind, componentInfo }));
     }
 
     const builtAt = process.env.SOURCE_DATE_EPOCH ? new Date(Number(process.env.SOURCE_DATE_EPOCH) * 1000).toISOString() : '';
