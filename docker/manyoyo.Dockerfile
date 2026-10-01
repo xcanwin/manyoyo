@@ -3,12 +3,14 @@
 # ==============================================================================
 # 镜像源参数化（默认使用阿里云，可按需覆盖），两个阶段共享同一默认值
 ARG APT_MIRROR=https://mirrors.aliyun.com
+ARG NODEJS_MIRROR=https://mirrors.tencent.com/nodejs-release/
 
 FROM ubuntu:24.04 AS cache-stage
 
 ARG TARGETARCH
 ARG TOOL="common"
 ARG APT_MIRROR
+ARG NODEJS_MIRROR
 
 # 复制缓存目录（可能为空）
 COPY ./docker/cache/ /cache/
@@ -26,7 +28,7 @@ RUN <<EOX
     ensure_curl() {
         if command -v curl > /dev/null 2>&1; then return 0; fi
         echo "安装 curl（缓存缺失，需联网下载）"
-        sed -i "s|http://[^/]*\.ubuntu\.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
+        if [ -n "${APT_MIRROR}" ]; then sed -i "s|http://[^/]*\.ubuntu\.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources; fi
         apt-get -o Acquire::https::Verify-Peer=false update -y
         apt-get -o Acquire::https::Verify-Peer=false install -y --no-install-recommends curl ca-certificates
     }
@@ -41,7 +43,7 @@ RUN <<EOX
     else
         echo "下载 Node.js"
         ensure_curl
-        NVM_NODEJS_ORG_MIRROR=https://mirrors.tencent.com/nodejs-release/
+        NVM_NODEJS_ORG_MIRROR=${NODEJS_MIRROR%/}
         NODE_TAR=$(curl -sL ${NVM_NODEJS_ORG_MIRROR}/latest-v24.x/SHASUMS256.txt | grep linux-${ARCH_NODE}.tar.gz | awk '{print $2}')
         curl -fsSL ${NVM_NODEJS_ORG_MIRROR}/latest-v24.x/${NODE_TAR} | tar -xz -C /opt/node --strip-components=1 --exclude='*.md' --exclude='LICENSE'
     fi
@@ -99,7 +101,7 @@ ENV LANG=C.UTF-8 \
 RUN <<EOX
     # 配置 APT 镜像源
     set -eu
-    sed -i "s|http://[^/]*\.ubuntu\.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
+    if [ -n "${APT_MIRROR}" ]; then sed -i "s|http://[^/]*\.ubuntu\.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources; fi
     ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
     # 安装所有基础依赖

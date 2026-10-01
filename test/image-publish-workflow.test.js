@@ -22,7 +22,7 @@ describe('image-publish workflow', () => {
     test('never passes credentials into the build and uses no other secrets', () => {
         const secrets = text.match(/secrets\.[A-Za-z_]+/g) || [];
         expect(new Set(secrets)).toEqual(new Set(['secrets.GITHUB_TOKEN']));
-        const buildArgBlocks = text.match(/build-args: \|\n(?:\s+.+\n)+/g) || [];
+        const buildArgBlocks = text.match(/build-args: \|\n(?: {12}\S.*\n)+/g) || [];
         expect(buildArgBlocks.length).toBeGreaterThan(0);
         buildArgBlocks.forEach(block => {
             expect(block).not.toMatch(/TOKEN|SECRET|PASSWORD|KEY|secrets\./i);
@@ -45,5 +45,22 @@ describe('image-publish workflow', () => {
         expect(mkdir).toBeLessThan(text.indexOf('docker/build-push-action'));
         const dockerfile = fs.readFileSync(path.join(__dirname, '../docker/manyoyo.Dockerfile'), 'utf8');
         expect(dockerfile).toContain('COPY ./docker/cache/ /cache/');
+    });
+
+    test('builds with official mirrors (the runner is overseas; China mirrors crawl at ~120 kB/s) and the Dockerfile honors an empty APT_MIRROR', () => {
+        const blocks = text.match(/build-args: \|\n(?: {12}\S.*\n)+/g) || [];
+        expect(blocks).toHaveLength(3);
+        blocks.forEach(block => {
+            expect(block).toMatch(/^\s+APT_MIRROR=$/m);
+            expect(block).toContain('NODEJS_MIRROR=https://nodejs.org/dist');
+            expect(block).toContain('NPM_REGISTRY=https://registry.npmjs.org/');
+            expect(block).toContain('PIP_INDEX_URL=https://pypi.org/simple');
+        });
+        const dockerfile = fs.readFileSync(path.join(__dirname, '../docker/manyoyo.Dockerfile'), 'utf8');
+        const seds = dockerfile.match(/.*sed -i "s\|http.*ubuntu\.sources.*/g) || [];
+        expect(seds).toHaveLength(2);
+        seds.forEach(line => expect(line).toContain('if [ -n "${APT_MIRROR}" ]'));
+        expect(dockerfile).toContain('ARG NODEJS_MIRROR=https://mirrors.tencent.com/nodejs-release/');
+        expect(dockerfile).not.toContain('NVM_NODEJS_ORG_MIRROR=https://mirrors.tencent.com');
     });
 });
