@@ -79,6 +79,12 @@ describe('.run packaging', () => {
     }
     const sh = (...args) => spawnSync('sh', args, { encoding: 'utf-8' });
 
+    test('the generated header has no $VAR directly followed by a non-ASCII character (macOS bash 3.2 as sh)', () => {
+        const header = renderRunHeader({ name: 'pkg', sha256: 'a'.repeat(64) });
+        expect(header.split('\n').filter(line => /\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7f]/.test(line))).toEqual([]);
+        expect(header).toContain('${PAYLOAD_SHA256}');
+    });
+
     test('header validates its inputs', () => {
         expect(() => renderRunHeader({ name: 'x', sha256: 'bad' })).toThrow(/SHA256/);
         expect(() => renderRunHeader({ name: 'a b', sha256: 'a'.repeat(64) })).toThrow(/name/);

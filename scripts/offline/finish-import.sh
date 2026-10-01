@@ -17,12 +17,12 @@ else
     runtime="$MANYOYO_IMPORT_CMD"
 fi
 
-log "导入 $MANYOYO_IMPORT_ARCHIVE（$runtime）"
+log "导入 ${MANYOYO_IMPORT_ARCHIVE}（${runtime}）"
 if "$runtime" load -i "$MANYOYO_IMPORT_ARCHIVE" >> "$MANYOYO_IMPORT_LOG" 2>&1; then
     : > "$MANYOYO_IMPORT_STATE"
     rm -f "$MANYOYO_IMPORT_ARCHIVE"
     log "导入完成，已删除临时归档"
 else
-    log "导入失败：归档保留在 $MANYOYO_IMPORT_ARCHIVE，重新运行安装包即可重试"
+    log "导入失败：归档保留在 ${MANYOYO_IMPORT_ARCHIVE}，重新运行安装包即可重试"
     exit 1
 fi

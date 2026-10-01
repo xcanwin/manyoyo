@@ -322,6 +322,16 @@ describe('offline installer (sh)', () => {
         }
     });
 
+    test('no $VAR is directly followed by a non-ASCII character (macOS bash 3.2 as sh reads such bytes as part of the name and dies under set -u)', () => {
+        for (const file of ['install.sh', 'finish-import.sh']) {
+            const lines = fs.readFileSync(path.join(SCRIPTS, file), 'utf8').split('\n');
+            const offenders = lines
+                .map((line, index) => ({ line, number: index + 1 }))
+                .filter(({ line }) => /\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7f]/.test(line));
+            expect(offenders.map(o => `${file}:${o.number}: ${o.line.trim()}`)).toEqual([]);
+        }
+    });
+
     test('scripts are valid POSIX sh (sh -n, dash -n) and pass shellcheck when available', () => {
         for (const file of ['install.sh', 'finish-import.sh']) {
             expect(spawnSync('sh', ['-n', path.join(SCRIPTS, file)]).status).toBe(0);

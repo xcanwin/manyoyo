@@ -37,7 +37,7 @@ payload() {
 verify() {
     actual="$(payload | hash_cmd | awk '{ print $1 }')"
     if [ "$actual" != "$PAYLOAD_SHA256" ]; then
-        echo "校验失败：安装包不完整或已被修改（期望 $PAYLOAD_SHA256，实际 $actual）。请重新下载。" >&2
+        echo "校验失败：安装包不完整或已被修改（期望 \${PAYLOAD_SHA256}，实际 \${actual}）。请重新下载。" >&2
         exit 1
     fi
 }

@@ -42,7 +42,7 @@ log() {
 fail() {
     log "✗ 安装失败：$1"
     log "  下一步：$2"
-    log "  日志：$LOG（修好后直接重新运行安装包即可续上）"
+    log "  日志：${LOG}（修好后直接重新运行安装包即可续上）"
     exit 1
 }
 
@@ -74,19 +74,19 @@ with_timeout() {
 # ---------------------------------------------------------------------------
 check_platform() {
     step_os="${MANYOYO_TEST_UNAME_S:-$(uname -s)}"
-    [ "$step_os" = Darwin ] || fail "这个安装包只支持 macOS（当前系统：$step_os）。" "请在 Mac 上运行；Linux / Windows 暂不支持。"
+    [ "$step_os" = Darwin ] || fail "这个安装包只支持 macOS（当前系统：${step_os}）。" "请在 Mac 上运行；Linux / Windows 暂不支持。"
 
     raw_arch="${MANYOYO_TEST_UNAME_M:-$(uname -m)}"
     case "$raw_arch" in
         arm64) cur_arch=arm64 ;;
         x86_64) cur_arch=x64 ;;
-        *) fail "不认识的 CPU 架构：$raw_arch。" "请使用 Apple Silicon（arm64）或 Intel（x64）的 Mac。" ;;
+        *) fail "不认识的 CPU 架构：${raw_arch}。" "请使用 Apple Silicon（arm64）或 Intel（x64）的 Mac。" ;;
     esac
-    [ "$cur_arch" = "$MANYOYO_ARCH" ] || fail "安装包是 $MANYOYO_ARCH 版，但当前终端是 $cur_arch。" "请下载 $cur_arch 对应的安装包；如果你在 Apple Silicon 上看到 x64，说明终端在 Rosetta 下运行，请换原生终端。"
+    [ "$cur_arch" = "$MANYOYO_ARCH" ] || fail "安装包是 $MANYOYO_ARCH 版，但当前终端是 ${cur_arch}。" "请下载 $cur_arch 对应的安装包；如果你在 Apple Silicon 上看到 x64，说明终端在 Rosetta 下运行，请换原生终端。"
 
     mac_version="${MANYOYO_TEST_MACOS_VERSION:-$(sw_vers -productVersion)}"
     mac_major="${mac_version%%.*}"
-    [ "$mac_major" -ge "$MANYOYO_MIN_MACOS" ] 2>/dev/null || fail "macOS 版本过低：$mac_version，需要 $MANYOYO_MIN_MACOS 或更高。" "请先升级 macOS，或改用文档里的其它安装方式。"
+    [ "$mac_major" -ge "$MANYOYO_MIN_MACOS" ] 2>/dev/null || fail "macOS 版本过低：${mac_version}，需要 $MANYOYO_MIN_MACOS 或更高。" "请先升级 macOS，或改用文档里的其它安装方式。"
 
     free_mb="${MANYOYO_TEST_FREE_MB:-$(df -k "$HOME_DIR" | awk 'NR==2 { print int($4 / 1024) }')}"
     [ "$free_mb" -ge "$MANYOYO_MIN_FREE_MB" ] 2>/dev/null || fail "磁盘空间不足：可用约 ${free_mb}MB，至少需要 ${MANYOYO_MIN_FREE_MB}MB。" "清理磁盘后重新运行安装包。"
@@ -133,7 +133,7 @@ install_podman() {
         log "• 私有 Podman 已安装，跳过"
         return 0
     fi
-    log "▶ 安装私有 Podman（$MANYOYO_PODMAN_VERSION）"
+    log "▶ 安装私有 Podman（${MANYOYO_PODMAN_VERSION}）"
     mkdir -p "$PODMAN_ROOT"
     # 只替换程序目录；config/ 与 data/（machine、镜像存储）属于用户数据，重装不能动
     for sub in bin lib share; do
@@ -212,7 +212,7 @@ prepare_machine() {
     if podman_private machine inspect "$MANYOYO_MACHINE_NAME" >/dev/null 2>&1; then
         log "• 虚拟机 $MANYOYO_MACHINE_NAME 已存在，跳过创建"
     else
-        [ -f "$vm_file" ] || fail "安装包里没有虚拟机磁盘 $MANYOYO_VM_FILE。" "重新下载安装包并核对 SHA256。"
+        [ -f "$vm_file" ] || fail "安装包里没有虚拟机磁盘 ${MANYOYO_VM_FILE}。" "重新下载安装包并核对 SHA256。"
         log "▶ 创建虚拟机（约 10–20 秒）"
         if ! run podman_private machine init --image "$vm_file" "$MANYOYO_MACHINE_NAME"; then
             run podman_private machine rm -f "$MANYOYO_MACHINE_NAME" || true
@@ -239,13 +239,13 @@ start_image_import() {
     if [ -f "$IMPORT_DIR/loading.json" ]; then
         pid="$(sed -n 's/.*"pid": *\([0-9][0-9]*\).*/\1/p' "$IMPORT_DIR/loading.json")"
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-            log "• 镜像导入已在后台进行（pid $pid）"
+            log "• 镜像导入已在后台进行（pid ${pid}）"
             return 0
         fi
     fi
     archive="$IMPORT_DIR/$(basename "$MANYOYO_IMAGE_FILE")"
     if [ ! -f "$archive" ]; then
-        [ -f "$here/$MANYOYO_IMAGE_FILE" ] || fail "安装包里没有镜像归档 $MANYOYO_IMAGE_FILE。" "重新下载安装包并核对 SHA256。"
+        [ -f "$here/$MANYOYO_IMAGE_FILE" ] || fail "安装包里没有镜像归档 ${MANYOYO_IMAGE_FILE}。" "重新下载安装包并核对 SHA256。"
         mv "$here/$MANYOYO_IMAGE_FILE" "$archive"
     fi
     cp "$here/install/finish-import.sh" "$IMPORT_DIR/finish.sh"
@@ -265,7 +265,7 @@ start_image_import() {
 # main
 # ---------------------------------------------------------------------------
 main() {
-    log "MANYOYO $MANYOYO_VERSION 离线安装（$MANYOYO_KIND / $MANYOYO_ARCH）"
+    log "MANYOYO $MANYOYO_VERSION 离线安装（$MANYOYO_KIND / ${MANYOYO_ARCH}）"
     check_platform
 
     MODE=private
@@ -275,7 +275,7 @@ main() {
             MODE=private
         elif EXTERNAL_CMD="$(detect_external_runtime)"; then
             MODE=external
-            log "• 检测到可用的 $EXTERNAL_CMD，复用它，不安装内置 Podman 与虚拟机磁盘"
+            log "• 检测到可用的 ${EXTERNAL_CMD}，复用它，不安装内置 Podman 与虚拟机磁盘"
         fi
     else
         if EXTERNAL_CMD="$(detect_external_runtime)"; then
