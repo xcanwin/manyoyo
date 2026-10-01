@@ -110,6 +110,14 @@ describe('scan-release-artifacts', () => {
         expect(files.some(f => f.endsWith('config.json'))).toBe(true);
     });
 
+    test('a match inside an expanded archive is reported once, at the inner path (not again for the archive itself)', async () => {
+        write('src/app/leak.txt', `token ${FAKE_TOKEN}`);
+        const archive = path.join(root, 'plain.tar');
+        expect(spawnSync('tar', ['-cf', archive, '-C', path.join(root, 'src'), 'app']).status).toBe(0);
+        const result = await scanTargets([archive]);
+        expect(result.hits.map(h => h.file)).toEqual(['plain.tar!/app/leak.txt']);
+    });
+
     test('detects a match that straddles the read-chunk boundary', async () => {
         const CHUNK = 4 * 1024 * 1024;
         const padding = Buffer.alloc(CHUNK - 10, 'x');

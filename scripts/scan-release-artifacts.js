@@ -186,19 +186,22 @@ async function scanTargets(targets, options = {}) {
         checkFilename(display);
         const head = readHead(filePath);
         const kind = detectArchiveKind(head);
+        // 归档先展开再扫内容；展开成功就只算哈希，不再对归档原始字节重复扫描
+        // （否则每个 tar 层里的命中会在“层文件本身”和“解开后的文件”各报一次）
+        let expanded = false;
+        if (kind) {
+            if (depth >= maxDepth) {
+                result.warnings.push(`嵌套层数超过 ${maxDepth}，未展开: ${display}`);
+            } else {
+                expanded = await expandArchive(filePath, display, kind, depth);
+            }
+        }
         const stats = await scanStreamContent(
             fs.createReadStream(filePath, { highWaterMark: CHUNK_BYTES }),
-            rules,
+            expanded ? [] : rules,
             (rule, raw, offset) => addHit(rule, display, raw, offset)
         );
         result.inventory.push({ path: display, size: stats.size, sha256: stats.sha256 });
-
-        if (!kind) return;
-        if (depth >= maxDepth) {
-            result.warnings.push(`嵌套层数超过 ${maxDepth}，未展开: ${display}`);
-            return;
-        }
-        await expandArchive(filePath, display, kind, depth);
     }
 
     async function expandArchive(filePath, display, kind, depth) {
@@ -210,18 +213,18 @@ async function scanTargets(targets, options = {}) {
             const entries = fs.readdirSync(dir);
             if (extracted.error || (extracted.status !== 0 && entries.length === 0)) {
                 if (kind === 'gzip') {
-                    await scanGunzipped(filePath, display);
-                } else if (kind !== 'tar') {
-                    result.warnings.push(`无法解开 ${kind} 文件，仅按原始字节扫描: ${display}`);
-                } else {
-                    result.warnings.push(`tar 解包失败: ${display}`);
+                    return await scanGunzipped(filePath, display);
                 }
-                return;
+                result.warnings.push(kind !== 'tar'
+                    ? `无法解开 ${kind} 文件，仅按原始字节扫描: ${display}`
+                    : `tar 解包失败，仅按原始字节扫描: ${display}`);
+                return false;
             }
             if (extracted.status !== 0) {
                 result.warnings.push(`tar 解包有告警（已尽量解开）: ${display}`);
             }
             await walk(dir, `${display}!`, depth + 1);
+            return true;
         } finally {
             removeTree(dir);
         }
@@ -234,8 +237,10 @@ async function scanTargets(targets, options = {}) {
         input.pipe(gunzip);
         try {
             await scanStreamContent(gunzip, rules, (rule, raw, offset) => addHit(rule, `${display}!gunzip`, raw, offset));
+            return true;
         } catch (error) {
-            result.warnings.push(`gzip 解压失败: ${display}`);
+            result.warnings.push(`gzip 解压失败，仅按原始字节扫描: ${display}`);
+            return false;
         }
     }
 
