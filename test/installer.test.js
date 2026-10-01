@@ -74,7 +74,7 @@ function writePayload(dir, { kind = 'full', arch = 'arm64', version = '9.9.9', m
     const componentInfo = {
         image: { ref: 'ghcr.io/xcanwin/manyoyo:9.9.9-common', file: 'images/manyoyo-9.9.9-common-arm64.tar.gz', sha256: IMAGE_SHA },
         podman: { version: '6.1.3' },
-        vmDisk: { file: 'vm/disk.raw.zst' }
+        vmDisk: { file: 'vm/disk.raw.zst', sha256: 'c'.repeat(64) }
     };
     if (kind === 'full') {
         fs.mkdirSync(path.join(dir, 'runtime/podman/bin'), { recursive: true });
@@ -170,6 +170,11 @@ describe('offline installer (sh)', () => {
         expect(fs.existsSync(path.join(m, 'runtime/import/manyoyo-9.9.9-common-arm64.tar.gz'))).toBe(false);
         expect(fs.existsSync(path.join(m, 'runtime/import/loading.json'))).toBe(false);
 
+        // 安装记录：manyoyo update 据此判断 Podman / 虚拟机磁盘有没有变化
+        expect(JSON.parse(fs.readFileSync(path.join(m, '.install/installed.json'), 'utf8'))).toEqual({
+            version: '9.9.9', kind: 'full', arch: 'arm64', imageVersion: '9.9.9-common', podmanVersion: '6.1.3', vmDiskSha256: 'c'.repeat(64)
+        });
+
         // PATH 块：zsh 的 .zprofile 与 .zshrc 各一段
         expect(blocks(path.join(home, '.zprofile'))).toBe(1);
         expect(blocks(path.join(home, '.zshrc'))).toBe(1);
@@ -228,6 +233,13 @@ describe('offline installer (sh)', () => {
         expect(countCalls('podman')).toBe(0);
         expect(await waitFor(imported)).toBe(true);
         expect(calls().some(c => c.startsWith('docker load -i') && c.includes('manyoyo-9.9.9-common-arm64.tar.gz'))).toBe(true);
+    });
+
+    test('reusing an existing runtime records no Podman / VM versions (nothing was installed)', () => {
+        script(path.join(fakeBin, 'docker'), 'exit 0');
+        expect(install(writePayload(path.join(root, 'payload'))).status).toBe(0);
+        const record = JSON.parse(fs.readFileSync(path.join(home, '.manyoyo/.install/installed.json'), 'utf8'));
+        expect(record).toEqual(expect.objectContaining({ podmanVersion: '', vmDiskSha256: '' }));
     });
 
     test('an existing Docker whose daemon is down does not count as a runtime', () => {

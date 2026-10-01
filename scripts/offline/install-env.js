@@ -27,7 +27,8 @@ function renderInstallEnv({ version, imageVersion, arch, kind, componentInfo }) 
         MANYOYO_IMAGE_SHA: componentInfo.image.sha256,
         MANYOYO_MACHINE_NAME: MACHINE_NAME,
         MANYOYO_PODMAN_VERSION: kind === 'full' ? componentInfo.podman.version : '',
-        MANYOYO_VM_FILE: kind === 'full' ? componentInfo.vmDisk.file : ''
+        MANYOYO_VM_FILE: kind === 'full' ? componentInfo.vmDisk.file : '',
+        MANYOYO_VM_SHA: kind === 'full' ? componentInfo.vmDisk.sha256 : ''
     };
     const lines = Object.entries(values).map(([name, value]) => `${name}=${shellValue(name, value)}`);
     return `# 由构建脚本生成，安装器 source 它；不要手改\n${lines.join('\n')}\n`;

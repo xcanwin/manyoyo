@@ -3,6 +3,7 @@ import * as React from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ResizeHandle } from "@/components/resize-handle"
 import { SetupWizard } from "@/components/setup-wizard"
+import { UpdateBanner } from "@/components/update-banner"
 import { WorkspacePanel } from "@/components/workspace-panel"
 import { buildDocumentTitle } from "@/lib/chat-behavior"
 import { useResizableWidth } from "@/hooks/use-resizable-width"
@@ -138,6 +139,7 @@ export function App() {
         />
       </SidebarInset>
       {unsavedChangesDialog}
+      <UpdateBanner />
     </SidebarProvider>
   )
 }

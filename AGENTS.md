@@ -23,6 +23,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `bin/manyoyo.js`：CLI 入口与主流程编排（2200+ 行单文件）。
 - `lib/agent-adapters/`：`resolveYoloCommand` 单一数据源，CLI 与 Web 共用，新增 YOLO 智能体只需改这里。
 - `lib/uninstall.js` / `proxy-config.js` / `offline-import.js`：`manyoyo uninstall`（精确移除带标记的 PATH 块、停服务与私有 machine、用户数据逐项询问）、安装时把用户的代理设置抄进私有 Podman 的 `containers.conf`、离线包后台导入镜像时的状态标记（serve/CLI 据此等待而不是去仓库拉）。安装脚本在 `scripts/offline/install.sh`（POSIX sh，只用 macOS 自带命令，测试见 `test/installer.test.js`）。
+- `lib/app-update.js` / `update-check.js` / `download-verified.js`：离线包安装的增量升级（查最新 Release → 只下 `-app.tar.gz` 并校验 → `app/<版本>/` + 原子切换 `current` + 保留上一版本 + `update --rollback`，npm 安装不经过这里）、serve 每天最多一次的新版本检查（`updateCheck` 可关，请求不带本机信息，结果走 `GET /api/system/update`）、带 SHA256 校验的下载。升级包命名约定：`manyoyo-<ver>-macos-<arch>-app.tar.gz`、`SHA256SUMS-macos-<arch>`、`release-manifest-macos-<arch>.json`，必须上传到 GitHub Release。
 - `lib/container-runtime.js` / `runtime-heal.js` / `error-hints.js`：容器运行时选择（配置 > 私有 Podman > daemon 可用的 docker/podman，返回 `{command, env, source}`，`env` 只传给运行时子进程）、daemon 不可用时的自愈（`podman machine start` / macOS `open -a Docker`）、原始错误到“原因 + 下一步”的映射。
 - `lib/container-run.js` / `container-modes.js` / `image-build.js`：容器运行参数构造、common/dind/sock 模式解析、镜像构建与缓存。
 - `lib/runtime-resolver.js` / `runtime-normalizers.js` / `worktrees.js`：配置四层合并、参数归一化（`parseEnvEntry` / `normalizeVolume`）、Git worktrees 挂载推导（`--wt` / `--wtr`）。

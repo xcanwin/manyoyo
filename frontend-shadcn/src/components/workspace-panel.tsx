@@ -72,7 +72,6 @@ const OTHER_VIEWS = (Object.keys(VIEW_LABELS) as View[]).filter(
 const SYNC_POLL_INTERVAL_MS = 6000
 const SYNC_POLL_IDLE_TIMEOUT_MS = 10 * 60 * 1000
 
-const IMAGE_VERSION_TAG_PATTERN = /^(\d+\.\d+\.\d+)-([A-Za-z0-9][A-Za-z0-9_.-]*)$/
 
 type Tone = "ok" | "warn" | "danger" | "info"
 
@@ -357,7 +356,6 @@ function CheckView({ detail }: { detail: SessionDetail | null }) {
 
   const status = statusInfo(detail.status)
   const resume = resumeStatus(detail)
-  const imageVersionValid = IMAGE_VERSION_TAG_PATTERN.test(detail.applied.imageVersion || "")
   const workdirConfigured = Boolean(detail.applied.hostPath && detail.applied.containerPath)
 
   return (
@@ -382,14 +380,6 @@ function CheckView({ detail }: { detail: SessionDetail | null }) {
             detail: detail.agentEnabled ? "活动页可直接发送 Agent 提示词。" : "当前会话不支持 Agent 模式。",
           },
           { label: "Resume 健康", value: resume.value, tone: resume.tone, detail: resume.detail },
-          {
-            label: "镜像版本",
-            value: imageVersionValid ? "格式正常" : "格式异常",
-            tone: imageVersionValid ? "ok" : "danger",
-            detail: detail.applied.imageVersion
-              ? `当前值：${detail.applied.imageVersion}。建议保持 x.y.z-后缀 格式，便于 manyoyo 的版本校验。`
-              : "缺少 imageVersion，manyoyo 的版本校验会失效。",
-          },
           {
             label: "工作目录映射",
             value: workdirConfigured ? "已配置" : "缺失",
@@ -440,7 +430,6 @@ function ConfigView({ detail }: { detail: SessionDetail | null }) {
           { label: "AGENT", value: detail.agentName || detail.name || "—" },
           { label: "containerName", value: applied.containerName || detail.containerName || "—" },
           { label: "imageName", value: applied.imageName || detail.image || "—" },
-          { label: "imageVersion", value: applied.imageVersion || "—" },
           { label: "containerMode", value: applied.containerMode || "default" },
         ]}
       />

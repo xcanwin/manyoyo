@@ -5588,6 +5588,43 @@ describe('Web Server Runtime State', () => {
     });
 });
 
+describe('Web Server Update Info', () => {
+    test('GET /api/system/update needs auth and returns what the update checker knows', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-update-'));
+        const port = await getFreePort();
+        const info = { enabled: true, installMode: 'offline', current: '7.1.6', latest: '8.0.0', updateAvailable: true, checkedAt: '2026-10-02T00:00:00.000Z', error: '' };
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, { updateInfo: () => info }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            expect((await request(`${baseUrl}/api/system/update`)).response.status).toBe(401);
+            const cookie = await loginAndGetCookie(baseUrl);
+            const res = await request(`${baseUrl}/api/system/update`, { headers: { Cookie: cookie } });
+            expect(res.response.status).toBe(200);
+            expect(res.json).toEqual(info);
+        } finally {
+            if (handle && typeof handle.close === 'function') await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
+    test('without an update checker the endpoint reports "disabled" instead of failing', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-update-none-'));
+        const port = await getFreePort();
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const cookie = await loginAndGetCookie(baseUrl);
+            const res = await request(`${baseUrl}/api/system/update`, { headers: { Cookie: cookie } });
+            expect(res.json).toEqual(expect.objectContaining({ enabled: false, updateAvailable: false }));
+        } finally {
+            if (handle && typeof handle.close === 'function') await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('Web Server One-Time Login Token', () => {
     const { getLoginTokenDir, issueLoginToken } = require('../lib/login-token');
 

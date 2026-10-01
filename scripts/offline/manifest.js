@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { sha256File } = require('./download');
+const { sha256File } = require('../../lib/download-verified');
 
 // 目录里所有文件的清单（相对路径、大小、SHA256、是否可执行），按路径排序，结果可复现
 async function inventoryDir(rootDir, { exclude = [] } = {}) {

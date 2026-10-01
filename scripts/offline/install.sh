@@ -261,6 +261,18 @@ start_image_import() {
         nohup sh "$IMPORT_DIR/finish.sh" >/dev/null 2>&1 &
 }
 
+# 记录这次安装带来的运行环境版本；manyoyo update 据此判断新版本的 Podman / 虚拟机磁盘有没有变化
+write_installed_record() {
+    podman_version=""
+    vm_sha=""
+    if [ "$MODE" = private ]; then
+        podman_version="${MANYOYO_PODMAN_VERSION}"
+        vm_sha="${MANYOYO_VM_SHA}"
+    fi
+    printf '{"version":"%s","kind":"%s","arch":"%s","imageVersion":"%s","podmanVersion":"%s","vmDiskSha256":"%s"}\n' \
+        "$MANYOYO_VERSION" "$MANYOYO_KIND" "$MANYOYO_ARCH" "$MANYOYO_IMAGE_VERSION" "$podman_version" "$vm_sha" > "$STATE/installed.json"
+}
+
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
@@ -298,6 +310,7 @@ main() {
     fi
 
     setup_path
+    write_installed_record
 
     if [ "${MANYOYO_TEST_SKIP_MACHINE:-0}" != 1 ]; then
         if [ "$MODE" = private ]; then

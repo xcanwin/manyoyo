@@ -10,6 +10,8 @@
     "containerMode": "common",
     // 容器运行时：auto（默认，自动选择）/ docker / podman，仅全局配置生效
     "containerRuntime": "auto",
+    // serve 是否每天检查一次新版本（默认 true；请求只带固定的 User-Agent，不附带任何本机信息），仅全局配置生效
+    "updateCheck": true,
 
     // 容器启动环境（env 按 key 合并覆盖；其余数组参数会累加）
     // 仅支持绝对路径，如 /abs/path.env

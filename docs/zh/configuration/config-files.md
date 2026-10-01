@@ -142,6 +142,17 @@ MANYOYO 支持两种配置文件：
 }
 ```
 
+#### updateCheck
+- **类型**：布尔
+- **默认值**：`true`
+- **说明**：`serve` 是否每天最多向 GitHub Release 查询一次新版本，并在网页右下角提示。仅全局配置生效；请求只带固定的 `User-Agent`，不附带任何本机信息；设为 `false` 则完全不发请求。
+- **示例**：
+```json5
+{
+    "updateCheck": false
+}
+```
+
 #### serverUser
 - **类型**：字符串
 - **默认值**：`admin`

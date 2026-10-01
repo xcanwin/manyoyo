@@ -22,10 +22,10 @@ description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频�
 | `manyoyo config show` | 显示最终生效配置 |
 | `manyoyo config command` | 显示将执行的容器命令 |
 | `manyoyo init [agents]` | 初始化本机 Agent 配置到 `~/.manyoyo` |
-| `manyoyo update` | 更新 MANYOYO；本地 file 安装场景会跳过 |
 | `manyoyo install <name>` | 安装 manyoyo 命令（docker-cli-plugin） |
 | `manyoyo prune` | 清理悬空镜像和 `<none>` 镜像 |
 | `manyoyo doctor` | 诊断容器运行时、镜像、配置、Agent、模式、插件和端口 |
+| `manyoyo update [--rollback]` | 更新 MANYOYO。离线包安装只下载 `-app.tar.gz`（数十 MB），校验 SHA256 后放进 `~/.manyoyo/app/<版本>/` 并原子切换 `current`，保留上一版本；`--rollback` 切回上一版本。npm 安装沿用 `npm update -g`；本地 file 安装会跳过。新版本捆绑的 Podman / 虚拟机磁盘有变化时只提示需要下载新的完整包 |
 | `manyoyo uninstall` | 卸载离线包安装的 MANYOYO：停止后台服务与私有 Podman 虚拟机，删除 `~/.manyoyo/{bin,app,runtime}` 与 shell 配置里的 PATH 块；配置、会话历史、日志和 `workpath/` 逐项询问（默认保留）。`--yes` 只确认程序本身的卸载，不会删除任何用户数据；复用你自己的 Docker/Podman 时，只会询问是否删除 manyoyo 的容器和镜像，不会动运行时本身 |
 | `manyoyo`（无参数） | 在 `127.0.0.1` 随机端口后台启动（或复用）网页服务，并打开浏览器自动登录；实例记录在 `~/.manyoyo/serve/app.json`。登录用一次性令牌（60 秒内有效、用后即删，存于 `~/.manyoyo/serve/login-tokens/`，仅回环监听启用）；再次执行 `manyoyo` 会签发新令牌。没有浏览器打开器时，会在终端打印一次性登录地址。`-h/--help` 仍显示帮助 |
 

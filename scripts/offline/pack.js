@@ -6,7 +6,7 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const { pipeline } = require('stream/promises');
-const { sha256File } = require('./download');
+const { sha256File } = require('../../lib/download-verified');
 
 const PAYLOAD_MARKER = '__MANYOYO_PAYLOAD_BELOW__';
 const DEFAULT_VOLUME_BYTES = 1900 * 1000 * 1000;

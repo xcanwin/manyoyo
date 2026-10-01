@@ -142,6 +142,17 @@ Mode descriptions:
 }
 ```
 
+#### updateCheck
+- **Type**: Boolean
+- **Default**: `true`
+- **Description**: Whether `serve` asks GitHub Releases for a newer version at most once a day and shows a notice in the bottom-right corner of the web UI. Global config only. The request carries only a fixed `User-Agent` and no local information; `false` sends no request at all.
+- **Example**:
+```json5
+{
+    "updateCheck": false
+}
+```
+
 #### serverUser
 - **Type**: String
 - **Default**: `admin`

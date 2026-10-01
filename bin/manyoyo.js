@@ -16,7 +16,9 @@ const { describeError } = require('../lib/error-hints');
 const { ensureRuntimeReady } = require('../lib/runtime-heal');
 const { ensureImagePresent, pullImageProcess } = require('../lib/image-pull');
 const { readImportState, waitForImport } = require('../lib/offline-import');
-const { runUninstall } = require('../lib/uninstall');
+const { runUninstall, readPid, defaultIsManyoyoServe, defaultKill } = require('../lib/uninstall');
+const appUpdate = require('../lib/app-update');
+const { createUpdateChecker } = require('../lib/update-check');
 const { getLoginTokenDir, issueLoginToken } = require('../lib/login-token');
 const { launchApp, getAppStatePath, openBrowser } = require('../lib/app-launcher');
 const { initAgentConfigs } = require('../lib/init-config');
@@ -120,6 +122,8 @@ let DOCKER_CMD = 'docker';
 // 仅运行时子进程使用的完整 env（私有 Podman 才有值），不要写回 process.env
 let DOCKER_ENV;
 let CONTAINER_RUNTIME = null;
+// 全局配置 updateCheck（默认 true）：serve 是否每天检查一次新版本
+let UPDATE_CHECK_ENABLED = true;
 // serve 的容器环境状态，供 GET /api/system/runtime 读取
 const RUNTIME_STATE = { status: 'ready', message: '' };
 const DOCKER_DAEMON_ERROR_CODES = new Set(['PODMAN_MACHINE_UNAVAILABLE', 'DOCKER_DAEMON_UNAVAILABLE', 'PORT_IN_USE']);
@@ -331,6 +335,7 @@ function installServeProcessDiagnostics(logger) {
  * @property {string} [yolo] - YOLO 模式
  * @property {string} [containerMode] - 容器模式
  * @property {string} [containerRuntime] - 容器运行时（auto/docker/podman，默认 auto；仅全局配置生效）
+ * @property {boolean} [updateCheck] - serve 是否每天检查一次新版本（默认 true；仅全局配置生效，请求不附带任何本机信息）
  * @property {number} [cacheTTL] - 缓存过期天数
  * @property {string} [nodeMirror] - Node.js 镜像源
  */
@@ -847,7 +852,119 @@ function installManyoyo(name) {
     process.exit(0);
 }
 
-function updateManyoyo() {
+// 升级后让旧版本的后台服务退出（pid 必须确实是 manyoyo serve），下次执行 manyoyo 就会启动新版本
+function stopBackgroundApp() {
+    const pid = readPid(path.join(os.homedir(), '.manyoyo', 'serve', 'app.json'));
+    if (pid && pid !== process.pid && defaultIsManyoyoServe(pid) && defaultKill(pid)) {
+        console.log(`${GREEN}✅ 已停止旧版本的后台服务 (pid ${pid})，下次执行 ${MANYOYO_NAME} 会启动新版本。${NC}`);
+    }
+}
+
+// 升级流程里准备容器运行时：和 ensureDocker 一样选择并（必要时）自愈，但没有运行时也不退出进程
+async function prepareRuntimeForUpdate(configuredRuntime) {
+    try {
+        CONTAINER_RUNTIME = selectContainerRuntime({ configured: configuredRuntime });
+    } catch (error) {
+        return false;
+    }
+    DOCKER_CMD = CONTAINER_RUNTIME.command;
+    DOCKER_ENV = mergeRuntimeEnv(CONTAINER_RUNTIME.env);
+    if (!isRuntimeProven()) {
+        const result = await healContainerRuntime(state => {
+            if (state.status === 'starting') console.log(`${YELLOW}⏳ ${state.message}...${NC}`);
+        });
+        if (result.status !== 'ready' && result.status !== 'started') {
+            console.log(`${YELLOW}⚠️  ${result.message}${NC}`);
+            return false;
+        }
+    }
+    return true;
+}
+
+async function updateOfflineInstall(mode, options, globalConfig) {
+    const { appRoot } = mode;
+    if (options.rollback) {
+        const result = appUpdate.rollbackApp({ appRoot });
+        console.log(`${GREEN}✅ 已回滚: ${result.from || '未知'} → ${result.to}${NC}`);
+        stopBackgroundApp();
+        return;
+    }
+
+    const installed = appUpdate.currentVersion(appRoot) || mode.version;
+    console.log(`${CYAN}🔄 当前版本: ${installed}${NC}`);
+    console.log(`${CYAN}🔄 正在查询最新版本...${NC}`);
+    const release = await appUpdate.fetchLatestRelease();
+    if (appUpdate.compareVersions(release.version, installed) <= 0) {
+        console.log(`${GREEN}✅ 已是最新版本 ${installed}${NC}`);
+        return;
+    }
+    console.log(`${CYAN}⬇️  发现新版本 ${release.version}，只下载 manyoyo 本体（数十 MB）${NC}`);
+    const result = await appUpdate.installAppUpdate({ appRoot, release, log: line => console.log(`   ${line}`) });
+    console.log(`${GREEN}✅ 更新完成: ${installed} → ${result.version}（上一版本 ${result.previous || '无'} 已保留，可用 ${MANYOYO_NAME} update --rollback 回滚）${NC}`);
+
+    // Podman / VM 磁盘有变化只提示（需要新的完整包）
+    try {
+        const names = appUpdate.releaseAssetNames(release.version, appUpdate.arch());
+        if (release.assets[names.manifest]) {
+            const remote = JSON.parse(await appUpdate.fetchText(fetch, release.assets[names.manifest]));
+            const hint = appUpdate.describeRuntimeChange(appUpdate.readInstalledRecord(os.homedir()), remote);
+            if (hint) console.log(`${YELLOW}ℹ️  ${hint}${NC}`);
+        }
+    } catch (error) {
+        // 提示信息拿不到不影响升级
+    }
+
+    // 新版本要求的镜像不存在就拉取；仍用旧镜像的容器只列出来，不动
+    const imageName = String(globalConfig.imageName || 'ghcr.io/xcanwin/manyoyo');
+    const imageVersion = String(globalConfig.imageVersion || result.manifest.imageVersion || '');
+    if (imageVersion && await prepareRuntimeForUpdate(globalConfig.containerRuntime)) {
+        const imageRef = `${imageName}:${imageVersion}`;
+        try {
+            await ensureImagePresent({
+                imageRef,
+                command: DOCKER_CMD,
+                isPresent: () => {
+                    try {
+                        dockerExecArgs(['image', 'inspect', imageRef], { stdio: 'pipe' });
+                        return true;
+                    } catch (e) {
+                        return false;
+                    }
+                },
+                pull: () => pullImageProcess({ command: DOCKER_CMD, env: DOCKER_ENV, imageRef, onOutput: (text, stream) => (stream === 'stderr' ? process.stderr : process.stdout).write(text) }),
+                onStart: () => console.log(`${YELLOW}⏬ 新版本需要镜像 ${imageRef}，正在拉取...${NC}`)
+            });
+        } catch (error) {
+            console.log(`${YELLOW}⚠️  镜像还没准备好：${error.message}${NC}`);
+        }
+        const outdated = appUpdate.findOutdatedContainers({ run: runCmd, runtime: { command: DOCKER_CMD, env: DOCKER_ENV }, imageRef });
+        if (outdated.length > 0) {
+            console.log(`${YELLOW}ℹ️  有 ${outdated.length} 个容器还在用旧镜像：${outdated.map(item => `${item.name}(${item.image})`).join('、')}${NC}`);
+            console.log(`${YELLOW}   它们可以继续使用；想换成新镜像，请新建容器（会话历史与凭据都在宿主机上，不会丢）。${NC}`);
+        }
+    }
+    stopBackgroundApp();
+}
+
+async function updateManyoyo(options = {}, globalConfig = {}) {
+    const mode = appUpdate.detectInstallMode({ scriptPath: __filename });
+    if (mode.mode === 'offline') {
+        try {
+            await updateOfflineInstall(mode, options, globalConfig);
+        } catch (error) {
+            if (error instanceof appUpdate.UpdateError) {
+                console.error(`${RED}❌ ${error.message}${NC}`);
+                process.exit(1);
+            }
+            throw error;
+        }
+        return;
+    }
+    if (options.rollback) {
+        console.error(`${RED}❌ --rollback 只适用于离线包安装；npm 安装的版本请用 npm install -g @xcanwin/manyoyo@<版本> 回退。${NC}`);
+        process.exit(1);
+    }
+
     let isLocalFileInstall = false;
     let currentVersion = 'unknown';
 
@@ -1332,8 +1449,9 @@ Notes:
         .action(options => selectAction('doctor', { ...options, doctor: true }));
 
     program.command('update')
-        .description('更新 MANYOYO（若检测为本地 file 安装则跳过）')
-        .action(() => selectAction('update', { update: true }));
+        .description('更新 MANYOYO（离线包安装只下载变化部分并保留上一版本；若检测为本地 file 安装则跳过）')
+        .option('--rollback', '离线包安装：切回上一版本')
+        .action(options => selectAction('update', { update: true, rollback: Boolean(options.rollback) }));
 
     program.command('install <name>')
         .description(`安装 ${MANYOYO_NAME} 命令 (docker-cli-plugin)`)
@@ -1386,6 +1504,7 @@ Notes:
         throw new Error('serve --stop 与 --restart 不能同时使用');
     }
 
+    UPDATE_CHECK_ENABLED = config.updateCheck !== false;
     const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin', 'doctor', 'uninstall']);
     if (isServerStopMode) {
         noDockerActions.add('serve');
@@ -1395,7 +1514,7 @@ Notes:
     }
 
     if (options.update) {
-        updateManyoyo();
+        await updateManyoyo(options, config);
         process.exit(0);
     }
 
@@ -2228,6 +2347,13 @@ async function runWebServerMode(runtime) {
         runtime.serverAuthPassAuto = SERVER_AUTH_PASS_AUTO;
     }
 
+    const updateChecker = createUpdateChecker({
+        currentVersion: require('../package.json').version,
+        installMode: appUpdate.detectInstallMode({ scriptPath: __filename }).mode,
+        enabled: UPDATE_CHECK_ENABLED,
+        fetchLatest: () => appUpdate.fetchLatestRelease()
+    });
+
     const needRuntimeHeal = !isRuntimeProven();
     if (needRuntimeHeal) {
         RUNTIME_STATE.status = 'starting';
@@ -2246,6 +2372,7 @@ async function runWebServerMode(runtime) {
         runtimeState: RUNTIME_STATE,
         autoPullImage: true,
         importState: () => readImportState(),
+        updateInfo: () => updateChecker.getInfo(),
         loginTokenDir: getLoginTokenDir(),
         hostPath: runtime.hostPath,
         containerPath: runtime.containerPath,
