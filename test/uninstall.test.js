@@ -35,6 +35,7 @@ function seedInstall({ privatePodman = true } = {}) {
     fs.mkdirSync(path.join(m, 'web-history'), { recursive: true });
     fs.writeFileSync(path.join(m, 'web-history/a.json'), '{}');
     fs.mkdirSync(path.join(m, 'logs/run'), { recursive: true });
+    fs.writeFileSync(path.join(m, 'logs/run/a.log'), 'log line');
     fs.mkdirSync(path.join(m, 'workpath'), { recursive: true });
     fs.writeFileSync(path.join(m, 'workpath/project.txt'), 'my work');
     if (privatePodman) {
@@ -182,6 +183,27 @@ describe('runUninstall', () => {
         for (const keep of ['manyoyo.json', 'web-history', 'logs', 'workpath/project.txt']) expect(fs.existsSync(path.join(m, keep))).toBe(true);
         expect(summary.kept.length).toBeGreaterThan(0);
         expect(h.logs.join('\n')).toContain('没有删除任何用户数据');
+    });
+
+    test('answering yes to everything leaves no empty directories behind (not even run/serve)', async () => {
+        seedInstall();
+        fs.mkdirSync(path.join(m, 'logs/serve'), { recursive: true });
+        await runUninstall(harness(['y', 'y', 'y']).options);
+        expect(fs.existsSync(m)).toBe(false);
+    });
+
+    test('empty leftover sub-directories of kept data are pruned, files and symlinks are never touched', async () => {
+        seedInstall({ privatePodman: false });
+        fs.mkdirSync(path.join(m, 'logs/empty/deeper'), { recursive: true });
+        const elsewhere = path.join(root, 'elsewhere');
+        fs.mkdirSync(elsewhere);
+        fs.symlinkSync(elsewhere, path.join(m, 'logs/link'));
+        await runUninstall(harness(['y', 'n', 'n']).options);
+        expect(fs.existsSync(path.join(m, 'logs/empty'))).toBe(false);
+        expect(fs.readFileSync(path.join(m, 'logs/run/a.log'), 'utf8')).toBe('log line');
+        expect(fs.lstatSync(path.join(m, 'logs/link')).isSymbolicLink()).toBe(true);
+        expect(fs.existsSync(elsewhere)).toBe(true);
+        expect(fs.readFileSync(path.join(m, 'workpath/project.txt'), 'utf8')).toBe('my work');
     });
 
     test('with nothing kept the empty ~/.manyoyo directory is removed too', async () => {

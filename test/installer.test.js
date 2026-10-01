@@ -132,6 +132,7 @@ describe('offline installer (sh)', () => {
         const result = install(payload, { http_proxy: 'http://user:secret@127.0.0.1:7890' });
         expect(result.status).toBe(0);
         expect(result.stdout).toContain('安装完成');
+        expect(result.stdout).toContain('exec "$SHELL" -l'); // 当前终端立刻生效的办法
 
         const m = path.join(home, '.manyoyo');
         expect(fs.readFileSync(path.join(m, 'app/9.9.9/.installed'), 'utf8')).toMatch(/^[0-9a-f]{64}$/);

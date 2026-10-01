@@ -192,6 +192,10 @@ describe("SetupWizard", () => {
 
     expect(api.testConnection).toHaveBeenCalledWith("claude", { ANTHROPIC_AUTH_TOKEN: "sk-secret" })
     expect(text()).toContain(expected)
+    // 成功是绿色，失败走 destructive（红），二者不能混
+    const alert = container.querySelector('[data-slot="alert"][data-tone]') as HTMLElement
+    expect(alert.dataset.tone).toBe(category === "success" ? "success" : "error")
+    expect(alert.className.includes("emerald")).toBe(category === "success")
     expect(text()).not.toContain("sk-secret")
   })
 

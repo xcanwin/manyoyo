@@ -32,7 +32,7 @@ describe('image-publish workflow', () => {
     test('produces one archive artifact per architecture', () => {
         expect(text).toMatch(/dest=out\/manyoyo-.*-amd64\.tar/);
         expect(text).toMatch(/dest=out\/manyoyo-.*-arm64\.tar/);
-        expect(text).toContain('actions/upload-artifact@v4');
+        expect(text).toContain('actions/upload-artifact@v7');
     });
 
     test('validates the image version format before building', () => {

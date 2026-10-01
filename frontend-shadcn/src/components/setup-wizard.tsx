@@ -314,7 +314,15 @@ export function SetupWizard({
                         <p className="text-xs text-muted-foreground">{readiness.blockedReason}，就绪后可测试连接</p>
                       ) : null}
                       {testResult ? (
-                        <Alert variant={connectionNotice(testResult).tone === "error" ? "destructive" : "default"}>
+                        <Alert
+                          variant={connectionNotice(testResult).tone === "error" ? "destructive" : "default"}
+                          data-tone={connectionNotice(testResult).tone}
+                          // 成功提示用绿色：测试连接要等一会儿，用户需要一眼看出“通过了”
+                          className={cn(
+                            connectionNotice(testResult).tone === "success" &&
+                              "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 *:data-[slot=alert-description]:text-emerald-700 dark:text-emerald-400 dark:*:data-[slot=alert-description]:text-emerald-400"
+                          )}
+                        >
                           <AlertDescription>{connectionNotice(testResult).text}</AlertDescription>
                         </Alert>
                       ) : null}

@@ -17,7 +17,7 @@ env:
 
 jobs:
   image-archive:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read
@@ -30,7 +30,7 @@ jobs:
           - arch: x64
             platform: linux/amd64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Resolve image version
         id: version
@@ -54,9 +54,9 @@ jobs:
           docker save "${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}" | gzip -n > "image/manyoyo-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}.tar.gz"
           ls -lh image
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
-          name: image-${{ matrix.arch }}
+          name: manyoyo-image-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}
           path: image/manyoyo-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}.tar.gz
           retention-days: 3
           if-no-files-found: error
@@ -75,12 +75,25 @@ jobs:
           - arch: x64
             runner: macos-15-intel
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
+
+      # 产物名带版本号：manyoyo-<version>-macos-<arch>，下载下来的 zip 一眼能认
+      - name: Resolve versions
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.imageVersion }}
+        run: |
+          IMAGE_VERSION="${INPUT_VERSION}"
+          if [ -z "$IMAGE_VERSION" ]; then
+            IMAGE_VERSION="$(node -p "require('./package.json').imageVersion")"
+          fi
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "imageVersion=$IMAGE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Install GNU tar (reproducible, normalized archives)
         run: |
@@ -90,9 +103,9 @@ jobs:
       - run: npm ci --include=optional
       - run: npm run build:web-shadcn
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
-          name: image-${{ matrix.arch }}
+          name: manyoyo-image-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}
           path: image
 
       - name: Build packages
@@ -127,9 +140,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           cat "dist-offline/FILES-macos-${{ matrix.arch }}.txt"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
-          name: offline-macos-${{ matrix.arch }}
+          name: manyoyo-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}
           path: ${{ steps.files.outputs.list }}
           retention-days: 7
           if-no-files-found: error

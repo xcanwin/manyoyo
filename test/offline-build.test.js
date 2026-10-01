@@ -490,7 +490,7 @@ describe('scan allowlists and offline workflow', () => {
         const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\nenv:'));
         expect(onBlock).toContain('workflow_dispatch:');
         expect(onBlock).not.toMatch(/^\s*(push|pull_request|schedule|release):/m);
-        expect(text.indexOf('scripts/scan-release-artifacts.js')).toBeLessThan(text.indexOf('actions/upload-artifact@v4', text.indexOf('name: Build packages')));
+        expect(text.indexOf('scripts/scan-release-artifacts.js')).toBeLessThan(text.indexOf('actions/upload-artifact@v7', text.indexOf('name: Build packages')));
         expect(text).toContain('scan-allowlist.json');
         expect(text).toContain('scan-allowlist-image.json');
         expect(text).toContain('steps.files.outputs.list');
@@ -499,5 +499,8 @@ describe('scan allowlists and offline workflow', () => {
         expect(text).toContain('packages: read');
         expect(text).toContain('brew install gnu-tar');
         expect(text).toContain('macos-15-intel');
+        // 产物名带前缀与版本号，zip 一眼能认
+        expect(text).toContain('name: manyoyo-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}');
+        expect(text).toContain('name: manyoyo-image-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}');
     });
 });
