@@ -222,6 +222,7 @@ export default defineConfig({
               collapsed: false,
               items: [
                 { text: '快速开始', link: '/zh/guide/quick-start' },
+                { text: '迁移已有 Agent 配置', link: '/zh/guide/migrate' },
                 { text: '安装详解', link: '/zh/guide/installation' },
                 { text: '基础用法', link: '/zh/guide/basic-usage' }
               ]
@@ -311,6 +312,7 @@ export default defineConfig({
               collapsed: false,
               items: [
                 { text: 'Quick Start', link: '/en/guide/quick-start' },
+                { text: 'Migrate Existing Agent Configs', link: '/en/guide/migrate' },
                 { text: 'Installation', link: '/en/guide/installation' },
                 { text: 'Basic Usage', link: '/en/guide/basic-usage' }
               ]

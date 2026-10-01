@@ -7,6 +7,10 @@ description: MANYOYO 安装指南，涵盖 Node.js 与 Docker/Podman 前置条�
 
 本页面提供 MANYOYO 的详细安装指南，包括前置条件、安装步骤和镜像构建。
 
+## 推荐：离线安装包（macOS）
+
+macOS 用户优先使用[离线安装包](./quick-start.md)：自带 Node.js、容器运行环境与镜像，无需管理员密码。下面的 npm / 包管理器 / 源码方式适用于 Linux、Windows(WSL)，以及已经装好 Node.js 与 Docker / Podman 的用户。
+
 ## 系统要求
 
 ### 必需

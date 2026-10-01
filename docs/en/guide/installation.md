@@ -7,6 +7,10 @@ description: Complete MANYOYO installation guide covering Node.js and Docker/Pod
 
 This page provides a detailed installation guide for MANYOYO, including prerequisites, installation steps, and image building.
 
+## Recommended: offline package (macOS)
+
+On macOS prefer the [offline package](./quick-start.md): it bundles Node.js, the container runtime and the image, and needs no administrator password. The npm / package manager / source methods below are for Linux, Windows (WSL), and users who already have Node.js and Docker / Podman.
+
 ## System Requirements
 
 ### Required

@@ -1,74 +1,96 @@
 ---
 title: 快速开始 | MANYOYO
-description: 宿主机已可用 Claude/Codex/Gemini/OpenCode 时，最快把配置迁移到 MANYOYO 并立即在沙箱内访问大模型。
+description: 下载离线包，一条命令装好 MANYOYO 与容器环境，浏览器自动打开向导，几分钟内开始使用 AI Agent 沙箱。
 ---
 
 # 快速开始
 
-本页面针对这类用户：
-- 宿主机上已经能运行 `claude` / `codex` / `gemini` / `opencode`
-- 已经能访问大模型（环境变量或本地认证已配置）
+目标：**下载离线包 → 一条命令 → 浏览器**。不需要先装 Node.js、Docker 或 Podman，也不需要自己构建镜像。
 
-目标是用最短路径迁移到 MANYOYO 沙箱。
+> 目前离线包支持 macOS（Apple 芯片与 Intel）。Linux、Windows 以及已经装好 npm / Docker / Podman 的用户，见[安装详解](./installation.md)和[迁移已有 Agent 配置](./migrate.md)。
 
-## 1. 安装 manyoyo
+## 1. 下载
 
-```bash
-npm install -g @xcanwin/manyoyo
-manyoyo -v
-```
+打开 [GitHub Releases](https://github.com/xcanwin/manyoyo/releases/latest)，按你的 Mac 选一个 `.run` 文件：
 
-## 2. 安装 Podman / Docker
+| 你的 Mac | 在终端执行 `uname -m` 的结果 | 完整包（推荐） | 精简包 |
+|---|---|---|---|
+| Apple 芯片（M 系列） | `arm64` | `manyoyo-<版本>-macos-arm64.run` | `manyoyo-<版本>-macos-arm64-lite.run` |
+| Intel | `x86_64` | `manyoyo-<版本>-macos-x64.run` | `manyoyo-<版本>-macos-x64-lite.run` |
 
-容器运行时安装或切换可参考：
-- [安装 Podman（推荐）](./installation.md#安装-podman推荐)
-- [安装 Docker（可选）](./installation.md#安装-docker可选)
+- **完整包**约 1.8GB：自带 Node.js、容器运行环境（Podman 与虚拟机）和 MANYOYO 镜像，纯净的 Mac 直接可用。
+- **精简包**约 0.8GB：只带 Node.js、MANYOYO 和镜像，要求你已经装好并启动了 Docker Desktop / OrbStack / Podman。
+- 同时下载同一页上对应架构的 `SHA256SUMS-macos-<arch>`，用来校验文件完整。
+- 文件如果被拆成 `.run.001`、`.run.002` 等分卷，把它们放在同一个目录，执行 `cat manyoyo-*.run.* > manyoyo-合并.run` 合并后再继续（合并后同样可以校验）。
 
-## 3. 构建沙箱镜像
-
-```bash
-manyoyo build --iv 1.9.2-common
-```
-
-## 4. 立即迁移配置
+**国内下载提示**：文件较大，建议使用支持断点续传的方式，下载中断后可以接着下：
 
 ```bash
-manyoyo init all
+curl -L -C - -O <Release 页面里该文件的下载地址>
 ```
 
-## 5. 直接启动 Agent
+也可以使用 aria2、迅雷等下载工具。
+
+## 2. 校验（建议）
 
 ```bash
-manyoyo run -r claude
-manyoyo run -r codex
-manyoyo run -r gemini
-manyoyo run -r opencode
+shasum -a 256 -c SHA256SUMS-macos-arm64        # Intel 用 SHA256SUMS-macos-x64
+sh manyoyo-*-macos-arm64.run --check           # 只校验安装包自身，不改动系统
 ```
 
-如果只想先验证帮助与配置链路，可先执行：
+## 3. 一条命令安装
 
 ```bash
-manyoyo --help
-manyoyo run --help
-manyoyo config show -r claude
+sh manyoyo-*-macos-arm64.run
 ```
 
-## 故障排查
+安装器会：校验 → 解压到 `~/.manyoyo` → 创建并启动容器运行环境 → 后台导入镜像 → 自动打开浏览器。整个过程不需要管理员密码，也不会改动系统目录，只会在你的 shell 配置里加一小段带标记的 `PATH` 设置。完整包大约 1.5 到 2 分钟。
 
-如果 `init` 提示某些变量未找到，直接编辑 `~/.manyoyo/manyoyo.json` 的对应 `runs.<agent>.env`：
+脚本很短，想先看再执行：`sed -n '1,/^__MANYOYO_PAYLOAD_BELOW__$/p' manyoyo-*.run`。
+
+## 4. 浏览器里的向导
+
+安装完成后浏览器会自动打开并已登录，按向导四步走：
+
+1. 选择 Agent（Claude Code / Codex / Gemini / OpenCode）
+2. 填 API Key（或兼容服务的 Base URL），可以点「测试连接」
+3. 选择工作目录（Agent 只能看到这里）
+4. 保存，直接进入对话
+
+顶部进度条显示容器环境与镜像的准备进度，准备好之前可以先填前三步。
+
+## 5. 之后怎么用
+
+新开一个终端（或在当前终端执行 `exec "$SHELL" -l`），然后：
 
 ```bash
-vim ~/.manyoyo/manyoyo.json
-
-# 示例：查看 runs.claude.env
-node -e "console.log(require('json5').parse(require('fs').readFileSync(process.env.HOME+'/.manyoyo/manyoyo.json','utf8')).runs?.claude?.env)"
+manyoyo                 # 启动（或复用）本机服务并打开浏览器，已自动登录
+manyoyo update          # 升级：只下载变化的部分，可用 manyoyo update --rollback 回滚
+manyoyo uninstall       # 卸载：配置、会话历史和工作目录逐项询问，默认保留
 ```
 
-更多问题见：[故障排查](../troubleshooting/README.md)
+`manyoyo` 启动的服务在后台一直运行，关闭它：
+
+```bash
+manyoyo serve 127.0.0.1:<端口> --stop     # 端口见启动时打印的地址
+```
+
+安装完成后，下载的 `.run` 文件可以删除。
+
+## 隐私
+
+安装器和版本检查**不收集、不上传任何信息**：安装全程不联网；`serve` 每天最多向 GitHub Release 查询一次新版本，请求只带固定的 `User-Agent`，不附带任何本机信息，可在全局配置里设置 `"updateCheck": false` 关闭。Key 只保存在你本机的 `~/.manyoyo/manyoyo.json`。
+
+## 遇到问题
+
+- 安装日志在 `~/.manyoyo/logs/install/`，失败后修好问题直接重新运行安装包即可续上。
+- 运行 `manyoyo doctor` 检查环境，`manyoyo doctor --fix` 自动修复可修复的项。
+- 更多见[故障排查](../troubleshooting/README.md)。
 
 ## 下一步
 
 - [基础用法](./basic-usage.md)
+- [迁移已有 Agent 配置](./migrate.md)
 - [配置系统](../configuration/README.md)
 - [命令参考](../reference/cli-options.md)
 - [故障排查](../troubleshooting/README.md)
