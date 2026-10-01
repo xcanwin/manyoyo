@@ -207,15 +207,24 @@ podman_private() {
         CONTAINERS_CONF="$PODMAN_ROOT/containers.conf" "$PODMAN_ROOT/bin/podman" "$@"
 }
 
+machine_listed() {
+    podman_private machine list --format '{{.Name}}' 2>/dev/null | sed 's/\*$//' | grep -qx "$MANYOYO_MACHINE_NAME"
+}
+
 prepare_machine() {
     vm_file="$here/$MANYOYO_VM_FILE"
-    if podman_private machine inspect "$MANYOYO_MACHINE_NAME" >/dev/null 2>&1; then
+    # 虚拟机里可能已经有用户的容器：只要列表里有这个名字，就绝不重建、绝不删除
+    if podman_private machine inspect "$MANYOYO_MACHINE_NAME" >/dev/null 2>&1 \
+        || machine_listed; then
         log "• 虚拟机 $MANYOYO_MACHINE_NAME 已存在，跳过创建"
     else
         [ -f "$vm_file" ] || fail "安装包里没有虚拟机磁盘 ${MANYOYO_VM_FILE}。" "重新下载安装包并核对 SHA256。"
         log "▶ 创建虚拟机（约 10–20 秒）"
         if ! run podman_private machine init --image "$vm_file" "$MANYOYO_MACHINE_NAME"; then
-            run podman_private machine rm -f "$MANYOYO_MACHINE_NAME" || true
+            # 只清理这次 init 留下的半成品：init 之前它不在列表里，现在出现了，才是我们造成的
+            if machine_listed; then
+                run podman_private machine rm -f "$MANYOYO_MACHINE_NAME" || true
+            fi
             fail "创建虚拟机失败。" "查看日志；常见原因是磁盘空间不足或系统虚拟化被禁用。清理后重新运行安装包。"
         fi
     fi

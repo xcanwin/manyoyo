@@ -16,6 +16,7 @@ const { describeError } = require('../lib/error-hints');
 const { ensureRuntimeReady } = require('../lib/runtime-heal');
 const { ensureImagePresent, pullImageProcess } = require('../lib/image-pull');
 const { readImportState, waitForImport } = require('../lib/offline-import');
+const { pruneDanglingImages: pruneDanglingImagesSafely } = require('../lib/image-prune');
 const { runUninstall, readPid, defaultIsManyoyoServe, defaultKill } = require('../lib/uninstall');
 const appUpdate = require('../lib/app-update');
 const { createUpdateChecker } = require('../lib/update-check');
@@ -1069,27 +1070,11 @@ function getImageList() {
 }
 
 function pruneDanglingImages() {
-    console.log(`\n${YELLOW}清理悬空镜像...${NC}`);
-    dockerExecArgs(['image', 'prune', '-f'], { stdio: 'inherit' });
-
-    // Remove remaining <none> images
-    try {
-        const imagesOutput = dockerExecArgs(['images', '-a', '--format', '{{.ID}} {{.Repository}}']);
-        const noneImages = imagesOutput
-            .split('\n')
-            .filter(line => line.includes('<none>'))
-            .map(line => line.split(' ')[0])
-            .filter(id => id);
-
-        if (noneImages.length > 0) {
-            console.log(`${YELLOW}清理剩余的 <none> 镜像 (${noneImages.length} 个)...${NC}`);
-            dockerExecArgs(['rmi', '-f', ...noneImages], { stdio: 'inherit' });
-        }
-    } catch (e) {
-        // Ignore errors if no <none> images found
-    }
-
-    console.log(`${GREEN}✅ 清理完成${NC}`);
+    pruneDanglingImagesSafely({
+        dockerExecArgs,
+        log: line => console.log(line),
+        colors: { YELLOW, GREEN, NC }
+    });
 }
 
 function maybeHandleDockerPluginMetadata(argv) {
@@ -2330,7 +2315,8 @@ async function runAppLauncher() {
             issueToken: () => issueLoginToken(getLoginTokenDir()),
             open: url => openBrowser(url),
             log: line => console.log(line),
-            logPathHint: buildManyoyoLogPath('serve').path
+            logPathHint: buildManyoyoLogPath('serve').path,
+            commandName: MANYOYO_NAME
         });
     } catch (e) {
         console.error(`${RED}${e.message}${NC}`);

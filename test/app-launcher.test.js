@@ -40,6 +40,7 @@ describe('app launcher', () => {
         expect(fs.statSync(statePath).mode & 0o777).toBe(0o600);
         expect(logs.join('\n')).toContain('http://127.0.0.1:45678');
         expect(logs.join('\n')).not.toContain('token=');
+        expect(logs.join('\n')).toContain('关闭服务: manyoyo serve 127.0.0.1:45678 --stop');
     });
 
     test('reuses a live instance without spawning', async () => {

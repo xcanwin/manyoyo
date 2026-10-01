@@ -44,13 +44,14 @@ state="\${FAKE_STATE:?}"
 echo "podman $* [CONTAINERS_CONF=$CONTAINERS_CONF XDG_DATA_HOME=$XDG_DATA_HOME]" >> "$state/calls.log"
 case "$1 $2" in
   "machine init")
-    [ -n "\${FAKE_FAIL_INIT:-}" ] && { echo "init boom" >&2; exit 1; }
+    [ -n "\${FAKE_FAIL_INIT:-}" ] && { [ -n "\${FAKE_PARTIAL:-}" ] && : > "$state/machine"; echo "init boom" >&2; exit 1; }
     : > "$state/machine" ;;
-  "machine inspect") [ -f "$state/machine" ] || exit 125 ;;
+  "machine inspect") [ -n "\${FAKE_INSPECT_FAILS:-}" ] && exit 125; [ -f "$state/machine" ] || exit 125 ;;
   "machine start")
     [ -n "\${FAKE_FAIL_START:-}" ] && { echo "krunkit abort" >&2; exit 1; }
     : > "$state/running" ;;
   "machine rm") rm -f "$state/machine" "$state/running" ;;
+  "machine list") [ -f "$state/machine" ] && echo "podman-machine-manyoyo*"; [ -n "\${FAKE_LIST_ONLY:-}" ] && echo "podman-machine-manyoyo*"; exit 0 ;;
   "load -i") echo "$3" >> "$state/loaded" ;;
 esac
 [ "$1" = info ] && { [ -f "$state/running" ] || exit 125; }
@@ -219,7 +220,7 @@ describe('offline installer (sh)', () => {
         const first = install(writePayload(path.join(root, 'payload')), { FAKE_FAIL_INIT: '1' });
         expect(first.status).toBe(1);
         expect(first.stdout).toContain('创建虚拟机失败');
-        expect(countCalls('podman machine rm -f podman-machine-manyoyo')).toBe(1);
+        expect(countCalls('podman machine rm')).toBe(0); // init 失败后列表里没有这台虚拟机，不用也不能删
         expect(install(writePayload(path.join(root, 'payload2'))).status).toBe(0);
         expect(countCalls('podman machine init')).toBe(2);
     });
@@ -240,6 +241,23 @@ describe('offline installer (sh)', () => {
         expect(install(writePayload(path.join(root, 'payload'))).status).toBe(0);
         const record = JSON.parse(fs.readFileSync(path.join(home, '.manyoyo/.install/installed.json'), 'utf8'));
         expect(record).toEqual(expect.objectContaining({ podmanVersion: '', vmDiskSha256: '' }));
+    });
+
+    test('a machine that exists but cannot be inspected right now is never re-created or removed (it may hold the user\'s containers)', () => {
+        fs.mkdirSync(path.join(root, 'state'), { recursive: true });
+        fs.writeFileSync(path.join(root, 'state/machine'), '');
+        const result = install(writePayload(path.join(root, 'payload')), { FAKE_INSPECT_FAILS: '1', FAKE_FAIL_INIT: '1' });
+        expect(result.status).toBe(0);
+        expect(countCalls('podman machine init')).toBe(0);
+        expect(countCalls('podman machine rm')).toBe(0);
+        expect(fs.existsSync(path.join(root, 'state/machine'))).toBe(true);
+    });
+
+    test('a failed init that left a half-created machine behind removes exactly that one', () => {
+        const first = install(writePayload(path.join(root, 'payload')), { FAKE_FAIL_INIT: '1', FAKE_PARTIAL: '1' });
+        expect(first.status).toBe(1);
+        expect(calls().filter(c => c.startsWith('podman machine rm -f podman-machine-manyoyo'))).toHaveLength(1);
+        expect(fs.existsSync(path.join(root, 'state/machine'))).toBe(false);
     });
 
     test('an existing Docker whose daemon is down does not count as a runtime', () => {

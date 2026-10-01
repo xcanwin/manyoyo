@@ -62,8 +62,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Create GitHub Release
         run: |
-          gh release create ${{ github.ref_name }} \
-            --title "${{ github.ref_name }}" \
-            --generate-notes
+          # 已经有同名 Release（例如先手动建好草稿）就不重复创建
+          if gh release view ${{ github.ref_name }} >/dev/null 2>&1; then
+            echo "Release ${{ github.ref_name }} 已存在，跳过创建"
+          else
+            gh release create ${{ github.ref_name }} \
+              --title "${{ github.ref_name }}" \
+              --generate-notes
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
