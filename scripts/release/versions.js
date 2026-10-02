@@ -1,4 +1,4 @@
-const { extractAgentMessageFromCodexJsonl } = require('./codex-output');
+const { extractAgentMessageFromCodexJsonl } = require('../../lib/codex-output');
 
 function parseReleaseVersion(version) {
     const match = String(version || '').trim().match(/^(\d+)\.(\d+)\.(\d+)$/);

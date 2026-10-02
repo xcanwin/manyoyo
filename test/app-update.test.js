@@ -338,6 +338,17 @@ describe('runtime change hint and outdated containers', () => {
         expect(describeRuntimeChange(installed, {})).toBe('');
     });
 
+    test('the same runtime hint is shown only once, a newer runtime shows it again', () => {
+        const first = { podmanVersion: '6.2.0', vmDiskSha256: 'n'.repeat(64) };
+        expect(appUpdate.markRuntimeHintShown(home, first)).toBe(true);
+        expect(appUpdate.markRuntimeHintShown(home, first)).toBe(false);
+        expect(appUpdate.markRuntimeHintShown(home, { ...first, podmanVersion: '6.3.0' })).toBe(true);
+        expect(appUpdate.markRuntimeHintShown(home, { ...first, podmanVersion: '6.3.0' })).toBe(false);
+        // 记录文件损坏时按“没提示过”处理，不抛错
+        fs.writeFileSync(path.join(home, '.manyoyo', '.install', 'runtime-hint.json'), '{bad');
+        expect(appUpdate.markRuntimeHintShown(home, first)).toBe(true);
+    });
+
     test('installAppUpdate hands back the package manifest so the caller can read manifest.runtime', async () => {
         seedInstalled('1.0.0');
         await startServer();

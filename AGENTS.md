@@ -17,6 +17,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - 多方案时给出清晰选项，避免来回确认。
 - 功能演进默认直接切换：除非明确要求，否则不引入兼容层、过渡开关、旧路径提示等历史包袱。
 - 未明确要求时不自动提交；需要提交时先给出 commit message 和命令让用户确认。
+- 推送与其他对外动作（合并 main、触发 workflow、发布）一律先要明确授权，有凭据也不例外。
 - 文档保持简洁、减少重复，保留可导航性与兼容链接。
 
 ## 项目结构
@@ -35,7 +36,8 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `lib/global-config.js` / `init-config.js` / `json5-text-edit.js`：`~/.manyoyo/manyoyo.json` 读写与 `imageVersion` 同步、`init` 初始化、JSON5 局部定位替换。
 - `lib/log-path.js` / `serve-log.js` / `serve-log-reader.js`：日志分目录规则、脱敏与进程快照、倒序分页读取。
 - `lib/core/`：会话控制事件的创建/校验/投影与 `FileEventStore`（JSONL 追加日志 + 快照）；`app-error.js` 暂未接入 `sendJson`。
-- `lib/doctor.js`、`capacity.js`、`codex-output.js`、`agent-resume.js`、`dev-release.js`：环境诊断、容量估算、Codex JSONL 解析、会话恢复参数推断、发布向导。
+- `lib/doctor.js`、`capacity.js`、`codex-output.js`、`agent-resume.js`：环境诊断、容量估算、Codex JSONL 解析、会话恢复参数推断。
+- `scripts/release/`：发布控制台（维护者工具，不进 npm 包）。`npm run release` 在 `127.0.0.1:3900` 启动网页（令牌 + Host/Origin 校验，只能选择固定阶段、不能提交任意命令）：状态完全由 git / GitHub / npm 的真实状态推出（`facts.js` → `stages.js`），可随时中断续跑；阶段执行在 `actions.js`，任务执行器 `jobs.js`（single / 逐步确认 step / 一次确认 auto），对外动作每次都要确认。页面源码在 `frontend/release.html` + `frontend/src/release/`，`npm run build:release` 构建成 `scripts/release/console.html`（已忽略，首次运行自动构建）。`--status` 只在终端看状态，`--dry-run` 对外动作只打印命令。
 - `lib/plugin/`：插件路由与 Playwright 插件（场景管理、MCP 集成、compose/Dockerfile 模板）。
 - `lib/web/`：`serve` 网页服务；`server.js` 单文件 6000+ 行，靠 `Grep "^function <名>"` 定位，不要整文件读。
 - `frontend/`：默认 Web 前端（`/` 路由，登录页 `/auth/login`；React + shadcn/ui），独立 Vite + React + TS 项目，约 70 个源文件；组件地图见该目录 `AGENTS.md`。
@@ -68,7 +70,7 @@ npm start                # 从源码运行无参入口（打开网页界面）�
 npm install -g . / npm link   # 本地全局安装或软链 CLI
 npm run build:web        # 构建默认前端单文件产物 lib/web/index.html，随 npm run prepack 自动执行
 npm run dev:web          # 默认前端本地开发；npm run test:web 跑其 Vitest
-npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
+npm run release          # 维护者发布控制台（网页，127.0.0.1:3900）；--status 终端看状态，--dry-run 彩排；npm run build:release 单独构建页面
 # 根目录除 lint:sh（只管安装脚本）外没有 lint 脚本；前端的真检查是下面两条
 
 # 改 frontend/ 必跑这两条（根目录的 npm test 不含它们）
@@ -149,7 +151,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 环境文件解析：`manyoyo config show --ef /abs/path/myenv.env`；容器调试：`manyoyo run -n <name> -x /bin/bash`。
 - 环境诊断：`manyoyo doctor`（人类可读）/ `manyoyo doctor --json`（脚本消费），可加 `--port <port>`。
 - 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.4-common`），可加 `--iba TOOL=common`。
-- 维护者发布：`npm run dev:release`（`-- --yes` 自动确认，`-- --version <x.y.z>` 指定版本）。
+- 维护者发布：`npm run release`，按页面「下一步」推进；也可「一键发布」整段（合并 main → 验证）。
 - 局域网监听：`manyoyo serve 0.0.0.0:3000 -U <user> -P <pass>`；未显式设 `-P/--pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`）时启动会生成随机密码并打印到终端。
 - 调接口先登录拿 cookie：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`，之后带 `-b /tmp/manyoyo.cookie` 访问。
 - 常用接口：`GET /api/sessions`（列表）、`GET /api/sessions/<name>/audit`（导出会话审计）、`POST /api/sessions/<name>/remove-with-history`（删除对话历史但保留容器）。
@@ -179,6 +181,17 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 改了代码就要重新触发 `offline-macos.yml` / `offline-linux.yml` 并在干净用户下重测；镜像（`ghcr.io/xcanwin/manyoyo:<imageVersion>`）只有 Dockerfile 或 `docker/` 变化才需要重发，且要先于离线包。
 - 发版顺序（维护者）：本机装好 shellcheck 跑 `npm test`（CI 的 ubuntu 自带，本地没有会静默跳过）→ 合并 main → （Dockerfile/`docker/` 有变先 `image-publish.yml`）触发 `offline-macos.yml` 与 `offline-linux.yml` → `gh release create <tag> --target main --notes-file …`（说明以 `scripts/release-notes-template.md` 开头；会触发 npm 发布，发布前测试失败要先删 Release 与 tag 再来）→ `release-offline.yml`（`macosRunId` + `linuxRunId`，一次上传两个平台）→ `release-verify.yml`（`tag=<tag>`，游客身份在 Linux x64/arm64 与 macOS arm64/Intel 的 runner 上验证安装、`update`、卸载；macOS 不启动虚拟机）。macOS 真实虚拟机启动、浏览器向导、Agent 对话只能在真机偶尔抽查。
 
+## 开发流程踩坑（踩过才知道）
+
+- 全新检出先 `npm run build:web`（生成 `lib/web/index.html`）再 `npm test`，否则 Web 页面用例失败；CI 的 `npm-publish.yml` 已先构建。
+- 用脚本/工具整文件重写 `.sh` 会丢可执行位：提交前看 `git diff --cached --summary`，不应出现 `mode change`。
+- 文档：frontmatter 的 `description` 含英文冒号加空格必须加引号，正文里裸 `<name>` 会被当 Vue 标签，须放进反引号；否则 `docs:build` 报错。移动页面先登记 `redirects.json`，再跑 `npm run docs:check`。
+- 测试里起本进程的 HTTP 替身时，被测子进程必须异步 `spawn`；`spawnSync` 会卡住替身，表现为无输出超时。兼容性回归用仓库内 fixture（`test/fixtures/`），不要依赖 git tag（CI 浅克隆拿不到）。
+- 改 workflow 后先用 `python3 -c "import yaml; yaml.safe_load(open('<文件>'))"` 校验语法；`set -e` 下 `! cmd` 不会失败，检查“不存在”要写 `if cmd; then exit 1; fi`。
+- 开发容器若 PID 1 是 `tail -f /dev/null`，孤儿进程不会被回收，僵尸耗尽 cgroup 的 pids 上限后测试随机报“无法创建线程”/`spawn EAGAIN`；这时用 `docker run --rm -v "$PWD:$PWD" -w "$PWD" node:22-bookworm bash -lc '<命令>'` 在干净容器里验证，并让维护者重启容器。不要用 `pkill -f` / `pgrep -f` 匹配带自己命令行的模式，会杀掉自己的 shell。
+- 子 agent 批量精简文档后，必须抽查事实（命令、参数、默认值以代码为准），删掉其自述“未核实”的新增内容。
+- 推送、合并 main、触发 workflow、发 Release/npm 等对外动作，**即使已有 git/gh 凭据，也必须先得到用户明确授权**，授权只对当次指定的动作有效。获授权后若环境没配 git 凭据，可用 `git -c credential.helper='!gh auth git-credential' push origin <分支>`。发布后 `npm view` 可能几分钟内仍是旧版本，以 npm-publish 日志里的 `+ @xcanwin/manyoyo@<版本>` 为准再复查。
+
 ## 版本对齐
 
 - 镜像版本读取 `package.json` 的 `imageVersion`（格式 `x.y.z-variant`），与 `version` 字段独立。
@@ -198,7 +211,6 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 ## 提交与 PR 指引
 
 - 简短中文动词短语，文档用 `docs:` 前缀，不超过 50 字；确需补充背景时最多追加一句精简摘要，不写分点列表、不写验证过程。
-- `npm run dev:release` 的发布提交使用 `commit-diff` 产出：标题不加范围前缀，正文可使用要点列表；此例外不适用于日常提交。
 - 提交信息里不写 `Co-Authored-By`、生成工具署名等任何尾注。
 - 未明确要求时不自动提交；需要时先给出 commit message 和命令让用户确认。
 - PR 需包含：变更摘要、测试结果（如 `npm test`）、相关文档更新说明。

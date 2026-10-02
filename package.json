@@ -32,7 +32,8 @@
     "scripts": {
         "start": "node bin/manyoyo.js",
         "serve:dev": "node bin/manyoyo.js serve 127.0.0.1:3000",
-        "dev:release": "node scripts/dev-release.js",
+        "release": "node scripts/release/index.js",
+        "build:release": "node scripts/web.js build-release",
         "build:web": "node scripts/web.js build",
         "dev:web": "node scripts/web.js dev",
         "test:web": "node scripts/web.js test",

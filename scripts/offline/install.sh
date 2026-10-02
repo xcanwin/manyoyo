@@ -428,7 +428,7 @@ main() {
 
     log "✓ 安装完成：$ROOT"
     log "  新开一个终端后可直接输入 manyoyo；想在当前终端立刻使用，执行：exec \"\$SHELL\" -l"
-    log "  安装包（.run 文件）现在可以删除。"
+    [ "${MANYOYO_FROM_BOOTSTRAP:-0}" = 1 ] || log "  安装包（.run 文件）现在可以删除。"
 
     if [ "$OPEN_AFTER" = 1 ]; then
         # shellcheck disable=SC2086

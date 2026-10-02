@@ -54,7 +54,7 @@ npm run docs:check               # build, then check redirect pages, canonicals,
 
 ## Release outline
 
-Releases are done by the maintainer: the `npm run dev:release` wizard handles the version and release commit; installers, images and the Release are built only in CI and privacy-scanned. The full order is in the "release order" section of [`AGENTS.md`](https://github.com/xcanwin/manyoyo/blob/main/AGENTS.md).
+Releases are done by the maintainer: `npm run release` opens the release console (local `127.0.0.1:3900`). It walks through preflight → version → commit → merge to main → image → installers → Release → npm → attach installers → verify → manual checks, shows the next step, and can run stage by stage or the whole publishing stretch at once; every external action lists its commands and asks for confirmation. `npm run release -- --status` prints the state in the terminal and `--dry-run` only prints commands. Installers, images and the Release are built only in CI and privacy-scanned. The full order is in the "release order" section of [`AGENTS.md`](https://github.com/xcanwin/manyoyo/blob/main/AGENTS.md).
 
 ## Next Steps
 

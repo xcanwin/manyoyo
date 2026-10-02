@@ -895,7 +895,7 @@ async function updateOfflineInstall(mode, options, globalConfig) {
 
     // Podman / VM 磁盘有变化只提示（需要新的完整包）
     const runtimeHint = appUpdate.describeRuntimeChange(appUpdate.readInstalledRecord(os.homedir()), result.manifest.runtime);
-    if (runtimeHint) console.log(`${YELLOW}ℹ️  ${runtimeHint}${NC}`);
+    if (runtimeHint && appUpdate.markRuntimeHintShown(os.homedir(), result.manifest.runtime)) console.log(`${YELLOW}ℹ️  ${runtimeHint}${NC}`);
 
     // 新版本要求的镜像不存在就拉取；仍用旧镜像的容器只列出来，不动
     const imageName = String(globalConfig.imageName || 'ghcr.io/xcanwin/manyoyo');
