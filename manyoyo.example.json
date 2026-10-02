@@ -68,7 +68,7 @@
     //     }
     // },
 
-    // 可选插件（manyoyo playwright / manyoyo plugin playwright）
+    // 可选插件（manyoyo playwright）
     "plugins": {
         "playwright": {
             // mixed: 支持容器+宿主机；container: 仅容器；host: 仅宿主机

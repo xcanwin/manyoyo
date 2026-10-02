@@ -65,7 +65,7 @@ jobs:
           ls -lh image
 
       - run: npm ci --include=optional
-      - run: npm run build:web-shadcn
+      - run: npm run build:web
 
       - name: Build package
         run: |

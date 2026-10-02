@@ -101,7 +101,7 @@ jobs:
           echo "MANYOYO_TAR=$(brew --prefix)/opt/gnu-tar/libexec/gnubin/tar" >> "$GITHUB_ENV"
 
       - run: npm ci --include=optional
-      - run: npm run build:web-shadcn
+      - run: npm run build:web
 
       - uses: actions/download-artifact@v8
         with:
@@ -115,7 +115,7 @@ jobs:
             --out dist-offline
 
       # 发布前扫描：扫描失败即整个 job 失败，产物不会上传。
-      # full 目录树是 lite / app 的超集，扫它即覆盖。其中 images/（镜像归档）下一步用镜像专用允许列表单独扫，
+      # full 目录树是 app 的超集，扫它即覆盖。其中 images/（镜像归档）下一步用镜像专用允许列表单独扫，
       # vm/（官方未启动过的 machine-os 磁盘，不透明压缩文件）由 manifest 记录的 SHA256 约束，不做字符串扫描。
       - name: Scan packaged tree
         run: |

@@ -5,13 +5,13 @@ description: Fastest path for users who already run Claude/Codex/Gemini/OpenCode
 
 # Migrate Existing Agent Configs
 
-This page is for users who already have npm / Docker or Podman set up and a working agent on the host (new to MANYOYO? start with [Quick Start](./quick-start.md)). You already:
+This page is for users who already have npm / Docker or Podman set up and a working agent on the host (new to MANYOYO? start with [Install](./quick-start.md)). You already:
 - can run `claude` / `codex` / `gemini` / `opencode` on host
 - already have model access configured (env vars or local auth)
 
 Goal: migrate that working setup into MANYOYO with minimal steps.
 
-> The default image is the prebuilt `ghcr.io/xcanwin/manyoyo`, pulled automatically when missing locally, so you normally do not need `manyoyo build`; the build step below is only for custom images.
+> The default image is the prebuilt `ghcr.io/xcanwin/manyoyo`, pulled automatically when missing locally, so you do not need `manyoyo build`; build only when you want a custom image.
 
 ## 1. Install manyoyo
 
@@ -23,22 +23,16 @@ manyoyo -v
 ## 2. Install Podman / Docker
 
 Container runtime install/switch references:
-- [Install Podman (Recommended)](./installation.md#install-podman-recommended)
-- [Install Docker (Optional)](./installation.md#install-docker-optional)
+- [Install Podman (Recommended)](../advanced/installation.md#install-podman-recommended)
+- [Install Docker (Optional)](../advanced/installation.md#install-docker-optional)
 
-## 3. Build sandbox image
-
-```bash
-manyoyo build --iv 2.0.0-common
-```
-
-## 4. Migrate existing configs now
+## 3. Migrate existing configs now
 
 ```bash
 manyoyo init all
 ```
 
-## 5. Start agents directly
+## 4. Start agents directly
 
 ```bash
 manyoyo run -r claude

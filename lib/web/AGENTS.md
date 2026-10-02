@@ -1,6 +1,6 @@
 # lib/web/ 协作指引
 
-根目录 `AGENTS.md` 的补充，仅在改动 Web 服务端时适用。前端在 `frontend-shadcn/`，见该目录的 `AGENTS.md`。
+根目录 `AGENTS.md` 的补充，仅在改动 Web 服务端时适用。前端在 `frontend/`，见该目录的 `AGENTS.md`。
 
 ## lib/web/server.js（6000+ 行单文件）
 
@@ -9,7 +9,7 @@
 - `resolveYoloCommand()` 委托到 `lib/agent-adapters/index.js`，与 `bin/manyoyo.js` 共用同一份映射，无需分别维护。
 - Agent 会话恢复参数：Claude/Gemini → `-r`，Codex → `resume`，OpenCode → `-c`。
 - 会话控制事件：`/agent/stream`、`/agent/stop` 通过 `createWebStreamEmitter()` / `appendWebSessionControlEvent()` 写入 `lib/core/event-store.js`（`FileEventStore`），`GET /api/sessions/:name/audit` 导出该会话的事件与投影。
-- **`/agent/stream` 的 NDJSON 事件协议是跨前后端的契约**，改一处必须同步另一处：服务端 `lib/web/server.js`、前端 `frontend-shadcn/src/lib/api.ts` 的 `StreamEvent` + `workspace-panel.tsx` 的事件分支
+- **`/agent/stream` 的 NDJSON 事件协议是跨前后端的契约**，改一处必须同步另一处：服务端 `lib/web/server.js`、前端 `frontend/src/lib/api.ts` 的 `StreamEvent` + `workspace-panel.tsx` 的事件分支
   - `content_chunk`：token 级增量，前端**追加**；`reset: true` 表示换了一条 assistant 消息、从空白重新开始。只发新增片段，不要改成重发累计全文（几千个增量就是 O(n²) 流量）。
   - `content_delta`：每条 assistant 消息落地时下发一次的权威全文，前端**整体覆盖**。
   - `trace`：**不保证带结构化 `traceEvent`**。stderr 行（`emitStderrTraceLine`）和解析不出 JSON 的 stdout 行只有 `text` + `stream`，前端靠 `toTraceEvent()` 兜底成 `kind="output"` 的事件展示。新增只认 `traceEvent` 的分支等于把自定义 CLI、CLI 报错的输出全吞掉。
@@ -21,11 +21,9 @@
 - 空闲保活是 `/agent/stream` 那条心跳规则的同类问题，**两个入口都要守**：终端侧服务端每 `WEB_TERMINAL_PING_INTERVAL_MS`（30s）发 WebSocket ping 帧，连续 `WEB_TERMINAL_MAX_MISSED_PONGS`（3 次，约 90s）无 pong 才判死；前端另发应用层 `ping`（浏览器 JS 发不出 ping 帧，上行需要自己造流量）。判死阈值不要收紧到一个周期：手机切后台会让连接短暂挂起，误杀等于用户的 shell 没了。升级后的 socket 还要 `setTimeout(0)` + `setKeepAlive`，解除 HTTP 侧空闲超时。
 - 新增接口/页面必须走全局认证网关，禁止在业务路由里零散补认证；匿名白名单见根 `AGENTS.md` 的安全约束。
 
-## lib/web/frontend/
+## lib/web/index.html
 
-只剩一个文件：`shadcn.html`，是 `npm run build:web-shadcn` 的产物（已 `.gitignore`），由 `loadTemplate()` 在每次请求时读取。服务端不再托管其它前端静态资源，别往这个目录里放新的散装 js/css。
-
-目录里没有任何被跟踪的文件，而 git 不记录空目录——**全新检出（CI、别人第一次 clone）是没有 `lib/web/frontend/` 这个目录的**。任何往这里写文件的构建步骤都必须自己 `mkdir -p`（见 `frontend-shadcn/scripts/emit-shadcn-html.mjs`），否则本地有目录跑得好好的，CI 上直接 ENOENT。
+前端构建产物（`npm run build:web`，已 `.gitignore`），由 `loadIndexHtml()` 在每次请求时读取，`/` 与登录页 `/auth/login` 共用。服务端不托管其它前端静态资源，别往 `lib/web/` 里放散装 js/css。
 
 ## 测试
 

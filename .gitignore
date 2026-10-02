@@ -20,6 +20,6 @@ coverage/
 nohup.out
 libpod/
 .playwright-cli/
-lib/web/frontend/shadcn.html
+lib/web/index.html
 .claude/
 dist-offline/

@@ -20,14 +20,14 @@ let server;
 let base;
 let state;
 
-function buildAppTarball(version, { arch = ARCH, kind = 'app', skip = [], osName } = {}) {
+function buildAppTarball(version, { arch = ARCH, kind = 'app', skip = [], osName, runtime } = {}) {
     const dir = path.join(root, `pkg-${version}-${kind}`);
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(path.join(dir, 'node/bin'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'manyoyo/bin'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'node/bin/node'), 'node');
     fs.writeFileSync(path.join(dir, 'manyoyo/bin/manyoyo.js'), `// ${version}`);
-    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ version, kind, arch, imageVersion: `${version}-common`, ...(osName ? { os: osName } : {}) }));
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ version, kind, arch, imageVersion: `${version}-common`, ...(osName ? { os: osName } : {}), ...(runtime ? { runtime } : {}) }));
     skip.forEach(rel => fs.rmSync(path.join(dir, rel), { recursive: true, force: true }));
     const tgz = path.join(root, `pkg-${version}-${kind}.tar.gz`);
     const r = spawnSync('tar', ['-czf', tgz, '-C', dir, ...fs.readdirSync(dir)]);
@@ -65,7 +65,8 @@ function publish(version, { tamperSums = false, tarball, extraAssets = {}, arch 
     const names = appUpdate.releaseAssetNames(version, arch, osName || 'macos');
     const data = tarball || buildAppTarball(version, { arch, osName });
     state.files[names.app] = data;
-    state.files[names.sums] = `${tamperSums ? 'f'.repeat(64) : sha(data)}  ${names.app}\n`;
+    // 真实 Release 只有一个 SHA256SUMS，列出全部安装包与升级包
+    state.files[names.sums] = `${'a'.repeat(64)}  manyoyo-${version}-macos-${arch}.run\n${tamperSums ? 'f'.repeat(64) : sha(data)}  ${names.app}\n`;
     const assets = [names.app, names.sums, ...Object.keys(extraAssets)].map(name => ({ name, browser_download_url: `${base}/dl/${encodeURIComponent(name)}` }));
     Object.assign(state.files, extraAssets);
     state.release = { tag_name: `v${version}`, assets };
@@ -186,15 +187,14 @@ describe('installAppUpdate / rollbackApp', () => {
         expect(JSON.parse(fs.readFileSync(path.join(appRoot, '.update.json'), 'utf8'))).toEqual(expect.objectContaining({ previous: '1.0.0', current: '9.0.0' }));
         // 只下载了 app 包与校验清单，没有碰完整包
         const downloaded = state.hits.map(h => decodeURIComponent(h.url)).filter(u => u.startsWith('/dl/')).map(u => u.slice(4)).sort();
-        expect(downloaded).toEqual([`SHA256SUMS-macos-${ARCH}`, `manyoyo-9.0.0-macos-${ARCH}-app.tar.gz`].sort());
+        expect(downloaded).toEqual(['SHA256SUMS', `manyoyo-9.0.0-macos-${ARCH}-app.tar.gz`].sort());
         expect(fs.readdirSync(appRoot).filter(n => n.startsWith('.tmp-') || n.startsWith('.current.'))).toEqual([]);
     });
 
     test('linux: looks for the linux-named assets only and accepts a linux manifest', async () => {
         expect(appUpdate.releaseAssetNames('9.0.0', 'x64', 'linux')).toEqual({
             app: 'manyoyo-9.0.0-linux-x64-app.tar.gz',
-            sums: 'SHA256SUMS-linux-x64',
-            manifest: 'release-manifest-linux-x64.json'
+            sums: 'SHA256SUMS'
         });
         expect(appUpdate.releaseAssetNames('9.0.0', 'arm64').app).toBe('manyoyo-9.0.0-macos-arm64-app.tar.gz'); // 默认仍是 macOS
         expect(appUpdate.platformOs()).toBe(process.platform === 'linux' ? 'linux' : 'macos');
@@ -206,7 +206,7 @@ describe('installAppUpdate / rollbackApp', () => {
         const result = await installAppUpdate({ appRoot, release, fetchImpl: fetch, tmpRoot: root, targetOs: 'linux' });
         expect(result.version).toBe('9.0.0');
         const downloaded = state.hits.map(h => decodeURIComponent(h.url)).filter(u => u.startsWith('/dl/')).map(u => u.slice(4)).sort();
-        expect(downloaded).toEqual([`SHA256SUMS-linux-${ARCH}`, `manyoyo-9.0.0-linux-${ARCH}-app.tar.gz`].sort());
+        expect(downloaded).toEqual(['SHA256SUMS', `manyoyo-9.0.0-linux-${ARCH}-app.tar.gz`].sort());
     });
 
     test('a release that only has macOS assets gives a clear error on linux, and a mismatching manifest os is refused', async () => {
@@ -253,7 +253,7 @@ describe('installAppUpdate / rollbackApp', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('9.0.0');
-        state.files[`SHA256SUMS-macos-${ARCH}`] = `${'a'.repeat(64)}  something-else.tar.gz\n`;
+        state.files.SHA256SUMS = `${'a'.repeat(64)}  something-else.tar.gz\n`;
         await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root }))
             .rejects.toMatchObject({ code: 'CHECKSUM' });
         expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe('1.0.0');
@@ -322,18 +322,29 @@ describe('installAppUpdate / rollbackApp', () => {
 });
 
 describe('runtime change hint and outdated containers', () => {
-    const remote = { manifest: { components: { podman: { version: '6.2.0' }, vmDisk: { sha256: 'n'.repeat(64) } } } };
+    // 升级包 manifest.json 里的 runtime 字段（由构建写入，仅 macOS 完整包有 Podman / 虚拟机磁盘）
+    const runtime = { podmanVersion: '6.2.0', vmDiskSha256: 'n'.repeat(64) };
 
     test('only a changed Podman or VM disk produces a hint, and the hint says to download the full package', () => {
         const installed = { podmanVersion: '6.1.3', vmDiskSha256: 'o'.repeat(64) };
-        const hint = describeRuntimeChange(installed, remote);
+        const hint = describeRuntimeChange(installed, runtime);
         expect(hint).toContain('Podman 6.1.3 → 6.2.0');
         expect(hint).toContain('虚拟机磁盘有更新');
         expect(hint).toContain('完整安装包');
-        expect(describeRuntimeChange({ podmanVersion: '6.2.0', vmDiskSha256: 'n'.repeat(64) }, remote)).toBe('');
-        expect(describeRuntimeChange(null, remote)).toBe('');
-        expect(describeRuntimeChange({ podmanVersion: '', vmDiskSha256: '' }, remote)).toBe(''); // 复用外部运行时：没装过
+        expect(describeRuntimeChange({ podmanVersion: '6.2.0', vmDiskSha256: 'n'.repeat(64) }, runtime)).toBe('');
+        expect(describeRuntimeChange(null, runtime)).toBe('');
+        expect(describeRuntimeChange({ podmanVersion: '', vmDiskSha256: '' }, runtime)).toBe(''); // 复用外部运行时：没装过
+        expect(describeRuntimeChange(installed, undefined)).toBe(''); // 升级包没有 runtime 字段（Linux 或旧包）
         expect(describeRuntimeChange(installed, {})).toBe('');
+    });
+
+    test('installAppUpdate hands back the package manifest so the caller can read manifest.runtime', async () => {
+        seedInstalled('1.0.0');
+        await startServer();
+        publish('9.0.0', { tarball: buildAppTarball('9.0.0', { runtime }) });
+        const result = await installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root });
+        expect(result.manifest.runtime).toEqual(runtime);
+        expect(describeRuntimeChange({ podmanVersion: '6.1.3', vmDiskSha256: '' }, result.manifest.runtime)).toContain('Podman 6.1.3 → 6.2.0');
     });
 
     test('lists only manyoyo containers whose image is not the one the new version needs', () => {
@@ -473,5 +484,26 @@ describe('manyoyo update (CLI)', () => {
 
     test('update --help documents --rollback', () => {
         expect(runCli(path.join(repo, 'bin/manyoyo.js'), ['update', '--help']).stdout).toContain('--rollback');
+    });
+});
+
+describe('compatibility with the 8.0.1 client', () => {
+    // 已安装 8.0.1 的用户跑 manyoyo update：旧版代码先找 SHA256SUMS-<os>-<arch>，找不到回退到 SHA256SUMS；
+    // 精简后的 Release 只有 SHA256SUMS、没有 release-manifest，旧客户端必须照样升级成功。
+    // 旧版模块原样存放在 test/fixtures/app-update-8.0.1/（来自 git tag v8.0.1；CI 浅克隆拿不到 tag，所以不用 git show）
+    const oldUpdate = require('./fixtures/app-update-8.0.1/app-update.js');
+
+    test.each([['macos'], ['linux']])('the old app-update.js upgrades (%s) from a Release that only has the app package and SHA256SUMS', async osName => {
+        seedInstalled('1.0.0');
+        await startServer();
+        publish('9.0.0', { osName });
+        expect(Object.keys(state.files).sort()).toEqual(['SHA256SUMS', `manyoyo-9.0.0-${osName}-${ARCH}-app.tar.gz`].sort());
+        const release = await oldUpdate.fetchLatestRelease({ apiBase: base });
+        const result = await oldUpdate.installAppUpdate({ appRoot, release, fetchImpl: fetch, tmpRoot: root, targetOs: osName });
+        expect(result.version).toBe('9.0.0');
+        expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe('9.0.0');
+        // 旧客户端对不存在的 release-manifest 直接跳过提示
+        const names = oldUpdate.releaseAssetNames('9.0.0', ARCH, osName);
+        expect(release.assets[names.manifest]).toBeUndefined();
     });
 });

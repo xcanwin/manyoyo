@@ -1,151 +1,68 @@
 ---
-title: Configuration Overview | MANYOYO
-description: Understand MANYOYO configuration with environment variables, JSON5 config files, run profiles, and config priority for AI Agent CLI workflows.
+title: Configuration Basics | MANYOYO
+description: One config file, four priority layers and a minimal example, so you can understand MANYOYO configuration in minutes
 ---
 
-# Configuration System Overview
+# Configuration Basics
 
-MANYOYO provides a flexible configuration system to simplify command-line operations and manage complex runtime environments.
+This page explains where MANYOYO configuration lives and which value wins when sources conflict. You can use MANYOYO without any config; read this when you want to pin an agent, environment variables or mounts.
 
-## Configuration Methods
+## One file
 
-MANYOYO supports two main configuration methods:
+There is a single global config: `~/.manyoyo/manyoyo.json`, read automatically by every `manyoyo` command when it exists. The format is JSON5, which allows comments, trailing commas and unquoted keys:
 
-1. **Environment Variables**: Pass environment variables like BASE_URL and TOKEN to CLI tools inside the container
-2. **Configuration Files**: Manage MANYOYO runtime parameters using JSON5 format configuration files
-
-## JSON5 Format Explanation
-
-Configuration files use **JSON5 format**, which has the following advantages over standard JSON:
-
-- **Support for Comments**: You can use `//` for single-line comments and `/* */` for multi-line comments
-- **Trailing Commas**: Arrays and objects can have a comma after the last item
-- **More Flexible Key Names**: Object keys can be unquoted (when they follow identifier rules)
-- **Better Readability**: Suitable for manual editing and maintenance
-
-Example:
 ```json5
 {
-    // This is a comment
-    containerName: "my-dev",  // Keys can be unquoted
-    imageVersion: "1.8.0-common",  // Trailing commas are supported
+    // global defaults
+    imageVersion: "2.1.0-common",
+    runs: {
+        // named run profile: manyoyo run -r claude
+        claude: {
+            envFile: ["/abs/path/anthropic.env"],
+            yolo: "c",
+        },
+    },
 }
 ```
 
-## Configuration File Path Rules
+- `manyoyo run -r <name>` reads `runs.<name>`; it takes a name, not a file path.
+- `envFile` and `--ef` accept absolute paths only.
+- `containerName` supports a `{now}` template (expands to `MMDD-HHmm`).
+- All fields are listed in [Config files](./config-files.md).
 
-### Run Configuration
-- `manyoyo run -r claude` → Loads `runs.claude` from `~/.manyoyo/manyoyo.json`
-- `manyoyo run -r <name>` only accepts `runs.<name>` names, not file paths
+## Four-layer priority
 
-### Global Configuration
-- When running any manyoyo command, `~/.manyoyo/manyoyo.json` is automatically loaded (if it exists)
+**Command line > `runs.<name>` > global config > defaults**
 
-### Environment Files
-- `manyoyo run --ef /abs/path/myenv.env` → Loads environment file from absolute path
-- `--ef` only accepts absolute paths (no short name / relative path)
+Different parameter types merge differently:
 
-## Priority Mechanism
+| Type | Parameters | Behavior |
+| --- | --- | --- |
+| Scalar | `containerName`, `hostPath`, `containerPath`, `imageName`, `imageVersion`, `containerMode`, `yolo`, `shellPrefix`, `shell`, `serverUser`, `serverPass` | Only the highest-priority value is used |
+| Map | `env` | Merged by key; for the same key the higher priority wins |
+| Array | `envFile`, `volumes`, `ports`, `imageBuildArgs` | Appended in order global, then `runs.<name>`, then command line; all apply |
+| First-run | `first.shellPrefix/shell/shellSuffix`, `first.env`, `first.envFile` | Run once when a container is newly created; each field follows the rule above |
 
-MANYOYO configuration parameters are divided into three categories with different merging behaviors:
+`serverUser` / `serverPass` can also fall back to the environment variables `MANYOYO_SERVER_USER` / `MANYOYO_SERVER_PASS` (lower than global config, higher than defaults); see [Web service](../guide/web.md).
 
-### Override Parameters
-These parameters only take the value from the highest priority:
-
-**Priority Order**: Command-line arguments > `runs.<name>` > Global configuration > Default values
-
-Override parameters include:
-- `containerName` - Container name
-- `hostPath` - Host working directory
-- `containerPath` - Container working directory
-- `imageName` - Image name
-- `imageVersion` - Image version
-- `containerMode` - Container nesting mode
-- `yolo` - YOLO mode selection
-- `shellPrefix` - Command prefix
-- `shell` - Execution command
-- `serverUser` - Web login username
-- `serverPass` - Web login password
-
-For web auth parameters `serverUser` / `serverPass`, environment variables are also supported with this priority:
-
-`command-line arguments > runs.<name> > global configuration > environment variables > defaults`
-
-Environment variable keys: `MANYOYO_SERVER_USER`, `MANYOYO_SERVER_PASS`.
-
-Example:
-```bash
-# Global configuration sets imageVersion: "1.8.0-common"
-# Run configuration sets imageVersion: "1.8.0-full"
-# Final value is "1.8.0-full" (run configuration has higher priority)
-```
-
-### Merge Parameters
-These parameters are accumulated and merged in order:
-
-**Merge Order**: Global configuration + `runs.<name>` + Command-line arguments
-
-Merge parameters include:
-- `env` - Environment variable map (merged by key)
-- `envFile` - Environment file array
-- `volumes` - Mount volume array
-- `ports` - Port mapping array
-- `imageBuildArgs` - Image build argument array
-
-### First-Run Bootstrap Parameters (`first.*`)
-These parameters run once only **after a new container is created and before regular command execution**. They are skipped when reusing an existing container:
-
-- `first.shellPrefix` / `first.shell` / `first.shellSuffix`: override type (CLI > `runs.<name>.first` > global `first`)
-- `first.env`: merged by key (global `first.env` + `runs.<name>.first.env` + CLI `--first-env`)
-- `first.envFile`: array accumulation (global `first.envFile` + `runs.<name>.first.envFile` + CLI `--first-env-file`)
-
-Example:
-```bash
-# Global configuration: env: {"VAR1":"value1"}
-# runs.demo: env: {"VAR2":"value2"}
-# Command line: -e "VAR3=value3"
-# Final result: VAR1/VAR2/VAR3 are effective; same key is overridden by later source
-```
-
-## Configuration Merge Rules Table
-
-| Parameter Type | Parameter Name | Merge Behavior | Example |
-|---------------|----------------|----------------|---------|
-| Override | `containerName` | Takes highest priority value | CLI `-n test` overrides `runs.<name>` or global value |
-| Override | `hostPath` | Takes highest priority value | Defaults to current directory |
-| Override | `containerPath` | Takes highest priority value | Defaults to same as hostPath |
-| Override | `imageName` | Takes highest priority value | Default `ghcr.io/xcanwin/manyoyo` |
-| Override | `imageVersion` | Takes highest priority value | e.g., `1.8.0-common` |
-| Override | `containerMode` | Takes highest priority value | `common`, `dind`, `sock` |
-| Override | `yolo` | Takes highest priority value | `c`, `gm`, `cx`, `oc` |
-| Override | `serverUser` | Uses web auth priority order | CLI > `runs.<name>` > global > env vars > defaults |
-| Override | `serverPass` | Uses web auth priority order | CLI > `runs.<name>` > global > env vars > defaults |
-| Merge | `env` | Map merge by key | Global + `runs.<name>` + CLI (later source overrides same key) |
-| Merge | `envFile` | Array accumulation merge | Absolute-path env files from global + `runs.<name>` + CLI |
-| Merge | `volumes` | Array accumulation merge | All mount volumes take effect |
-| Merge | `ports` | Array accumulation merge | All port mappings take effect (pass-through as `--publish`) |
-| Merge | `imageBuildArgs` | Array accumulation merge | All build arguments take effect |
-| First bootstrap | `first.shellPrefix/shell/shellSuffix` | Override (CLI > run first > global first) | Runs only once on new container creation |
-| First bootstrap | `first.env` | Map merge by key | Global `first.env` + `runs.<name>.first.env` + CLI `--first-env` |
-| First bootstrap | `first.envFile` | Array accumulation merge | Global `first.envFile` + `runs.<name>.first.envFile` + CLI `--first-env-file` |
-
-## Debugging Configuration
-
-Use the following commands to view the final effective configuration:
+## Minimal example
 
 ```bash
-# Display final configuration
-manyoyo config show
-
-# Display command to be executed
-manyoyo config command
+# global: imageVersion 2.1.0-common; runs.demo: imageVersion 2.1.0-full, env VAR2
+# command line: -e VAR3=value3
+manyoyo run -r demo -e "VAR3=value3"
+# image is 2.1.0-full (runs overrides global); VAR2, VAR3 and the global env all apply
 ```
 
-These debugging commands will display the merged results from all configuration sources, helping you understand the priority and merge logic of configurations.
+## See the final result
 
-## Next Steps
+```bash
+manyoyo config show -r demo      # merged final config
+manyoyo config command -r demo   # container command that will run
+```
 
-- [Environment Variables Details](./environment.md) - Learn how to configure environment variables
-- [Configuration Files Details](./config-files.md) - Learn all configuration options
-- [Configuration Examples](./examples.md) - View practical configuration examples
-- [Web Server Auth and Security](../advanced/web-server-auth.md) - Learn auth behavior and security guidance for `serve`
+## Next
+
+- [Environment variables](./environment.md): pass API URLs and tokens
+- [Config files](./config-files.md): all fields
+- [Examples](./examples.md)

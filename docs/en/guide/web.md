@@ -1,0 +1,139 @@
+---
+title: Web Service and Remote Access | MANYOYO
+description: Covers starting the manyoyo serve web service, the auth gateway, login flow, remote access (ssh -L) and public-listening hardening.
+---
+
+# Web Service and Remote Access
+
+This page covers the `manyoyo serve` web service: how to start it, sign in and reach it remotely. Risks and boundaries are in [Security Notes](./security.md); `ssh -L` access on SSH machines is in [First Run](./first-run.md).
+
+The web UI provides three interaction modes: `Command`, `AGENT`, and `Interactive Terminal`. `AGENT` mode requires `agentPromptCommand` to be configured on the session (template must include `{prompt}`).
+
+## Listen Address and Startup
+
+`serve` only supports `<ip:port>`, e.g. `127.0.0.1:3000`, `0.0.0.0:3000`.
+
+Default listen address is `127.0.0.1:3000`.
+
+```bash
+# Local access only (default)
+manyoyo serve
+
+# Custom listen address
+manyoyo serve 127.0.0.1:3000
+
+# LAN access (requires strong password + firewall)
+manyoyo serve 0.0.0.0:3000 -U admin -P 'StrongPassword'
+
+# Run in background
+manyoyo serve 127.0.0.1:3000 -U admin -P 'StrongPassword' -d
+
+# Run in background with auto-generated password (prints the password for this run)
+manyoyo serve 127.0.0.1:3000 -d
+
+# Stop a specific background server
+manyoyo serve 127.0.0.1:3000 --stop
+
+# Restart a specific background server
+manyoyo serve 127.0.0.1:3000 -U admin -P 'StrongPassword' -d --restart
+```
+
+## Auth Parameter Priority
+
+Web auth parameters are `serverUser` and `serverPass`. They can come from CLI, config files, and env vars.
+
+Priority:
+
+`command-line arguments > runs.<name> > global configuration > environment variables > defaults`
+
+Environment variables:
+
+- `MANYOYO_SERVER_USER`
+- `MANYOYO_SERVER_PASS`
+
+Defaults:
+
+- `serverUser`: `admin`
+- `serverPass`: auto-generated random password on startup when not explicitly set
+
+## Auth Gateway Behavior
+
+`serve` mode uses a global auth gateway. All pages and APIs require authentication except login-related allowlist routes.
+
+Current anonymous allowlist:
+
+- `/auth/login` (`GET` is the login page, `POST` is the login endpoint)
+- `/auth/logout`
+
+Unauthenticated requests to any page path redirect to `/auth/login`; API and `/auth/*` requests get a plain `401`.
+
+## Web Frontend
+
+The `serve` web UI is built with React and shadcn/ui.
+
+- Default URL: `http://127.0.0.1:3000/`; When unauthenticated it redirects to `http://127.0.0.1:3000/auth/login`, then back to `/` after a successful login
+- Login goes through the `/auth/login` endpoint and its cookie
+- Source lives in `frontend/` at the repo root, a standalone Vite + React + TypeScript project. It uses ES Modules; the rest of the Node project still follows CommonJS conventions
+
+Before working on it for the first time, install its own dependencies separately (it's a large, separate tree that won't slow down everyday `npm install`):
+
+```bash
+cd frontend && npm ci && cd ..
+```
+
+Then, depending on what you need:
+
+```bash
+# Just want to see the current build: build once, then preview via my serve as usual
+npm run build:web
+manyoyo serve
+
+# Editing frontend/src and want live reload (HMR) — two terminals:
+manyoyo serve                # Terminal 1: the real backend (containers, sessions, terminal WebSocket)
+npm run dev:web       # Terminal 2: Vite dev server, proxies /api and /auth to 127.0.0.1:3000 by default
+```
+
+If `my serve` listens on an address other than the default `127.0.0.1:3000`, override the proxy target for `dev:web` with the `MANYOYO_SERVE_URL` environment variable.
+
+On publish (`npm publish`/`npm pack`), `frontend` is rebuilt automatically and the output is baked into `lib/web/index.html`; running `my serve` in production needs no frontend toolchain beyond Node itself.
+
+## Login and API Access Example
+
+```bash
+# 1) Login and store cookie
+curl --noproxy '*' -c /tmp/manyoyo.cookie \
+  -X POST http://127.0.0.1:3000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"StrongPassword"}'
+
+# 2) Access API with cookie
+curl --noproxy '*' -b /tmp/manyoyo.cookie \
+  http://127.0.0.1:3000/api/sessions
+
+# 3) Logout
+curl --noproxy '*' -b /tmp/manyoyo.cookie \
+  -X POST http://127.0.0.1:3000/auth/logout
+```
+
+## Minimum Security Baseline
+
+- Prefer `127.0.0.1` for local-only access
+- If using `0.0.0.0`, set a strong password and restrict source IP via firewall
+- Avoid plain-text passwords in shared scripts; prefer protected config or env vars
+- Rotate `serverPass` regularly; use isolated credentials in shared environments
+
+## Common Issue
+
+### `401 Unauthorized`
+
+Check in this order:
+
+1. Ensure `/auth/login` succeeded and cookie is attached
+2. Ensure `-U` / `-P` matches effective config
+3. Run `manyoyo config show` and verify final source of `serverUser` / `serverPass`
+
+## Related Docs
+
+- [CLI Reference](../reference/cli-options.md)
+- [Configuration Overview](../configuration/README.md)
+- [Configuration Files Details](../configuration/config-files.md)

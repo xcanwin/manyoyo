@@ -1,6 +1,7 @@
 #!/bin/sh
 # MANYOYO 离线安装器（POSIX sh，只用 macOS / Linux 自带命令；不联网、不用 brew/git/python3，不执行 sudo）。
 # 由 .run 头部解开负载后调用：sh install/install.sh [--no-open] [--headless|--gui]
+# 注意：这是 .run 内部的安装器；用户在终端里 curl | sh 运行的下载引导脚本是仓库里的 scripts/install.sh，它只负责下载、校验并启动 .run。
 # Linux 包（MANYOYO_OS=linux）不带 Podman：使用系统里已有的 podman / docker。
 # 幂等：每一步先检测，已完成就跳过；中途失败直接重跑即可续上。日志：~/.manyoyo/logs/install/
 #
@@ -394,12 +395,11 @@ main() {
             log "• 检测到可用的 ${EXTERNAL_CMD}，复用它，不安装内置 Podman 与虚拟机磁盘"
         fi
     else
+        # 不带 Podman 的包只有 Linux 版：复用系统里已有的 docker / podman
         if EXTERNAL_CMD="$(detect_external_runtime)"; then
             MODE=external
-        elif [ "${MANYOYO_OS:-macos}" = linux ]; then
-            explain_no_runtime_linux
         else
-            fail "精简包需要已经在运行的 Docker 或 Podman，但没有检测到。" "先启动 Docker Desktop / OrbStack / Podman machine 后重试，或改用包含 Podman 的完整包。"
+            explain_no_runtime_linux
         fi
     fi
 

@@ -60,6 +60,73 @@ describe('MANYOYO CLI', () => {
             expect(output).toContain('MANYOYO');
         });
 
+        describe('help output', () => {
+            const help = args => execSync(`node ${BIN_PATH} ${args}`, { encoding: 'utf-8' });
+
+            test('root help leads with the no-arg web entry, groups subcommands and uses Chinese wording', () => {
+                const output = help('--help');
+                expect(output).toContain('打开网页界面');
+                expect(output).toContain('--headless');
+                expect(output).toContain('--gui');
+                ['日常:', '命令行运行:', '容器与镜像:', '网页服务与插件:'].forEach(title => expect(output).toContain(title));
+                expect(output).toContain('显示帮助');
+                expect(output).not.toContain('display help');
+                expect(output).not.toContain('run/c.json');
+                expect(output).not.toContain('1.7.4');
+                expect(output).not.toContain('docker-cli-plugin');
+                expect(output).not.toMatch(/^\s+plugin\b/m);
+                expect(output).not.toMatch(/^\s+install\b/m);
+            });
+
+            test('root help keeps only a few common examples', () => {
+                const output = help('--help');
+                const examples = output.split('示例:')[1].split('\n').filter(line => line.trim().startsWith('manyoyo'));
+                expect(examples.length).toBeLessThanOrEqual(5);
+            });
+
+            test('array options do not print (default: [])', () => {
+                expect(help('run --help')).not.toContain('(default: [])');
+                expect(help('build --help')).not.toContain('(default: [])');
+                ['ps', 'serve', 'config show', 'playwright'].forEach(cmd => expect(help(`${cmd} --help`)).not.toContain('display help'));
+            });
+
+            test('image version examples follow package.json imageVersion', () => {
+                expect(help('run --help')).toContain(PACKAGE_IMAGE_VERSION);
+                expect(help('build --help')).toContain(PACKAGE_IMAGE_VERSION);
+            });
+
+            test('update and uninstall descriptions stay short', () => {
+                const output = help('--help');
+                expect(output).toContain('升级到最新版本');
+                expect(output).toContain('卸载 MANYOYO（配置和数据默认保留）');
+                expect(output).not.toContain('file 安装');
+            });
+
+            test('config command describes a container command, not docker run', () => {
+                expect(help('config --help')).toContain('显示将执行的容器命令');
+            });
+
+            test('install subcommand was removed', () => {
+                const result = require('child_process').spawnSync('node', [BIN_PATH, 'install', 'docker-cli-plugin'], { encoding: 'utf-8' });
+                expect(result.status).not.toBe(0);
+                expect(result.stderr).toContain('unknown command');
+            });
+
+            test('podman --help prints usage and exits 0 without a private Podman', () => {
+                const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-podman-help-'));
+                try {
+                    const result = require('child_process').spawnSync('node', [BIN_PATH, 'podman', '--help'], {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome }
+                    });
+                    expect(result.status).toBe(0);
+                    expect(result.stdout).toContain('用法');
+                } finally {
+                    fs.rmSync(tempHome, { recursive: true, force: true });
+                }
+            });
+        });
+
         test('no args should reuse the running local app and open a one-time login url', async () => {
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-noargs-'));
             const binDir = path.join(tempHome, 'bin');
@@ -155,8 +222,7 @@ describe('MANYOYO CLI', () => {
             expect(output).toContain('MANYOYO');
             expect(output).toContain('--help');
             expect(output).toContain('--version');
-            expect(output).toContain('serve 127.0.0.1:3000 -d');
-            expect(output).toContain('build --update-agents --yes');
+            expect(output).toContain('manyoyo run -y c');
         });
 
         test('serve --help should include detach stop and restart option', () => {

@@ -9,7 +9,8 @@ const { pipeline } = require('stream/promises');
 const { sha256File } = require('../../lib/download-verified');
 
 const PAYLOAD_MARKER = '__MANYOYO_PAYLOAD_BELOW__';
-const DEFAULT_VOLUME_BYTES = 1900 * 1000 * 1000;
+// 略低于 GitHub 单个 Release 资产的上限（2 GiB = 2,147,483,648），x64 完整包（约 2.0 GB）正好放进一个文件；超限才分卷
+const DEFAULT_VOLUME_BYTES = 2100 * 1000 * 1000;
 
 function renderRunHeader({ name, sha256, volumes = 1 }) {
     if (!Number.isInteger(volumes) || volumes < 1 || volumes > 9999) throw new Error(`volumes 不合法: ${volumes}`);

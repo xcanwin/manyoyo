@@ -2,7 +2,7 @@
 
 MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 AI 编程助手（Claude Code、Gemini、Codex、OpenCode）的 YOLO/SOLO 模式提供隔离的 Docker/Podman 容器环境。核心原则：最小改动、可验证、中英文文档一致。新增功能前先明确范围与安全影响，再动手改代码。
 
-**动 `lib/web/` 或 `frontend-shadcn/` 之前，先读对应目录的 `AGENTS.md` 再看代码**——`lib/web/AGENTS.md`（Web 服务端：流式协议、终端 WebSocket、同步 IO 与保活的既有结论）、`frontend-shadcn/AGENTS.md`（默认 Web 前端：组件地图、移动端与样式规范）。这两份写的都是读代码看不出来、踩过才知道的约束，跳过它们等于把同一个坑再踩一遍。
+**动 `lib/web/` 或 `frontend/` 之前，先读对应目录的 `AGENTS.md` 再看代码**——`lib/web/AGENTS.md`（Web 服务端：流式协议、终端 WebSocket、同步 IO 与保活的既有结论）、`frontend/AGENTS.md`（默认 Web 前端：组件地图、移动端与样式规范）。这两份写的都是读代码看不出来、踩过才知道的约束，跳过它们等于把同一个坑再踩一遍。
 
 - 运行环境：Node.js >= 22，容器运行时支持 `podman` 或 `docker`。macOS 离线包（及 Linux 离线包）自带 Node.js，完整 macOS 包还自带私有 Podman。
 - 默认镜像是 `ghcr.io/xcanwin/manyoyo`（本地没有时自动拉取）；向导与快捷对话的默认工作目录是 `~/.manyoyo/work/`（7.x 遗留的 `workpath/` 仅在卸载时询问）。
@@ -23,8 +23,8 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 
 - `bin/manyoyo.js`：CLI 入口与主流程编排（2200+ 行单文件）。
 - `lib/agent-adapters/`：`resolveYoloCommand` 单一数据源，CLI 与 Web 共用，新增 YOLO 智能体只需改这里。
-- `lib/uninstall.js` / `proxy-config.js` / `offline-import.js`：`manyoyo uninstall`（精确移除带标记的 PATH 块、停服务与私有 machine、用户数据逐项询问）、安装时把用户的代理设置抄进私有 Podman 的 `containers.conf`、离线包后台导入镜像时的状态标记（serve/CLI 据此等待而不是去仓库拉）。安装脚本在 `scripts/offline/install.sh`（POSIX sh，只用 macOS / Linux 自带命令，不执行 sudo；Linux 包 `MANYOYO_OS=linux`：不带 Podman，检测系统 docker/podman，缺失时给 apt 指引，测试见 `test/installer.test.js`）。Linux 包由 `offline-linux.yml` 构建（`build.js --platform linux`，内部 kind 为 lite，扫描用 `scan-allowlist-linux.json`）。
-- `lib/app-update.js` / `update-check.js` / `download-verified.js`：离线包安装的增量升级（查最新 Release → 只下 `-app.tar.gz` 并校验 → `app/<版本>/` + 原子切换 `current` + 保留上一版本 + `update --rollback`，npm 安装不经过这里）、serve 每天最多一次的新版本检查（`updateCheck` 可关，请求不带本机信息，结果走 `GET /api/system/update`）、带 SHA256 校验的下载。升级包命名约定：`manyoyo-<ver>-<os>-<arch>-app.tar.gz`、`SHA256SUMS-<os>-<arch>`、`release-manifest-<os>-<arch>.json`（`os` 为 `macos` 或 `linux`，包内 manifest 的 `os` 字段会被校验），必须上传到 GitHub Release（`release-offline.yml` 的 `os` 输入分平台上传）。
+- `lib/uninstall.js` / `proxy-config.js` / `offline-import.js`：`manyoyo uninstall`（精确移除带标记的 PATH 块、停服务与私有 machine、用户数据逐项询问）、安装时把用户的代理设置抄进私有 Podman 的 `containers.conf`、离线包后台导入镜像时的状态标记（serve/CLI 据此等待而不是去仓库拉）。用户入口是 `scripts/install.sh`（`curl … | sh` 的下载引导脚本：判断系统与芯片 → 跟随 `releases/latest` 跳转取版本（不调 GitHub API）→ 下载并按 `SHA256SUMS` 校验 `.run` → 有 tty 时 `</dev/tty`、无 tty 时加 `--headless` 后启动；不进 npm 包，不装任何东西，只下载、校验、启动）；真正的安装逻辑在 `.run` 里的 `scripts/offline/install.sh`（POSIX sh，只用 macOS / Linux 自带命令，不执行 sudo；Linux 包 `MANYOYO_OS=linux`：不带 Podman，检测系统 docker/podman，缺失时给 apt 指引，测试见 `test/installer.test.js`）。Linux 包由 `offline-linux.yml` 构建（`build.js --platform linux`，内部 kind 为 lite，扫描用 `scan-allowlist-linux.json`）。
+- `lib/app-update.js` / `update-check.js` / `download-verified.js`：离线包安装的增量升级（查最新 Release → 只下 `-app.tar.gz` 并校验 → `app/<版本>/` + 原子切换 `current` + 保留上一版本 + `update --rollback`，npm 安装不经过这里）、serve 每天最多一次的新版本检查（`updateCheck` 可关，请求不带本机信息，结果走 `GET /api/system/update`）、带 SHA256 校验的下载。升级包命名约定：`manyoyo-<ver>-<os>-<arch>-app.tar.gz` 与单一校验清单 `SHA256SUMS`（`os` 为 `macos` 或 `linux`，包内 manifest 的 `os` 字段会被校验；这两个名字已安装的 8.0.1 客户端按名查找，不能改），必须上传到 GitHub Release；Release 里只有 9 个资产：4 个 `.run`、4 个 `-app.tar.gz`、1 个 `SHA256SUMS`（`release-offline.yml` 一次运行合并上传两个平台，没有精简包与 `release-manifest`）。macOS 升级包的 `manifest.json` 带 `runtime: { podmanVersion, vmDiskSha256 }`，`manyoyo update` 据此提示是否需要换完整包。
 - `lib/headless.js` / `setup-cli.js` / `setup-config.js`：有头/无头判定（安装器与无参 `manyoyo` 共用，`--headless`/`--gui`/`MANYOYO_HEADLESS`）、无头环境的命令行配置向导 `manyoyo setup`（输入不回显、非 TTY 不挂起）、向导写配置的文本构造（与 `/api/setup/*` 同源，写入走 `lib/secure-file.js`）。
 - `lib/podman-passthrough.js`：`manyoyo podman <参数>` 透传私有 Podman、`manyoyo podman env` 输出只在当前终端定义 `podman` 函数的 shell 代码。
 - `lib/container-runtime.js` / `runtime-heal.js` / `error-hints.js`：容器运行时选择（配置 > 私有 Podman > daemon 可用的 docker/podman，返回 `{command, env, source}`，`env` 只传给运行时子进程）、daemon 不可用时的自愈（`podman machine start` / macOS `open -a Docker`）、原始错误到“原因 + 下一步”的映射。
@@ -38,11 +38,11 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `lib/doctor.js`、`capacity.js`、`codex-output.js`、`agent-resume.js`、`dev-release.js`：环境诊断、容量估算、Codex JSONL 解析、会话恢复参数推断、发布向导。
 - `lib/plugin/`：插件路由与 Playwright 插件（场景管理、MCP 集成、compose/Dockerfile 模板）。
 - `lib/web/`：`serve` 网页服务；`server.js` 单文件 6000+ 行，靠 `Grep "^function <名>"` 定位，不要整文件读。
-- `frontend-shadcn/`：默认 Web 前端（`/` 路由，`/shadcn` 为别名），独立 Vite + React + TS 项目，约 70 个源文件；组件地图见该目录 `AGENTS.md`。
+- `frontend/`：默认 Web 前端（`/` 路由，登录页 `/auth/login`；React + shadcn/ui），独立 Vite + React + TS 项目，约 70 个源文件；组件地图见该目录 `AGENTS.md`。
 - `docker/`：多阶段 `manyoyo.Dockerfile`、构建缓存 `cache/`（Node.js、JDT LSP、gopls，2 天有效）、各 Agent 默认配置与 supervisor 模板 `res/`。
-- `docs/`：VitePress 文档，中文主维护 `docs/zh/`，英文 `docs/en/`，结构须一致。
-- `test/`：Jest（`*.test.js`），依赖真实容器运行时的用例在 `test/integration/`；前端 Vitest 在 `frontend-shadcn/src/`（`*.test.ts(x)`，与源码同目录）。
-- `scripts/`、`assets/`、`manyoyo.example.json`：构建与发布脚本、资源、配置模板。`scripts/offline/`（离线包构建：下载校验、无 pkgutil 的 `.pkg` 解包、krunkit 补丁、`.run` 打包与分卷）与 `scripts/scan-release-artifacts.js`（发布产物隐私扫描）只在 CI 运行，发布产物不要在本机构建；`dist-offline/` 已被 `.gitignore` 忽略。
+- `docs/`：VitePress 文档，中文主维护 `docs/`（`/en/` 以外都是中文，站点根路径就是中文首页），英文 `docs/en/`，结构须一致；旧地址（`/zh/**` 与移动过的页面）由构建期 `buildEnd` 按 `docs/.vitepress/redirects.mts` 与 `redirects.json` 生成静态 meta refresh 页，仓库里不放跳转页；`node scripts/check-docs-seo.js` 检查构建产物。
+- `test/`：Jest（`*.test.js`），依赖真实容器运行时的用例在 `test/integration/`；前端 Vitest 在 `frontend/src/`（`*.test.ts(x)`，与源码同目录）。
+- `scripts/`、`assets/`、`manyoyo.example.json`：构建与发布脚本、资源、配置模板。`scripts/offline/`（离线包构建：下载校验、无 pkgutil 的 `.pkg` 解包、krunkit 补丁、`.run` 打包；完整包默认不分卷，分卷只在超过 GitHub 单文件 2 GiB 时兜底）与 `scripts/scan-release-artifacts.js`（发布产物隐私扫描）只在 CI 运行，发布产物不要在本机构建；`dist-offline/` 已被 `.gitignore` 忽略。
 
 ## 构建、测试与开发命令
 
@@ -51,30 +51,34 @@ npm install              # 开发阶段安装/更新依赖（会更新 package-l
 npm ci --include=optional # 提交前与 CI 的可复现安装（CI 不再执行 npm install）
 
 npm run test:unit        # 开发阶段（快）：test/ 下 Jest 单测（不含 test/integration/）+ 前端 Vitest
-npm test                 # 提交前：Jest 覆盖率（输出 coverage/）+ frontend-shadcn Vitest
+npm test                 # 提交前：Jest 覆盖率（输出 coverage/）+ frontend Vitest
                          # 需要真实 docker/podman 的用例都在 test/integration/，
                          # docker info / podman info 失败时自动跳过并打印原因
 npm run test:integration # 只跑 test/integration/（容器运行时集成测试）
+npm run test:installer   # 只跑安装脚本用例（改 scripts/install.sh / scripts/offline/*.sh 时）
+npm run lint:sh          # shellcheck 检查安装脚本；本机没有 shellcheck 会明确报错（不会静默跳过）
 npx jest test/manyoyo.test.js            # 单个测试文件
 npx jest --testNamePattern="关键词"       # 按测试名称匹配
 
 # 文档：必须先 ci 安装再构建，不能并行
 npm run docs:dev|build|preview   # build 会检查 dead links；dev 听 127.0.0.1:5173，preview 听 4173
+npm run docs:check               # docs:build + scripts/check-docs-seo.js（跳转页、canonical、description、sitemap）
 
-npm install -g . / npm link / npm run install-link   # 本地全局安装或软链 CLI
-npm run build:web-shadcn # 构建默认前端单文件产物 shadcn.html，随 npm run prepack 自动执行
-npm run dev:web-shadcn   # 默认前端本地开发；npm run test:web-shadcn 跑其 Vitest
+npm start                # 从源码运行无参入口（打开网页界面）；npm run serve:dev 前台调试 serve（127.0.0.1:3000）
+npm install -g . / npm link   # 本地全局安装或软链 CLI
+npm run build:web        # 构建默认前端单文件产物 lib/web/index.html，随 npm run prepack 自动执行
+npm run dev:web          # 默认前端本地开发；npm run test:web 跑其 Vitest
 npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
-# 根目录没有 lint 脚本；前端的真检查是下面两条
+# 根目录除 lint:sh（只管安装脚本）外没有 lint 脚本；前端的真检查是下面两条
 
-# 改 frontend-shadcn/ 必跑这两条（根目录的 npm test 不含它们）
-cd frontend-shadcn && npm run typecheck   # tsc -b --noEmit（必须 -b，否则一个文件都不检查）
-cd frontend-shadcn && npm run lint        # eslint；有既存报错，基线与规则说明见该目录 AGENTS.md
+# 改 frontend/ 必跑这两条（根目录的 npm test 不含它们）
+cd frontend && npm run typecheck   # tsc -b --noEmit（必须 -b，否则一个文件都不检查）
+cd frontend && npm run lint        # eslint；有既存报错，基线与规则说明见该目录 AGENTS.md
 ```
 
 Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版本与 `package.json.imageVersion` 同主版本号。
 
-`npx jest` 若直接报 `jest-circus/build/runner.js ... was not found`，是 node_modules 损坏，先 `npm ci --include=optional` 重装；重装仍无法跑 Jest 时，前端改动用这组替代验证：`cd frontend-shadcn && npm run typecheck && npm run lint`，再回根目录 `npm run test:web-shadcn && npm run build:web-shadcn`；并在交付说明里写清楚哪些没验证。没有容器运行时不影响 `npm test`（集成测试自动跳过）。
+`npx jest` 若直接报 `jest-circus/build/runner.js ... was not found`，是 node_modules 损坏，先 `npm ci --include=optional` 重装；重装仍无法跑 Jest 时，前端改动用这组替代验证：`cd frontend && npm run typecheck && npm run lint`，再回根目录 `npm run test:web && npm run build:web`；并在交付说明里写清楚哪些没验证。没有容器运行时不影响 `npm test`（集成测试自动跳过）。
 
 ## 编码风格
 
@@ -83,7 +87,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - `bin/manyoyo.js` 负责传入 `ctx` 对象，模块不直接读取全局变量。
 - CLI 选项声明靠近 `bin/manyoyo.js`；配置合并与归一化优先维护 `lib/runtime-resolver.js`、`lib/runtime-normalizers.js`，worktrees 逻辑维护 `lib/worktrees.js`。
 - 命名清晰简短；优先小步改动，保持改动范围清晰。
-- `frontend-shadcn/` 是例外，见该目录的 `AGENTS.md`。
+- `frontend/` 是例外，见该目录的 `AGENTS.md`。
 
 ## 核心架构
 
@@ -124,7 +128,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 
 默认适用于新增功能、行为变更、bug 修复；纯文档改动可例外。
 
-- **Red**：先写失败测试，选最小 case。按领域分工：CLI → `test/manyoyo.test.js`；Web → `test/web-server-auth.test.js`；插件 → `test/plugin-command.test.js`（至少覆盖 host/container 两类场景的配置生成、参数透传、挂载或启动路径）；前端 → `frontend-shadcn/src/` 对应 Vitest 用例。
+- **Red**：先写失败测试，选最小 case。按领域分工：CLI → `test/manyoyo.test.js`；Web → `test/web-server-auth.test.js`；插件 → `test/plugin-command.test.js`（至少覆盖 host/container 两类场景的配置生成、参数透传、挂载或启动路径）；前端 → `frontend/src/` 对应 Vitest 用例。
 - **Green**：只做最小代码改动让测试通过，避免顺手重构。
 - **Refactor**：在测试持续通过的前提下整理命名或重复逻辑，确保行为不变。
 - 新增功能优先补关键分支与异常路径；涉及网页认证时至少验证未登录 `401`、登录成功可访问、登出后失效。
@@ -160,8 +164,8 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 日志量：`lib/log-path.js` 只按天分文件，**没有轮转、没有保留期、没有大小上限**。不要按「每个 HTTP 请求 / 每个子进程调用 / 每个流式事件」逐条写盘（曾经这么干过，实测约 55000 条、20MB/天），高频路径上只记 warn/error。
 - 在线查看日志的接口一律**不要全量 `readFileSync` + `split('\n')`**：同步读会阻塞事件循环，文件越长越糟；日期/路径类查询参数必须白名单校验（`^\d{4}-\d{2}-\d{2}$` 之类），否则会被拼出目录穿越。
 - 日志内容渲染到 HTML 必须逐字段转义后再进 DOM。日志里含用户 prompt 等任意文本，用字符串拼 `innerHTML` 等于把 prompt 当代码执行。
-- Web 鉴权：所有路由默认认证，匿名白名单仅限 `/auth/login`、`/auth/logout`、`/shadcn/auth/login`；新增接口/页面必须走全局认证网关，禁止在业务路由里零散补认证。未登录的页面请求一律 302 到 `/shadcn/auth/login`，`/api/*` 与 `/auth/*` 返回 401。
-- `serve` 的 Web 界面只有 `frontend-shadcn/` 一套（`/`，`/shadcn` 是兼容别名），服务端不再托管任何散装前端静态资源。
+- Web 鉴权：所有路由默认认证，匿名白名单仅限 `/auth/login`、`/auth/logout`；新增接口/页面必须走全局认证网关，禁止在业务路由里零散补认证。未登录的页面请求一律 302 到 `/auth/login`，`/api/*` 与 `/auth/*` 返回 401。
+- `serve` 的 Web 界面只有 `frontend/` 一套（`/`，登录页 `/auth/login`），服务端不再托管任何散装前端静态资源。
 - 使用 `serve 0.0.0.0:<port>` 对外监听时必须设置强密码，并通过防火墙限制访问来源。
 - 新增容器模式或挂载选项时不放宽安全校验；`sock` 模式需明确安全风险提示（可访问宿主机 Docker socket）。
 - 调整容器内 Playwright CLI 浏览器安装链路时，必须保证 `playwright-cli install-browser` 安装到全局 `@playwright/cli` 自带的 Playwright，而不是仓库本地 `node_modules/playwright`。
@@ -173,23 +177,23 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 发布产物（npm 包、离线包、镜像）只在 CI 构建并经 `scripts/scan-release-artifacts.js` 扫描：解不开/解包不完整的文件按“未扫描”失败，`--exclude` 必须 `^` 锚定，允许列表按具体文件放行（镜像里曾扫出 SSH 主机私钥）。
 - 含凭据的配置写入统一走 `lib/secure-file.js`（0600、临时文件 + rename）；`manyoyo.json` 的任何新写入点都不要直接 `writeFileSync`。
 - 改了代码就要重新触发 `offline-macos.yml` / `offline-linux.yml` 并在干净用户下重测；镜像（`ghcr.io/xcanwin/manyoyo:<imageVersion>`）只有 Dockerfile 或 `docker/` 变化才需要重发，且要先于离线包。
-- 发版顺序（维护者）：本机装好 shellcheck 跑 `npm test`（CI 的 ubuntu 自带，本地没有会静默跳过）→ 合并 main → （Dockerfile/`docker/` 有变先 `image-publish.yml`）触发 `offline-macos.yml` 与 `offline-linux.yml` → `gh release create <tag> --target main --notes-file …`（会触发 npm 发布，发布前测试失败要先删 Release 与 tag 再来）→ `release-offline.yml` 分 `os=macos|linux` 各上传一次 → `release-verify.yml`（`tag=<tag>`，游客身份在 Linux x64/arm64 与 macOS arm64/Intel 的 runner 上验证安装、`update`、卸载；macOS 不启动虚拟机）。macOS 真实虚拟机启动、浏览器向导、Agent 对话只能在真机偶尔抽查。
+- 发版顺序（维护者）：本机装好 shellcheck 跑 `npm test`（CI 的 ubuntu 自带，本地没有会静默跳过）→ 合并 main → （Dockerfile/`docker/` 有变先 `image-publish.yml`）触发 `offline-macos.yml` 与 `offline-linux.yml` → `gh release create <tag> --target main --notes-file …`（说明以 `scripts/release-notes-template.md` 开头；会触发 npm 发布，发布前测试失败要先删 Release 与 tag 再来）→ `release-offline.yml`（`macosRunId` + `linuxRunId`，一次上传两个平台）→ `release-verify.yml`（`tag=<tag>`，游客身份在 Linux x64/arm64 与 macOS arm64/Intel 的 runner 上验证安装、`update`、卸载；macOS 不启动虚拟机）。macOS 真实虚拟机启动、浏览器向导、Agent 对话只能在真机偶尔抽查。
 
 ## 版本对齐
 
 - 镜像版本读取 `package.json` 的 `imageVersion`（格式 `x.y.z-variant`），与 `version` 字段独立。
-- `test/doc-example-version.test.js` 强制 `README.md`、`docs/{zh,en}/guide/quick-start.md`、`basic-usage.md`、`reference/cli-options.md` 的镜像版本与 `package.json.imageVersion` 同主版本，改 `imageVersion` 后不同步这 7 个文件会导致 `npm test` 失败。
-- `README.md` 的快速开始与主流程示例须与 `version` / `imageVersion` 对齐；`docs/zh/`、`docs/en/` 的历史/场景示例可用其他版本，但必须保持 `x.y.z-后缀` 格式并标注用途。
+- `test/doc-example-version.test.js` 扫描 `README.md` 与 `docs/**/*.md`（排除 `docs/.vitepress/`），所有 `x.y.z-后缀` 镜像版本示例必须与 `package.json.imageVersion` 同主版本，改 `imageVersion` 后不同步会导致 `npm test` 失败；确需保留的历史示例写进该测试的 `ALLOWED_HISTORICAL_VERSIONS` 白名单（文件 + 版本 + 原因），默认为空。
+- `README.md` 的快速开始与主流程示例须与 `version` / `imageVersion` 对齐；`docs/`、`docs/en/` 的历史/场景示例可用其他版本，但必须保持 `x.y.z-后缀` 格式并标注用途。
 - `package.json.playwrightCliVersion` 是 Playwright CLI 版本的单一来源；镜像内安装 `@playwright/cli` 时禁止改回 `@latest`，也不要误用 `dependencies.playwright` 作为版本来源。
 - 包含文件 `README.md`、`LICENSE`、`docker/manyoyo.Dockerfile`、`manyoyo.example.json` 需与发布一致；`bin/manyoyo.js` 变更时同步检查 `package.json` 的 `bin` 字段。
 
 ## 文档规范
 
-- 中文主维护 `docs/zh/`，英文 `docs/en/`，结构须一致；文档改动需中英文同步更新，并保留兼容跳转页。
-- 侧边栏在 `/zh/` 与 `/en/` 统一展示全章节导航；首页卡片需可点击跳转。
+- 中文主维护 `docs/`（`/en/` 以外），英文 `docs/en/`，结构须一致；文档改动需中英文同步更新。页面移动后在 `docs/.vitepress/redirects.json` 的 `moved` 里登记旧→新路径（构建期自动生成跳转页），不要手写跳转 `.md`；不要用 JS 跳转。
+- 侧边栏在中文（根路径）与 `/en/` 统一展示 6 组导航（前两组展开、其余折叠）；首页卡片需可点击跳转；每页必须有自己的 `title` / `description`。
 - 目录首页一律使用 `README.md`，不再新增 `index.md`；内部链接优先用仓库相对 `.md` / `README.md` 路径，保证 GitHub 网页浏览可直接跳转，站点路由由 VitePress 兼容。
 - 文档修改后运行 `npm run docs:build`，检查 dead links 与 sidebar/nav 行为。
-- 新增配置项或 CLI 选项时，同步更新 `manyoyo.example.json`、`docs/zh/` 与 `docs/en/`；必要时同步 `README.md` 示例。
+- 新增配置项或 CLI 选项时，同步更新 `manyoyo.example.json`、`docs/` 与 `docs/en/`；必要时同步 `README.md` 示例。
 
 ## 提交与 PR 指引
 
