@@ -20,7 +20,7 @@ Open [GitHub Releases](https://github.com/xcanwin/manyoyo/releases/latest) and p
 
 - The **full package** (about 1.8GB) bundles Node.js, the container runtime (Podman and its VM) and the MANYOYO image, and works on a clean Mac.
 - The **lite package** (about 0.8GB) bundles only Node.js, MANYOYO and the image, and requires Docker Desktop / OrbStack / Podman to be installed and running already.
-- Also download `SHA256SUMS-macos-<arch>` for your architecture from the same page to verify the file.
+- To verify the download yourself, also fetch `SHA256SUMS-macos-<arch>` from the same page (optional: the package verifies itself during installation).
 - If a file is split into volumes (`.run.001`, `.run.002`, ...), download all of them into one directory and use `.run.001` wherever the commands below say `.run` (for example `sh manyoyo-*-macos-arm64.run.001`); the package joins and verifies the volumes itself and tells you which volume is missing or has the wrong size. Alternative: merge manually with `cat manyoyo-*.run.* > manyoyo-merged.run` and use it as a normal `.run`.
 
 **Download tip for slow networks**: the files are large, so use a resumable download and continue after an interruption:
@@ -31,12 +31,16 @@ curl -L -C - -O <download URL of the file on the Release page>
 
 aria2 and other download managers work too.
 
-## 2. Verify (recommended)
+## 2. Verify (optional)
+
+The package verifies itself before installing, so this step is usually unnecessary. To compare with the checksum on the Release page:
 
 ```bash
-shasum -a 256 -c SHA256SUMS-macos-arm64        # use SHA256SUMS-macos-x64 on Intel
-sh manyoyo-*-macos-arm64.run --check           # verifies the package itself, changes nothing
+# one line with the file name = match; no output = mismatch, download again (use SHA256SUMS-macos-x64 on Intel)
+grep "$(shasum -a 256 manyoyo-*-macos-arm64.run | cut -d' ' -f1)" SHA256SUMS-macos-arm64
 ```
+
+For split volumes (`.run.001` ...) just run `sh manyoyo-*.run.001 --check`; it only verifies and changes nothing.
 
 ## 3. Install with one command
 
@@ -94,7 +98,6 @@ There is one Linux package and it **does not bundle a container runtime**: it us
 
 ```bash
 uname -m                                           # x86_64 -> x64, aarch64 -> arm64
-sha256sum -c SHA256SUMS-linux-x64                  # verify (SHA256SUMS-linux-arm64 for arm64)
 sh manyoyo-<version>-linux-x64.run                 # install
 ```
 

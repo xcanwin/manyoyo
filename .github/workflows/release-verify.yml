@@ -1,0 +1,119 @@
+# 发版后的“游客验证”：以匿名身份从 GitHub Release 下载真实资产，在干净的 runner 上走一遍安装 → 版本 → update → 卸载。
+# 目的：把原来需要人在新用户 / 新机器上手工做的验证交给 CI。不需要任何 secret，也不会修改 Release。
+# 覆盖：Linux x64 / arm64 完整安装（真实 docker、真实镜像导入）；macOS arm64 / Intel 用真实 macOS 的 sh（bash 3.2）跑安装器，
+# 跳过虚拟机（GitHub 的 macOS runner 没有嵌套虚拟化，MANYOYO_TEST_SKIP_MACHINE），其余步骤（校验、解压、PATH、包装脚本、update、卸载）都是真的。
+# 不覆盖：macOS 上真正启动 Podman 虚拟机、浏览器向导、Agent 对话——这些仍需维护者偶尔在真机验证。
+# 前提：tag 必须是 Release 的“最新版本”（update 用例断言“已是最新版本”）；两个平台的 release-offline 都已上传。
+
+name: Verify Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release 的 tag，如 v8.0.1（必须是最新 Release）'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag }}
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Download and verify (anonymous)
+        run: |
+          set -eu
+          case "$TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "tag 格式不对: $TAG"; exit 1 ;; esac
+          ver="${TAG#v}"
+          base="https://github.com/xcanwin/manyoyo/releases/download/${TAG}"
+          mkdir -p "$RUNNER_TEMP/rv" && cd "$RUNNER_TEMP/rv"
+          run_file="manyoyo-${ver}-linux-${{ matrix.arch }}.run"
+          sums="SHA256SUMS-linux-${{ matrix.arch }}"
+          curl -sSL -f -O "${base}/${run_file}"
+          curl -sSL -f -O "${base}/${sums}"
+          curl -sSL -f -O "${base}/release-manifest-linux-${{ matrix.arch }}.json"
+          grep -q "$(sha256sum "$run_file" | cut -d' ' -f1)" "$sums"
+          echo "校验值与 ${sums} 一致"
+      - name: Install headless, import image, update, uninstall
+        run: |
+          set -eu
+          ver="${TAG#v}"
+          cd "$RUNNER_TEMP/rv"
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          sh "manyoyo-${ver}-linux-${{ matrix.arch }}.run" --no-open
+          m="$HOME/.manyoyo/bin/manyoyo"
+          test "$("$m" -v)" = "$ver"
+          # 后台导入镜像（真实 docker load）：等标记出现
+          for i in $(seq 1 90); do
+            ls "$HOME"/.manyoyo/.install/image-loaded-* >/dev/null 2>&1 && break
+            sleep 5
+          done
+          ls "$HOME"/.manyoyo/.install/image-loaded-*
+          docker images --format '{{.Repository}}:{{.Tag}}' | grep -q '^ghcr.io/xcanwin/manyoyo:'
+          "$m" update 2>&1 | tee update.out
+          grep -q "已是最新版本 ${ver}" update.out
+          "$m" uninstall --yes
+          test ! -e "$HOME/.manyoyo/app" && test ! -e "$HOME/.manyoyo/bin"
+          echo "Linux ${{ matrix.arch }} 验证通过"
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - name: Download and verify (anonymous)
+        run: |
+          set -eu
+          case "$TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "tag 格式不对: $TAG"; exit 1 ;; esac
+          ver="${TAG#v}"
+          base="https://github.com/xcanwin/manyoyo/releases/download/${TAG}"
+          mkdir -p "$RUNNER_TEMP/rv" && cd "$RUNNER_TEMP/rv"
+          sums="SHA256SUMS-macos-${{ matrix.arch }}"
+          curl -sSL -f -O "${base}/${sums}"
+          curl -sSL -f -O "${base}/release-manifest-macos-${{ matrix.arch }}.json"
+          # 完整包可能被拆成 .run.001/.002…：按 SHA256SUMS 里列出的文件名下载并校验
+          files="$(awk '{print $2}' "$sums" | grep -E "^manyoyo-${ver}-macos-${{ matrix.arch }}\.run(\.[0-9]{3})?$")"
+          for f in $files; do
+            curl -sSL -f -O "${base}/${f}"
+            grep -q "$(shasum -a 256 "$f" | cut -d' ' -f1)" "$sums"
+          done
+          echo "$files" > files.txt
+          cat files.txt
+      - name: Install with the macOS system sh (VM skipped), update, uninstall
+        run: |
+          set -eu
+          ver="${TAG#v}"
+          cd "$RUNNER_TEMP/rv"
+          first="$(head -n 1 files.txt)"
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          # 分卷：只对第 1 卷运行；真实 macOS 的 sh 是 bash 3.2，正好覆盖“变量后跟中文”这类问题
+          MANYOYO_TEST_SKIP_MACHINE=1 MANYOYO_TEST_FREE_MB=100000 sh "$first" --no-open
+          m="$HOME/.manyoyo/bin/manyoyo"
+          test "$("$m" -v)" = "$ver"
+          "$m" update 2>&1 | tee update.out
+          grep -q "已是最新版本 ${ver}" update.out
+          "$m" uninstall --yes
+          test ! -e "$HOME/.manyoyo/app" && test ! -e "$HOME/.manyoyo/bin"
+          echo "macOS ${{ matrix.arch }} 验证通过（未启动虚拟机）"

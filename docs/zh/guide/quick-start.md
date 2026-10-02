@@ -20,7 +20,7 @@ description: 下载离线包，一条命令装好 MANYOYO 与容器环境，浏�
 
 - **完整包**约 1.8GB：自带 Node.js、容器运行环境（Podman 与虚拟机）和 MANYOYO 镜像，纯净的 Mac 直接可用。
 - **精简包**约 0.8GB：只带 Node.js、MANYOYO 和镜像，要求你已经装好并启动了 Docker Desktop / OrbStack / Podman。
-- 同时下载同一页上对应架构的 `SHA256SUMS-macos-<arch>`，用来校验文件完整。
+- 想额外校验的话，再下载同一页上对应架构的 `SHA256SUMS-macos-<arch>`（可选：安装包安装时会自动校验自身）。
 - 文件如果被拆成 `.run.001`、`.run.002` 等分卷，把它们全部下载到同一个目录，后面的 `.run` 文件名换成 `.run.001`（例如 `sh manyoyo-*-macos-arm64.run.001`）即可，安装包会自己按序拼接并校验，缺卷或大小不对时会提示是哪一卷。备选：`cat manyoyo-*.run.* > manyoyo-合并.run` 手动合并后当普通 `.run` 使用。
 
 **国内下载提示**：文件较大，建议使用支持断点续传的方式，下载中断后可以接着下：
@@ -31,12 +31,16 @@ curl -L -C - -O <Release 页面里该文件的下载地址>
 
 也可以使用 aria2、迅雷等下载工具。
 
-## 2. 校验（建议）
+## 2. 校验（可选）
+
+安装包在安装前会自动校验自身，通常不需要这一步。想对照 Release 页面上的校验值，可以用：
 
 ```bash
-shasum -a 256 -c SHA256SUMS-macos-arm64        # Intel 用 SHA256SUMS-macos-x64
-sh manyoyo-*-macos-arm64.run --check           # 只校验安装包自身，不改动系统
+# 有输出（带文件名的一行）= 一致；没有任何输出 = 不一致，请重新下载（Intel 用 SHA256SUMS-macos-x64）
+grep "$(shasum -a 256 manyoyo-*-macos-arm64.run | cut -d' ' -f1)" SHA256SUMS-macos-arm64
 ```
+
+分卷（`.run.001` 等）直接运行 `sh manyoyo-*.run.001 --check` 即可，只校验、不改动系统。
 
 ## 3. 一条命令安装
 
@@ -93,8 +97,7 @@ eval "$(manyoyo podman env)"          # 当前终端起，直接用 podman ps -a
 Linux 包只有一种，**不自带容器运行环境**：用你系统里的 Podman 或 Docker（安装器不会替你执行 `sudo`，也不会装系统软件）。要求 Ubuntu 22.04 / Debian 12 或更高（glibc 2.35 起）。
 
 ```bash
-uname -m                                           # x86_64 选 x64，aarch64 选 arm64
-sha256sum -c SHA256SUMS-linux-x64                  # 校验（arm64 用 SHA256SUMS-linux-arm64）
+uname -m                                           # x86_64 选 x64，aarch64 选 arm64（安装包自带校验，无需另外校验）
 sh manyoyo-<版本>-linux-x64.run                    # 安装
 ```
 

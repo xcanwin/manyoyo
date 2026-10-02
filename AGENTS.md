@@ -173,6 +173,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 发布产物（npm 包、离线包、镜像）只在 CI 构建并经 `scripts/scan-release-artifacts.js` 扫描：解不开/解包不完整的文件按“未扫描”失败，`--exclude` 必须 `^` 锚定，允许列表按具体文件放行（镜像里曾扫出 SSH 主机私钥）。
 - 含凭据的配置写入统一走 `lib/secure-file.js`（0600、临时文件 + rename）；`manyoyo.json` 的任何新写入点都不要直接 `writeFileSync`。
 - 改了代码就要重新触发 `offline-macos.yml` / `offline-linux.yml` 并在干净用户下重测；镜像（`ghcr.io/xcanwin/manyoyo:<imageVersion>`）只有 Dockerfile 或 `docker/` 变化才需要重发，且要先于离线包。
+- 发版顺序（维护者）：本机装好 shellcheck 跑 `npm test`（CI 的 ubuntu 自带，本地没有会静默跳过）→ 合并 main → （Dockerfile/`docker/` 有变先 `image-publish.yml`）触发 `offline-macos.yml` 与 `offline-linux.yml` → `gh release create <tag> --target main --notes-file …`（会触发 npm 发布，发布前测试失败要先删 Release 与 tag 再来）→ `release-offline.yml` 分 `os=macos|linux` 各上传一次 → `release-verify.yml`（`tag=<tag>`，游客身份在 Linux x64/arm64 与 macOS arm64/Intel 的 runner 上验证安装、`update`、卸载；macOS 不启动虚拟机）。macOS 真实虚拟机启动、浏览器向导、Agent 对话只能在真机偶尔抽查。
 
 ## 版本对齐
 

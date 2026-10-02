@@ -61,12 +61,10 @@ AI Agent CLI 往往需要：
 macOS 用户（推荐）：从 [Releases](https://github.com/xcanwin/manyoyo/releases/latest) 下载对应架构的离线包，一条命令装好，浏览器里完成向导，不需要先装 Node.js、Docker 或 Podman：
 
 ```bash
-uname -m                                           # arm64 选 macos-arm64，x86_64 选 macos-x64
-shasum -a 256 -c SHA256SUMS-macos-arm64            # 校验（可选，Intel 用 SHA256SUMS-macos-x64）
-sh manyoyo-*-macos-arm64.run                       # 安装并自动打开浏览器
-manyoyo                                            # 之后：启动本机服务并打开浏览器
-manyoyo update                                     # 升级；manyoyo uninstall 卸载
+sh manyoyo-*-macos-arm64.run     # 下载好 .run 后只需这一条：安装并自动打开浏览器（Intel 芯片把 arm64 换成 x64）
 ```
+
+安装包会在安装前自动校验自身，不需要另外校验。之后日常：`manyoyo` 启动并打开浏览器，`manyoyo update` 升级，`manyoyo uninstall` 卸载。不确定芯片类型时，在终端执行 `uname -m`（`arm64` 选 arm64，`x86_64` 选 x64）。
 
 Linux（Debian / Ubuntu）下载 `linux-x64` / `linux-arm64` 的 `.run` 同样一条命令安装（用系统里的 Podman / Docker，不执行 sudo），SSH 等无头环境用 `manyoyo setup` 命令行配置。详见[快速开始](https://xcanwin.github.io/manyoyo/zh/guide/quick-start)。
 
