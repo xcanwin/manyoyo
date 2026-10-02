@@ -1,0 +1,7 @@
+{
+  "moved": {
+    "guide/installation": "advanced/installation",
+    "troubleshooting/build-errors": "advanced/build-errors",
+    "advanced/web-server-auth": "guide/web"
+  }
+}

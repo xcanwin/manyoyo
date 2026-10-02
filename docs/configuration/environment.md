@@ -1,18 +1,90 @@
 ---
-title: 页面已迁移
-outline: false
+title: 环境变量 | MANYOYO
+description: 把 API 地址、Token 等环境变量传给容器内的 Agent，用 -e 或环境文件
 ---
 
-<script setup>
-import { onMounted } from 'vue'
+# 环境变量
 
-onMounted(() => {
-  window.location.replace(new URL('../zh/configuration/environment', window.location.href).toString())
-})
-</script>
+本页说明如何把 `BASE_URL`、`AUTH_TOKEN` 等环境变量传给容器内的 Agent CLI。
 
-# 页面已迁移
+## 两种传入方式
 
-此页面已迁移至 [新地址](../zh/configuration/environment.md)。
+```bash
+# 1. 命令行 -e：适合临时测试（会留在命令历史里）
+manyoyo run -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" -x claude
 
-如果没有自动跳转，请点击上方链接。
+# 2. 环境文件 --ef：推荐，密钥不进命令历史
+manyoyo run --ef /abs/path/anthropic.env -x claude
+```
+
+`--ef`（以及配置里的 `envFile`）**仅支持绝对路径**。`-e` 可多次传入。
+
+## 环境文件格式
+
+```bash
+# 以 # 开头的行和空行会被忽略
+export ANTHROPIC_BASE_URL="https://api.anthropic.com"
+export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
+API_TIMEOUT_MS=3000000      # 不带 export 也可以
+```
+
+- 支持 `KEY=VALUE` 与 `export KEY=VALUE`，值可用单引号、双引号或不加引号。
+- 变量名须匹配 `^[A-Za-z_][A-Za-z0-9_]*$`；值不能包含换行、`;`、`&`、`|`、`` ` ``、`$`、`<`、`>` 等 shell 特殊字符。
+
+## 各 Agent 示例
+
+```bash
+mkdir -p ~/.manyoyo/env
+
+# Claude Code
+cat > ~/.manyoyo/env/claude.env << 'EOF'
+export ANTHROPIC_BASE_URL="https://api.anthropic.com"
+export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
+export ANTHROPIC_MODEL="claude-sonnet-4-5"
+EOF
+
+# Codex
+cat > ~/.manyoyo/env/codex.env << 'EOF'
+export OPENAI_BASE_URL="https://api.openai.com/v1"
+export OPENAI_API_KEY="sk-xxxxxxxx"
+EOF
+
+# Gemini
+cat > ~/.manyoyo/env/gemini.env << 'EOF'
+export GEMINI_API_KEY="your-api-key"
+EOF
+```
+
+使用时 `manyoyo run --ef $HOME/.manyoyo/env/claude.env -x claude`，或写进 `runs.<name>.envFile` 后用 `manyoyo run -r <name>`。OpenCode 的变量见 [Agent 参考](../reference/agents.md)。
+
+## 同名变量谁生效
+
+后加载的覆盖先加载的，顺序为：
+
+1. 各层 `envFile`（全局 → `runs.<name>` → `--ef`）
+2. 全局 `env`
+3. `runs.<name>.env`
+4. 命令行 `-e`
+
+所以同名变量以 `-e` 为准，其次是 `runs.<name>.env`，最后才是环境文件。
+
+## 建议
+
+- 文件名要有区分度（如 `claude-work.env`），非敏感配置与密钥拆成两个文件，只有密钥文件不进版本控制。
+- 密钥与访问风险见[安全说明](../guide/security.md)。
+- `MANYOYO_SERVER_USER` / `MANYOYO_SERVER_PASS` 是 MANYOYO 自身用于 `serve` 认证的变量，不会注入容器，见[网页服务](../guide/web.md)。
+
+## 变量没生效？
+
+```bash
+manyoyo config show -r claude                       # 看合并后的最终配置
+manyoyo run -r claude -x env | grep ANTHROPIC       # 看容器里实际拿到的值
+```
+
+常见原因：文件路径不是绝对路径、格式不合法、多个来源设置了同名变量。
+
+## 下一步
+
+- [配置概览](./README.md)：四层优先级
+- [配置文件](./config-files.md)：在 `runs` 里使用 `envFile`
+- [配置示例](./examples.md)

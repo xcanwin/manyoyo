@@ -1,3 +1,8 @@
+---
+title: "Session Management and Recovery | MANYOYO"
+description: "Create, resume, keep and clean up MANYOYO container sessions, plus how each agent resumes a conversation."
+---
+
 # Session Management
 
 This page explains how to create, resume, keep, and clean up container sessions. A session is one container plus the agent's working state and conversation history inside it.

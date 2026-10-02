@@ -1,3 +1,8 @@
+---
+title: "Run Agents from the CLI | MANYOYO"
+description: "Run agents from the command line with manyoyo run, covering daily container operations, command styles, YOLO shortcuts, environment variables and session resume."
+---
+
 # Basic Usage
 
 This page keeps only the daily workflows and matches the current `--help` structure.

@@ -52,7 +52,7 @@ manyoyo init all   # 把本机已有的 Agent 配置搬进来
 manyoyo run -y c   # 在沙箱里以 YOLO 模式启动 Claude Code
 ```
 
-默认镜像 `ghcr.io/xcanwin/manyoyo` 首次使用时自动拉取；需要自定义镜像时再执行 `manyoyo build --iv 2.1.0-common`。更多命令见[命令速查](https://xcanwin.github.io/manyoyo/zh/reference/cli-options)。
+默认镜像 `ghcr.io/xcanwin/manyoyo` 首次使用时自动拉取；需要自定义镜像时再执行 `manyoyo build --iv 2.1.0-common`。更多命令见[命令速查](https://xcanwin.github.io/manyoyo/reference/cli-options)。
 
 ## 它能做什么
 
@@ -71,11 +71,11 @@ manyoyo run -y c   # 在沙箱里以 YOLO 模式启动 Claude Code
 
 ## 安全须知
 
-MANYOYO 降低风险，但不是“绝对安全”：主要隔离手段是容器而不是虚拟机；`YOLO / SOLO` 仍可能执行危险命令；`sock` 模式会暴露宿主机 Docker socket；对外监听必须设强密码。详见[安全须知](https://xcanwin.github.io/manyoyo/zh/reference/container-modes)。
+MANYOYO 降低风险，但不是“绝对安全”：主要隔离手段是容器而不是虚拟机；`YOLO / SOLO` 仍可能执行危险命令；`sock` 模式会暴露宿主机 Docker socket；对外监听必须设强密码。详见[安全须知](https://xcanwin.github.io/manyoyo/reference/container-modes)。
 
 ## 文档
 
-- 中文：<https://xcanwin.github.io/manyoyo/>（[安装](https://xcanwin.github.io/manyoyo/zh/guide/quick-start)、[命令速查](https://xcanwin.github.io/manyoyo/zh/reference/cli-options)、[配置](https://xcanwin.github.io/manyoyo/zh/configuration/)、[故障排查](https://xcanwin.github.io/manyoyo/zh/troubleshooting/)）
+- 中文：<https://xcanwin.github.io/manyoyo/>（[安装](https://xcanwin.github.io/manyoyo/guide/quick-start)、[命令速查](https://xcanwin.github.io/manyoyo/reference/cli-options)、[配置](https://xcanwin.github.io/manyoyo/configuration/)、[故障排查](https://xcanwin.github.io/manyoyo/troubleshooting/)）
 - English: <https://xcanwin.github.io/manyoyo/en/>
 
 ## 许可证

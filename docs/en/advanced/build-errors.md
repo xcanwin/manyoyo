@@ -1,3 +1,8 @@
+---
+title: "Image Build Issues | MANYOYO"
+description: "Troubleshoot failed MANYOYO custom image builds by error message, covering network, permission, cache and platform problems."
+---
+
 # Build Issue Troubleshooting
 
 Find the cause and the shortest fix by error message. The default image `ghcr.io/xcanwin/manyoyo` is pulled automatically; you only need to build for a [custom image](./custom-image.md). Examples use `2.1.0-common`; replace with your actual tag.

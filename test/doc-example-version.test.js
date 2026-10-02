@@ -5,11 +5,11 @@ const { imageVersion: PACKAGE_IMAGE_VERSION } = require('../package.json');
 const ROOT_DIR = path.join(__dirname, '..');
 const DOC_FILES_TO_ENFORCE = [
     'README.md',
-    'docs/zh/guide/quick-start.md',
+    'docs/guide/quick-start.md',
     'docs/en/guide/quick-start.md',
-    'docs/zh/guide/basic-usage.md',
+    'docs/guide/basic-usage.md',
     'docs/en/guide/basic-usage.md',
-    'docs/zh/reference/cli-options.md',
+    'docs/reference/cli-options.md',
     'docs/en/reference/cli-options.md'
 ];
 

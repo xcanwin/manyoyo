@@ -1,3 +1,8 @@
+---
+title: "Containers Inside the Sandbox | MANYOYO"
+description: "Let an AI agent build images and run containers inside the MANYOYO sandbox with dind or sock, with minimal steps and common problems."
+---
+
 # Running Containers Inside the Sandbox (dind / sock)
 
 Let an AI agent build images and run containers inside the sandbox: `dind` uses an independent runtime inside the container, while `sock` operates the host Docker directly. Both modes add `--privileged`; see [Security](../guide/security.md) for the risks and [Container Modes](../reference/container-modes.md) for the comparison.

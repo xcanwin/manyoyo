@@ -1,3 +1,8 @@
+---
+title: "Runtime Issues | MANYOYO"
+description: "Troubleshoot MANYOYO runtime problems by symptom, covering permissions, environment variables, network, authentication and AI CLI tool errors."
+---
+
 # Runtime Issue Troubleshooting
 
 Look up by symptom: error message, cause, fix. Start with `manyoyo doctor`; add `--fix` to auto-repair what it can (start the container runtime, pull the image, generate default config).

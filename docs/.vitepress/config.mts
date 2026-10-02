@@ -1,4 +1,7 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { defineConfig } from 'vitepress'
+import { buildRedirects, redirectFile, renderRedirectHtml } from './redirects.mts'
 
 const repo = 'https://github.com/xcanwin/manyoyo'
 const editBase = 'https://github.com/xcanwin/manyoyo/edit/main/docs'
@@ -21,13 +24,10 @@ const defaultOgImage = `${siteUrl}images/manyoyo-og-cover.svg`
 const readmeRewrites = {
   'README.md': 'index.md',
   'configuration/README.md': 'configuration/index.md',
+  'troubleshooting/README.md': 'troubleshooting/index.md',
   'en/README.md': 'en/index.md',
   'en/configuration/README.md': 'en/configuration/index.md',
-  'en/troubleshooting/README.md': 'en/troubleshooting/index.md',
-  'troubleshooting/README.md': 'troubleshooting/index.md',
-  'zh/README.md': 'zh/index.md',
-  'zh/configuration/README.md': 'zh/configuration/index.md',
-  'zh/troubleshooting/README.md': 'zh/troubleshooting/index.md'
+  'en/troubleshooting/README.md': 'en/troubleshooting/index.md'
 }
 
 function toRoutePath(relativePath: string): string {
@@ -53,7 +53,7 @@ function toRoutePathFromUrl(url: string): string {
   const parsed = new URL(url, siteUrl)
   let routePath = parsed.pathname
 
-  if (sitePathPrefix && routePath.startsWith(sitePathPrefix)) {
+  if (sitePathPrefix && (routePath === sitePathPrefix || routePath.startsWith(`${sitePathPrefix}/`))) {
     routePath = routePath.slice(sitePathPrefix.length) || '/'
   }
 
@@ -64,44 +64,12 @@ function toRoutePathFromUrl(url: string): string {
   return routePath
 }
 
-function resolveLocalePaths(routePath: string): {
-  canonicalPath: string
-  zhPath: string
-  enPath: string
-  xDefaultPath: string
-} {
-  let canonicalPath = routePath
-
-  if (routePath === '/') {
-    canonicalPath = '/zh/'
-  } else if (!routePath.startsWith('/zh/') && !routePath.startsWith('/en/')) {
-    canonicalPath = `/zh${routePath}`
+// 中文在根路径，英文在 /en/ 下，两边同构
+function resolveLocalePaths(routePath: string): { zhPath: string; enPath: string } {
+  if (routePath === '/en/' || routePath.startsWith('/en/')) {
+    return { zhPath: routePath.replace(/^\/en/, '') || '/', enPath: routePath }
   }
-
-  if (canonicalPath.startsWith('/zh/')) {
-    return {
-      canonicalPath,
-      zhPath: canonicalPath,
-      enPath: canonicalPath.replace(/^\/zh\//, '/en/'),
-      xDefaultPath: '/zh/'
-    }
-  }
-
-  if (canonicalPath.startsWith('/en/')) {
-    return {
-      canonicalPath,
-      zhPath: canonicalPath.replace(/^\/en\//, '/zh/'),
-      enPath: canonicalPath,
-      xDefaultPath: '/zh/'
-    }
-  }
-
-  return {
-    canonicalPath,
-    zhPath: '/zh/',
-    enPath: '/en/',
-    xDefaultPath: '/zh/'
-  }
+  return { zhPath: routePath, enPath: routePath === '/' ? '/en/' : `/en${routePath}` }
 }
 
 export default defineConfig({
@@ -118,43 +86,50 @@ export default defineConfig({
   sitemap: {
     hostname: siteUrl,
     transformItems: (items) => {
-      return items
-        .filter((item) => {
-          const routePath = toRoutePathFromUrl(item.url)
-          return routePath === '/zh/' || routePath === '/en/' || routePath.startsWith('/zh/') || routePath.startsWith('/en/')
-        })
-        .map((item) => {
-          const routePath = toRoutePathFromUrl(item.url)
-          const { canonicalPath, zhPath, enPath } = resolveLocalePaths(routePath)
-          return {
-            ...item,
-            url: toAbsoluteUrl(canonicalPath),
-            links: [
-              { lang: 'zh-CN', url: toAbsoluteUrl(zhPath) },
-              { lang: 'en-US', url: toAbsoluteUrl(enPath) }
-            ]
-          }
-        })
+      return items.map((item) => {
+        const { zhPath, enPath } = resolveLocalePaths(toRoutePathFromUrl(item.url))
+        return {
+          ...item,
+          links: [
+            { lang: 'zh-CN', url: toAbsoluteUrl(zhPath) },
+            { lang: 'en', url: toAbsoluteUrl(enPath) },
+            { lang: 'x-default', url: toAbsoluteUrl('/') }
+          ]
+        }
+      })
+    }
+  },
+  // 旧地址（/zh/** 与移动过的页面）：构建结束时生成纯静态的 meta refresh 页，不依赖 JS（GitHub Pages 做不了 301）
+  buildEnd: async (siteConfig) => {
+    const routes = siteConfig.pages.map((page) => toRoutePath(page))
+    const base = siteConfig.site.base.replace(/\/$/, '')
+    for (const [from, to] of buildRedirects(routes)) {
+      const file = path.join(siteConfig.outDir, redirectFile(from))
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      fs.writeFileSync(file, renderRedirectHtml({
+        lang: to.startsWith('/en/') ? 'en' : 'zh-CN',
+        href: `${base}${to}`,
+        canonical: toAbsoluteUrl(to)
+      }))
     }
   },
   transformHead: ({ pageData, description }) => {
     const routePath = toRoutePath(pageData.relativePath)
-    const { canonicalPath, zhPath, enPath, xDefaultPath } = resolveLocalePaths(routePath)
-    const canonicalUrl = toAbsoluteUrl(canonicalPath)
-    const isCompatPath = routePath === '/' || (!routePath.startsWith('/zh/') && !routePath.startsWith('/en/'))
+    const { zhPath, enPath } = resolveLocalePaths(routePath)
+    const canonicalUrl = toAbsoluteUrl(routePath)
     const pageTitle =
       (typeof pageData.frontmatter.title === 'string' && pageData.frontmatter.title) ||
       pageData.title ||
       siteName
     const pageDescription = description || defaultDescription
-    const locale = canonicalPath.startsWith('/en/') ? 'en_US' : 'zh_CN'
+    const locale = routePath.startsWith('/en/') ? 'en_US' : 'zh_CN'
     const alternateLocale = locale === 'en_US' ? 'zh_CN' : 'en_US'
     const head = [
       ['link', { rel: 'canonical', href: canonicalUrl }],
       ['link', { rel: 'alternate', hreflang: 'zh-CN', href: toAbsoluteUrl(zhPath) }],
       ['link', { rel: 'alternate', hreflang: 'en', href: toAbsoluteUrl(enPath) }],
-      ['link', { rel: 'alternate', hreflang: 'x-default', href: toAbsoluteUrl(xDefaultPath) }],
-      ['meta', { name: 'robots', content: isCompatPath ? 'noindex,follow' : 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1' }],
+      ['link', { rel: 'alternate', hreflang: 'x-default', href: toAbsoluteUrl('/') }],
+      ['meta', { name: 'robots', content: 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1' }],
       ['meta', { property: 'og:type', content: 'website' }],
       ['meta', { property: 'og:site_name', content: siteName }],
       ['meta', { property: 'og:title', content: pageTitle }],
@@ -169,9 +144,9 @@ export default defineConfig({
       ['meta', { name: 'twitter:image', content: defaultOgImage }]
     ] as [string, Record<string, string>, string?][]
 
-    if (canonicalPath === '/zh/' || canonicalPath === '/en/') {
-      const inLanguage = canonicalPath.startsWith('/en/') ? 'en-US' : 'zh-CN'
-      const siteDescription = canonicalPath.startsWith('/en/')
+    if (routePath === '/' || routePath === '/en/') {
+      const inLanguage = routePath.startsWith('/en/') ? 'en-US' : 'zh-CN'
+      const siteDescription = routePath.startsWith('/en/')
         ? 'Security sandbox for running AI Agent CLI tools with Docker or Podman.'
         : '用于在 Docker 或 Podman 中安全运行 AI Agent CLI 工具的安全沙箱。'
       const jsonLd = JSON.stringify({
@@ -196,84 +171,84 @@ export default defineConfig({
     root: {
       label: '简体中文',
       lang: 'zh-CN',
-      link: '/zh/',
+      link: '/',
       themeConfig: {
         siteTitle: 'MANYOYO 文档',
         nav: [
-          { text: '安装', link: '/zh/guide/quick-start' },
+          { text: '安装', link: '/guide/quick-start' },
           {
             text: '文档',
             items: [
-              { text: '开始使用', link: '/zh/guide/introduction' },
-              { text: '使用指南', link: '/zh/guide/basic-usage' },
-              { text: '配置', link: '/zh/configuration/' },
-              { text: '参考', link: '/zh/reference/cli-options' },
-              { text: '进阶与开发', link: '/zh/advanced/installation' }
+              { text: '开始使用', link: '/guide/introduction' },
+              { text: '使用指南', link: '/guide/basic-usage' },
+              { text: '配置', link: '/configuration/' },
+              { text: '参考', link: '/reference/cli-options' },
+              { text: '进阶与开发', link: '/advanced/installation' }
             ]
           },
-          { text: '常见问题', link: '/zh/troubleshooting/' },
+          { text: '常见问题', link: '/troubleshooting/' },
           { text: 'GitHub', link: repo }
         ],
         sidebar: {
-          '/zh/': [
+          '/': [
             {
               text: '开始使用',
               collapsed: false,
               items: [
-                { text: '介绍', link: '/zh/guide/introduction' },
-                { text: '安装', link: '/zh/guide/quick-start' },
-                { text: '第一次使用', link: '/zh/guide/first-run' },
-                { text: '日常使用', link: '/zh/guide/daily' }
+                { text: '介绍', link: '/guide/introduction' },
+                { text: '安装', link: '/guide/quick-start' },
+                { text: '第一次使用', link: '/guide/first-run' },
+                { text: '日常使用', link: '/guide/daily' }
               ]
             },
             {
               text: '使用指南',
               collapsed: false,
               items: [
-                { text: '命令行运行 Agent', link: '/zh/guide/basic-usage' },
-                { text: '迁移已有 Agent 配置', link: '/zh/guide/migrate' },
-                { text: '网页服务与远程访问', link: '/zh/guide/web' },
-                { text: '安全须知', link: '/zh/guide/security' }
+                { text: '命令行运行 Agent', link: '/guide/basic-usage' },
+                { text: '迁移已有 Agent 配置', link: '/guide/migrate' },
+                { text: '网页服务与远程访问', link: '/guide/web' },
+                { text: '安全须知', link: '/guide/security' }
               ]
             },
             {
               text: '配置',
               collapsed: true,
               items: [
-                { text: '配置入门', link: '/zh/configuration/' },
-                { text: '配置项参考', link: '/zh/configuration/config-files' },
-                { text: '环境变量', link: '/zh/configuration/environment' },
-                { text: '配置示例', link: '/zh/configuration/examples' }
+                { text: '配置入门', link: '/configuration/' },
+                { text: '配置项参考', link: '/configuration/config-files' },
+                { text: '环境变量', link: '/configuration/environment' },
+                { text: '配置示例', link: '/configuration/examples' }
               ]
             },
             {
               text: '参考',
               collapsed: true,
               items: [
-                { text: '命令速查', link: '/zh/reference/cli-options' },
-                { text: '支持的 Agent', link: '/zh/reference/agents' },
-                { text: '容器模式', link: '/zh/reference/container-modes' }
+                { text: '命令速查', link: '/reference/cli-options' },
+                { text: '支持的 Agent', link: '/reference/agents' },
+                { text: '容器模式', link: '/reference/container-modes' }
               ]
             },
             {
               text: '常见问题',
               collapsed: true,
               items: [
-                { text: '常见问题', link: '/zh/troubleshooting/' },
-                { text: '运行时问题', link: '/zh/troubleshooting/runtime-errors' }
+                { text: '常见问题', link: '/troubleshooting/' },
+                { text: '运行时问题', link: '/troubleshooting/runtime-errors' }
               ]
             },
             {
               text: '进阶与开发',
               collapsed: true,
               items: [
-                { text: '安装详解', link: '/zh/advanced/installation' },
-                { text: '自定义镜像', link: '/zh/advanced/custom-image' },
-                { text: '镜像构建问题', link: '/zh/advanced/build-errors' },
-                { text: 'Docker-in-Docker', link: '/zh/advanced/docker-in-docker' },
-                { text: '会话管理与恢复', link: '/zh/advanced/session-management' },
-                { text: 'Playwright 插件', link: '/zh/advanced/playwright' },
-                { text: '参与开发', link: '/zh/advanced/contributing' }
+                { text: '安装详解', link: '/advanced/installation' },
+                { text: '自定义镜像', link: '/advanced/custom-image' },
+                { text: '镜像构建问题', link: '/advanced/build-errors' },
+                { text: 'Docker-in-Docker', link: '/advanced/docker-in-docker' },
+                { text: '会话管理与恢复', link: '/advanced/session-management' },
+                { text: 'Playwright 插件', link: '/advanced/playwright' },
+                { text: '参与开发', link: '/advanced/contributing' }
               ]
             }
           ]

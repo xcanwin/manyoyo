@@ -42,7 +42,7 @@ jobs:
         run: npm ci --include=optional
 
       - name: Build docs
-        run: npm run docs:build
+        run: npm run docs:build && node scripts/check-docs-seo.js
 
       - name: Setup Pages (auto-enable, optional PAT)
         if: ${{ env.PAGES_ADMIN_TOKEN != '' }}

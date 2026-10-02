@@ -1,3 +1,8 @@
+---
+title: "构建问题排查 | MANYOYO"
+description: "按错误信息排查 MANYOYO 自定义镜像构建失败：网络、权限、缓存与平台问题的原因与最短解决办法。"
+---
+
 # 构建问题排查
 
 按错误信息查原因和最短解决办法。默认镜像 `ghcr.io/xcanwin/manyoyo` 会自动拉取，只有[自定义镜像](./custom-image.md)才需要构建。示例使用 `2.1.0-common`，请替换为实际标签。

@@ -55,4 +55,4 @@ MANYOYO lets Claude Code, Codex, Gemini and OpenCode run in YOLO / SOLO mode ins
 - [Codex CLI container sandbox](./reference/agents.md) - run `codex` in an isolated container with session recovery
 - [Container modes](./reference/container-modes.md) - compare `common` / `dind` / `sock`
 
-> 中文文档请切换到 [简体中文](../zh/README.md)。
+> 中文文档请切换到 [简体中文](../README.md)。

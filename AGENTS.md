@@ -40,7 +40,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `lib/web/`：`serve` 网页服务；`server.js` 单文件 6000+ 行，靠 `Grep "^function <名>"` 定位，不要整文件读。
 - `frontend/`：默认 Web 前端（`/` 路由，登录页 `/auth/login`；React + shadcn/ui），独立 Vite + React + TS 项目，约 70 个源文件；组件地图见该目录 `AGENTS.md`。
 - `docker/`：多阶段 `manyoyo.Dockerfile`、构建缓存 `cache/`（Node.js、JDT LSP、gopls，2 天有效）、各 Agent 默认配置与 supervisor 模板 `res/`。
-- `docs/`：VitePress 文档，中文主维护 `docs/zh/`，英文 `docs/en/`，结构须一致。
+- `docs/`：VitePress 文档，中文主维护 `docs/`（`/en/` 以外都是中文，站点根路径就是中文首页），英文 `docs/en/`，结构须一致；旧地址（`/zh/**` 与移动过的页面）由构建期 `buildEnd` 按 `docs/.vitepress/redirects.mts` 与 `redirects.json` 生成静态 meta refresh 页，仓库里不放跳转页；`node scripts/check-docs-seo.js` 检查构建产物。
 - `test/`：Jest（`*.test.js`），依赖真实容器运行时的用例在 `test/integration/`；前端 Vitest 在 `frontend/src/`（`*.test.ts(x)`，与源码同目录）。
 - `scripts/`、`assets/`、`manyoyo.example.json`：构建与发布脚本、资源、配置模板。`scripts/offline/`（离线包构建：下载校验、无 pkgutil 的 `.pkg` 解包、krunkit 补丁、`.run` 打包；完整包默认不分卷，分卷只在超过 GitHub 单文件 2 GiB 时兜底）与 `scripts/scan-release-artifacts.js`（发布产物隐私扫描）只在 CI 运行，发布产物不要在本机构建；`dist-offline/` 已被 `.gitignore` 忽略。
 
@@ -179,17 +179,17 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 
 - 镜像版本读取 `package.json` 的 `imageVersion`（格式 `x.y.z-variant`），与 `version` 字段独立。
 - `test/doc-example-version.test.js` 强制 `README.md`、`docs/{zh,en}/guide/quick-start.md`、`basic-usage.md`、`reference/cli-options.md` 的镜像版本与 `package.json.imageVersion` 同主版本，改 `imageVersion` 后不同步这 7 个文件会导致 `npm test` 失败。
-- `README.md` 的快速开始与主流程示例须与 `version` / `imageVersion` 对齐；`docs/zh/`、`docs/en/` 的历史/场景示例可用其他版本，但必须保持 `x.y.z-后缀` 格式并标注用途。
+- `README.md` 的快速开始与主流程示例须与 `version` / `imageVersion` 对齐；`docs/`、`docs/en/` 的历史/场景示例可用其他版本，但必须保持 `x.y.z-后缀` 格式并标注用途。
 - `package.json.playwrightCliVersion` 是 Playwright CLI 版本的单一来源；镜像内安装 `@playwright/cli` 时禁止改回 `@latest`，也不要误用 `dependencies.playwright` 作为版本来源。
 - 包含文件 `README.md`、`LICENSE`、`docker/manyoyo.Dockerfile`、`manyoyo.example.json` 需与发布一致；`bin/manyoyo.js` 变更时同步检查 `package.json` 的 `bin` 字段。
 
 ## 文档规范
 
-- 中文主维护 `docs/zh/`，英文 `docs/en/`，结构须一致；文档改动需中英文同步更新，并保留兼容跳转页。
-- 侧边栏在 `/zh/` 与 `/en/` 统一展示全章节导航；首页卡片需可点击跳转。
+- 中文主维护 `docs/`（`/en/` 以外），英文 `docs/en/`，结构须一致；文档改动需中英文同步更新。页面移动后在 `docs/.vitepress/redirects.json` 的 `moved` 里登记旧→新路径（构建期自动生成跳转页），不要手写跳转 `.md`；不要用 JS 跳转。
+- 侧边栏在中文（根路径）与 `/en/` 统一展示 6 组导航（前两组展开、其余折叠）；首页卡片需可点击跳转；每页必须有自己的 `title` / `description`。
 - 目录首页一律使用 `README.md`，不再新增 `index.md`；内部链接优先用仓库相对 `.md` / `README.md` 路径，保证 GitHub 网页浏览可直接跳转，站点路由由 VitePress 兼容。
 - 文档修改后运行 `npm run docs:build`，检查 dead links 与 sidebar/nav 行为。
-- 新增配置项或 CLI 选项时，同步更新 `manyoyo.example.json`、`docs/zh/` 与 `docs/en/`；必要时同步 `README.md` 示例。
+- 新增配置项或 CLI 选项时，同步更新 `manyoyo.example.json`、`docs/` 与 `docs/en/`；必要时同步 `README.md` 示例。
 
 ## 提交与 PR 指引
 
