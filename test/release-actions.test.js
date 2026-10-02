@@ -180,6 +180,20 @@ describe('release / assets / npm', () => {
         await expect(ACTIONS.image(ctx, {}, facts())).rejects.toMatchObject({ code: 'RUN_FAILED', message: expect.stringContaining('failure') });
     });
 
+    test('npm needs several consecutive reads of the new version: a CDN flap back to the old one resets the count', async () => {
+        const sequence = ['8.0.1', '8.1.0', '8.0.1', '8.1.0', '8.1.0', '8.1.0'];
+        let views = 0;
+        const ctx = makeCtx({
+            read: (cmd, args) => {
+                if (cmd === 'gh' && args[1] === 'list') return { status: 0, stdout: JSON.stringify([{ databaseId: 9 }]) };
+                if (cmd === 'gh') return { status: 0, stdout: JSON.stringify({ status: 'completed', conclusion: 'success' }) };
+                return { status: 0, stdout: sequence[Math.min(views++, sequence.length - 1)] };
+            }
+        });
+        await ACTIONS.npm(ctx, {}, facts());
+        expect(views).toBe(6);
+    });
+
     test('npm waits for the publish run, then polls npm until the version is visible', async () => {
         let views = 0;
         const ctx = makeCtx({
@@ -191,7 +205,7 @@ describe('release / assets / npm', () => {
             }
         });
         await ACTIONS.npm(ctx, {}, facts());
-        expect(views).toBe(3);
+        expect(views).toBe(5); // 第 3 次起连续 3 次读到新版本
     });
 
     test('dry-run skips the file-writing version and commit actions', async () => {
