@@ -1,12 +1,12 @@
 {
-  "name": "frontend-shadcn",
+  "name": "frontend",
   "private": true,
   "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:single": "npm run build && node scripts/emit-shadcn-html.mjs",
+    "build:single": "npm run build && node scripts/emit-html.mjs",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc -b --noEmit",

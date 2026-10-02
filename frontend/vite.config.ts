@@ -20,7 +20,12 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": { target: backendTarget, changeOrigin: true, ws: true },
-      "/auth": { target: backendTarget, changeOrigin: true },
+      "/auth": {
+        target: backendTarget,
+        changeOrigin: true,
+        // GET /auth/login 是前端自己渲染的登录页，由 Vite 返回，不能转给后端（后端读的是构建产物）
+        bypass: (req) => (req.method === "GET" && req.url?.startsWith("/auth/login") ? "/index.html" : undefined),
+      },
     },
   },
   build: {

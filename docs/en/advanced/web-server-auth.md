@@ -62,41 +62,40 @@ Defaults:
 
 Current anonymous allowlist:
 
-- `/auth/login` (`POST` login endpoint; `GET` redirects to the login page)
+- `/auth/login` (`GET` is the login page, `POST` is the login endpoint)
 - `/auth/logout`
-- `/shadcn/auth/login` (the login page)
 
-Unauthenticated requests to any page path redirect to `/shadcn/auth/login`; API and `/auth/*` requests get a plain `401`.
+Unauthenticated requests to any page path redirect to `/auth/login`; API and `/auth/*` requests get a plain `401`.
 
-## shadcn/ui Frontend
+## Web Frontend
 
-The `serve` web UI is served by the shadcn/ui frontend.
+The `serve` web UI is built with React and shadcn/ui.
 
-- Default URL: `http://127.0.0.1:3000/`; `/shadcn` is a compatibility alias. When unauthenticated, either route redirects to `http://127.0.0.1:3000/shadcn/auth/login`, then back to `/shadcn` after a successful login
+- Default URL: `http://127.0.0.1:3000/`; When unauthenticated it redirects to `http://127.0.0.1:3000/auth/login`, then back to `/` after a successful login
 - Login goes through the `/auth/login` endpoint and its cookie
-- Source lives in `frontend-shadcn/` at the repo root, a standalone Vite + React + TypeScript project. It uses ES Modules; the rest of the Node project still follows CommonJS conventions
+- Source lives in `frontend/` at the repo root, a standalone Vite + React + TypeScript project. It uses ES Modules; the rest of the Node project still follows CommonJS conventions
 
 Before working on it for the first time, install its own dependencies separately (it's a large, separate tree that won't slow down everyday `npm install`):
 
 ```bash
-cd frontend-shadcn && npm ci && cd ..
+cd frontend && npm ci && cd ..
 ```
 
 Then, depending on what you need:
 
 ```bash
 # Just want to see the current build: build once, then preview via my serve as usual
-npm run build:web-shadcn
+npm run build:web
 manyoyo serve
 
-# Editing frontend-shadcn/src and want live reload (HMR) — two terminals:
+# Editing frontend/src and want live reload (HMR) — two terminals:
 manyoyo serve                # Terminal 1: the real backend (containers, sessions, terminal WebSocket)
-npm run dev:web-shadcn       # Terminal 2: Vite dev server, proxies /api and /auth to 127.0.0.1:3000 by default
+npm run dev:web       # Terminal 2: Vite dev server, proxies /api and /auth to 127.0.0.1:3000 by default
 ```
 
-If `my serve` listens on an address other than the default `127.0.0.1:3000`, override the proxy target for `dev:web-shadcn` with the `MANYOYO_SERVE_URL` environment variable.
+If `my serve` listens on an address other than the default `127.0.0.1:3000`, override the proxy target for `dev:web` with the `MANYOYO_SERVE_URL` environment variable.
 
-On publish (`npm publish`/`npm pack`), `frontend-shadcn` is rebuilt automatically and the output is baked into `lib/web/frontend/shadcn.html`; running `my serve` in production needs no frontend toolchain beyond Node itself.
+On publish (`npm publish`/`npm pack`), `frontend` is rebuilt automatically and the output is baked into `lib/web/index.html`; running `my serve` in production needs no frontend toolchain beyond Node itself.
 
 ## Login and API Access Example
 

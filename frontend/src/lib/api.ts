@@ -376,7 +376,7 @@ async function request(url: string, options: RequestInit = {}) {
     },
   })
   if (response.status === 401) {
-    window.location.href = "/shadcn/auth/login"
+    window.location.href = "/auth/login"
     throw new Error("未登录或登录已过期")
   }
   let data: Record<string, unknown>
@@ -572,7 +572,7 @@ export async function apiStream(
     body: JSON.stringify(body),
   })
   if (response.status === 401) {
-    window.location.href = "/shadcn/auth/login"
+    window.location.href = "/auth/login"
     throw new Error("未登录或登录已过期")
   }
   if (!response.ok || !response.body) {

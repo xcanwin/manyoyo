@@ -1,9 +1,9 @@
-# frontend-shadcn/ 协作指引
+# frontend/ 协作指引
 
-根目录 `AGENTS.md` 的补充，仅在改动默认 Web 前端时适用。本目录是独立 Vite 项目：TypeScript + React + ES Modules，沿用目录内既有格式与工具链（根仓库的 CommonJS / 四空格约定不适用于此）。它是 `serve` 唯一的 Web 界面。
+根目录 `AGENTS.md` 的补充，仅在改动默认 Web 前端时适用。本目录是独立 Vite 项目：TypeScript + React + shadcn/ui + ES Modules，沿用目录内既有格式与工具链（根仓库的 CommonJS / 四空格约定不适用于此）。它是 `serve` 唯一的 Web 界面。
 
-- 开发：`npm run dev:web-shadcn`；构建：`npm run build:web-shadcn`（产出单文件 `lib/web/frontend/shadcn.html`，随 `npm run prepack` 自动执行）。
-- 测试：Vitest，用例与源码同目录（`*.test.ts` / `*.test.tsx`），`npm run test:web-shadcn` 运行，也随 `npm test` / `npm run test:unit` 自动执行。
+- 开发：`npm run dev:web`；构建：`npm run build:web`（产出单文件 `lib/web/index.html`，随 `npm run prepack` 自动执行）。
+- 测试：Vitest，用例与源码同目录（`*.test.ts` / `*.test.tsx`），`npm run test:web` 运行，也随 `npm test` / `npm run test:unit` 自动执行。
 - `/agent/stream` 的 NDJSON 事件协议是跨前后端的契约，本目录涉及 `src/lib/api.ts` 的 `StreamEvent` 与 `workspace-panel.tsx` 的事件分支，改动须同步服务端，详见 `lib/web/AGENTS.md`。其中 `trace` 事件**不保证带结构化 `traceEvent`**（stderr、非 JSON 的 stdout 只有 `text`），一律先过 `toTraceEvent()` 兜底，别写 `if (event.traceEvent)` 这种会吞掉原始输出的分支。
 - 校验：`npm run typecheck`（`tsc -b --noEmit`，必须带 `-b`：根 tsconfig 是 `files: []` 的 solution 配置，裸 `tsc --noEmit` 一个源文件都不会检查）+ `npm run lint`（eslint），两条都不在根目录 `npm test` 里。lint 基线是 4 error + 2 warning 的既存问题（`app-sidebar`、`logs-dialog`、`markdown-content`、`workspace-panel`），以「数量没变多」为准，不要顺手去修无关文件。
 - eslint 用的是 React Compiler 规则集：`react-hooks/set-state-in-effect`（effect 里直接 setState）和 `react-hooks/refs`（渲染期读 ref）都报 error。状态由外部 props 驱动、确实只能在 effect 里对账时，`eslint-disable-next-line` 要贴在 **setState 那一行**，贴在 `React.useEffect(` 上不生效。

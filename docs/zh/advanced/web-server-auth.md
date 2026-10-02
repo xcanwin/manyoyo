@@ -62,41 +62,40 @@ manyoyo serve 127.0.0.1:3000 -U admin -P 'StrongPassword' -d --restart
 
 当前匿名放行路由：
 
-- `/auth/login`（`POST` 登录接口；`GET` 会跳转到登录页）
+- `/auth/login`（`GET` 是登录页，`POST` 是登录接口）
 - `/auth/logout`
-- `/shadcn/auth/login`（登录页）
 
-未登录访问任何页面路径都会跳转到 `/shadcn/auth/login`，接口与 `/auth/*` 则直接返回 `401`。
+未登录访问任何页面路径都会跳转到 `/auth/login`，接口与 `/auth/*` 则直接返回 `401`。
 
-## shadcn/ui 前端
+## 网页前端
 
 `serve` 模式的 Web 界面由 shadcn/ui 前端提供。
 
-- 默认地址：`http://127.0.0.1:3000/`；`/shadcn` 是兼容别名。未登录访问两者都会跳转到 `http://127.0.0.1:3000/shadcn/auth/login`，登录成功后跳回 `/shadcn`
+- 默认地址：`http://127.0.0.1:3000/`。未登录会跳转到 `http://127.0.0.1:3000/auth/login`，登录成功后回到 `/`
 - 登录走 `/auth/login` 接口和 cookie
-- 源码在仓库根目录的 `frontend-shadcn/`，是独立的 Vite + React + TypeScript 项目；它使用 ES Modules，本项目其余 Node 代码仍遵循 CommonJS 约定
+- 源码在仓库根目录的 `frontend/`，是独立的 Vite + React + TypeScript 项目；它使用 ES Modules，本项目其余 Node 代码仍遵循 CommonJS 约定
 
 首次参与开发需要单独装一次它自己的依赖（体积较大，与根目录 `npm install` 分开，不会拖慢日常开发）：
 
 ```bash
-cd frontend-shadcn && npm ci && cd ..
+cd frontend && npm ci && cd ..
 ```
 
 之后按需选择：
 
 ```bash
 # 只想看当前构建效果：手动构建一次，再照常启动 my serve 预览
-npm run build:web-shadcn
+npm run build:web
 manyoyo serve
 
-# 改 frontend-shadcn/src 下的代码并实时看效果（HMR），两个终端：
+# 改 frontend/src 下的代码并实时看效果（HMR），两个终端：
 manyoyo serve                # 终端一：真实后端（容器、会话、终端 WebSocket）
-npm run dev:web-shadcn       # 终端二：Vite 开发服务器，默认把 /api、/auth 代理到 127.0.0.1:3000
+npm run dev:web       # 终端二：Vite 开发服务器，默认把 /api、/auth 代理到 127.0.0.1:3000
 ```
 
-`my serve` 监听地址不是默认的 `127.0.0.1:3000` 时，用 `MANYOYO_SERVE_URL` 环境变量覆盖 `dev:web-shadcn` 的代理目标。
+`my serve` 监听地址不是默认的 `127.0.0.1:3000` 时，用 `MANYOYO_SERVE_URL` 环境变量覆盖 `dev:web` 的代理目标。
 
-发布时（`npm publish`/`npm pack`）会自动重新构建 `frontend-shadcn` 并把产物打进 `lib/web/frontend/shadcn.html`；生产环境运行 `my serve` 不需要 Node 之外的任何前端工具链。
+发布时（`npm publish`/`npm pack`）会自动重新构建 `frontend` 并把产物打进 `lib/web/index.html`；生产环境运行 `my serve` 不需要 Node 之外的任何前端工具链。
 
 ## 登录与 API 访问示例
 

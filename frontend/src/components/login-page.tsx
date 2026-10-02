@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
-const REDIRECT_TARGET = "/shadcn"
+const REDIRECT_TARGET = "/"
 
 export function LoginPage() {
   const [username, setUsername] = React.useState("")

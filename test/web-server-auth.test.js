@@ -200,17 +200,18 @@ describe('Web Server Auth Gateway', () => {
 
             const pageRes = await request(`${baseUrl}/`, { redirect: 'manual' });
             expect(pageRes.response.status).toBe(302);
-            expect(pageRes.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(pageRes.response.headers.get('location')).toBe('/auth/login');
 
             // 任意页面路径（含已下线的旧路由）未登录时都打回登录页，不再各自分支
             const otherPageRes = await request(`${baseUrl}/whatever-page`, { redirect: 'manual' });
             expect(otherPageRes.response.status).toBe(302);
-            expect(otherPageRes.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(otherPageRes.response.headers.get('location')).toBe('/auth/login');
 
-            // GET /auth/login 曾是独立登录页，现在只留跳转接住老书签
+            // GET /auth/login 直接返回登录页（匿名可访问，不再跳转）
             const authLoginRes = await request(`${baseUrl}/auth/login`, { redirect: 'manual' });
-            expect(authLoginRes.response.status).toBe(302);
-            expect(authLoginRes.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(authLoginRes.response.status).toBe(200);
+            expect(authLoginRes.response.headers.get('content-type')).toContain('text/html');
+            expect(authLoginRes.text).toContain('<div id="root">');
 
             const faviconRes = await request(`${baseUrl}/favicon.ico`, { redirect: 'manual' });
             expect(faviconRes.response.status).toBe(204);
@@ -252,7 +253,7 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
-    test('should serve the shadcn frontend at / and 404 the removed legacy routes/assets', async () => {
+    test('should serve the frontend at / and 404 the removed legacy and /shadcn routes/assets', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-default-theme-'));
         const port = await getFreePort();
         let handle = null;
@@ -266,12 +267,13 @@ describe('Web Server Auth Gateway', () => {
             expect(rootHtml.response.status).toBe(200);
             expect(rootHtml.text).toContain('<div id="root">');
 
-            const shadcnHtml = await request(`${baseUrl}/shadcn`, { headers: { Cookie: authCookie } });
-            expect(shadcnHtml.response.status).toBe(200);
-            expect(shadcnHtml.text).toContain('<div id="root">');
+            // 未登录访问已下线的 /shadcn 路径，与其他页面一样被打回登录页
+            const anonShadcn = await request(`${baseUrl}/shadcn/auth/login`, { redirect: 'manual' });
+            expect(anonShadcn.response.status).toBe(302);
+            expect(anonShadcn.response.headers.get('location')).toBe('/auth/login');
 
-            // 旧前端已整体删除：路由与散装静态资源都不该再有响应体
-            for (const removedPath of ['/legacy', '/app/frontend/app.js', '/app/vendor/xterm.js', '/auth/frontend/login.js']) {
+            // 旧前端已整体删除：路由与散装静态资源都不该再有响应体（含已下线的 /shadcn 别名）
+            for (const removedPath of ['/shadcn', '/shadcn/auth/login', '/legacy', '/app/frontend/app.js', '/app/vendor/xterm.js', '/auth/frontend/login.js']) {
                 const removed = await request(`${baseUrl}${removedPath}`, { headers: { Cookie: authCookie } });
                 expect(removed.response.status).toBe(404);
             }
@@ -283,8 +285,8 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
-    test('should redirect unauthenticated /shadcn to its own login page and serve it after login', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-shadcn-route-'));
+    test('should redirect unauthenticated / to the login page and serve the app after login', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-route-'));
         const port = await getFreePort();
         let handle = null;
 
@@ -292,12 +294,12 @@ describe('Web Server Auth Gateway', () => {
             handle = await startWebServer(buildServerOptions(tempHost, port));
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
 
-            const unauth = await request(`${baseUrl}/shadcn`, { redirect: 'manual' });
+            const unauth = await request(`${baseUrl}/`, { redirect: 'manual' });
             expect(unauth.response.status).toBe(302);
-            expect(unauth.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(unauth.response.headers.get('location')).toBe('/auth/login');
 
             const authCookie = await loginAndGetCookie(baseUrl);
-            const authed = await request(`${baseUrl}/shadcn`, {
+            const authed = await request(`${baseUrl}/`, {
                 headers: { Cookie: authCookie }
             });
             expect(authed.response.status).toBe(200);
@@ -315,8 +317,8 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
-    test('should serve the shadcn login page without auth and let an already-authed visit reach it too', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-shadcn-login-'));
+    test('should serve the login page at /auth/login without auth and let an already-authed visit reach it too', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-login-'));
         const port = await getFreePort();
         let handle = null;
 
@@ -324,13 +326,13 @@ describe('Web Server Auth Gateway', () => {
             handle = await startWebServer(buildServerOptions(tempHost, port));
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
 
-            const unauth = await request(`${baseUrl}/shadcn/auth/login`);
+            const unauth = await request(`${baseUrl}/auth/login`);
             expect(unauth.response.status).toBe(200);
             expect(unauth.response.headers.get('content-type')).toContain('text/html');
             expect(unauth.text).toContain('<div id="root">');
 
             const authCookie = await loginAndGetCookie(baseUrl);
-            const authed = await request(`${baseUrl}/shadcn/auth/login`, {
+            const authed = await request(`${baseUrl}/auth/login`, {
                 headers: { Cookie: authCookie }
             });
             expect(authed.response.status).toBe(200);
@@ -342,8 +344,8 @@ describe('Web Server Auth Gateway', () => {
         }
     });
 
-    test('should apply configured serveTitle to the shadcn frontend and login page', async () => {
-        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-shadcn-title-'));
+    test('should apply configured serveTitle to the frontend and login page', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-title-'));
         const port = await getFreePort();
         let handle = null;
 
@@ -353,24 +355,24 @@ describe('Web Server Auth Gateway', () => {
             }));
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
 
-            const loginPage = await request(`${baseUrl}/shadcn/auth/login`);
+            const loginPage = await request(`${baseUrl}/auth/login`);
             expect(loginPage.response.status).toBe(200);
             expect(loginPage.text).toContain('<title>我的团队 · manyoyo</title>');
 
             const authCookie = await loginAndGetCookie(baseUrl);
-            const appPage = await request(`${baseUrl}/shadcn`, {
+            const appPage = await request(`${baseUrl}/`, {
                 headers: { Cookie: authCookie }
             });
             expect(appPage.response.status).toBe(200);
             expect(appPage.text).toContain('<title>我的团队 · manyoyo</title>');
 
-            // 回归用例：shadcn.html 是 vite singlefile 打包产物，全部依赖内联成一个 <script>；
+            // 回归用例：index.html 是 vite singlefile 打包产物，全部依赖内联成一个 <script>；
             // 曾经用 .replace('</head>', ...) 往里注入 __MANYOYO_SERVE_TITLE__ 标记，
             // 结果命中了内联脚本里恰好出现的字面量 "</head>"，把注入内容（带着 "</script>"）插进
-            // 脚本中间，导致整页被当成纯文本展示。shadcn 前端改用更窄的 <title> 定位注入
+            // 脚本中间，导致整页被当成纯文本展示。前端改用更窄的 <title> 定位注入
             // manyoyo-serve-title 标记（见下），不应该再走 </head> 那套注入方式。
             expect(appPage.text).not.toContain('__MANYOYO_SERVE_TITLE__');
-            // shadcn 前端现在会按当前 AGENT 动态改写 document.title，配置了 serveTitle 时
+            // 前端现在会按当前 AGENT 动态改写 document.title，配置了 serveTitle 时
             // 需要告知前端跳过动态改写，不能覆盖用户显式设置的静态标题
             expect(appPage.text).toContain('<meta name="manyoyo-serve-title" content="1">');
         } finally {
@@ -5710,8 +5712,9 @@ describe('Web Server One-Time Login Token', () => {
             expect(sessions.response.status).toBe(200);
 
             const second = await useToken(baseUrl, token);
-            expect(second.response.status).toBe(302);
-            expect(second.response.headers.get('location')).toBe('/shadcn/auth/login');
+            // 令牌已用过：不再登录，直接落在登录页
+            expect(second.response.status).toBe(200);
+            expect(second.text).toContain('<div id="root">');
             expect(second.response.headers.get('set-cookie')).toBeNull();
 
             await request(`${baseUrl}/auth/logout`, { method: 'POST', headers: { Cookie: cookie } });
@@ -5728,11 +5731,11 @@ describe('Web Server One-Time Login Token', () => {
             fs.utimesSync(file, past, past);
 
             const expired = await useToken(baseUrl, token);
-            expect(expired.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(expired.response.status).toBe(200);
             expect(expired.response.headers.get('set-cookie')).toBeNull();
 
             const forged = await useToken(baseUrl, 'c'.repeat(64));
-            expect(forged.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(forged.response.status).toBe(200);
             expect(forged.response.headers.get('set-cookie')).toBeNull();
         });
     });
@@ -5741,7 +5744,7 @@ describe('Web Server One-Time Login Token', () => {
         await withServer({ serverHost: '0.0.0.0' }, async ({ baseUrl, tokenDir }) => {
             const token = issueLoginToken(tokenDir);
             const res = await useToken(baseUrl, token);
-            expect(res.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(res.response.status).toBe(200);
             expect(res.response.headers.get('set-cookie')).toBeNull();
             expect(fs.readdirSync(tokenDir)).toHaveLength(1);
         });
@@ -5750,7 +5753,7 @@ describe('Web Server One-Time Login Token', () => {
     test('the token endpoint stays reachable without a token and needs no new anonymous route', async () => {
         await withServer({}, async ({ baseUrl }) => {
             const plain = await request(`${baseUrl}/auth/login`, { redirect: 'manual' });
-            expect(plain.response.headers.get('location')).toBe('/shadcn/auth/login');
+            expect(plain.response.status).toBe(200);
             const other = await request(`${baseUrl}/api/sessions?token=${'d'.repeat(64)}`);
             expect(other.response.status).toBe(401);
         });

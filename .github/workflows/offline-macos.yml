@@ -101,7 +101,7 @@ jobs:
           echo "MANYOYO_TAR=$(brew --prefix)/opt/gnu-tar/libexec/gnubin/tar" >> "$GITHUB_ENV"
 
       - run: npm ci --include=optional
-      - run: npm run build:web-shadcn
+      - run: npm run build:web
 
       - uses: actions/download-artifact@v8
         with:
