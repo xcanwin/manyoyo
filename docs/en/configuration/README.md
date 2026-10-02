@@ -28,7 +28,7 @@ Example:
 {
     // This is a comment
     containerName: "my-dev",  // Keys can be unquoted
-    imageVersion: "1.8.0-common",  // Trailing commas are supported
+    imageVersion: "2.1.0-common",  // Trailing commas are supported
 }
 ```
 
@@ -75,9 +75,9 @@ Environment variable keys: `MANYOYO_SERVER_USER`, `MANYOYO_SERVER_PASS`.
 
 Example:
 ```bash
-# Global configuration sets imageVersion: "1.8.0-common"
-# Run configuration sets imageVersion: "1.8.0-full"
-# Final value is "1.8.0-full" (run configuration has higher priority)
+# Global configuration sets imageVersion: "2.1.0-common"
+# Run configuration sets imageVersion: "2.1.0-full"
+# Final value is "2.1.0-full" (run configuration has higher priority)
 ```
 
 ### Merge Parameters
@@ -115,7 +115,7 @@ Example:
 | Override | `hostPath` | Takes highest priority value | Defaults to current directory |
 | Override | `containerPath` | Takes highest priority value | Defaults to same as hostPath |
 | Override | `imageName` | Takes highest priority value | Default `ghcr.io/xcanwin/manyoyo` |
-| Override | `imageVersion` | Takes highest priority value | e.g., `1.8.0-common` |
+| Override | `imageVersion` | Takes highest priority value | e.g., `2.1.0-common` |
 | Override | `containerMode` | Takes highest priority value | `common`, `dind`, `sock` |
 | Override | `yolo` | Takes highest priority value | `c`, `gm`, `cx`, `oc` |
 | Override | `serverUser` | Uses web auth priority order | CLI > `runs.<name>` > global > env vars > defaults |

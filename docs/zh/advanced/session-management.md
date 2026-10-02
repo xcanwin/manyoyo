@@ -379,14 +379,12 @@ manyoyo run -n temp --rm-on-exit -y c
 # - 不需要保留历史
 ```
 
-### 批量清理
+### 清理容器
 
 ```bash
-# 清理所有停止的 MANYOYO 容器
-docker ps -a | grep my | grep Exited | awk '{print $1}' | xargs docker rm
-
-# 清理所有 MANYOYO 容器（危险！）
-docker ps -a | grep my | awk '{print $1}' | xargs docker rm -f
+# 查看容器，确认名称后逐个删除
+manyoyo ps
+manyoyo rm <名称>
 ```
 
 ## 会话监控

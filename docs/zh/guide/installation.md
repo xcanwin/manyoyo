@@ -187,25 +187,9 @@ npm update -g @xcanwin/manyoyo
 npm outdated -g @xcanwin/manyoyo
 ```
 
-## 拉取基础镜像（Podman 用户）
-
-::: warning 仅 Podman 用户需要
-Docker 用户可以跳过此步骤，Docker 会自动拉取基础镜像。
-:::
-
-Podman 用户需要手动拉取 Ubuntu 基础镜像：
-
-```bash
-podman pull ubuntu:24.04
-```
-
-验证镜像：
-
-```bash
-podman images | grep ubuntu
-```
-
 ## 构建沙箱镜像
+
+默认镜像首次使用时自动拉取，只有自定义镜像才需要构建。
 
 MANYOYO 使用自定义的容器镜像，包含预装的 AI CLI 工具和开发环境。
 
@@ -213,7 +197,7 @@ MANYOYO 使用自定义的容器镜像，包含预装的 AI CLI 工具和开发�
 
 ```bash
 # 构建推荐版本（common）
-manyoyo build --iv 1.8.0-common
+manyoyo build --iv 2.1.0-common
 
 # 构建后验证
 docker images | grep manyoyo  # 或 podman images
@@ -232,9 +216,9 @@ docker images | grep manyoyo  # 或 podman images
 包含所有支持的 AI CLI 工具和开发环境：
 
 ```bash
-manyoyo build --iv 1.8.0-full
+manyoyo build --iv 2.1.0-full
 # 或显式指定构建参数
-manyoyo build --iv 1.8.0-full --iba TOOL=full
+manyoyo build --iv 2.1.0-full --iba TOOL=full
 ```
 
 **包含工具**：
@@ -291,12 +275,12 @@ manyoyo build --iba TOOL=go,codex,java,gemini
 
 ```bash
 # 自定义镜像名和版本
-manyoyo build --in myimage --iv 1.8.0-common
-# 生成镜像：myimage:1.8.0-common
+manyoyo build --in myimage --iv 2.1.0-common
+# 生成镜像：myimage:2.1.0-common
 
 # 指定完整的镜像名
-manyoyo build --in localhost/myuser/sandbox --iv 1.0.0-common
-# 生成镜像：localhost/myuser/sandbox:1.0.0-common
+manyoyo build --in localhost/myuser/sandbox --iv 2.1.0-common
+# 生成镜像：localhost/myuser/sandbox:2.1.0-common
 ```
 
 #### 特殊构建参数
@@ -384,7 +368,7 @@ manyoyo -h
 docker images | grep manyoyo  # 或 podman images
 
 # 应该看到类似：
-# ghcr.io/xcanwin/manyoyo  1.8.0-common  xxx  xxx  xxGB
+# ghcr.io/xcanwin/manyoyo  2.1.0-common  xxx  xxx  xxGB
 ```
 
 ### 3. 初始化 Agent 配置（推荐）
@@ -464,14 +448,9 @@ manyoyo -v
 
 ```bash
 # 构建新版本镜像
-manyoyo build --iv 1.8.0-common
+manyoyo build --iv 2.1.0-common
 
-# 更新全局配置
-cat > ~/.manyoyo/manyoyo.json << 'EOF'
-{
-    "imageVersion": "1.8.0-common"
-}
-EOF
+# 更新全局配置：编辑 ~/.manyoyo/manyoyo.json，把 imageVersion 改为 "2.1.0-common"
 
 # 清理旧镜像（可选）
 manyoyo prune
@@ -493,11 +472,9 @@ rm -rf ~/.manyoyo/
 ### 清理镜像和容器
 
 ```bash
-# 删除所有 MANYOYO 容器
-docker ps -a | grep my | awk '{print $1}' | xargs docker rm
-
-# 删除所有 MANYOYO 镜像
-docker images | grep manyoyo | awk '{print $3}' | xargs docker rmi
+# 查看容器，确认名称后逐个删除
+manyoyo ps
+manyoyo rm <名称>
 
 # 清理悬空镜像
 manyoyo prune

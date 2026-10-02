@@ -111,7 +111,6 @@ export default defineConfig({
   cleanUrls: true,
   rewrites: readmeRewrites,
   lastUpdated: true,
-  srcExclude: ['README_EN.md'],
   head: [
     ['meta', { name: 'theme-color', content: '#0f766e' }],
     ['meta', { name: 'keywords', content: defaultKeywords }]

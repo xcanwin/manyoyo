@@ -9,7 +9,7 @@ hero:
   tagline: 安全运行 Agent YOLO/SOLO 模式，保护宿主机
   actions:
     - theme: brand
-      text: 2 分钟快速开始
+      text: 快速开始
       link: /zh/guide/quick-start
     - theme: alt
       text: 安装详解
@@ -57,15 +57,6 @@ MANYOYO 不是通用容器工具，而是专门为 AI Agent CLI 设计的安全�
 
 ## 热门场景
 
-- [Claude Code YOLO 安全沙箱](./guide/quick-start.md) - 2 分钟启动隔离环境，降低宿主机风险
+- [Claude Code YOLO 安全沙箱](./guide/quick-start.md) - 快速启动隔离环境，降低宿主机风险
 - [Codex CLI 容器沙箱](./reference/agents.md) - 在隔离容器中运行 `codex`，支持会话恢复与命令调试
-- [Docker/Podman 安全运行 Agent CLI](./reference/container-modes.md) - 对比 `none` / `dind` / `sock` 模式
-
-## 在线文档部署方式
-
-当前文档站使用 **VitePress + GitHub Actions + GitHub Pages**：
-
-- 本地开发：`npm run docs:dev`
-- 默认仅监听 `127.0.0.1`；如需局域网访问，请在本地自行追加 `--host 0.0.0.0`
-- 构建静态站：`npm run docs:build`
-- 推送 `main` 分支后自动部署到 GitHub Pages
+- [Docker/Podman 安全运行 Agent CLI](./reference/container-modes.md) - 对比 `common` / `dind` / `sock` 模式

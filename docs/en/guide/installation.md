@@ -187,25 +187,9 @@ Check for updates:
 npm outdated -g @xcanwin/manyoyo
 ```
 
-## Pull Base Image (Podman Users)
-
-::: warning Podman Users Only
-Docker users can skip this step. Docker will automatically pull the base image.
-:::
-
-Podman users need to manually pull the Ubuntu base image:
-
-```bash
-podman pull ubuntu:24.04
-```
-
-Verify the image:
-
-```bash
-podman images | grep ubuntu
-```
-
 ## Build Sandbox Image
+
+The default image is pulled automatically on first use; build only when you want a custom image.
 
 MANYOYO uses custom container images that include pre-installed AI CLI tools and development environments.
 
@@ -213,7 +197,7 @@ MANYOYO uses custom container images that include pre-installed AI CLI tools and
 
 ```bash
 # Build recommended version (common)
-manyoyo build --iv 1.8.0-common
+manyoyo build --iv 2.1.0-common
 
 # Verify after build
 docker images | grep manyoyo  # or podman images
@@ -232,9 +216,9 @@ docker images | grep manyoyo  # or podman images
 Includes all supported AI CLI tools and development environments:
 
 ```bash
-manyoyo build --iv 1.8.0-full
+manyoyo build --iv 2.1.0-full
 # Or explicitly specify build args
-manyoyo build --iv 1.8.0-full --iba TOOL=full
+manyoyo build --iv 2.1.0-full --iba TOOL=full
 ```
 
 **Included Tools**:
@@ -291,12 +275,12 @@ manyoyo build --iba TOOL=go,codex,java,gemini
 
 ```bash
 # Custom image name and version
-manyoyo build --in myimage --iv 1.8.0-common
-# Generates image: myimage:1.8.0-common
+manyoyo build --in myimage --iv 2.1.0-common
+# Generates image: myimage:2.1.0-common
 
 # Specify full image name
-manyoyo build --in localhost/myuser/sandbox --iv 1.0.0-common
-# Generates image: localhost/myuser/sandbox:1.0.0-common
+manyoyo build --in localhost/myuser/sandbox --iv 2.1.0-common
+# Generates image: localhost/myuser/sandbox:2.1.0-common
 ```
 
 #### Special Build Parameters
@@ -384,7 +368,7 @@ manyoyo -h
 docker images | grep manyoyo  # or podman images
 
 # Should see something like:
-# ghcr.io/xcanwin/manyoyo  1.8.0-common  xxx  xxx  xxGB
+# ghcr.io/xcanwin/manyoyo  2.1.0-common  xxx  xxx  xxGB
 ```
 
 ### 3. Initialize Agent Config (Recommended)
@@ -464,14 +448,9 @@ manyoyo -v
 
 ```bash
 # Build new version image
-manyoyo build --iv 1.8.0-common
+manyoyo build --iv 2.1.0-common
 
-# Update global configuration
-cat > ~/.manyoyo/manyoyo.json << 'EOF'
-{
-    "imageVersion": "1.8.0-common"
-}
-EOF
+# Update global config: edit ~/.manyoyo/manyoyo.json and set imageVersion to "2.1.0-common"
 
 # Clean old images (optional)
 manyoyo prune
@@ -493,11 +472,9 @@ rm -rf ~/.manyoyo/
 ### Clean Images and Containers
 
 ```bash
-# Delete all MANYOYO containers
-docker ps -a | grep my | awk '{print $1}' | xargs docker rm
-
-# Delete all MANYOYO images
-docker images | grep manyoyo | awk '{print $3}' | xargs docker rmi
+# List containers, confirm the name, then remove one by one
+manyoyo ps
+manyoyo rm <name>
 
 # Clean dangling images
 manyoyo prune

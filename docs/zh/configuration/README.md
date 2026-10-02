@@ -28,7 +28,7 @@ MANYOYO 支持两种主要的配置方式：
 {
     // 这是注释
     containerName: "my-dev",  // 键名可以不加引号
-    imageVersion: "1.8.0-common",  // 支持尾随逗号
+    imageVersion: "2.1.0-common",  // 支持尾随逗号
 }
 ```
 
@@ -75,9 +75,9 @@ MANYOYO 配置参数分为三类，具有不同的合并行为：
 
 示例：
 ```bash
-# 全局配置中设置 imageVersion: "1.8.0-common"
-# 运行配置中设置 imageVersion: "1.8.0-full"
-# 最终使用 "1.8.0-full"（运行配置优先级更高）
+# 全局配置中设置 imageVersion: "2.1.0-common"
+# 运行配置中设置 imageVersion: "2.1.0-full"
+# 最终使用 "2.1.0-full"（运行配置优先级更高）
 ```
 
 ### 合并型参数
@@ -115,7 +115,7 @@ MANYOYO 配置参数分为三类，具有不同的合并行为：
 | 覆盖型 | `hostPath` | 取最高优先级的值 | 默认为当前目录 |
 | 覆盖型 | `containerPath` | 取最高优先级的值 | 默认与 hostPath 相同 |
 | 覆盖型 | `imageName` | 取最高优先级的值 | 默认 `ghcr.io/xcanwin/manyoyo` |
-| 覆盖型 | `imageVersion` | 取最高优先级的值 | 如 `1.8.0-common` |
+| 覆盖型 | `imageVersion` | 取最高优先级的值 | 如 `2.1.0-common` |
 | 覆盖型 | `containerMode` | 取最高优先级的值 | `common`, `dind`, `sock` |
 | 覆盖型 | `yolo` | 取最高优先级的值 | `c`, `gm`, `cx`, `oc` |
 | 覆盖型 | `serverUser` | 按网页认证优先级取值 | CLI > `runs.<name>` > 全局 > 环境变量 > 默认值 |

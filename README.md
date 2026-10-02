@@ -21,14 +21,6 @@
 
 ---
 
-## 生态仓库
-
-| 仓库 | 定位 |
-|------|------|
-| [manyoyo](https://github.com/xcanwin/manyoyo) | CLI + 容器运行时 + Web 服务 |
-| [manyoyo-app](https://github.com/xcanwin/manyoyo-app) | Flutter 原生 UI 客户端（macOS / Windows / iOS / Android） |
-| [manyoyo-studio](https://github.com/xcanwin/manyoyo-studio) | Electron 桌面端 + Capacitor 移动端 |
-
 ## 为什么是 MANYOYO
 
 AI Agent CLI 往往需要：

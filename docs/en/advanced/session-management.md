@@ -380,14 +380,12 @@ manyoyo run -n temp --rm-on-exit -y c
 # - Don't need to preserve history
 ```
 
-### Batch Cleanup
+### Clean Up Containers
 
 ```bash
-# Clean up all stopped MANYOYO containers
-docker ps -a | grep my | grep Exited | awk '{print $1}' | xargs docker rm
-
-# Clean up all MANYOYO containers (dangerous!)
-docker ps -a | grep my | awk '{print $1}' | xargs docker rm -f
+# List containers, confirm the name, then remove one by one
+manyoyo ps
+manyoyo rm <name>
 ```
 
 ## Session Monitoring

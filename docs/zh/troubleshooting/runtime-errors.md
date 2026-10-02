@@ -126,7 +126,7 @@ docker images | grep manyoyo
 # 统一版本
 cat > ~/.manyoyo/manyoyo.json << 'EOF'
 {
-    "imageVersion": "1.8.0-common"
+    "imageVersion": "2.1.0-common"
 }
 EOF
 ```
@@ -659,8 +659,8 @@ manyoyo run --ef /abs/path/proxy.env --ef /abs/path/anthropic_claudecode.env -y 
 docker images | grep manyoyo
 
 # 2. 使用精简版镜像
-manyoyo build --iv 1.8.0-common --iba TOOL=common
-manyoyo run --iv 1.8.0-common -y c
+manyoyo build --iv 2.1.0-common --iba TOOL=common
+manyoyo run --iv 2.1.0-common -y c
 
 # 3. 清理无用资源
 docker system prune

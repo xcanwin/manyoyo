@@ -11,7 +11,7 @@ description: 宿主机已可用 Claude/Codex/Gemini/OpenCode 时，最快把配�
 
 目标是用最短路径把现有配置迁移到 MANYOYO 沙箱。
 
-> 默认镜像是预构建的 `ghcr.io/xcanwin/manyoyo`，本地没有时会自动拉取，通常不需要再执行 `manyoyo build`；下面的构建步骤只在你要自定义镜像时才需要。
+> 默认镜像是预构建的 `ghcr.io/xcanwin/manyoyo`，本地没有时会自动拉取，不需要执行 `manyoyo build`；只有自定义镜像时才需要构建。
 
 ## 1. 安装 manyoyo
 
@@ -26,19 +26,13 @@ manyoyo -v
 - [安装 Podman（推荐）](./installation.md#安装-podman推荐)
 - [安装 Docker（可选）](./installation.md#安装-docker可选)
 
-## 3. 构建沙箱镜像
-
-```bash
-manyoyo build --iv 2.1.0-common
-```
-
-## 4. 立即迁移配置
+## 3. 立即迁移配置
 
 ```bash
 manyoyo init all
 ```
 
-## 5. 直接启动 Agent
+## 4. 直接启动 Agent
 
 ```bash
 manyoyo run -r claude

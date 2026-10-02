@@ -11,8 +11,8 @@ Use this page to quickly locate common MANYOYO issues and run the shortest diagn
 
 | Symptom | Possible Cause | Quick Command | Details |
 | --- | --- | --- | --- |
-| `manyoyo build` fails | network/disk/permission | `df -h`, `manyoyo build --iv 1.8.0-common` | [Build Issues](./build-errors.md) |
-| `pinging container registry failed` | local image not built | `manyoyo build --iv 1.8.0-common` | [Image Pull Failures](./build-errors.md#image-pull-failures) |
+| `manyoyo build` fails | network/disk/permission | `df -h`, `manyoyo build --iv 2.1.0-common` | [Build Issues](./build-errors.md) |
+| `pinging container registry failed` | local image not built | `manyoyo build --iv 2.1.0-common` | [Image Pull Failures](./build-errors.md#image-pull-failures) |
 | `permission denied` | Docker/Podman permission issue | `groups`, `docker ps` | [Permission Issues](./runtime-errors.md#permission-denied) |
 | env vars not effective | invalid `envFile` path/format | `manyoyo config show --ef /abs/path/example.env` | [Env Var Issues](./runtime-errors.md#environment-variables-not-taking-effect) |
 
@@ -68,7 +68,7 @@ manyoyo ps
 2. Export logs
 
 ```bash
-manyoyo build --iv 1.8.0-common 2>&1 | tee build-error.log
+manyoyo build --iv 2.1.0-common 2>&1 | tee build-error.log
 docker logs <container-name> 2>&1 | tee runtime-error.log  # or podman logs
 ```
 

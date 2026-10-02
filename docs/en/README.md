@@ -9,7 +9,7 @@ hero:
   tagline: Safely run Agent YOLO/SOLO mode, protect your host machine
   actions:
     - theme: brand
-      text: 2-Minute Quick Start
+      text: Quick Start
       link: /en/guide/quick-start
     - theme: alt
       text: Installation Guide
@@ -57,15 +57,6 @@ MANYOYO is not a general container tool, but a security sandbox specifically des
 
 ## Popular Use Cases
 
-- [Claude Code YOLO sandbox](./guide/quick-start.md) - launch an isolated environment in 2 minutes
+- [Claude Code YOLO sandbox](./guide/quick-start.md) - launch an isolated environment quickly
 - [Codex CLI container sandbox](./reference/agents.md) - run `codex` in an isolated container with session recovery
-- [Docker/Podman secure runtime for Agent CLI](./reference/container-modes.md) - compare `none` / `dind` / `sock` modes
-
-## Documentation Deployment
-
-This documentation site uses **VitePress + GitHub Actions + GitHub Pages**:
-
-- Local development: `npm run docs:dev`
-- By default it only listens on `127.0.0.1`; append `--host 0.0.0.0` locally if LAN access is needed
-- Build static site: `npm run docs:build`
-- Automatically deploy to GitHub Pages after pushing to `main` branch
+- [Docker/Podman secure runtime for Agent CLI](./reference/container-modes.md) - compare `common` / `dind` / `sock` modes

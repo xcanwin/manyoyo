@@ -19,7 +19,7 @@ MANYOYO 支持两种配置文件：
 ```json5
 {
     "imageName": "ghcr.io/xcanwin/manyoyo",
-    "imageVersion": "1.8.0-full"
+    "imageVersion": "2.1.0-full"
 }
 ```
 
@@ -104,7 +104,7 @@ MANYOYO 支持两种配置文件：
 - **示例**：
 ```json5
 {
-    "imageVersion": "1.8.0-full"  // full 版本包含所有工具
+    "imageVersion": "2.1.0-full"  // full 版本包含所有工具
 }
 ```
 
@@ -479,7 +479,7 @@ first.envFile: 全局 first.envFile + runs.<name>.first.envFile + 命令行 --fi
 {
     // 使用自定义镜像
     "imageName": "ghcr.io/xcanwin/manyoyo",
-    "imageVersion": "1.8.0-full",
+    "imageVersion": "2.1.0-full",
 
     // 全局环境变量
     "env": {
@@ -647,10 +647,10 @@ manyoyo run -r claude -x env | grep ANTHROPIC
 ```json5
 {
     // 生产环境配置
-    "imageVersion": "1.8.0-full",
+    "imageVersion": "2.1.0-full",
 
     // 开发时可以临时切换
-    // "imageVersion": "1.8.0-common",
+    // "imageVersion": "2.1.0-common",
 
     "envFile": [
         "/abs/path/anthropic_base.env",    // 基础配置

@@ -11,8 +11,8 @@
 
 | 症状 | 可能原因 | 快速命令 | 详情 |
 | --- | --- | --- | --- |
-| `manyoyo build` 失败 | 网络/磁盘/权限 | `df -h`、`manyoyo build --iv 1.8.0-common` | [构建问题](./build-errors.md) |
-| `pinging container registry failed` | 本地镜像未构建 | `manyoyo build --iv 1.8.0-common` | [镜像拉取失败](./build-errors.md#镜像拉取失败) |
+| `manyoyo build` 失败 | 网络/磁盘/权限 | `df -h`、`manyoyo build --iv 2.1.0-common` | [构建问题](./build-errors.md) |
+| `pinging container registry failed` | 本地镜像未构建 | `manyoyo build --iv 2.1.0-common` | [镜像拉取失败](./build-errors.md#镜像拉取失败) |
 | `permission denied` | Docker/Podman 权限不足 | `groups`、`docker ps` | [权限问题](./runtime-errors.md#权限不足) |
 | 环境变量未生效 | `envFile` 路径/格式错误 | `manyoyo config show --ef /abs/path/example.env` | [环境变量问题](./runtime-errors.md#环境变量未生效) |
 
@@ -68,7 +68,7 @@ manyoyo ps
 2. 导出日志
 
 ```bash
-manyoyo build --iv 1.8.0-common 2>&1 | tee build-error.log
+manyoyo build --iv 2.1.0-common 2>&1 | tee build-error.log
 docker logs <容器名> 2>&1 | tee runtime-error.log  # 或 podman logs
 ```
 
