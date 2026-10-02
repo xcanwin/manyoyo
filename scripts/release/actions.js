@@ -16,6 +16,7 @@ const { WORKFLOWS, NPM_PACKAGE, expectedAssetNames, treeFingerprint } = require(
 const POLL_MS = 15000;
 const RUN_APPEAR_TIMEOUT_MS = 120000;
 const NPM_VISIBLE_TIMEOUT_MS = 15 * 60 * 1000;
+const NPM_CONSECUTIVE_OK = 3;
 const RUN_MAX_WAIT_MS = 90 * 60 * 1000;
 
 class ReleaseError extends Error {
@@ -253,13 +254,17 @@ const ACTIONS = {
             }
             await waitForCompletion(ctx, run.databaseId, 'npm 发布');
             const until = ctx.now() + NPM_VISIBLE_TIMEOUT_MS;
+            // registry 的 CDN 节点同步有先后，发布后几分钟内 npm view 会在新旧版本间来回跳：连续几次都读到新版本才算数
+            let consecutive = 0;
             for (;;) {
                 assertNotAborted(ctx);
                 const seen = String((await slow(ctx)('npm', ['view', NPM_PACKAGE, 'version', '--prefer-online'])).stdout || '').trim();
-                if (seen === V) break;
-                ctx.log(`npm 上仍是 ${seen || '未知'}，等待 ${V} 可见…`);
+                consecutive = seen === V ? consecutive + 1 : 0;
+                if (consecutive >= NPM_CONSECUTIVE_OK) break;
+                if (seen === V) ctx.log(`npm 上已出现 ${V}（${consecutive}/${NPM_CONSECUTIVE_OK}），再确认一下…`);
+                else ctx.log(`npm 上仍是 ${seen || '未知'}，等待 ${V} 可见…`);
                 if (ctx.now() > until) throw new ReleaseError('NPM_TIMEOUT', `npm 上 ${NPM_VISIBLE_TIMEOUT_MS / 60000} 分钟内没有出现 ${V}`);
-                await ctx.sleep(POLL_MS);
+                await ctx.sleep(consecutive > 0 ? 5000 : POLL_MS);
             }
         }
         ctx.log(`npm 上已是 ${V}`);
