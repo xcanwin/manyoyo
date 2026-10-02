@@ -7,12 +7,12 @@ outline: false
 import { onMounted } from 'vue'
 
 onMounted(() => {
-  window.location.replace(new URL('../zh/guide/installation', window.location.href).toString())
+  window.location.replace(new URL('../zh/advanced/installation', window.location.href).toString())
 })
 </script>
 
 # 页面已迁移
 
-此页面已迁移至 [新地址](../zh/guide/installation.md)。
+此页面已迁移至 [新地址](../zh/advanced/installation.md)。
 
 如果没有自动跳转，请点击上方链接。

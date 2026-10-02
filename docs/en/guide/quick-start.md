@@ -28,7 +28,7 @@ npm install -g @xcanwin/manyoyo
 manyoyo
 ```
 
-More ways to install (low-privilege npm, from source) are in [Installation Details](./installation.md).
+More ways to install (low-privilege npm, from source) are in [Installation Details](../advanced/installation.md).
 
 ::: details Manual download
 Open [Releases](https://github.com/xcanwin/manyoyo/releases/latest), download `manyoyo-<version>-<os>-<arch>.run` (Apple silicon: `macos-arm64`, Intel Mac: `macos-x64`), then run `sh manyoyo-*.run`.

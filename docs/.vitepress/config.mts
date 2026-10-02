@@ -200,69 +200,80 @@ export default defineConfig({
       themeConfig: {
         siteTitle: 'MANYOYO 文档',
         nav: [
-          { text: '首页', link: '/zh/' },
           { text: '安装', link: '/zh/guide/quick-start' },
           {
             text: '文档',
             items: [
-              { text: '指南', link: '/zh/guide/installation' },
+              { text: '开始使用', link: '/zh/guide/introduction' },
+              { text: '使用指南', link: '/zh/guide/basic-usage' },
               { text: '配置', link: '/zh/configuration/' },
               { text: '参考', link: '/zh/reference/cli-options' },
-              { text: '高级', link: '/zh/advanced/docker-in-docker' },
-              { text: '故障排查', link: '/zh/troubleshooting/' }
+              { text: '进阶与开发', link: '/zh/advanced/installation' }
             ]
           },
+          { text: '常见问题', link: '/zh/troubleshooting/' },
           { text: 'GitHub', link: repo }
         ],
         sidebar: {
           '/zh/': [
             {
-              text: '基础指南',
+              text: '开始使用',
               collapsed: false,
               items: [
+                { text: '介绍', link: '/zh/guide/introduction' },
                 { text: '安装', link: '/zh/guide/quick-start' },
                 { text: '第一次使用', link: '/zh/guide/first-run' },
-                { text: '日常使用', link: '/zh/guide/daily' },
-                { text: '迁移已有 Agent 配置', link: '/zh/guide/migrate' },
-                { text: '安装详解', link: '/zh/guide/installation' },
-                { text: '基础用法', link: '/zh/guide/basic-usage' }
+                { text: '日常使用', link: '/zh/guide/daily' }
               ]
             },
             {
-              text: '配置系统',
+              text: '使用指南',
               collapsed: false,
               items: [
-                { text: '配置概览', link: '/zh/configuration/' },
+                { text: '命令行运行 Agent', link: '/zh/guide/basic-usage' },
+                { text: '迁移已有 Agent 配置', link: '/zh/guide/migrate' },
+                { text: '网页服务与远程访问', link: '/zh/guide/web' },
+                { text: '安全须知', link: '/zh/guide/security' }
+              ]
+            },
+            {
+              text: '配置',
+              collapsed: true,
+              items: [
+                { text: '配置入门', link: '/zh/configuration/' },
+                { text: '配置项参考', link: '/zh/configuration/config-files' },
                 { text: '环境变量', link: '/zh/configuration/environment' },
-                { text: '配置文件', link: '/zh/configuration/config-files' },
                 { text: '配置示例', link: '/zh/configuration/examples' }
               ]
             },
             {
-              text: '命令参考',
-              collapsed: false,
+              text: '参考',
+              collapsed: true,
               items: [
-                { text: '命令行选项', link: '/zh/reference/cli-options' },
-                { text: 'AI 智能体', link: '/zh/reference/agents' },
+                { text: '命令速查', link: '/zh/reference/cli-options' },
+                { text: '支持的 Agent', link: '/zh/reference/agents' },
                 { text: '容器模式', link: '/zh/reference/container-modes' }
               ]
             },
             {
-              text: '高级主题',
-              collapsed: false,
+              text: '常见问题',
+              collapsed: true,
               items: [
-                { text: 'Docker-in-Docker', link: '/zh/advanced/docker-in-docker' },
-                { text: '会话管理', link: '/zh/advanced/session-management' },
-                { text: '网页服务认证', link: '/zh/advanced/web-server-auth' }
+                { text: '常见问题', link: '/zh/troubleshooting/' },
+                { text: '运行时问题', link: '/zh/troubleshooting/runtime-errors' }
               ]
             },
             {
-              text: '故障排查',
-              collapsed: false,
+              text: '进阶与开发',
+              collapsed: true,
               items: [
-                { text: '问题索引', link: '/zh/troubleshooting/' },
-                { text: '构建问题', link: '/zh/troubleshooting/build-errors' },
-                { text: '运行时问题', link: '/zh/troubleshooting/runtime-errors' }
+                { text: '安装详解', link: '/zh/advanced/installation' },
+                { text: '自定义镜像', link: '/zh/advanced/custom-image' },
+                { text: '镜像构建问题', link: '/zh/advanced/build-errors' },
+                { text: 'Docker-in-Docker', link: '/zh/advanced/docker-in-docker' },
+                { text: '会话管理与恢复', link: '/zh/advanced/session-management' },
+                { text: 'Playwright 插件', link: '/zh/advanced/playwright' },
+                { text: '参与开发', link: '/zh/advanced/contributing' }
               ]
             }
           ]
@@ -292,69 +303,80 @@ export default defineConfig({
       themeConfig: {
         siteTitle: 'MANYOYO Docs',
         nav: [
-          { text: 'Home', link: '/en/' },
           { text: 'Install', link: '/en/guide/quick-start' },
           {
             text: 'Documentation',
             items: [
-              { text: 'Guide', link: '/en/guide/installation' },
+              { text: 'Getting Started', link: '/en/guide/introduction' },
+              { text: 'Guides', link: '/en/guide/basic-usage' },
               { text: 'Configuration', link: '/en/configuration/' },
               { text: 'Reference', link: '/en/reference/cli-options' },
-              { text: 'Advanced', link: '/en/advanced/docker-in-docker' },
-              { text: 'Troubleshooting', link: '/en/troubleshooting/' }
+              { text: 'Advanced & Development', link: '/en/advanced/installation' }
             ]
           },
+          { text: 'FAQ', link: '/en/troubleshooting/' },
           { text: 'GitHub', link: repo }
         ],
         sidebar: {
           '/en/': [
             {
-              text: 'Basic Guide',
+              text: 'Getting Started',
               collapsed: false,
               items: [
+                { text: 'Introduction', link: '/en/guide/introduction' },
                 { text: 'Install', link: '/en/guide/quick-start' },
                 { text: 'First Run', link: '/en/guide/first-run' },
-                { text: 'Daily Use', link: '/en/guide/daily' },
-                { text: 'Migrate Existing Agent Configs', link: '/en/guide/migrate' },
-                { text: 'Installation', link: '/en/guide/installation' },
-                { text: 'Basic Usage', link: '/en/guide/basic-usage' }
+                { text: 'Daily Use', link: '/en/guide/daily' }
               ]
             },
             {
-              text: 'Configuration System',
+              text: 'Guides',
               collapsed: false,
               items: [
-                { text: 'Overview', link: '/en/configuration/' },
+                { text: 'Run Agents from the CLI', link: '/en/guide/basic-usage' },
+                { text: 'Migrate Existing Agent Configs', link: '/en/guide/migrate' },
+                { text: 'Web Service and Remote Access', link: '/en/guide/web' },
+                { text: 'Security Notes', link: '/en/guide/security' }
+              ]
+            },
+            {
+              text: 'Configuration',
+              collapsed: true,
+              items: [
+                { text: 'Configuration Basics', link: '/en/configuration/' },
+                { text: 'Configuration Reference', link: '/en/configuration/config-files' },
                 { text: 'Environment Variables', link: '/en/configuration/environment' },
-                { text: 'Configuration Files', link: '/en/configuration/config-files' },
                 { text: 'Examples', link: '/en/configuration/examples' }
               ]
             },
             {
-              text: 'Command Reference',
-              collapsed: false,
+              text: 'Reference',
+              collapsed: true,
               items: [
-                { text: 'CLI Options', link: '/en/reference/cli-options' },
-                { text: 'AI Agents', link: '/en/reference/agents' },
+                { text: 'Command Cheat Sheet', link: '/en/reference/cli-options' },
+                { text: 'Supported Agents', link: '/en/reference/agents' },
                 { text: 'Container Modes', link: '/en/reference/container-modes' }
               ]
             },
             {
-              text: 'Advanced Topics',
-              collapsed: false,
+              text: 'FAQ',
+              collapsed: true,
               items: [
-                { text: 'Docker-in-Docker', link: '/en/advanced/docker-in-docker' },
-                { text: 'Session Management', link: '/en/advanced/session-management' },
-                { text: 'Web Server Auth', link: '/en/advanced/web-server-auth' }
+                { text: 'FAQ', link: '/en/troubleshooting/' },
+                { text: 'Runtime Issues', link: '/en/troubleshooting/runtime-errors' }
               ]
             },
             {
-              text: 'Troubleshooting',
-              collapsed: false,
+              text: 'Advanced & Development',
+              collapsed: true,
               items: [
-                { text: 'Issue Index', link: '/en/troubleshooting/' },
-                { text: 'Build Errors', link: '/en/troubleshooting/build-errors' },
-                { text: 'Runtime Errors', link: '/en/troubleshooting/runtime-errors' }
+                { text: 'Installation Details', link: '/en/advanced/installation' },
+                { text: 'Custom Image', link: '/en/advanced/custom-image' },
+                { text: 'Image Build Issues', link: '/en/advanced/build-errors' },
+                { text: 'Docker-in-Docker', link: '/en/advanced/docker-in-docker' },
+                { text: 'Session Management and Recovery', link: '/en/advanced/session-management' },
+                { text: 'Playwright Plugin', link: '/en/advanced/playwright' },
+                { text: 'Contributing', link: '/en/advanced/contributing' }
               ]
             }
           ]

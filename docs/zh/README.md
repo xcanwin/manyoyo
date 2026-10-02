@@ -1,62 +1,58 @@
 ---
 layout: home
 title: MANYOYO 文档 | AI 智能体 CLI 安全沙箱
-description: MANYOYO 是用于 AI Agent CLI 的 Docker/Podman 安全沙箱，可安全运行 Claude Code、Gemini、Codex、OpenCode 的 YOLO/SOLO 模式。
+description: MANYOYO 让 Claude Code、Codex、Gemini、OpenCode 在容器里放心跑 YOLO 模式，AI 随便折腾，伤不到你的电脑。一条命令安装。
 
 hero:
   name: MANYOYO
   text: AI 智能体 CLI 安全沙箱
-  tagline: 安全运行 Agent YOLO/SOLO 模式，保护宿主机
+  tagline: 让 AI 在容器里随便折腾，伤不到你的电脑
   actions:
     - theme: brand
-      text: 快速开始
+      text: 立即安装
       link: /zh/guide/quick-start
     - theme: alt
-      text: 安装详解
-      link: /zh/guide/installation
+      text: 它是什么
+      link: /zh/guide/introduction
     - theme: alt
       text: GitHub
       link: https://github.com/xcanwin/manyoyo
 
 features:
-  - title: 多智能体支持
-    details: claude code、gemini、codex、opencode 一套命令快速切换。
+  - title: 隔离保护
+    details: 基于 Docker/Podman 容器隔离，Agent 只能看到你给它的工作目录。
+    link: /zh/guide/security
+    linkText: 安全须知
+  - title: 多 Agent
+    details: Claude Code、Codex、Gemini、OpenCode 一个入口，随时切换。
     link: /zh/reference/agents
-    linkText: 查看详情
-  - title: 安全隔离
-    details: 基于 Docker/Podman 容器隔离，降低宿主机风险。
-    link: /zh/reference/container-modes
-    linkText: 查看详情
-  - title: 配置系统
-    details: 支持环境变量、配置文件、运行配置，灵活管理复杂场景。
-    link: /zh/configuration/
-    linkText: 查看详情
-  - title: 故障排查
-    details: 完整的问题索引、构建和运行时错误解决方案。
-    link: /zh/troubleshooting/
-    linkText: 查看详情
-  - title: 为效率而生
-    details: 支持会话恢复、环境文件导入、配置模板，减少重复操作和 token 开销。
-    link: /zh/advanced/session-management
-    linkText: 查看详情
-  - title: 容器嵌套
-    details: 支持 Docker-in-Docker 模式，安全运行容器化应用。
-    link: /zh/advanced/docker-in-docker
-    linkText: 查看详情
+    linkText: 支持的 Agent
+  - title: 网页界面
+    details: 浏览器里对话、看文件、开终端，手机也能用。
+    link: /zh/guide/first-run
+    linkText: 第一次使用
+  - title: 一条命令安装
+    details: 安装、升级、卸载各一条命令，不需要先装 Node.js 或容器。
+    link: /zh/guide/daily
+    linkText: 日常使用
 ---
 
-> 如果你更习惯英文文档，请切换到 [English](../en/README.md)。
+## 一条命令安装
 
-## 为什么是 MANYOYO
+```bash
+curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
+```
 
-MANYOYO 不是通用容器工具，而是专门为 AI Agent CLI 设计的安全沙箱：
+装完浏览器自动打开，按向导选 Agent、填 Key 就能开始对话。macOS 不需要预装任何东西；Linux 需要已有 Docker 或 Podman。已有 Node.js 和 Docker/Podman 的用户，也可以 `npm install -g @xcanwin/manyoyo`。
 
-- 常见 Agent 与开发工具可预装，避免反复安装
-- 可自由切换 Agent 和 `/bin/bash`，适合真实开发流程
-- 支持配置文件和环境文件，适配团队协作
+## 它是什么
+
+MANYOYO（慢悠悠）让 Claude Code、Codex、Gemini、OpenCode 在容器里放心跑 YOLO / SOLO 模式：Agent 只能看到你给它的工作目录，容器出问题随时删掉重来。详见[介绍](./guide/introduction.md)。
 
 ## 热门场景
 
-- [Claude Code YOLO 安全沙箱](./guide/quick-start.md) - 快速启动隔离环境，降低宿主机风险
+- [Claude Code YOLO 安全沙箱](./guide/quick-start.md) - 一条命令装好，隔离环境里放心免确认
 - [Codex CLI 容器沙箱](./reference/agents.md) - 在隔离容器中运行 `codex`，支持会话恢复与命令调试
-- [Docker/Podman 安全运行 Agent CLI](./reference/container-modes.md) - 对比 `common` / `dind` / `sock` 模式
+- [容器模式](./reference/container-modes.md) - 对比 `common` / `dind` / `sock` 模式
+
+> English? 请切换到 [English](../en/README.md)。

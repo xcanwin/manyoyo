@@ -28,7 +28,7 @@ npm install -g @xcanwin/manyoyo
 manyoyo
 ```
 
-更多安装方式（低权限 npm、源码）见[安装详解](./installation.md)。
+更多安装方式（低权限 npm、源码）见[安装详解](../advanced/installation.md)。
 
 ::: details 手动下载
 打开 [Releases](https://github.com/xcanwin/manyoyo/releases/latest)，下载 `manyoyo-<版本>-<系统>-<芯片>.run`（Apple 芯片选 `macos-arm64`，Intel Mac 选 `macos-x64`），然后执行 `sh manyoyo-*.run`。

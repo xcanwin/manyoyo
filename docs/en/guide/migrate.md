@@ -23,8 +23,8 @@ manyoyo -v
 ## 2. Install Podman / Docker
 
 Container runtime install/switch references:
-- [Install Podman (Recommended)](./installation.md#install-podman-recommended)
-- [Install Docker (Optional)](./installation.md#install-docker-optional)
+- [Install Podman (Recommended)](../advanced/installation.md#install-podman-recommended)
+- [Install Docker (Optional)](../advanced/installation.md#install-docker-optional)
 
 ## 3. Migrate existing configs now
 

@@ -1,62 +1,58 @@
 ---
 layout: home
 title: MANYOYO Docs | AI Agent CLI Security Sandbox
-description: MANYOYO is a Docker/Podman security sandbox for AI Agent CLI tools. Safely run Claude Code, Gemini, Codex, and OpenCode in YOLO/SOLO workflows.
+description: MANYOYO lets Claude Code, Codex, Gemini and OpenCode run in YOLO mode inside a container so the AI can go wild without hurting your computer. One command to install.
 
 hero:
   name: MANYOYO
   text: AI Agent CLI Security Sandbox
-  tagline: Safely run Agent YOLO/SOLO mode, protect your host machine
+  tagline: Let AI go wild in a container, without hurting your computer
   actions:
     - theme: brand
-      text: Quick Start
+      text: Install now
       link: /en/guide/quick-start
     - theme: alt
-      text: Installation Guide
-      link: /en/guide/installation
+      text: What is it
+      link: /en/guide/introduction
     - theme: alt
       text: GitHub
       link: https://github.com/xcanwin/manyoyo
 
 features:
-  - title: Multi-Agent Support
-    details: Claude Code, Gemini, Codex, OpenCode - switch between agents with one command.
+  - title: Isolation
+    details: Docker/Podman container isolation; the agent only sees the work directory you give it.
+    link: /en/guide/security
+    linkText: Security notes
+  - title: Multiple agents
+    details: Claude Code, Codex, Gemini and OpenCode behind one entry point, switch any time.
     link: /en/reference/agents
-    linkText: Learn more
-  - title: Security Isolation
-    details: Docker/Podman container isolation to reduce host machine risks.
-    link: /en/reference/container-modes
-    linkText: Learn more
-  - title: Configuration System
-    details: Support environment variables, config files, and run configs for flexible scenario management.
-    link: /en/configuration/
-    linkText: Learn more
-  - title: Troubleshooting
-    details: Complete issue index with build and runtime error solutions.
-    link: /en/troubleshooting/
-    linkText: Learn more
-  - title: Built for Efficiency
-    details: Session recovery, environment file import, config templates to reduce repetition and token costs.
-    link: /en/advanced/session-management
-    linkText: Learn more
-  - title: Container Nesting
-    details: Docker-in-Docker mode support for safely running containerized applications.
-    link: /en/advanced/docker-in-docker
-    linkText: Learn more
+    linkText: Supported agents
+  - title: Web UI
+    details: Chat, browse files and open a terminal in the browser, phones included.
+    link: /en/guide/first-run
+    linkText: First run
+  - title: One-command install
+    details: One command each to install, upgrade and uninstall; no need to install Node.js or containers first.
+    link: /en/guide/daily
+    linkText: Daily use
 ---
 
-> If you prefer Chinese documentation, please switch to [简体中文](../zh/README.md).
+## Install with one command
 
-## Why MANYOYO
+```bash
+curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
+```
 
-MANYOYO is not a general container tool, but a security sandbox specifically designed for AI Agent CLIs:
+When it finishes the browser opens; follow the wizard to pick an agent and enter a key, then start chatting. macOS needs nothing installed first; Linux needs Docker or Podman. If you already have Node.js and Docker/Podman, `npm install -g @xcanwin/manyoyo` works too.
 
-- Pre-installed common Agents and development tools, avoiding repeated installations
-- Freely switch between Agent and `/bin/bash`, suitable for real development workflows
-- Support configuration files and environment files for team collaboration
+## What is it
 
-## Popular Use Cases
+MANYOYO lets Claude Code, Codex, Gemini and OpenCode run in YOLO / SOLO mode inside a container: the agent only sees the work directory you give it, and a broken container can be deleted and recreated any time. See the [Introduction](./guide/introduction.md).
 
-- [Claude Code YOLO sandbox](./guide/quick-start.md) - launch an isolated environment quickly
+## Popular use cases
+
+- [Claude Code YOLO sandbox](./guide/quick-start.md) - one command to set up, no-confirmation mode in an isolated environment
 - [Codex CLI container sandbox](./reference/agents.md) - run `codex` in an isolated container with session recovery
-- [Docker/Podman secure runtime for Agent CLI](./reference/container-modes.md) - compare `common` / `dind` / `sock` modes
+- [Container modes](./reference/container-modes.md) - compare `common` / `dind` / `sock`
+
+> 中文文档请切换到 [简体中文](../zh/README.md)。

@@ -1,11 +1,11 @@
 ---
-title: Web Server Auth and Security | MANYOYO
-description: Covers auth gateway behavior, priority rules, login flow, and exposure hardening for MANYOYO serve mode.
+title: Web Service and Remote Access | MANYOYO
+description: Covers starting the manyoyo serve web service, the auth gateway, login flow, remote access (ssh -L) and public-listening hardening.
 ---
 
-# Web Server Auth and Security
+# Web Service and Remote Access
 
-This page focuses on authentication behavior and minimum security baseline for `manyoyo serve`.
+This page covers the `manyoyo serve` web service: how to start it, sign in and reach it remotely. Risks and boundaries are in [Security Notes](./security.md); `ssh -L` access on SSH machines is in [First Run](./first-run.md).
 
 The web UI provides three interaction modes: `Command`, `AGENT`, and `Interactive Terminal`. `AGENT` mode requires `agentPromptCommand` to be configured on the session (template must include `{prompt}`).
 

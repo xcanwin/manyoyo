@@ -1,11 +1,11 @@
 ---
-title: 网页服务认证与安全实践 | MANYOYO
-description: 介绍 MANYOYO serve 模式的认证网关、参数优先级、登录流程与对外监听安全建议。
+title: 网页服务与远程访问 | MANYOYO
+description: 介绍 manyoyo serve 网页服务的启动方式、认证网关、登录流程、远程访问（ssh -L）与对外监听安全建议。
 ---
 
-# 网页服务认证与安全实践
+# 网页服务与远程访问
 
-本页聚焦 `manyoyo serve` 网页模式的认证行为与最小安全基线。
+本页讲 `manyoyo serve` 网页服务：怎么启动、怎么登录、怎么远程访问。风险与边界见[安全须知](./security.md)；SSH 机器上的 `ssh -L` 访问见[第一次使用](./first-run.md)。
 
 当前网页交互支持三种模式：`命令模式`、`AGENT 模式`、`交互终端`。其中 `AGENT 模式` 需要会话配置 `agentPromptCommand`（模板内必须包含 `{prompt}`）。
 

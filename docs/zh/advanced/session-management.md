@@ -1,627 +1,125 @@
 # 会话管理
 
-本页面介绍 MANYOYO 的会话管理机制，包括会话创建、恢复、持久化和最佳实践。
+本页说明如何创建、恢复、保留和清理容器会话。会话 = 一个容器 + 容器内智能体的工作状态与对话历史。
 
-> 提示：运行配置统一写在 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`，`envFile` 使用绝对路径，`env` 使用对象（map）。
-
-## 什么是会话
-
-在 MANYOYO 中，**会话（Session）** 指的是：
-- 一个运行的容器实例
-- 容器内 AI 智能体的工作状态
-- 智能体的对话历史和上下文
-
-## 会话生命周期
-
-```
-创建 → 运行 → 暂停/退出 → 恢复 → 删除
-  ↓      ↓         ↓          ↓       ↓
- 容器   AI工作   容器保留   继续工作  清理
-```
+> 运行配置写在 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`，`envFile` 用绝对路径，`env` 用对象。
 
 ## 创建会话
 
-### 自动命名会话
-
 ```bash
-# 自动生成容器名（基于时间戳）
-manyoyo run -y c
-# 生成名称如：my-0204-1430
-
-# 查看容器名
-manyoyo ps
-```
-
-**命名规则**：`my-{月日}-{时分}`
-- 例如：`my-0204-1430` 表示 2月4日 14:30 创建
-
-### 命名会话
-
-```bash
-# 创建命名会话（推荐）
+# 命名会话（推荐，便于恢复）
 manyoyo run -n my-project -y c
 
-# 优势：
-# - 容易记忆
-# - 便于管理多个项目
-# - 配置文件可以固定名称
+# 不指定名称时自动生成 my-{月日}-{时分}，用 manyoyo ps 查看
+manyoyo run -y c
+
+# 用运行配置固定名称与参数
+manyoyo run -r project-a
 ```
 
-### 使用配置文件创建会话
-
-```bash
-# 方式 1：运行配置（推荐）
-cat > ~/.manyoyo/manyoyo.json << 'EOF'
+```json
 {
     "runs": {
         "project-a": {
             "containerName": "my-project-a",
+            "hostPath": "/abs/path/project-a",
             "envFile": ["/abs/path/anthropic_claudecode.env"],
             "yolo": "c"
         }
     }
 }
-EOF
-
-manyoyo run -r project-a
-
-# 方式 2：带项目路径的运行配置
-cat > ~/.manyoyo/manyoyo.json << 'EOF'
-{
-    "runs": {
-        "project-b": {
-            "containerName": "my-myproject",
-            "hostPath": "/abs/path/myproject",
-            "containerPath": "/abs/path/myproject",
-            "envFile": ["/abs/path/anthropic_claudecode.env"],
-            "yolo": "c"
-        }
-    }
-}
-EOF
-
-manyoyo run -r project-b
 ```
 
-## 会话恢复
+`containerName` 支持 `{now}` 模板（展开为 `MMDD-HHmm`）。
 
-### 退出提示
+## 退出时的选择
 
-当你退出容器会话后，系统会提示：
+退出智能体后会询问是否保留容器：
 
-```
-容器退出，请选择操作：
-  y - 保持容器在后台运行（默认）
-  n - 删除容器
-  1 - 使用首次命令重新进入
-  r - 恢复首次命令会话（仅 Agent 命令可用）
-  x - 执行新命令
-  i - 进入交互式 shell
-```
+| 选项 | 作用 |
+|------|------|
+| `y`（默认） | 容器留在后台，之后可恢复 |
+| `n` | 删除容器，数据与历史丢失 |
+| `1` | 用首次命令（容器标签 `manyoyo.default_cmd`）重新进入 |
+| `r` | 在首次命令后追加恢复参数（仅首次命令是 Agent 时出现） |
+| `x` | 输入并执行新命令 |
+| `i` | 进入交互式 shell |
 
-### 选项说明
-
-#### y - 保持运行（推荐）
+不想被询问可用 `-q` 的静默项隐藏提示（见 [CLI 选项](../reference/cli-options.md)），一次性任务用 `--rm-on-exit` 退出即删除：
 
 ```bash
-# 选择 'y' 后，容器在后台运行
-# 稍后可以恢复会话
-
-# 恢复 Claude Code 会话
-manyoyo run -n my-project -- -c
-
-# 恢复 Codex 会话
-manyoyo run -n my-project -- resume --last
-
-# 恢复 Gemini 会话
-manyoyo run -n my-project -- -r
-```
-
-**适用场景**：
-- 临时离开，稍后继续工作
-- 需要保留 AI 对话历史
-- 测试未完成，需要继续
-
-#### n - 删除容器
-
-```bash
-# 选择 'n' 后，容器被删除
-# 所有数据和历史丢失
-```
-
-**适用场景**：
-- 一次性测试
-- 不需要保留历史
-- 想要释放资源
-
-#### 1 - 重新进入
-
-```bash
-# 选择 '1' 后，使用启动时的命令重新进入
-# 例如，如果启动时是 'manyoyo run -y c'
-# 则重新运行 'claude --dangerously-skip-permissions'
-```
-
-**适用场景**：
-- AI 意外退出
-- 需要重启 AI 工具
-- 清空当前会话但保留容器
-
-#### r - 恢复首次命令会话
-
-```bash
-# 选择 'r' 后，在首次命令后自动追加 Agent 恢复参数
-# 例如：
-#   Claude -> -r
-#   Codex  -> resume
-```
-
-**适用场景**：
-- 首次命令就是 Agent CLI
-- 希望快速走恢复流程而不是手动输入
-
-#### x - 执行新命令
-
-```bash
-# 选择 'x' 后，可以执行任意命令
-# 提示输入命令
-
-# 例如：
-x
-请输入要执行的命令: npm test
-```
-
-**适用场景**：
-- 需要运行测试
-- 检查 AI 做的修改
-- 执行自定义脚本
-
-#### i - 进入 shell
-
-```bash
-# 选择 'i' 后，进入 /bin/bash
-
-# 可以：
-$ ls -la              # 查看文件
-$ git status          # 检查代码
-$ npm test            # 运行测试
-$ claude --version    # 检查工具版本
-```
-
-**适用场景**：
-- 需要手动检查
-- 调试问题
-- 运行多个命令
-
-### 智能体特定的恢复命令
-
-不同 AI CLI 工具有不同的恢复方式：
-
-#### Claude Code
-
-```bash
-# 恢复最后会话
-manyoyo run -n my-session -- -c
-manyoyo run -n my-session -- --continue
-
-# 查看可用会话
-manyoyo run -n my-session -x "claude --list-sessions"
-```
-
-#### Codex
-
-```bash
-# 恢复最后会话
-manyoyo run -n my-session -- resume --last
-
-# 恢复特定会话
-manyoyo run -n my-session -- resume <session-id>
-
-# 列出所有会话
-manyoyo run -n my-session -- list
-```
-
-#### Gemini
-
-```bash
-# 恢复会话
-manyoyo run -n my-session -- -r
-manyoyo run -n my-session -- --resume
-
-# 清除会话历史
-manyoyo run -n my-session -- --clear
-```
-
-#### OpenCode
-
-```bash
-# 恢复会话
-manyoyo run -n my-session -- -c
-manyoyo run -n my-session -- --continue
-```
-
-## 会话持久化
-
-### 容器持久化
-
-容器状态由 Docker/Podman 管理：
-
-```bash
-# 查看所有会话（包括停止的）
-manyoyo ps
-docker ps -a | grep my
-
-# 容器状态
-docker ps -a --format "table {{.Names}}\t{{.Status}}"
-```
-
-### 数据持久化
-
-#### 1. 工作目录挂载
-
-```bash
-# 默认挂载当前目录
-manyoyo run -y c  # 当前目录自动挂载
-
-# 指定工作目录
-manyoyo run --hp /path/to/project -y c
-
-# 代码修改会保存在宿主机
-```
-
-#### 2. 额外数据挂载
-
-```bash
-# 挂载数据目录
-manyoyo run -v "/data:/workspace/data" -y c
-
-# 挂载配置文件
-manyoyo run -v "~/.gitconfig:/root/.gitconfig:ro" -y c
-```
-
-#### 3. 使用 volumes（推荐）
-
-```bash
-# 创建持久化卷
-docker volume create myproject-data
-
-# 挂载卷
-manyoyo run -v "myproject-data:/workspace/data" -y c
-
-# 数据在容器删除后仍然保留
-```
-
-### AI 对话历史持久化
-
-不同 AI 工具的历史存储位置：
-
-#### Claude Code
-
-```bash
-# 历史存储在容器内
-# 位置：~/.claude/sessions/
-
-# 挂载会话目录（可选）
-manyoyo run -v "~/.claude:/root/.claude" -y c
-```
-
-#### Codex
-
-```bash
-# 历史存储在容器内
-# 位置：~/.codex/sessions/
-
-# 挂载会话目录
-manyoyo run -v "~/.codex:/root/.codex" -y c
-```
-
-## 多会话管理
-
-### 并行会话
-
-```bash
-# 项目 A
-manyoyo run -n project-a --hp ~/projects/a -y c
-
-# 项目 B
-manyoyo run -n project-b --hp ~/projects/b -y c
-
-# 项目 C
-manyoyo run -n project-c --hp ~/projects/c -y c
-
-# 查看所有会话
-manyoyo ps
-```
-
-### 会话切换
-
-```bash
-# 在项目 A 中工作
-manyoyo run -n project-a -- -c
-
-# 切换到项目 B
-manyoyo run -n project-b -- -c
-
-# 切换到项目 C
-manyoyo run -n project-c -- -c
-```
-
-### 会话隔离
-
-每个会话完全独立：
-- 独立的文件系统
-- 独立的环境变量
-- 独立的 AI 对话历史
-- 独立的进程空间
-
-## 会话清理
-
-### 手动清理
-
-```bash
-# 删除单个会话
-manyoyo rm my-session
-manyoyo rm my-session
-
-# 或使用 Docker 命令
-docker rm -f my-session
-```
-
-### 自动清理
-
-```bash
-# 一次性会话（退出后自动删除）
 manyoyo run -n temp --rm-on-exit -y c
-
-# 适用场景：
-# - 临时测试
-# - 快速验证
-# - 不需要保留历史
 ```
 
-### 清理容器
+## 恢复会话
+
+容器仍在时，用同名重新进入；`-- ` 之后的参数追加到首次命令：
 
 ```bash
-# 查看容器，确认名称后逐个删除
+manyoyo run -n my-project              # 重新执行首次命令
+manyoyo run -n my-project -- -r        # Claude / Gemini 恢复
+manyoyo run -n my-project -- resume    # Codex 恢复
+manyoyo run -n my-project -- -c        # OpenCode 恢复
+```
+
+各智能体的恢复参数以 `lib/agent-resume.js` 为准：Claude/Gemini → `-r`，Codex → `resume`，OpenCode → `-c`。会话启动后终端提示里也会打印当前容器可用的恢复命令。更多恢复选项见各智能体自己的 `--help`。
+
+## 持久化范围
+
+- **容器存在时**：文件系统、环境变量与智能体对话历史都保留在容器里；`manyoyo rm` 后一并消失。
+- **工作目录**：默认挂载当前目录，用 `--hp` 指定其他目录，代码改动保存在宿主机。
+- **额外数据**：用 `-v` 或 `volumes` 挂载；命名卷在容器删除后仍保留。
+- **对话历史**：保存在容器内（如 `~/.claude`、`~/.codex`）。要在删除容器后保留，需要挂载对应目录；挂载宿主机凭据或配置目录的风险见 [安全须知](../guide/security.md)。
+
+```bash
+manyoyo run -n my-project -v "myproject-data:/workspace/data" -y c
+```
+
+## 多会话
+
+每个会话有独立的文件系统、环境变量、对话历史与进程空间，按项目各开一个：
+
+```bash
+manyoyo run -n project-a --hp ~/projects/a -y c
+manyoyo run -n project-b --hp ~/projects/b -y c
+manyoyo ps                          # 查看全部会话
+manyoyo run -n project-a -- -r      # 切回 A（Claude）
+```
+
+## 查看与进入
+
+```bash
+manyoyo ps                                  # 列出会话
+manyoyo run -n my-project -x /bin/bash      # 进入运行中的容器
+docker logs --tail 100 my-project           # 容器日志（Podman 同理）
+```
+
+## 清理
+
+先 `manyoyo ps` 确认名称，再逐个删除，不要用按前缀批量匹配的命令，以免误删其他容器：
+
+```bash
 manyoyo ps
 manyoyo rm <名称>
 ```
 
-## 会话监控
-
-### 查看会话状态
+## 备份与快照
 
 ```bash
-# 列出所有 MANYOYO 会话
-manyoyo ps
-
-# 详细状态
-docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-
-# 资源使用情况
-docker stats $(docker ps -q --filter "name=my")
+docker cp my-project:/root/.claude ./claude-backup    # 备份智能体历史
+docker commit my-project my-project:snapshot          # 保存容器当前状态为镜像
 ```
 
-### 查看会话日志
+快照镜像不会自动被 `manyoyo` 管理，不需要时用 `manyoyo images` 查看后清理。
 
-```bash
-# 查看容器日志
-docker logs my-session
+## 常见问题
 
-# 实时日志
-docker logs -f my-session
+- **提示容器不存在**：`manyoyo ps` 确认名称；已被删除就重新 `manyoyo run -n <名称> -y c`。
+- **恢复后智能体不记得之前的对话**：容器可能是新建的，或历史目录没有挂载；见上文持久化范围。
+- **容器无法启动**：`docker logs <名称>` 看原因，必要时 `manyoyo rm <名称>` 后重建；运行时问题见 [运行错误](../troubleshooting/runtime-errors.md)。
 
-# 最后 100 行
-docker logs --tail 100 my-session
-```
+## 下一步
 
-### 进入运行中的会话
-
-```bash
-# 进入 shell 检查
-manyoyo run -n my-session -x /bin/bash
-
-# 查看进程
-$ ps aux
-
-# 查看文件
-$ ls -la
-
-# 查看环境变量
-$ env | grep ANTHROPIC
-```
-
-## 最佳实践
-
-### 1. 命名规范
-
-```bash
-# 按项目命名
-my-webapp
-my-api
-my-mobile
-
-# 按功能命名
-my-dev
-my-test
-my-debug
-
-# 按时间命名（自动）
-my-0204-1430
-```
-
-### 2. 配置文件管理
-
-```bash
-# 为每个项目创建配置
-~/.manyoyo/manyoyo.json
-└── runs
-    ├── webapp
-    ├── api
-    ├── mobile
-    └── debug
-
-# 快速启动
-manyoyo run -r webapp
-manyoyo run -r api
-manyoyo run -r mobile
-```
-
-### 3. 数据备份
-
-```bash
-# 导出容器配置
-docker inspect my-session > my-session.json
-
-# 备份挂载的数据
-tar -czf backup.tar.gz ~/projects/myproject
-
-# 备份 AI 历史（可选）
-docker cp my-session:/root/.claude ./claude-backup
-```
-
-### 4. 定期清理
-
-```bash
-# 每周清理脚本
-cat > ~/cleanup-manyoyo.sh << 'EOF'
-#!/bin/bash
-# 清理超过 7 天的停止容器
-docker ps -a --filter "name=my" --filter "status=exited" \
-    --format "{{.ID}} {{.CreatedAt}}" | \
-    awk '{if ($2 < systime() - 604800) print $1}' | \
-    xargs -r docker rm
-
-# 清理悬空镜像
-docker image prune -f
-EOF
-
-chmod +x ~/cleanup-manyoyo.sh
-```
-
-### 5. 会话模板
-
-```bash
-# 创建会话模板
-cat > ~/.manyoyo/manyoyo.json << 'EOF'
-{
-    "runs": {
-        "template": {
-            "containerName": "my-template",
-            "envFile": ["/abs/path/base.env", "/abs/path/secrets.env"],
-            "volumes": [
-                "~/.ssh:/root/.ssh:ro",
-                "~/.gitconfig:/root/.gitconfig:ro"
-            ],
-            "env": {
-                "TZ": "Asia/Shanghai"
-            }
-        }
-    }
-}
-EOF
-
-# 基于模板创建新会话
-manyoyo run -r template
-# 复制 runs.template 为 runs.newproject 并修改 containerName
-```
-
-## 高级技巧
-
-### 会话快照
-
-```bash
-# 提交容器为镜像（保存当前状态）
-docker commit my-session my-session:snapshot-$(date +%Y%m%d)
-
-# 从快照创建新会话
-docker run -it my-session:snapshot-20240204
-```
-
-### 会话导出/导入
-
-```bash
-# 导出会话
-docker export my-session > my-session.tar
-
-# 导入到其他机器
-cat my-session.tar | docker import - my-session:imported
-```
-
-### 会话共享
-
-```bash
-# 多人协作（同一容器）
-# 人员 A 创建会话
-manyoyo run -n shared-session -y c
-
-# 人员 B 进入相同会话
-manyoyo run -n shared-session -x /bin/bash
-
-# 注意：不推荐多人同时使用 AI
-```
-
-## 故障排查
-
-### 会话无法恢复
-
-**问题**：提示容器不存在
-
-**解决方案**：
-```bash
-# 检查容器是否存在
-manyoyo ps
-docker ps -a | grep my-session
-
-# 如果不存在，创建新会话
-manyoyo run -n my-session -y c
-```
-
-### AI 历史丢失
-
-**问题**：恢复会话后，AI 不记得之前的对话
-
-**解决方案**：
-```bash
-# 检查容器是否是新创建的
-docker ps -a --format "{{.Names}}\t{{.CreatedAt}}"
-
-# 挂载会话目录（下次创建时）
-manyoyo run -v "~/.claude:/root/.claude" -n my-session -y c
-```
-
-### 容器无法启动
-
-**问题**：会话启动失败
-
-**解决方案**：
-```bash
-# 查看容器日志
-docker logs my-session
-
-# 删除并重新创建
-manyoyo rm my-session
-manyoyo run -n my-session -y c
-```
-
-## 与 Skills Marketplace 集成
-
-如果安装了 Skills Marketplace，可以获得更强大的会话管理功能：
-
-```bash
-# 列出所有会话（包括云端）
-claude --list-sessions
-
-# 恢复云端会话
-claude --resume-session <session-id>
-
-# 同步会话到云端
-claude --sync-sessions
-```
-
-## 相关文档
-
-- [基础用法](../guide/basic-usage.md) - 学习基本命令
-- [AI 智能体](../reference/agents.md) - 了解各智能体的会话管理
-- [配置示例](../configuration/examples.md) - 查看配置示例
-- [容器模式](../reference/container-modes.md) - 了解容器管理
+- [基础用法](../guide/basic-usage.md)
+- [AI 智能体](../reference/agents.md)
+- [安全须知](../guide/security.md)

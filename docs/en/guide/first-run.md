@@ -35,7 +35,7 @@ ssh -L <port>:127.0.0.1:<port> <user>@<server>
 # then open http://127.0.0.1:<port>; user admin, password is the one set in manyoyo setup
 ```
 
-If the guess is wrong, force it with `manyoyo --headless` (no graphical session) or `manyoyo --gui` (graphical session), or set the environment variable `MANYOYO_HEADLESS=1` or `0`. More remote-access options are in [Web Server Authentication](../advanced/web-server-auth.md).
+If the guess is wrong, force it with `manyoyo --headless` (no graphical session) or `manyoyo --gui` (graphical session), or set the environment variable `MANYOYO_HEADLESS=1` or `0`. More remote-access options are in [Web Server Authentication](./web.md).
 
 ## Next Steps
 

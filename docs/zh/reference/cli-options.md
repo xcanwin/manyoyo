@@ -133,56 +133,15 @@ manyoyo
 | `--ext-path <path>` | 追加扩展目录，目录内需包含 `manifest.json` |
 | `--ext-name <name>` | 追加 `~/.manyoyo/plugin/playwright/extensions/` 下的扩展 |
 
-## 高频命令
-
-```bash
-# 查看帮助
-manyoyo --help
-manyoyo run --help
-manyoyo config show --help
-
-# 初始化并启动
-manyoyo init all
-manyoyo run -r claude
-manyoyo run -r codex --ss "resume --last"
-
-# 调试配置和命令拼装
-manyoyo config show -r claude
-manyoyo config command -r claude
-
-# 诊断运行环境
-manyoyo doctor
-manyoyo doctor --json
-manyoyo doctor --fix
-
-# 自定义命令
-manyoyo run --rm-on-exit -x /bin/bash
-manyoyo run -n demo --first-shell "npm ci" -s "npm test"
-
-# 网页服务
-manyoyo serve 127.0.0.1:3000
-manyoyo serve 0.0.0.0:3000 -U admin -P strong-password
-
-# Playwright
-manyoyo playwright ls
-manyoyo playwright up mcp-host-headless
-manyoyo playwright up cli-host-headless
-manyoyo playwright up dev-host-headed
-manyoyo playwright mcp-add --host localhost
-```
-
 ## 配置与优先级
 
-- 标量参数优先级：命令行参数 > `runs.<name>` > 全局配置 > 默认值
-- 数组参数 `envFile` / `volumes` / `imageBuildArgs`：按“全局配置 → `runs.<name>` → 命令行参数”追加合并
-- `env`：按 key 合并覆盖，优先级同标量参数
-- `serve` 认证参数优先级：命令行参数 > `runs.<name>` > 全局配置 > 环境变量 > 默认值
-- `--ef` 与 `--first-env-file` 仅支持绝对路径
-- `--worktrees` 默认按 `<主仓库父目录>/worktrees/<主仓库目录名>` 推导项目级 worktrees 根目录；若从某个 worktree 目录启动，会额外挂载主仓库根目录与该项目的 worktrees 根目录
-- `--worktrees-root` 表示“项目级 worktrees 根目录”，例如 `/Users/name/github/worktrees/manyoyo`，不是主仓库目录，也不是单个分支目录
+优先级与合并规则见[配置入门](../configuration/README.md)；`--ef` 与 `--first-env-file` 仅支持绝对路径。
 
-## 安全提醒
+- `--worktrees` 默认按 `<主仓库父目录>/worktrees/<主仓库目录名>` 推导项目级 worktrees 根目录；从某个 worktree 目录启动时，会额外挂载主仓库根目录与该根目录
+- `--worktrees-root` 是“项目级 worktrees 根目录”（如 `/Users/name/github/worktrees/manyoyo`），不是主仓库目录，也不是单个分支目录
+- `sock` 模式、`-y/--yolo` 与对外监听 `serve` 的风险见[安全说明](../guide/security.md)
 
-- `sock` 模式会让容器访问宿主机 Docker socket，风险最高
-- `-y, --yolo` 会跳过 Agent 权限确认，适合可控环境
-- `serve 0.0.0.0:<port>` 对外监听时必须设置强密码，并配合防火墙限制来源
+## 下一步
+
+- [日常使用](../guide/daily.md)
+- [配置概览](../configuration/README.md)

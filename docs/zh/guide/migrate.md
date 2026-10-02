@@ -23,8 +23,8 @@ manyoyo -v
 ## 2. 安装 Podman / Docker
 
 容器运行时安装或切换可参考：
-- [安装 Podman（推荐）](./installation.md#安装-podman推荐)
-- [安装 Docker（可选）](./installation.md#安装-docker可选)
+- [安装 Podman（推荐）](../advanced/installation.md#安装-podman推荐)
+- [安装 Docker（可选）](../advanced/installation.md#安装-docker可选)
 
 ## 3. 立即迁移配置
 

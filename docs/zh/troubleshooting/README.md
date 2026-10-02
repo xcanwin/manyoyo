@@ -1,78 +1,50 @@
-# 故障排查指南
+---
+title: 常见问题 | MANYOYO
+description: MANYOYO 常见问题按症状索引：安装、登录、权限、镜像、环境变量，每条给出最短排查路径。
+---
 
-本页用于快速定位 MANYOYO 常见问题，并给出最短排查路径。
+# 常见问题
 
-## 快速入口
+按症状找答案；找不到再看最下面的「最小诊断流程」。
 
-- 构建失败：[`build-errors`](./build-errors.md)
-- 运行异常：[`runtime-errors`](./runtime-errors.md)
+## 安装与启动
 
-## 常见问题速查
+**Linux 安装时提示没有 Docker / Podman**
+装好再重新运行安装命令即可续上：`sudo apt update && sudo apt install -y podman`，或按 Docker 官方文档安装。安装器不会替你执行 `sudo`。
 
-| 症状 | 可能原因 | 快速命令 | 详情 |
-| --- | --- | --- | --- |
-| `manyoyo build` 失败 | 网络/磁盘/权限 | `df -h`、`manyoyo build --iv 2.1.0-common` | [构建问题](./build-errors.md) |
-| `pinging container registry failed` | 本地镜像未构建 | `manyoyo build --iv 2.1.0-common` | [镜像拉取失败](./build-errors.md#镜像拉取失败) |
-| `permission denied` | Docker/Podman 权限不足 | `groups`、`docker ps` | [权限问题](./runtime-errors.md#权限不足) |
-| 环境变量未生效 | `envFile` 路径/格式错误 | `manyoyo config show --ef /abs/path/example.env` | [环境变量问题](./runtime-errors.md#环境变量未生效) |
+**浏览器没有自动打开**
+终端会打印一次性登录地址，60 秒内访问即可；超时再执行一次 `manyoyo`。SSH 等无图形界面的机器见[第一次使用](../guide/first-run.md)。
+
+**忘记登录密码**
+在本机执行 `manyoyo` 会自动登录，不需要密码。要重设密码，运行 `manyoyo setup`，或直接修改 `~/.manyoyo/manyoyo.json` 里的 `serverPass`。
+
+**升级后想回到上一版本**
+`manyoyo update --rollback`，见[日常使用](../guide/daily.md)。
+
+## 运行与镜像
+
+**`permission denied`**
+Docker / Podman 权限不足。先确认 `docker ps` 能直接运行；详见[权限问题](./runtime-errors.md#权限不足)。
+
+**`pinging container registry failed` / 镜像拉取失败**
+网络无法访问镜像仓库。检查代理，或改用本地构建，见[镜像拉取失败](../advanced/build-errors.md#镜像拉取失败)。
+
+**环境变量未生效**
+`envFile` 必须是绝对路径。用 `manyoyo config show --ef /abs/path/example.env` 核对，详见[环境变量问题](./runtime-errors.md#环境变量未生效)。
+
+**`manyoyo build` 失败**
+绝大多数用户不需要自己构建。确需构建时见[镜像构建问题](../advanced/build-errors.md)。
 
 ## 最小诊断流程
 
-1. 基础检查
-
 ```bash
-manyoyo -v
-node --version
-docker --version   # 或 podman --version
+manyoyo doctor                  # 检查容器运行时、镜像、配置和端口
+manyoyo doctor --fix            # 自动修复可修复的项
+manyoyo config show -r claude   # 查看最终生效的配置
+manyoyo config command -r claude  # 查看将执行的容器命令
+manyoyo ps                      # 容器状态
 ```
-
-2. 查看最终配置和命令
-
-```bash
-manyoyo config show
-manyoyo config command
-manyoyo config show -r claude
-```
-
-3. 检查镜像与容器状态
-
-```bash
-docker images | grep manyoyo   # 或 podman images
-manyoyo ps
-```
-
-4. 验证环境文件加载（`--ef` 仅支持绝对路径）
-
-```bash
-manyoyo config show --ef /abs/path/anthropic_claudecode.env
-manyoyo run --ef /abs/path/anthropic_claudecode.env -x env | grep ANTHROPIC
-```
-
-## 配置检查要点
-
-- 运行配置位于 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`。
-- `manyoyo run -r <name>` 只按名称读取 `~/.manyoyo/manyoyo.json` 中的 `runs.<name>`。
-- `envFile` 必须是绝对路径数组。
 
 ## 获取帮助
 
-1. 收集信息
-
-```bash
-uname -a
-manyoyo -v
-manyoyo config show
-manyoyo ps
-```
-
-2. 导出日志
-
-```bash
-manyoyo build --iv 2.1.0-common 2>&1 | tee build-error.log
-docker logs <容器名> 2>&1 | tee runtime-error.log  # 或 podman logs
-```
-
-3. 提交 Issue
-
-- 仓库地址：[GitHub Issues](https://github.com/xcanwin/manyoyo/issues)
-- 请附：复现步骤、错误日志、系统信息、脱敏后的配置片段。
+到 [GitHub Issues](https://github.com/xcanwin/manyoyo/issues) 提交，请附：复现步骤、错误日志、`manyoyo -v` 与系统信息、脱敏后的配置片段。更多运行时问题见[运行时问题](./runtime-errors.md)。

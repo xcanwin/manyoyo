@@ -133,56 +133,15 @@ Extra options for `playwright up`:
 | `--ext-path <path>` | Append an extension directory containing `manifest.json` |
 | `--ext-name <name>` | Append an extension under `~/.manyoyo/plugin/playwright/extensions/` |
 
-## Common workflows
-
-```bash
-# Help
-manyoyo --help
-manyoyo run --help
-manyoyo config show --help
-
-# Initialize and start
-manyoyo init all
-manyoyo run -r claude
-manyoyo run -r codex --ss "resume --last"
-
-# Inspect config and generated command
-manyoyo config show -r claude
-manyoyo config command -r claude
-
-# Diagnose the runtime environment
-manyoyo doctor
-manyoyo doctor --json
-manyoyo doctor --fix
-
-# Custom commands
-manyoyo run --rm-on-exit -x /bin/bash
-manyoyo run -n demo --first-shell "npm ci" -s "npm test"
-
-# Web server
-manyoyo serve 127.0.0.1:3000
-manyoyo serve 0.0.0.0:3000 -U admin -P strong-password
-
-# Playwright
-manyoyo playwright ls
-manyoyo playwright up mcp-host-headless
-manyoyo playwright up cli-host-headless
-manyoyo playwright up dev-host-headed
-manyoyo playwright mcp-add --host localhost
-```
-
 ## Configuration and precedence
 
-- Scalar options: command line > `runs.<name>` > global config > defaults
-- Array options `envFile`, `volumes`, `imageBuildArgs`: appended in order global config -> `runs.<name>` -> command line
-- `env`: merged by key with the same priority as scalar options
-- `serve` auth options: command line > `runs.<name>` > global config > environment variables > defaults
-- `--ef` and `--first-env-file` accept absolute paths only
-- `--worktrees` infers the project-level worktrees root as `<main-repo-parent>/worktrees/<main-repo-dir-name>` by default; when started from a linked worktree, MANYOYO also mounts the main repo root and that project-level worktrees root
-- `--worktrees-root` means the project-level worktrees root, for example `/Users/name/github/worktrees/manyoyo`; it is not the main repo directory and not a single branch worktree directory
+For precedence and merge rules see [Configuration basics](../configuration/README.md); `--ef` and `--first-env-file` accept absolute paths only.
 
-## Security notes
+- `--worktrees` infers the project-level worktrees root as `<main-repo-parent>/worktrees/<main-repo-dir-name>`; when started from a linked worktree, MANYOYO also mounts the main repo root and that root
+- `--worktrees-root` is the project-level worktrees root (e.g. `/Users/name/github/worktrees/manyoyo`), not the main repo directory and not a single branch directory
+- For the risks of `sock` mode, `-y/--yolo` and exposing `serve` on the network, see [Security](../guide/security.md)
 
-- `sock` mode exposes the host Docker socket to the container and is the highest-risk mode
-- `-y, --yolo` skips Agent confirmation and should stay in controlled environments
-- For `serve 0.0.0.0:<port>`, set a strong password and restrict source IPs with firewall rules
+## Next
+
+- [Daily use](../guide/daily.md)
+- [Configuration basics](../configuration/README.md)

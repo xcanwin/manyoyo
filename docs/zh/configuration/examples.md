@@ -1,233 +1,97 @@
+---
+title: 配置示例 | MANYOYO
+description: 几个可直接复制的 manyoyo.json 最小配置示例
+---
+
 # 配置示例
 
-本页面提供当前版本可直接使用的 MANYOYO 配置示例。
+本页给出几个可直接复制的最小 `~/.manyoyo/manyoyo.json` 示例。约定：运行配置写在 `runs.<name>`，`envFile` 必须是绝对路径，`env` 用对象（map）写法。
 
-> 统一规则：运行配置写在 `~/.manyoyo/manyoyo.json` 的 `runs.<name>`；
-> `envFile` 必须是绝对路径；`env` 推荐对象（map）写法。
-
-## 快速开始示例
-
-### 最小可用配置
+## 1. 最小可用配置
 
 ```bash
-mkdir -p ~/.manyoyo/
-
+mkdir -p ~/.manyoyo
 cat > ~/.manyoyo/manyoyo.json << 'EOF2'
 {
     "imageName": "ghcr.io/xcanwin/manyoyo",
     "imageVersion": "2.1.0-common",
     "runs": {
         "claude": {
-            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "envFile": ["/abs/path/anthropic.env"],
             "yolo": "c"
         }
     }
 }
 EOF2
-```
 
-使用：
-```bash
 manyoyo run -r claude
 ```
 
-## 智能体配置示例
+## 2. 多个 Agent
 
-### Claude Code（自定义 Base URL）
-
-**环境文件**（`/abs/path/anthropic_custom.env`）：
-```bash
-export ANTHROPIC_BASE_URL="https://custom-api.example.com"
-export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
-export ANTHROPIC_MODEL="claude-opus-4-5"
-export CLAUDE_CODE_SUBAGENT_MODEL="claude-haiku-4-5"
-```
-
-**`runs.claude-custom`**：
 ```json5
 {
-    "containerName": "my-claude-custom",
-    "envFile": ["/abs/path/anthropic_custom.env"],
-    "yolo": "c",
-    "quiet": ["tip"]
-}
-```
-
-### Codex（API Key）
-
-**环境文件**（`/abs/path/openai_api.env`）：
-```bash
-export OPENAI_API_KEY="sk-xxxxxxxx"
-export OPENAI_BASE_URL="https://api.openai.com/v1"
-export OPENAI_MODEL="gpt-4-turbo"
-```
-
-**`runs.codex-api`**：
-```json5
-{
-    "envFile": ["/abs/path/openai_api.env"],
-    "yolo": "cx"
-}
-```
-
-## 容器模式示例
-
-### Docker-in-Docker（较安全）
-
-**`runs.dind`**：
-```json5
-{
-    "containerName": "my-dind",
-    "containerMode": "dind",
-    "envFile": ["/abs/path/anthropic_claudecode.env"],
-    "volumes": [
-        "~/.docker:/root/.docker:ro"
-    ]
-}
-```
-
-### Socket 挂载（高风险）
-
-**`runs.sock`**：
-```json5
-{
-    "containerName": "my-sock",
-    "containerMode": "sock",
-    "envFile": ["/abs/path/anthropic_claudecode.env"]
-}
-```
-
-## 多环境示例
-
-**`~/.manyoyo/manyoyo.json`**：
-```json5
-{
-    "imageName": "ghcr.io/xcanwin/manyoyo",
-    "imageVersion": "2.1.0-common",
-    "env": {
-        "TZ": "Asia/Shanghai"
-    },
     "runs": {
-        "dev": {
-            "containerName": "my-dev",
-            "envFile": ["/abs/path/anthropic_dev.env"],
-            "env": {
-                "NODE_ENV": "development",
-                "DEBUG": "*"
-            },
-            "yolo": "c"
-        },
-        "test": {
-            "containerName": "my-test",
-            "envFile": ["/abs/path/anthropic_test.env"],
-            "env": {
-                "NODE_ENV": "test",
-                "CI": "true"
-            },
-            "yolo": "c"
-        },
-        "prod": {
-            "containerName": "my-prod",
-            "envFile": ["/abs/path/anthropic_prod.env"],
-            "env": {
-                "NODE_ENV": "production"
-            },
-            "yolo": "c",
-            "quiet": ["tip", "cmd"]
-        }
+        "claude": { "envFile": ["/abs/path/anthropic.env"], "yolo": "c" },
+        "codex":  { "envFile": ["/abs/path/openai.env"],    "yolo": "cx" }
     }
 }
 ```
 
-使用：
-```bash
-manyoyo run -r dev
-manyoyo run -r test
-manyoyo run -r prod
-```
+## 3. 多环境（共用全局 env）
 
-## 组合配置示例
-
-### 多个环境文件叠加
-
-**`runs.claude-full`**：
 ```json5
 {
-    "envFile": [
-        "/abs/path/base.env",
-        "/abs/path/anthropic_base.env",
-        "/abs/path/anthropic_secrets.env"
-    ],
-    "yolo": "c"
-}
-```
-
-### 全局 + 运行 + 命令行
-
-**全局 `env`**：
-```json5
-{
-    "env": {
-        "TZ": "Asia/Shanghai"
+    "env": { "TZ": "Asia/Shanghai" },
+    "runs": {
+        "dev":  { "containerName": "my-dev",  "env": { "NODE_ENV": "development" }, "yolo": "c" },
+        "prod": { "containerName": "my-prod", "env": { "NODE_ENV": "production" },  "yolo": "c", "quiet": ["tip", "cmd"] }
     }
 }
 ```
 
-**`runs.claude`**：
+`manyoyo run -r dev` / `manyoyo run -r prod`。
+
+## 4. 叠加：全局 + 运行配置 + 命令行
+
 ```json5
 {
-    "envFile": ["/abs/path/anthropic_claudecode.env"],
-    "env": {
-        "DEBUG": "false"
-    },
-    "yolo": "c"
-}
-```
-
-**命令行覆盖**：
-```bash
-manyoyo run -r claude -e "LOG_LEVEL=debug"
-```
-
-## 团队模板示例
-
-**团队模板**（`manyoyo.example.json`）：
-```json5
-{
-    "imageName": "localhost/team/manyoyo",
-    "imageVersion": "2.1.0-common",
-    "env": {
-        "PROJECT_NAME": "team-project",
-        "NODE_ENV": "development"
-    },
-    "envFile": [
-        "/abs/path/anthropic_team.env"
-    ],
+    "env": { "TZ": "Asia/Shanghai" },
     "runs": {
-        "team": {
+        "claude": {
+            "envFile": ["/abs/path/base.env", "/abs/path/secrets.env"],
+            "env": { "DEBUG": "false" },
             "yolo": "c"
         }
     }
 }
 ```
 
-使用：
 ```bash
-cp manyoyo.example.json ~/.manyoyo/manyoyo.json
-cp anthropic_team.example.env /abs/path/anthropic_team.env
-manyoyo run -r team
+manyoyo run -r claude -e "LOG_LEVEL=debug"   # 最终 TZ、DEBUG、LOG_LEVEL 都生效
 ```
 
-## 调试示例
+## 5. 容器模式
 
-```bash
-manyoyo config show -r claude
-manyoyo config command -r claude
-manyoyo run -r claude -x env | grep ANTHROPIC
+```json5
+{
+    "runs": {
+        "dind": { "containerMode": "dind", "envFile": ["/abs/path/anthropic.env"] }
+    }
+}
 ```
 
-## 相关文档
+`sock` 模式会让容器访问宿主机 Docker，风险最高，见[安全说明](../guide/security.md)与[容器模式](../reference/container-modes.md)。
 
-- [配置系统概览](./README.md)
-- [环境变量详解](./environment.md)
-- [配置文件详解](./config-files.md)
+## 验证
+
+```bash
+manyoyo config show -r claude      # 最终生效的配置
+manyoyo config command -r claude   # 将执行的容器命令
+```
+
+## 下一步
+
+- [配置概览](./README.md)
+- [环境变量](./environment.md)
+- [配置文件](./config-files.md)

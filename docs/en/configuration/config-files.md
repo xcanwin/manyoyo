@@ -1,688 +1,124 @@
+---
+title: Configuration Files Details
+description: "All fields of ~/.manyoyo/manyoyo.json, merge rules and minimal examples"
+---
+
 # Configuration Files Details
 
-Configuration files are used to simplify MANYOYO command-line operations and avoid repetitive parameter input. Uses **JSON5 format**, supporting comments and better readability.
+This page lists every field of `~/.manyoyo/manyoyo.json`. The file is JSON5 (comments allowed); the full template is `manyoyo.example.json` in the repository.
 
-## Configuration File Types
+## File and Priority
 
-MANYOYO supports two types of configuration files:
+There is one config file: `~/.manyoyo/manyoyo.json`. Top-level fields are the global config; `runs.<name>` is a run config loaded with `-r <name>`.
 
-### 1. Global Configuration
+Priority: command line > `runs.<name>` > global config > defaults.
 
-**File Path**: `~/.manyoyo/manyoyo.json`
+- Scalar fields: the highest-priority value wins.
+- `env`: merged by key, later wins.
+- `envFile`, `volumes`, `ports`, `imageBuildArgs`: appended in the order global -> `runs.<name>` -> command line.
+- `serverUser` / `serverPass`: command line > `runs.<name>` > global config > environment variable > default.
 
-**Features**:
-- Automatically loaded (when running any manyoyo command)
-- Suitable for setting default images, common environment variables, etc.
-- Lowest priority
-
-**Example**:
 ```json5
 {
     "imageName": "ghcr.io/xcanwin/manyoyo",
-    "imageVersion": "2.1.0-full"
-}
-```
-
-### 2. Run Configuration
-
-**Location**:
-- Global configuration file: `~/.manyoyo/manyoyo.json`
-- Run configuration: `runs.<name>` in `~/.manyoyo/manyoyo.json` (using `-r <name>`)
-
-**Features**:
-- Needs to be explicitly loaded (using `-r` parameter)
-- Suitable for setting configurations for specific projects or tools
-- Higher priority than global configuration
-
-**Example**:
-```json5
-{
-    "envFile": ["/abs/path/anthropic_claudecode.env"],
-    "first": {
-        "shell": "echo first-init"
-    },
-    "shellSuffix": "-c",
-    "yolo": "c"
-}
-```
-
-## Configuration Options Details
-
-Refer to `manyoyo.example.json` to view all configurable items. Below are detailed explanations:
-
-### Container Basic Configuration
-
-#### containerName
-- **Type**: String
-- **Default**: `my-{MMDD-HHMM}` (auto-generated)
-- **Description**: Container name, used to identify and manage containers
-- **Example**:
-```json5
-{
-    "containerName": "my-dev"
-}
-```
-
-#### hostPath
-- **Type**: String
-- **Default**: Current working directory
-- **Description**: Host working directory, will be mounted into the container
-- **Example**:
-```json5
-{
-    "hostPath": "/Users/username/projects/myproject"
-}
-```
-
-#### containerPath
-- **Type**: String
-- **Default**: Same as hostPath
-- **Description**: Working directory inside the container
-- **Example**:
-```json5
-{
-    "containerPath": "/workspace/myproject"
-}
-```
-
-#### imageName
-- **Type**: String
-- **Default**: `ghcr.io/xcanwin/manyoyo`
-- **Description**: Image name (without version tag)
-- **Example**:
-```json5
-{
-    "imageName": "localhost/myuser/manyoyo"
-}
-```
-
-#### imageVersion
-- **Type**: String
-- **Default**: None
-- **Description**: Image version tag
-- **Format**: `<version>-<variant>`
-- **Example**:
-```json5
-{
-    "imageVersion": "2.1.0-full"  // full version includes all tools
-}
-```
-
-Available variants:
-- `full` - Complete version (recommended)
-- `common` - Common tools version
-- Custom - Build using `--iba TOOL=xxx`
-
-#### containerMode
-- **Type**: String
-- **Values**: `common`, `dind`, `sock`
-- **Default**: `common`
-- **Description**: Container nesting mode
-- **Example**:
-```json5
-{
-    "containerMode": "dind"  // Docker-in-Docker mode
-}
-```
-
-Mode descriptions:
-- `common` - Normal mode, no container nesting capability
-- `dind` - Docker-in-Docker mode, secure nested containers
-- `sock` - Mount Docker Socket mode (dangerous, can access everything on host)
-
-#### containerRuntime
-- **Type**: String
-- **Values**: `auto`, `docker`, `podman`
-- **Default**: `auto`
-- **Description**: Container runtime. Global config only (`runs.<name>` is not supported). `auto` picks by priority: `~/.manyoyo/runtime/podman/bin/podman` (private Podman, used whenever it exists, with its own `XDG_CONFIG_HOME` / `XDG_DATA_HOME` / `CONTAINERS_CONF`) > docker whose `docker info` succeeds > podman whose `podman info` succeeds > the first one that only answers `--version`. Setting `docker` / `podman` explicitly uses that command without probing. `manyoyo doctor` shows the selected runtime and its source.
-- **Example**:
-```json5
-{
-    "containerRuntime": "podman"
-}
-```
-
-#### updateCheck
-- **Type**: Boolean
-- **Default**: `true`
-- **Description**: Whether `serve` asks GitHub Releases for a newer version at most once a day and shows a notice in the bottom-right corner of the web UI. Global config only. The request carries only a fixed `User-Agent` and no local information; `false` sends no request at all.
-- **Example**:
-```json5
-{
-    "updateCheck": false
-}
-```
-
-#### mirrors
-- **Type**: Object with keys `apt` / `npm` / `pip`
-- **Default**: unset (each tool uses its official default source)
-- **Description**: Package sources inside containers. Values must be `http://` or `https://` URLs; an empty string or a missing key means the official default. Global config only, applied when a **new container is created**; the image itself does not change. `npm` injects the `NPM_CONFIG_REGISTRY` environment variable, `pip` injects `PIP_INDEX_URL` (plus `PIP_TRUSTED_HOST` for `http` sources), and `apt` rewrites the sources under `/etc/apt` after the container is created (give only the mirror host, such as `https://mirrors.aliyun.com`; the `/ubuntu` and `/ubuntu-ports` paths are kept). Variables you set yourself in `env` take precedence. The web setup wizard and "System Settings" can pick a preset or a custom source too.
-- **Example**:
-```json5
-{
-    "mirrors": {
-        "apt": "https://mirrors.aliyun.com",
-        "npm": "https://registry.npmmirror.com/",
-        "pip": "https://mirrors.aliyun.com/pypi/simple/"
-    }
-}
-```
-
-#### serverUser
-- **Type**: String
-- **Default**: `admin`
-- **Description**: Web login username (`serve` mode)
-- **Environment Variable**: `MANYOYO_SERVER_USER`
-- **Example**:
-```json5
-{
-    "serverUser": "admin"
-}
-```
-
-#### serverPass
-- **Type**: String
-- **Default**: Auto-generated random password when unset
-- **Description**: Web login password (`serve` mode)
-- **Environment Variable**: `MANYOYO_SERVER_PASS`
-- **Example**:
-```json5
-{
-    "serverPass": "change-this-password"
-}
-```
-
-#### serve.title
-- **Type**: Object `{ title?: string }`
-- **Priority**: `runs.<name>.serve.title` > global config `serve.title`
-- **Description**: The web page `<title>`. When unset, the title dynamically shows the active session's Agent name (default behavior). Once `title` is set (including an empty string), it stays fixed and no longer changes when switching sessions.
-- **Example**:
-```json5
-{
-    "serve": {
-        "title": "My MANYOYO"  // an empty string "" fixes the title to blank
-    }
-}
-```
-
-### Environment Variable Configuration
-
-#### envFile
-- **Type**: String array
-- **Merge Method**: Accumulation merge
-- **Description**: Environment file list, loaded in order (absolute paths only)
-- **Example**:
-```json5
-{
-    "envFile": [
-        "/abs/path/anthropic_claudecode.env",
-        "/abs/path/secrets.env"
-    ]
-}
-```
-
-#### env
-- **Type**: Object (map)
-- **Merge Method**: Merge by key (later source overrides earlier source)
-- **Description**: Directly specify environment variables
-- **Example**:
-```json5
-{
-    "env": {
-        "DEBUG": "true",
-        "LOG_LEVEL": "info"
-    }
-}
-```
-
-### Mount Volume Configuration
-
-#### volumes
-- **Type**: String array
-- **Merge Method**: Accumulation merge
-- **Description**: Additional mount volumes
-- **Format**: `host_path:container_path[:options]`
-- **Path rule**: Host paths support absolute paths and `~` / `$HOME` prefixes (expanded to absolute paths before running)
-- **Example**:
-```json5
-{
-    "volumes": [
-        "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json",
-        "~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright",
-        "/tmp/cache:/workspace/cache:ro"  // Read-only mount
-    ]
-}
-```
-
-#### ports
-- **Type**: String array
-- **Merge Method**: Accumulation merge
-- **Description**: Additional port mappings (passed through as `--publish`)
-- **Format**: Mapping string supported by Docker/Podman `--publish`
-- **Example**:
-```json5
-{
-    "ports": [
-        "8080:80",
-        "127.0.0.1:8443:443"
-    ]
-}
-```
-
-### Service Configuration
-
-#### plugins.playwright
-- **Type**: Object
-- **Description**: Playwright plugin settings used by `manyoyo playwright` / `manyoyo plugin playwright`
-- **Example**:
-```json5
-{
-    "plugins": {
-        "playwright": {
-            "runtime": "mixed",  // mixed | container | host
-            "enabledScenes": ["mcp-cont-headless", "mcp-cont-headed", "mcp-host-headless", "mcp-host-headed", "cli-host-headless", "cli-host-headed", "dev-host-headed"],
-            "cliSessionScene": "cli-host-headless",
-            "mcpDefaultHost": "host.docker.internal",
-            "vncPasswordEnvKey": "VNC_PASSWORD",
-            "extensionProdversion": "132.0.0.0",
-            "navigatorPlatform": "MacIntel",
-            "disableWebRTC": false,
-            "devtoolsActivePortPath": "",
-            "devtoolsCdpTimeout": 60000,
-            "ports": {
-                "mcpContHeadless": 8931,
-                "mcpContHeaded": 8932,
-                "mcpHostHeadless": 8933,
-                "mcpHostHeaded": 8934,
-                "cliHostHeadless": 8935,
-                "cliHostHeaded": 8936,
-                "mcpContHeadedNoVnc": 6080
-            }
+    "imageVersion": "2.1.0-full",
+    "runs": {
+        "claude": {
+            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "yolo": "c"
         }
     }
 }
 ```
 
-`runs.<name>.plugins.playwright` can override global `plugins.playwright` for per-profile behavior.
+## Container and Image
 
-- `manyoyo playwright ext-download` downloads extensions into `~/.manyoyo/plugin/playwright/extensions/` (temp files are auto-cleaned).
-- `manyoyo playwright up <scene> --ext-path <path> --ext-name <name>` appends extension directories for any scene (both options can be repeated and are converted to Playwright extension launch args).
-- `cliSessionScene` selects the default host `playwright-cli` scene injected into `my run`; once the matching `cli-host-*` scene is started, `playwright-cli open` inside the container attaches to the host browser automatically.
-- Host-side agents controlling host Chrome: enable remote debugging in Chrome at `chrome://inspect/#remote-debugging`, then run `manyoyo playwright up dev-host-headed`; the command writes a host-side `PLAYWRIGHT_MCP_CONFIG` and prints host launch examples.
-- Container-side agents controlling host Chrome: set `cliSessionScene` to `dev-host-headed` and mount `DevToolsActivePort`; `my run` injects the container-side attach configuration automatically.
-- When `devtoolsActivePortPath` is empty, manyoyo checks common Chrome/Chromium/Brave locations. If manyoyo runs inside a container, mount the host file to `/root/Library/Application Support/Google/Chrome/DevToolsActivePort` or set this path explicitly.
-- `dev-host-headed` controls the real browser instance and may access existing login state, cookies, and open pages. Use it only in a trusted local environment.
-- Starting `cli-host-headed` now auto-creates `~/.manyoyo/.cache/ms-playwright`; if you want container-side `playwright-cli` to reuse the host cache, mount `~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright` in `volumes`.
-- `navigatorPlatform` injects `navigator.platform` (default `MacIntel` to match the built-in UA profile).
-- Set `disableWebRTC` to `true` to append WebRTC-disable launch args and inject a script that blocks WebRTC APIs.
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `containerName` | string | `my-{MMDD-HHmm}` | Container name; supports `{now}` (-> `MMDD-HHmm`) |
+| `hostPath` | string | current directory | Host working directory mounted into the container |
+| `containerPath` | string | same as `hostPath` | Working directory inside the container |
+| `imageName` | string | `ghcr.io/xcanwin/manyoyo` | Image name (without version) |
+| `imageVersion` | string | none | Format `x.y.z-suffix`, e.g. `2.1.0-common`, `2.1.0-full` |
+| `containerMode` | string | `common` | `common` / `dind` / `sock`, see [Container Modes](../reference/container-modes.md) |
+| `imageBuildArgs` | string array | none | Build args `KEY=VALUE`, appended, e.g. `TOOL=common` |
 
-### Command Configuration
+## Environment, Volumes and Ports
 
-#### shellPrefix
-- **Type**: String
-- **Description**: Command prefix, usually used to set temporary environment variables
-- **Example**:
+| Field | Type | Merge rule | Description |
+| --- | --- | --- | --- |
+| `envFile` | string array | append | Env files, **absolute paths only** |
+| `env` | object | override by key | Environment variables set directly |
+| `volumes` | string array | append | `host:container[:ro]`; host path may be absolute or start with `~` / `$HOME` |
+| `ports` | string array | append | Passed through as `--publish`, e.g. `"8080:80"` |
+
 ```json5
 {
-    "shellPrefix": "DEBUG=1"
+    "env": { "TZ": "Asia/Shanghai" },
+    "volumes": ["~/.ssh:/root/.ssh:ro"],
+    "ports": ["127.0.0.1:8443:443"]
 }
 ```
 
-#### shell
-- **Type**: String
-- **Description**: Main command to execute
-- **Example**:
-```json5
-{
-    "shell": "claude"
-}
-```
+For mount and `sock` mode risks, see [Security](../guide/security.md).
 
-#### shellSuffix
-- **Type**: String
-- **Description**: Command suffix appended after `shell` (e.g., `-c`, `resume --last`)
-- **Priority**: Can be overridden by command-line `--ss` or `-- ...` (`-- ...` has highest priority)
-- **Example**:
+## Commands
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `yolo` | string | `c` / `gm` / `cx` / `oc` (or `claude` / `gemini` / `codex` / `opencode`); skips permission prompts, see [Agents](../reference/agents.md) |
+| `shellPrefix` | string | Command prefix, often temporary env vars |
+| `shell` | string | Main command, e.g. `claude` |
+| `shellSuffix` | string | Appended after `shell`, e.g. `resume --last`; overridable by `--ss` or `-- ...` (the latter wins) |
+| `first` | object | Runs once **after a new container is created**, not when reusing one; has `shellPrefix` / `shell` / `shellSuffix` (override), `env` (merge by key), `envFile` (append) |
+| `agentPromptCommand` | string | Prompt command template for web AGENT mode, must contain `{prompt}`; inferred from `shell` / `yolo` when empty |
+| `quiet` | string array | Suppress output: `tip` / `cmd` / `full` |
+
 ```json5
 {
+    "first": { "shell": "echo setup-once", "env": { "BOOTSTRAP": "1" } },
     "shell": "codex",
     "shellSuffix": "resume --last"
 }
 ```
 
-#### agentPromptCommand
-- **Type**: String
-- **Description**: Prompt execution template for `AGENT` mode in `serve` web UI; must contain `{prompt}` placeholder
-- **Priority**: `createOptions.agentPromptCommand > runs.<name>.agentPromptCommand > global agentPromptCommand > empty`
-- **Auto infer**: when empty, the system infers a default template from the command program in the merged `shell/yolo` command for common agents (`claude/gemini/codex/opencode`)
-- **Context continuity**: with prior history, the system tries agent resume first; if resume is unavailable or fails, it injects a recent history window automatically
-- **Example**:
-```json5
-{
-    "agentPromptCommand": "codex exec --plain-text {prompt}"
-}
-```
+## Global-Only Fields
 
-#### first
-- **Type**: Object (map)
-- **Description**: Runs once only after new container creation and before regular command execution; skipped when reusing existing containers
-- **Fields**:
-  - `first.shellPrefix` / `first.shell` / `first.shellSuffix`: override type (`runs.<name>.first` > global `first`)
-  - `first.env`: merge by key (global `first.env` + `runs.<name>.first.env`)
-  - `first.envFile`: array accumulation (global `first.envFile` + `runs.<name>.first.envFile`)
-- **Example**:
-```json5
-{
-    "first": {
-        "shell": "echo setup-once",
-        "env": {
-            "BOOTSTRAP": "1"
-        },
-        "envFile": ["/abs/path/first.env"]
-    }
-}
-```
+These fields only take effect in the global config, not in `runs.<name>`.
 
-#### yolo
-- **Type**: String
-- **Values**: `c`, `gm`, `cx`, `oc` (or full names `claude`, `gemini`, `codex`, `opencode`)
-- **Description**: YOLO mode shortcut, skips permission confirmation
-- **Example**:
-```json5
-{
-    "yolo": "c"  // Equivalent to claude --dangerously-skip-permissions
-}
-```
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `containerRuntime` | string | `auto` | `auto` / `docker` / `podman`; `auto` prefers the private Podman, then a docker / podman whose daemon works. `manyoyo doctor` shows the selected runtime |
+| `updateCheck` | boolean | `true` | `serve` checks for a new version at most once a day; the request carries no local info, `false` sends nothing |
+| `mirrors` | object | official sources | In-container package sources `apt` / `npm` / `pip` (`http(s)://` URLs, empty = official), applied when a container is created; for `apt` give only the mirror host, e.g. `https://mirrors.aliyun.com`. Same-name variables in `env` win |
 
-### Other Configuration
+## Web Service
 
-#### quiet
-- **Type**: String array
-- **Values**: `tip`, `cmd`, `full`
-- **Description**: Silent display options
-- **Example**:
-```json5
-{
-    "quiet": ["tip", "cmd"]  // Don't display tips and commands
-}
-```
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `serverUser` | string | `admin` | Login username, env var `MANYOYO_SERVER_USER` |
+| `serverPass` | string | random | Login password, env var `MANYOYO_SERVER_PASS` |
+| `serve.title` | string | shown dynamically by session Agent name | Once set (even to an empty string) it is fixed; `runs.<name>.serve` beats global |
+| `serve.quickChat` | object | none | Web "Quick Chat": `path` is the work root, `run` is the `runs.<name>` to use |
 
-#### imageBuildArgs
-- **Type**: String array
-- **Merge Method**: Accumulation merge
-- **Description**: Image build arguments, passed to Dockerfile
-- **Format**: `KEY=VALUE`
-- **Example**:
-```json5
-{
-    "imageBuildArgs": [
-        "TOOL=common",
-        "GIT_SSL_NO_VERIFY=true"
-    ]
-}
-```
+For auth and public listening, see [Web Service](../guide/web.md) and [Security](../guide/security.md).
 
-## Configuration Path Rules
+## Plugins
 
-### Run Configuration Path Resolution
+`plugins.playwright` configures `manyoyo playwright`; `runs.<name>.plugins.playwright` overrides the global one. Fields and scenes are described in [Playwright Plugin](../advanced/playwright.md); defaults are in `manyoyo.example.json`.
+
+## Debugging
 
 ```bash
-# Read from runs in manyoyo.json
-manyoyo run -r claude
-# Loads: runs.claude in ~/.manyoyo/manyoyo.json
+manyoyo config show             # merged global config
+manyoyo config show -r claude   # merged result of one run config
+manyoyo config command -r claude  # command that will run
 ```
 
-### Global Configuration
+If a setting has no effect, confirm the file is valid JSON5 and check the final value with `config show`; if an `envFile` is not loaded, confirm it is an absolute path.
 
-Global configuration is always loaded from a fixed location:
-```bash
-~/.manyoyo/manyoyo.json
-```
+## Next
 
-## Configuration Merge Rules
-
-Refer to [Configuration System Overview](./README.md#priority-mechanism) for detailed merge rules.
-
-Brief description:
-
-### Override Parameters
-Takes the value from the highest priority:
-```
-Command-line arguments > runs.<name> > Global configuration > Default values
-```
-
-For `serverUser` / `serverPass`, the priority is:
-```
-Command-line arguments > runs.<name> > Global configuration > Environment variables > Default values
-```
-
-### Merge Parameters
-Accumulated merge in order:
-```
-Global configuration + runs.<name> + Command-line arguments
-```
-
-### First-Run Bootstrap Parameters
-`first` applies only in the new-container stage and supports CLI override/append:
-```
-first.shellPrefix/shell/shellSuffix: command line > runs.<name>.first > global first
-first.env: global first.env + runs.<name>.first.env + --first-env (key override)
-first.envFile: global first.envFile + runs.<name>.first.envFile + --first-env-file
-```
-
-## Complete Configuration Examples
-
-### Example: Global Configuration
-
-```json5
-// ~/.manyoyo/manyoyo.json
-{
-    // Use custom image
-    "imageName": "ghcr.io/xcanwin/manyoyo",
-    "imageVersion": "2.1.0-full",
-
-    // Global environment variables
-    "env": {
-        "TZ": "Asia/Shanghai",
-        "LANG": "en_US.UTF-8"
-    },
-
-    // Default silent tips
-    "quiet": ["tip"]
-}
-```
-
-### Example: Claude Code Run Configuration
-
-```json5
-// ~/.manyoyo/manyoyo.json (fragment)
-{
-    // Load Claude environment variables
-    "envFile": ["/abs/path/anthropic_claudecode.env"],
-
-    // Use YOLO mode
-    "yolo": "c",
-
-    // Additional mount SSH configuration
-    "volumes": [
-        "~/.ssh:/root/.ssh:ro"
-    ]
-}
-```
-
-### Example: Codex Run Configuration
-
-```json5
-// ~/.manyoyo/manyoyo.json (fragment)
-{
-    // Load Codex environment variables
-    "envFile": ["/abs/path/openai_[gpt]_codex.env"],
-
-    // Mount authentication file
-    "volumes": [
-        "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
-    ],
-
-    // Use YOLO mode
-    "yolo": "cx"
-}
-```
-
-### Example: Docker-in-Docker Configuration
-
-```json5
-// ~/.manyoyo/manyoyo.json (fragment)
-{
-    // Use Docker-in-Docker mode
-    "containerMode": "dind",
-
-    // Container name
-    "containerName": "my-dind",
-
-    // Additional mount Docker configuration
-    "volumes": [
-        "~/.docker:/root/.docker:ro"
-    ]
-}
-```
-
-### Example: Project-Specific Configuration
-
-```json5
-// ./myproject/.manyoyo.json
-{
-    // Project container name
-    "containerName": "my-myproject",
-
-    // Project environment variables
-    "env": {
-        "PROJECT_NAME": "myproject",
-        "NODE_ENV": "development"
-    },
-
-    // Use project local environment file
-    "envFile": ["/abs/path/local.env"]
-}
-```
-
-## Debugging Configuration
-
-### View Final Configuration
-
-```bash
-# Display merged results from all configuration sources
-manyoyo config show
-
-# Display merged results for specific run configuration
-manyoyo config show -r claude
-
-# Display command to be executed
-manyoyo config command -r claude
-```
-
-### Common Configuration Issues
-
-#### Configuration Not Taking Effect
-
-**Symptom**: After modifying configuration file, parameters are not taking effect
-
-**Solutions**:
-1. Check configuration file format (must be valid JSON5)
-2. Confirm file path is correct
-3. Use `config show` to view final configuration
-4. Note that override parameters only take the highest priority value
-
-```bash
-# Verify runs.claude structure
-cat ~/.manyoyo/manyoyo.json | jq '.runs.claude'
-
-# View final configuration
-manyoyo config show -r claude
-```
-
-#### Configuration Conflicts
-
-**Symptom**: Multiple configuration sources set the same parameter, uncertain which one takes effect
-
-**Solutions**:
-1. Understand priority rules (override vs merge)
-2. Use `config show` to view final value
-3. Remove conflicting items from lower priority configurations if necessary
-
-#### Environment Variables Not Loaded
-
-**Symptom**: envFile specified in configuration file, but environment variables not taking effect
-
-**Solutions**:
-1. Confirm environment file path is correct
-2. Check environment file format
-3. Use `config show` to view loaded environment file list
-4. Run `env` command in container to verify
-
-```bash
-# View environment files in configuration
-manyoyo config show -r claude | grep envFile
-
-# Verify environment variables in container
-manyoyo run -r claude -x env | grep ANTHROPIC
-```
-
-## Best Practices
-
-### 1. Layered Configuration
-
-```bash
-# Global configuration: Set common options
-~/.manyoyo/manyoyo.json
-
-# Run configuration: Set tool-specific options (runs in manyoyo.json)
-~/.manyoyo/manyoyo.json (runs.claude / runs.codex)
-
-# Project configuration: Set project-specific options
-./project/.manyoyo.json
-```
-
-### 2. Use Comments
-
-```json5
-{
-    // Production environment configuration
-    "imageVersion": "2.1.0-full",
-
-    // Can temporarily switch during development
-    // "imageVersion": "2.1.0-common",
-
-    "envFile": [
-        "/abs/path/anthropic_base.env",    // Base configuration
-        "/abs/path/anthropic_secrets.env"  // Sensitive information
-    ]
-}
-```
-
-### 3. Version Control
-
-```bash
-# Commit to version control
-.manyoyo.json           # Project configuration
-manyoyo.example.json     # Configuration example
-
-# Exclude sensitive information
-.gitignore:
-  *.env
-  secrets.json
-```
-
-### 4. Configuration Templates
-
-Create configuration templates for team use:
-```bash
-# Edit runs configuration
-vim ~/.manyoyo/manyoyo.json
-```
-
-## Related Documentation
-
-- [Configuration System Overview](./README.md) - Understand configuration priority mechanism
-- [Environment Variables Details](./environment.md) - Learn how to configure environment variables
-- [Configuration Examples](./examples.md) - View more practical examples
-- [Web Server Auth and Security](../advanced/web-server-auth.md) - Auth behavior and security baseline for `serve`
+- [Configuration System Overview](./README.md)
+- [Environment Variables Details](./environment.md)
+- [Configuration Examples](./examples.md)

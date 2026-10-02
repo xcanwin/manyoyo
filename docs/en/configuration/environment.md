@@ -1,299 +1,90 @@
-# Environment Variables Details
+---
+title: Environment Variables | MANYOYO
+description: Pass API URLs, tokens and other environment variables to the agent in the container with -e or env files
+---
 
-Environment variables are used to pass configuration information to CLI tools inside the container, such as BASE_URL, AUTH_TOKEN, and other sensitive information.
+# Environment Variables
 
-## Setting Methods
+This page shows how to pass variables such as `BASE_URL` and `AUTH_TOKEN` to the agent CLI inside the container.
 
-MANYOYO supports two methods for setting environment variables:
-
-### 1. String Form (Command Line)
-
-Use the `-e` parameter to specify environment variables directly on the command line:
+## Two ways to pass them
 
 ```bash
+# 1. -e on the command line: fine for quick tests (stays in shell history)
 manyoyo run -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-key" -x claude
+
+# 2. Env file with --ef: recommended, keys stay out of shell history
+manyoyo run --ef /abs/path/anthropic.env -x claude
 ```
 
-**Features**:
-- Suitable for temporary use or testing
-- Supports multiple uses of the `-e` parameter
-- Not suitable for sensitive information (will remain in command history)
+`--ef` (and `envFile` in config) **accepts absolute paths only**. `-e` can be repeated.
 
-### 2. File Form (Recommended)
-
-Use the `--ef` parameter to load environment variables from a file:
+## Env file format
 
 ```bash
-manyoyo run --ef /abs/path/anthropic_claudecode.env -x claude
-```
-
-**Features**:
-- Suitable for long-term use and team collaboration
-- Sensitive information does not appear in command history
-- Supports version control (exclude `.env` files)
-- Supports comments and better organization
-
-## Environment File Format
-
-Environment files use the `.env` format and support the following syntax:
-
-```bash
-# This is a comment and will be ignored
-
-# Standard format (recommended)
+# Lines starting with # and blank lines are ignored
 export ANTHROPIC_BASE_URL="https://api.anthropic.com"
 export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
-
-# Simplified format (also supported)
-API_TIMEOUT_MS=3000000
-ANTHROPIC_MODEL="claude-sonnet-4-5"
-
-# Both single and double quotes are supported
-TESTPATH='/usr/local/bin'
-MESSAGE="Hello World"
-
-# Comments can be placed anywhere
-# export DISABLED_VAR="will not take effect"
+API_TIMEOUT_MS=3000000      # export is optional
 ```
 
-**Notes**:
-- Lines starting with `#` are ignored
-- Supports both `KEY=VALUE` and `export KEY=VALUE` formats
-- Values can use single quotes, double quotes, or no quotes
-- Empty lines are ignored
+- Both `KEY=VALUE` and `export KEY=VALUE` work; values may use single quotes, double quotes, or none.
+- Names must match `^[A-Za-z_][A-Za-z0-9_]*$`; values cannot contain newlines or shell special characters such as `;`, `&`, `|`, `` ` ``, `$`, `<`, `>`.
 
-## Environment File Path Rules
-
-`--ef` accepts absolute paths only:
+## Per-agent examples
 
 ```bash
-manyoyo run --ef /abs/path/myconfig.env
-# Loads: file from the specified absolute path
-```
+mkdir -p ~/.manyoyo/env
 
-## Common Examples
-
-### Claude Code Environment Configuration
-
-Create environment file:
-
-```bash
-# Create environment file directory (absolute path)
-mkdir -p $HOME/.manyoyo/env/
-
-# Create Claude Code environment file
-cat > $HOME/.manyoyo/env/anthropic_[claudecode]_claudecode.env << 'EOF'
+# Claude Code
+cat > ~/.manyoyo/env/claude.env << 'EOF'
 export ANTHROPIC_BASE_URL="https://api.anthropic.com"
-# export CLAUDE_CODE_OAUTH_TOKEN="sk-xxxxxxxx"  # OAuth method
-export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"        # API Key method
-export API_TIMEOUT_MS=3000000
+export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
 export ANTHROPIC_MODEL="claude-sonnet-4-5"
-export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-5"
-export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
-export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
 EOF
-```
 
-Use environment file:
-
-```bash
-# Use from any directory (absolute path)
-manyoyo run --ef $HOME/.manyoyo/env/anthropic_[claudecode]_claudecode.env -x claude
-
-# Or use with runs configuration
-manyoyo run -r claude  # envFile specified in runs.claude
-```
-
-### Codex Environment Configuration
-
-Create environment file:
-
-```bash
-# Create environment file directory (absolute path)
-mkdir -p $HOME/.manyoyo/env/
-
-# Create Codex environment file
-cat > $HOME/.manyoyo/env/openai_[gpt]_codex.env << 'EOF'
-export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
-EOF
-```
-
-Use environment file:
-
-```bash
-# Use from any directory (absolute path)
-manyoyo run --ef $HOME/.manyoyo/env/openai_[gpt]_codex.env -x codex
-
-# Or use with runs configuration
-manyoyo run -r codex  # envFile specified in runs.codex
-```
-
-### Gemini Environment Configuration
-
-Create environment file:
-
-```bash
-# Create Gemini environment file
-cat > $HOME/.manyoyo/env/gemini.env << 'EOF'
-export GEMINI_API_KEY="your-api-key"
-export GEMINI_MODEL="gemini-2.0-flash-exp"
-EOF
-```
-
-Use environment file:
-
-```bash
-manyoyo run --ef $HOME/.manyoyo/env/gemini.env -x gemini
-```
-
-### OpenCode Environment Configuration
-
-Create environment file:
-
-```bash
-# Create OpenCode environment file
-cat > $HOME/.manyoyo/env/opencode.env << 'EOF'
-export OPENAI_API_KEY="your-api-key"
+# Codex
+cat > ~/.manyoyo/env/codex.env << 'EOF'
 export OPENAI_BASE_URL="https://api.openai.com/v1"
+export OPENAI_API_KEY="sk-xxxxxxxx"
+EOF
+
+# Gemini
+cat > ~/.manyoyo/env/gemini.env << 'EOF'
+export GEMINI_API_KEY="your-api-key"
 EOF
 ```
 
-Use environment file:
+Use it with `manyoyo run --ef $HOME/.manyoyo/env/claude.env -x claude`, or put it in `runs.<name>.envFile` and run `manyoyo run -r <name>`. For OpenCode variables see the [agent reference](../reference/agents.md).
+
+## Which value wins
+
+Later sources override earlier ones, in this order:
+
+1. Every layer's `envFile` (global, then `runs.<name>`, then `--ef`)
+2. Global `env`
+3. `runs.<name>.env`
+4. Command-line `-e`
+
+So `-e` wins over `runs.<name>.env`, and both win over env files.
+
+## Tips
+
+- Give files distinctive names (e.g. `claude-work.env`) and split non-secret settings from keys; keep only the key file out of version control.
+- For secrets and access risks see [Security](../guide/security.md).
+- `MANYOYO_SERVER_USER` / `MANYOYO_SERVER_PASS` are MANYOYO's own variables for `serve` authentication; they are not injected into the container. See [Web service](../guide/web.md).
+
+## Variable not taking effect?
 
 ```bash
-manyoyo run --ef $HOME/.manyoyo/env/opencode.env -x opencode
+manyoyo config show -r claude                       # final merged config
+manyoyo run -r claude -x env | grep ANTHROPIC       # values the container really got
 ```
 
-## Environment Variable Priority
+Common causes: the path is not absolute, the file format is invalid, or several sources set the same name.
 
-When using configuration files, environment variables are loaded in the following order:
+## Next
 
-1. `envFile` array in global configuration
-2. `envFile` array in `runs.<name>`
-3. Command-line `--ef` parameter
-4. `env` map in global configuration
-5. `env` map in `runs.<name>`
-6. Command-line `-e` parameter
-
-**Note**: Later loaded environment variables will override earlier ones with the same name.
-
-Example:
-```bash
-# Global config: envFile: ["/abs/path/base.env"]
-# runs.claude: envFile: ["/abs/path/override.env"]
-# Command line: --ef /abs/path/custom.env -e "VAR=value"
-#
-# Loading order:
-# 1. /abs/path/base.env
-# 2. /abs/path/override.env
-# 3. /abs/path/custom.env
-# 4. env map from global config
-# 5. env map from runs.claude
-# 6. VAR=value from command line
-```
-
-## MANYOYO Runtime Environment Variables
-
-Besides container `env` / `envFile`, MANYOYO also supports runtime env vars for web authentication:
-
-- `MANYOYO_SERVER_USER`
-- `MANYOYO_SERVER_PASS`
-
-These are used by `serve` auth and are not injected into container workloads. See:
-
-- [Configuration System Overview](./README.md)
-- [Web Server Auth and Security](../advanced/web-server-auth.md)
-
-## Best Practices
-
-### 1. Use Naming Conventions
-
-Recommended using descriptive file names:
-```bash
-/abs/path/env/
-├── anthropic_[claudecode]_claudecode.env
-├── openai_[gpt]_codex.env
-├── gemini_production.env
-└── opencode_dev.env
-```
-
-### 2. Separate Sensitive Information
-
-Store sensitive information (such as API Keys) separately:
-```bash
-# base.env - Non-sensitive configuration
-export ANTHROPIC_BASE_URL="https://api.anthropic.com"
-export API_TIMEOUT_MS=3000000
-
-# secrets.env - Sensitive information (do not commit to version control)
-export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
-```
-
-### 3. Use Configuration Files for Management
-
-Configure environment files in `runs` to avoid repetitive input:
-```json5
-// ~/.manyoyo/manyoyo.json (fragment)
-{
-    "runs": {
-        "claude": {
-            "envFile": [
-                "/abs/path/anthropic_base.env",
-                "/abs/path/anthropic_secrets.env"
-            ]
-        }
-    }
-}
-```
-
-### 4. Verify Environment Variables
-
-Use debugging commands to verify that environment variables are loaded correctly:
-```bash
-# View final configuration
-manyoyo config show -r claude
-
-# Verify in container
-manyoyo run -r claude -x env | grep ANTHROPIC
-```
-
-## Troubleshooting
-
-### Environment Variables Not Taking Effect
-
-**Symptom**: CLI tool reports missing required environment variables
-
-**Solutions**:
-1. Check file format (must be `.env` format)
-2. Confirm file path is correct
-3. Use `config show` to view configuration
-4. Run `env` command in container to check
-
-```bash
-# Check configuration
-manyoyo config show --ef /abs/path/myconfig.env
-
-# Check environment variables in container
-manyoyo run --ef /abs/path/myconfig.env -x env
-```
-
-### Environment Variable Value Incorrect
-
-**Symptom**: Environment variable value is not as expected
-
-**Solutions**:
-1. Check if multiple configuration sources set the same variable
-2. Confirm priority order
-3. Check for duplicate definitions in files
-
-```bash
-# View all effective environment variables
-manyoyo run --ef /abs/path/myconfig.env -x 'env | sort'
-```
-
-## Related Documentation
-
-- [Configuration System Overview](./README.md) - Understand configuration priority mechanism
-- [Configuration Files Details](./config-files.md) - Learn how to use envFile in configuration files
-- [Configuration Examples](./examples.md) - View complete configuration examples
+- [Configuration overview](./README.md): the four-layer priority
+- [Config files](./config-files.md): using `envFile` in `runs`
+- [Examples](./examples.md)

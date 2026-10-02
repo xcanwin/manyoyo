@@ -1,553 +1,118 @@
+---
+title: AI Agents
+description: Launch shortcuts, required environment variables and session resume for the four built-in agents
+---
+
 # AI Agents
 
-MANYOYO supports multiple AI CLI tools (agents), providing shortcuts to launch YOLO/SOLO mode.
+This page shows how to start YOLO mode for Claude Code, Gemini, Codex and OpenCode with one command, and what each one needs configured. YOLO mode skips permission prompts, so use it only inside a container; see [Security](../guide/security.md).
 
-> Note: Run profiles should be under `runs.<name>` in `~/.manyoyo/manyoyo.json`; use absolute paths for `envFile` and map style for `env`.
+## Quick Reference
 
-## Supported Agents
+| Agent | Shortcut (`-y`) | Command actually run | Resume (after `--`) |
+|-------|-----------------|----------------------|---------------------|
+| Claude Code | `c` / `cc` / `claude` | `IS_SANDBOX=1 claude --dangerously-skip-permissions` | `-r` (pick) or `-c` (most recent) |
+| Gemini | `gm` / `g` / `gemini` | `gemini --yolo` | `-r` |
+| Codex | `cx` / `codex` | `codex --dangerously-bypass-approvals-and-sandbox` | `resume` (`resume --last` for the most recent) |
+| OpenCode | `oc` / `opencode` | `OPENCODE_PERMISSION='{"*":"allow"}' opencode` | `-c` |
 
-### Claude Code
+Common usage:
 
-Anthropic's official Claude AI command-line tool.
-
-**Shortcuts**:
 ```bash
-manyoyo run -y c          # Recommended
-manyoyo run -y claude
-manyoyo run -y cc
+manyoyo run -y c                    # New container and start (Claude Code as example)
+manyoyo run -n my-session -y c      # Named container
+manyoyo run -n my-session -- -c     # Back to an existing container, pass the resume argument to the agent
 ```
 
-**Equivalent to**:
-```bash
-manyoyo run -x claude --dangerously-skip-permissions
-```
+## Recommended: Save as a Run Profile
 
-**Resume session**:
-```bash
-manyoyo run -n <container-name> -- -c
-manyoyo run -n <container-name> -- --continue
-```
+Add one entry per agent under `runs.<name>` in `~/.manyoyo/manyoyo.json`, then just run `manyoyo run -r <name>`. `envFile` must be an absolute path and `env` is an object. Keep keys in env files, not in the config.
 
-**Configuration example**:
 ```json5
-// runs.claude in ~/.manyoyo/manyoyo.json
 {
-    "envFile": ["/abs/path/anthropic_claudecode.env"],
-    "yolo": "c"
+    "runs": {
+        "claude":   { "yolo": "c",  "envFile": ["/abs/path/anthropic_claudecode.env"] },
+        "gemini":   { "yolo": "gm", "envFile": ["/abs/path/gemini.env"] },
+        "codex":    { "yolo": "cx", "envFile": ["/abs/path/openai_codex.env"] },
+        "opencode": { "yolo": "oc", "envFile": ["/abs/path/opencode.env"] }
+    }
 }
 ```
 
-**Environment variables**:
+`manyoyo init all` generates these entries in one go.
+
+## Claude Code
+
 ```bash
-# ~/.manyoyo/env/anthropic_claudecode.env
+manyoyo run -r claude
+manyoyo run -n <container> -- -c      # Continue the most recent session
+```
+
+Environment variables (`anthropic_claudecode.env`):
+
+```bash
 export ANTHROPIC_BASE_URL="https://api.anthropic.com"
 export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
-export ANTHROPIC_MODEL="claude-sonnet-4-5"
-export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-5"
-export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
-export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5"
+export ANTHROPIC_MODEL="claude-sonnet-4-5"    # optional
 ```
 
-**Common commands**:
+## Gemini
+
 ```bash
-# Start YOLO mode
-manyoyo run -r claude
-
-# View version
-manyoyo run -r claude -- --version
-
-# View help
-manyoyo run -r claude -- --help
-
-# Resume last session
-manyoyo run -r claude -- -c
-```
-
-### Gemini
-
-Google's Gemini AI command-line tool.
-
-**Shortcuts**:
-```bash
-manyoyo run -y gm         # Recommended
-manyoyo run -y gemini
-manyoyo run -y g
-```
-
-**Equivalent to**:
-```bash
-manyoyo run -x gemini --yolo
-```
-
-**Resume session**:
-```bash
-manyoyo run -n <container-name> -- -r
-manyoyo run -n <container-name> -- --resume
-```
-
-**Configuration example**:
-```json5
-// runs.gemini in ~/.manyoyo/manyoyo.json
-{
-    "envFile": ["/abs/path/gemini.env"],
-    "yolo": "gm"
-}
-```
-
-**Environment variables**:
-```bash
-# ~/.manyoyo/env/gemini.env
-export GEMINI_API_KEY="your-api-key"
-export GEMINI_MODEL="gemini-2.0-flash-exp"
-```
-
-**Common commands**:
-```bash
-# Start YOLO mode
 manyoyo run -r gemini
-
-# View version
-manyoyo run -r gemini -- --version
-
-# Resume session
-manyoyo run -r gemini -- -r
+manyoyo run -n <container> -- -r
 ```
 
-### Codex
+Environment variables (`gemini.env`):
 
-OpenAI's Codex command-line tool.
-
-**Shortcuts**:
 ```bash
-manyoyo run -y cx         # Recommended
-manyoyo run -y codex
+export GEMINI_API_KEY="your-api-key"
+export GEMINI_MODEL="gemini-2.0-flash-exp"    # optional
 ```
 
-**Equivalent to**:
+## Codex
+
 ```bash
-manyoyo run -x codex --dangerously-bypass-approvals-and-sandbox
+manyoyo run -r codex
+manyoyo run -n <container> -- resume --last
+manyoyo run -n <container> -- resume <session-id>
 ```
 
-**Resume session**:
-```bash
-manyoyo run -n <container-name> -- resume --last
-manyoyo run -n <container-name> -- resume <session-id>
-```
+To use account login instead of a key, mount the host login file into the container (in `runs.codex`):
 
-**Configuration example**:
 ```json5
-// runs.codex in ~/.manyoyo/manyoyo.json
-{
-    "envFile": ["/abs/path/openai_codex.env"],
-    "volumes": [
-        "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
-    ],
-    "yolo": "cx"
-}
+"volumes": ["/Users/<you>/.codex/auth.json:/root/.codex/auth.json"]
 ```
 
-**Environment variables**:
+Environment variables (`openai_codex.env`):
+
 ```bash
-# ~/.manyoyo/env/openai_codex.env
 export OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
 ```
 
-**Common commands**:
+## OpenCode
+
 ```bash
-# Start YOLO mode
-manyoyo run -r codex
-
-# View session list
-manyoyo run -r codex -- list
-
-# Resume last session
-manyoyo run -r codex -- resume --last
-
-# Resume specific session
-manyoyo run -r codex -- resume <session-id>
+manyoyo run -r opencode
+manyoyo run -n <container> -- -c
 ```
 
-### OpenCode
+Environment variables (`opencode.env`):
 
-Open-source AI code assistant.
-
-**Shortcuts**:
 ```bash
-manyoyo run -y oc         # Recommended
-manyoyo run -y opencode
-```
-
-**Equivalent to**:
-```bash
-manyoyo run -x "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode"
-```
-
-**Resume session**:
-```bash
-manyoyo run -n <container-name> -- -c
-manyoyo run -n <container-name> -- --continue
-```
-
-**Configuration example**:
-```json5
-// runs.opencode in ~/.manyoyo/manyoyo.json
-{
-    "envFile": ["/abs/path/opencode.env"],
-    "yolo": "oc"
-}
-```
-
-**Environment variables**:
-```bash
-# ~/.manyoyo/env/opencode.env
 export OPENAI_API_KEY="your-api-key"
 export OPENAI_BASE_URL="https://api.openai.com/v1"
 ```
 
-**Common commands**:
-```bash
-# Start YOLO mode
-manyoyo run -r opencode
+## Common Pitfalls
 
-# View version
-manyoyo run -r opencode -- --version
+- **Agent says not logged in or authentication failed**: run `manyoyo config show -r <name>` to confirm `envFile` took effect, then `manyoyo run -r <name> -x 'env | grep -E "ANTHROPIC|OPENAI|GEMINI"'` to see whether the variables reached the container. After editing an env file, recreate the container with `manyoyo rm <container>`.
+- **Resume shows nothing**: sessions live in the container and cannot be resumed after `manyoyo rm`; also check you used the resume argument for that agent from the table above.
+- **Want another agent in the same container**: `manyoyo run -n <container> -x /bin/bash`, then run the full command from the table; simpler is one container per agent (for example `-n proj-claude`, `-n proj-codex`).
+- **Command not found**: `manyoyo run -x which claude` (or gemini / codex / opencode) to confirm the image has the agent; switch to `2.1.0-full` if needed.
 
-# Resume session
-manyoyo run -r opencode -- -c
-```
+## Next Steps
 
-## YOLO Mode Explanation
-
-YOLO (You Only Live Once) mode refers to AI agents skipping permission confirmation and automatically executing commands.
-
-### Why Use YOLO Mode?
-
-**Advantages**:
-- Improves efficiency, reduces interaction
-- Suitable for automation scenarios
-- Runs in isolated containers, protecting host machine security
-
-**Risks**:
-- AI may execute dangerous commands (e.g., `rm -rf`)
-- In MANYOYO containers, risks are limited to inside the container
-
-### Security Isolation
-
-MANYOYO provides secure container isolation:
-
-```
-Host Machine
-  └─ MANYOYO Container (Isolated environment)
-      └─ AI Agent (YOLO mode)
-          ├─ File operations → Only affects container
-          ├─ Process operations → Only affects container
-          └─ Network operations → Configurable isolation
-```
-
-**Protection mechanisms**:
-- Container filesystem isolation
-- Resource limits
-- Network isolation (optional)
-- Can delete and restart containers at any time
-
-## Agent Comparison
-
-| Agent | Shortcut | Resume Command | Primary Use | Supported Languages |
-|--------|--------|----------|----------|----------|
-| Claude Code | `-y c` | `-- -c` | General programming assistance | Multi-language |
-| Gemini | `-y gm` | `-- -r` | General programming assistance | Multi-language |
-| Codex | `-y cx` | `-- resume --last` | Code generation | Multi-language |
-| OpenCode | `-y oc` | `-- -c` | Open-source code assistant | Multi-language |
-
-## Session Management
-
-### Create New Session
-
-```bash
-# Create new session (auto-generate container name)
-manyoyo run -y c
-
-# Create named session
-manyoyo run -n my-session -y c
-```
-
-### Resume Session
-
-Different agents have different resume methods:
-
-```bash
-# Claude Code
-manyoyo run -n my-session -- -c
-
-# Gemini
-manyoyo run -n my-session -- -r
-
-# Codex
-manyoyo run -n my-session -- resume --last
-
-# OpenCode
-manyoyo run -n my-session -- -c
-```
-
-### Session Persistence
-
-Container state determines whether sessions are preserved:
-
-```bash
-# Exit and keep container running (session preserved)
-# Select 'y' in interactive prompt
-
-# Remove container (session lost)
-manyoyo rm my-session
-```
-
-### View Sessions
-
-```bash
-# List all container sessions
-manyoyo ps
-
-# View specific container
-docker ps -a | grep my-session
-```
-
-## Switching Between Agents
-
-### Switch Within Container
-
-```bash
-# Start Claude Code
-manyoyo run -n dev -y c
-
-# After exit, enter shell
-manyoyo run -n dev -x /bin/bash
-
-# Manually run other agents in shell
-gemini --yolo
-codex --dangerously-bypass-approvals-and-sandbox
-```
-
-### Use Different Containers
-
-```bash
-# Claude Code container
-manyoyo run -n claude-session -y c
-
-# Codex container
-manyoyo run -n codex-session -y cx
-
-# Switch as needed
-manyoyo run -n claude-session -- -c
-manyoyo run -n codex-session -- resume --last
-```
-
-## Cycling Between Agent and /bin/bash
-
-MANYOYO supports flexible switching between AI agents and shell:
-
-### Switch from Agent to Shell
-
-```bash
-# Start agent
-manyoyo run -n dev -y c
-
-# After working, exit agent
-
-# Select 'i' to enter interactive shell
-# Or use command
-manyoyo run -n dev -x /bin/bash
-```
-
-### Switch from Shell to Agent
-
-```bash
-# In shell
-manyoyo run -n dev -x /bin/bash
-
-# Run agent directly inside container
-claude --dangerously-skip-permissions
-gemini --yolo
-codex --dangerously-bypass-approvals-and-sandbox
-
-# Or exit and use command
-manyoyo run -n dev -y c
-```
-
-### Workflow Example
-
-```bash
-# 1. Start Claude Code for development
-manyoyo run -n project -y c
-
-# 2. AI helps write code...
-
-# 3. Exit, enter shell to check
-manyoyo run -n project -x /bin/bash
-
-# 4. Manually test in shell
-$ npm test
-$ git status
-$ ls -la
-
-# 5. Continue using AI
-$ claude --dangerously-skip-permissions
-
-# 6. Or exit and resume
-manyoyo run -n project -- -c
-```
-
-## Tips and Best Practices
-
-### Use Run Configurations
-
-Create dedicated configuration for each agent:
-
-```bash
-# Create configuration
-cat > ~/.manyoyo/manyoyo.json << 'EOF'
-{
-    "runs": {
-        "claude": {
-            "envFile": ["/abs/path/anthropic_claudecode.env"],
-            "yolo": "c"
-        }
-    }
-}
-EOF
-
-# Use configuration (simple)
-manyoyo run -r claude
-```
-
-### Unified Container Naming
-
-Use meaningful container names:
-
-```bash
-# Name by project
-manyoyo run -n webapp-claude -r claude
-manyoyo run -n api-codex -r codex
-
-# Name by function
-manyoyo run -n dev-claude -r claude
-manyoyo run -n test-gemini -r gemini
-```
-
-### Multi-Agent Collaboration
-
-Use multiple agents in the same project:
-
-```bash
-# Claude for architecture design
-manyoyo run -n project-claude --hp ~/project -r claude
-
-# Codex for code generation
-manyoyo run -n project-codex --hp ~/project -r codex
-
-# Switch usage
-manyoyo run -n project-claude -- -c
-manyoyo run -n project-codex -- resume --last
-```
-
-### Configure Environment Isolation
-
-Configure different environments for different agents:
-
-```bash
-# Development environment - Use Claude
-cat > ~/.manyoyo/manyoyo.json << 'EOF'
-{
-    "runs": {
-        "dev": {
-            "envFile": ["/abs/path/anthropic_dev.env"],
-            "env": {
-                "NODE_ENV": "development"
-            },
-            "yolo": "c"
-        },
-        "prod": {
-            "envFile": ["/abs/path/gemini_prod.env"],
-            "env": {
-                "NODE_ENV": "production"
-            },
-            "yolo": "gm"
-        }
-    }
-}
-EOF
-```
-
-## Troubleshooting
-
-### Agent Cannot Start
-
-**Check environment variables**:
-```bash
-# Verify environment variables
-manyoyo config show -r claude
-
-# Test environment variables
-manyoyo run -r claude -x 'env | grep ANTHROPIC'
-```
-
-**Check image**:
-```bash
-# Confirm agent is installed in image
-manyoyo run -x which claude
-manyoyo run -x which gemini
-manyoyo run -x which codex
-```
-
-### Session Cannot Resume
-
-**Check container status**:
-```bash
-# Check if container exists
-manyoyo ps
-docker ps -a | grep <container-name>
-
-# View container logs
-docker logs <container-name>
-```
-
-**Use correct resume command**:
-```bash
-# Claude Code: -c or --continue
-manyoyo run -n test -- -c
-
-# Gemini: -r or --resume
-manyoyo run -n test -- -r
-
-# Codex: resume --last
-manyoyo run -n test -- resume --last
-```
-
-### API Authentication Failed
-
-**Check API Key**:
-```bash
-# View environment file
-cat ~/.manyoyo/env/anthropic_claudecode.env
-
-# Test API
-curl -H "x-api-key: $ANTHROPIC_AUTH_TOKEN" \
-     https://api.anthropic.com/v1/messages
-```
-
-**Update configuration**:
-```bash
-# Edit environment file
-vim ~/.manyoyo/env/anthropic_claudecode.env
-
-# Restart container
-manyoyo rm test
-manyoyo run -n test -r claude
-```
-
-## Related Documentation
-
-- [Basic Usage](../guide/basic-usage.md) - Learn basic commands and operations
-- [Configuration Examples](../configuration/examples.md) - View agent configuration examples
-- [Environment Variables](../configuration/environment.md) - Learn how to configure environment variables
-- [Runtime Issues](../troubleshooting/runtime-errors.md#ai-cli-tool-errors) - AI CLI tool troubleshooting
+- [Basic Usage](../guide/basic-usage.md)
+- [Environment Variables](../configuration/environment.md)
+- [Runtime Issues](../troubleshooting/runtime-errors.md#ai-cli-tool-errors)

@@ -1,151 +1,68 @@
 ---
-title: 配置系统概览 | MANYOYO
-description: 了解 MANYOYO 配置系统，包含环境变量、JSON5 配置文件、运行配置与配置优先级，适配 AI Agent CLI 场景。
+title: 配置入门 | MANYOYO
+description: 一个配置文件、四层优先级和最小示例，几分钟搞懂 MANYOYO 配置
 ---
 
-# 配置系统概览
+# 配置入门
 
-MANYOYO 提供灵活的配置系统，用于简化命令行操作和管理复杂的运行环境。
+本页说明 MANYOYO 的配置放在哪、多个来源冲突时谁生效。不配置也能用，需要固定 Agent、环境变量或挂载时再看。
 
-## 配置方式
+## 一个文件
 
-MANYOYO 支持两种主要的配置方式：
+全局配置只有一个：`~/.manyoyo/manyoyo.json`，任何 `manyoyo` 命令都会自动读取（存在时）。格式是 JSON5，支持注释、尾随逗号和不加引号的键名：
 
-1. **环境变量配置**：传递 BASE_URL、TOKEN 等环境变量到容器内的 CLI 工具
-2. **配置文件**：使用 JSON5 格式的配置文件管理 MANYOYO 的运行参数
-
-## JSON5 格式说明
-
-配置文件采用 **JSON5 格式**，相比标准 JSON 具有以下优势：
-
-- **支持注释**：可以使用 `//` 单行注释和 `/* */` 多行注释
-- **尾随逗号**：数组和对象的最后一项可以有逗号
-- **更灵活的键名**：对象键名可以不加引号（符合标识符规则的情况下）
-- **更好的可读性**：适合人工编辑和维护
-
-示例：
 ```json5
 {
-    // 这是注释
-    containerName: "my-dev",  // 键名可以不加引号
-    imageVersion: "2.1.0-common",  // 支持尾随逗号
+    // 全局默认值
+    imageVersion: "2.1.0-common",
+    runs: {
+        // 命名的运行配置：manyoyo run -r claude
+        claude: {
+            envFile: ["/abs/path/anthropic.env"],
+            yolo: "c",
+        },
+    },
 }
 ```
 
-## 配置文件路径规则
+- `manyoyo run -r <name>` 读取 `runs.<name>`，只接受名称，不接受文件路径。
+- `envFile` 与 `--ef` 仅支持绝对路径。
+- `containerName` 支持 `{now}` 模板（展开为 `MMDD-HHmm`）。
+- 全部字段见[配置文件](./config-files.md)。
 
-### 运行配置
-- `manyoyo run -r claude` → 加载 `~/.manyoyo/manyoyo.json` 的 `runs.claude`
-- `manyoyo run -r <name>` 仅支持 `runs.<name>` 名称，不支持文件路径
+## 四层优先级
 
-### 全局配置
-- 运行任何 manyoyo 命令时，都会自动加载 `~/.manyoyo/manyoyo.json`（如果存在）
+**命令行 > `runs.<name>` > 全局配置 > 默认值**
 
-### 环境文件
-- `manyoyo run --ef /abs/path/myenv.env` → 加载绝对路径环境文件
-- `--ef` 仅支持绝对路径，不支持短名称和相对路径
+不同类型的参数合并方式不同：
 
-## 优先级机制
+| 类型 | 参数 | 行为 |
+| --- | --- | --- |
+| 标量 | `containerName`、`hostPath`、`containerPath`、`imageName`、`imageVersion`、`containerMode`、`yolo`、`shellPrefix`、`shell`、`serverUser`、`serverPass` | 只取优先级最高的一个 |
+| map | `env` | 按 key 合并，同名 key 高优先级覆盖 |
+| 数组 | `envFile`、`volumes`、`ports`、`imageBuildArgs` | 按「全局 → `runs.<name>` → 命令行」依次追加，全部生效 |
+| 首次执行 | `first.shellPrefix/shell/shellSuffix`、`first.env`、`first.envFile` | 仅新建容器时执行一次；各字段规则同上 |
 
-MANYOYO 配置参数分为三类，具有不同的合并行为：
+`serverUser` / `serverPass` 额外支持环境变量 `MANYOYO_SERVER_USER` / `MANYOYO_SERVER_PASS` 兜底（优先级低于全局配置、高于默认值），详见[网页服务](../guide/web.md)。
 
-### 覆盖型参数
-这些参数只取最高优先级的值：
-
-**优先级顺序**：命令行参数 > `runs.<name>` > 全局配置 > 默认值
-
-覆盖型参数包括：
-- `containerName` - 容器名称
-- `hostPath` - 宿主机工作目录
-- `containerPath` - 容器工作目录
-- `imageName` - 镜像名称
-- `imageVersion` - 镜像版本
-- `containerMode` - 容器嵌套模式
-- `yolo` - YOLO 模式选择
-- `shellPrefix` - 命令前缀
-- `shell` - 执行命令
-- `serverUser` - 网页服务登录用户名
-- `serverPass` - 网页服务登录密码
-
-其中网页认证参数 `serverUser` / `serverPass` 还支持环境变量兜底，优先级为：
-
-`命令行参数 > runs.<name> > 全局配置 > 环境变量 > 默认值`
-
-对应环境变量：`MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`。
-
-示例：
-```bash
-# 全局配置中设置 imageVersion: "2.1.0-common"
-# 运行配置中设置 imageVersion: "2.1.0-full"
-# 最终使用 "2.1.0-full"（运行配置优先级更高）
-```
-
-### 合并型参数
-这些参数会按顺序累加合并：
-
-**合并顺序**：全局配置 + `runs.<name>` + 命令行参数
-
-合并型参数包括：
-- `env` - 环境变量对象（按 key 覆盖）
-- `envFile` - 环境文件数组
-- `volumes` - 挂载卷数组
-- `ports` - 端口映射数组
-- `imageBuildArgs` - 镜像构建参数数组
-
-### 首次预执行参数（`first.*`）
-这些参数仅在**新建容器后、常规命令前**执行一次，复用已有容器时不会执行：
-
-- `first.shellPrefix` / `first.shell` / `first.shellSuffix`：覆盖型（命令行 > `runs.<name>.first` > 全局 `first`）
-- `first.env`：按 key 合并（全局 `first.env` + `runs.<name>.first.env` + 命令行 `--first-env`）
-- `first.envFile`：数组累加（全局 `first.envFile` + `runs.<name>.first.envFile` + 命令行 `--first-env-file`）
-
-示例：
-```bash
-# 全局配置：env: {"VAR1":"value1"}
-# runs.demo：env: {"VAR2":"value2"}
-# 命令行：-e "VAR3=value3"
-# 最终结果：VAR1/VAR2/VAR3 都会生效；同名 key 按后者覆盖前者
-```
-
-## 配置合并规则表
-
-| 参数类型 | 参数名 | 合并行为 | 示例 |
-|---------|--------|---------|------|
-| 覆盖型 | `containerName` | 取最高优先级的值 | CLI `-n test` 覆盖 `runs.<name>` 或全局值 |
-| 覆盖型 | `hostPath` | 取最高优先级的值 | 默认为当前目录 |
-| 覆盖型 | `containerPath` | 取最高优先级的值 | 默认与 hostPath 相同 |
-| 覆盖型 | `imageName` | 取最高优先级的值 | 默认 `ghcr.io/xcanwin/manyoyo` |
-| 覆盖型 | `imageVersion` | 取最高优先级的值 | 如 `2.1.0-common` |
-| 覆盖型 | `containerMode` | 取最高优先级的值 | `common`, `dind`, `sock` |
-| 覆盖型 | `yolo` | 取最高优先级的值 | `c`, `gm`, `cx`, `oc` |
-| 覆盖型 | `serverUser` | 按网页认证优先级取值 | CLI > `runs.<name>` > 全局 > 环境变量 > 默认值 |
-| 覆盖型 | `serverPass` | 按网页认证优先级取值 | CLI > `runs.<name>` > 全局 > 环境变量 > 默认值 |
-| 合并型 | `env` | 对象按 key 合并覆盖 | 全局 + `runs.<name>` + CLI（同名后者覆盖） |
-| 合并型 | `envFile` | 数组累加合并 | 全局 + `runs.<name>` + CLI 的绝对路径文件 |
-| 合并型 | `volumes` | 数组累加合并 | 所有挂载卷生效 |
-| 合并型 | `ports` | 数组累加合并 | 所有端口映射生效（透传 `--publish`） |
-| 合并型 | `imageBuildArgs` | 数组累加合并 | 所有构建参数生效 |
-| 首次预执行 | `first.shellPrefix/shell/shellSuffix` | 覆盖型（CLI > run first > global first） | 仅新建容器时执行一次 |
-| 首次预执行 | `first.env` | 对象按 key 合并覆盖 | 全局 `first.env` + `runs.<name>.first.env` + CLI `--first-env` |
-| 首次预执行 | `first.envFile` | 数组累加合并 | 全局 `first.envFile` + `runs.<name>.first.envFile` + CLI `--first-env-file` |
-
-## 调试配置
-
-使用以下命令查看最终生效的配置：
+## 最小示例
 
 ```bash
-# 显示最终配置
-manyoyo config show
-
-# 显示将要执行的命令
-manyoyo config command
+# 全局：imageVersion 2.1.0-common；runs.demo：imageVersion 2.1.0-full，env VAR2
+# 命令行：-e VAR3=value3
+manyoyo run -r demo -e "VAR3=value3"
+# 镜像用 2.1.0-full（runs 覆盖全局）；VAR2、VAR3 以及全局 env 都生效
 ```
 
-这些调试命令会显示所有配置源的合并结果，帮助您理解配置的优先级和合并逻辑。
+## 看最终结果
+
+```bash
+manyoyo config show -r demo      # 合并后的最终配置
+manyoyo config command -r demo   # 将执行的容器命令
+```
 
 ## 下一步
 
-- [环境变量详解](./environment.md) - 了解如何配置环境变量
-- [配置文件详解](./config-files.md) - 学习所有配置选项
-- [配置示例](./examples.md) - 查看实用的配置示例
-- [网页服务认证与安全实践](../advanced/web-server-auth.md) - 了解 `serve` 模式认证与安全建议
+- [环境变量](./environment.md)：传 API 地址和 Token
+- [配置文件](./config-files.md)：全部字段
+- [配置示例](./examples.md)

@@ -35,7 +35,7 @@ ssh -L <端口>:127.0.0.1:<端口> <用户名>@<服务器地址>
 # 然后浏览器打开 http://127.0.0.1:<端口>，用户名 admin，密码是 manyoyo setup 里设的
 ```
 
-判断不对时强制指定：`manyoyo --headless`（无图形界面）或 `manyoyo --gui`（有图形界面），也可以设环境变量 `MANYOYO_HEADLESS=1` 或 `0`。更多远程访问方式见[网页服务认证](../advanced/web-server-auth.md)。
+判断不对时强制指定：`manyoyo --headless`（无图形界面）或 `manyoyo --gui`（有图形界面），也可以设环境变量 `MANYOYO_HEADLESS=1` 或 `0`。更多远程访问方式见[网页服务认证](./web.md)。
 
 ## 下一步
 

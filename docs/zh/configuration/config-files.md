@@ -1,688 +1,124 @@
+---
+title: 配置文件详解
+description: "~/.manyoyo/manyoyo.json 的全部字段、合并规则与最小示例"
+---
+
 # 配置文件详解
 
-配置文件用于简化 MANYOYO 命令行操作，避免重复输入参数。使用 **JSON5 格式**，支持注释和更好的可读性。
+本页列出 `~/.manyoyo/manyoyo.json` 的所有字段。文件为 JSON5 格式（支持注释），完整模板见仓库 `manyoyo.example.json`。
 
-## 配置文件类型
+## 文件与优先级
 
-MANYOYO 支持两种配置文件：
+只有一个配置文件：`~/.manyoyo/manyoyo.json`。顶层字段是全局配置，`runs.<name>` 是运行配置，用 `-r <name>` 加载。
 
-### 1. 全局配置
+优先级：命令行 > `runs.<name>` > 全局配置 > 默认值。
 
-**文件路径**：`~/.manyoyo/manyoyo.json`
+- 标量字段：取最高优先级的值。
+- `env`：按 key 合并，后者覆盖前者。
+- `envFile`、`volumes`、`ports`、`imageBuildArgs`：按「全局 → `runs.<name>` → 命令行」追加。
+- `serverUser` / `serverPass`：命令行 > `runs.<name>` > 全局配置 > 环境变量 > 默认值。
 
-**特点**：
-- 自动加载（运行任何 manyoyo 命令时）
-- 适合设置默认镜像、通用环境变量等
-- 优先级最低
-
-**示例**：
 ```json5
 {
     "imageName": "ghcr.io/xcanwin/manyoyo",
-    "imageVersion": "2.1.0-full"
-}
-```
-
-### 2. 运行配置
-
-**位置**：
-- 全局配置文件：`~/.manyoyo/manyoyo.json`
-- 运行配置：`~/.manyoyo/manyoyo.json` 的 `runs.<name>`（使用 `-r <name>`）
-
-**特点**：
-- 需要显式加载（使用 `-r` 参数）
-- 适合设置特定项目或工具的配置
-- 优先级高于全局配置
-
-**示例**：
-```json5
-{
-    "envFile": ["/abs/path/anthropic_claudecode.env"],
-    "first": {
-        "shell": "echo first-init"
-    },
-    "shellSuffix": "-c",
-    "yolo": "c"
-}
-```
-
-## 配置选项详解
-
-参考 `manyoyo.example.json` 查看所有可配置项。以下是详细说明：
-
-### 容器基础配置
-
-#### containerName
-- **类型**：字符串
-- **默认值**：`my-{月日-时分}`（自动生成）
-- **说明**：容器名称，用于标识和管理容器
-- **示例**：
-```json5
-{
-    "containerName": "my-dev"
-}
-```
-
-#### hostPath
-- **类型**：字符串
-- **默认值**：当前工作目录
-- **说明**：宿主机工作目录，会挂载到容器中
-- **示例**：
-```json5
-{
-    "hostPath": "/Users/username/projects/myproject"
-}
-```
-
-#### containerPath
-- **类型**：字符串
-- **默认值**：与 hostPath 相同
-- **说明**：容器内的工作目录
-- **示例**：
-```json5
-{
-    "containerPath": "/workspace/myproject"
-}
-```
-
-#### imageName
-- **类型**：字符串
-- **默认值**：`ghcr.io/xcanwin/manyoyo`
-- **说明**：镜像名称（不含版本号）
-- **示例**：
-```json5
-{
-    "imageName": "localhost/myuser/manyoyo"
-}
-```
-
-#### imageVersion
-- **类型**：字符串
-- **默认值**：无
-- **说明**：镜像版本标签
-- **格式**：`<version>-<variant>`
-- **示例**：
-```json5
-{
-    "imageVersion": "2.1.0-full"  // full 版本包含所有工具
-}
-```
-
-可用的变体：
-- `full` - 完整版本（推荐）
-- `common` - 常用工具版本
-- 自定义 - 使用 `--iba TOOL=xxx` 构建
-
-#### containerMode
-- **类型**：字符串
-- **可选值**：`common`, `dind`, `sock`
-- **默认值**：`common`
-- **说明**：容器嵌套模式
-- **示例**：
-```json5
-{
-    "containerMode": "dind"  // Docker-in-Docker 模式
-}
-```
-
-模式说明：
-- `common` - 普通模式，无容器嵌套能力
-- `dind` - Docker-in-Docker 模式，安全的嵌套容器
-- `sock` - 挂载 Docker Socket 模式（危险，可访问宿主机一切）
-
-#### containerRuntime
-- **类型**：字符串
-- **可选值**：`auto`, `docker`, `podman`
-- **默认值**：`auto`
-- **说明**：容器运行时，仅全局配置生效（不支持 `runs.<name>`）。`auto` 按优先级选择：`~/.manyoyo/runtime/podman/bin/podman`（私有 Podman，存在即用，并使用独立的 `XDG_CONFIG_HOME` / `XDG_DATA_HOME` / `CONTAINERS_CONF`）> `docker info` 可用的 docker > `podman info` 可用的 podman > 仅 `--version` 可用的第一个。显式设为 `docker` / `podman` 时直接使用该命令，不再探测。`manyoyo doctor` 会显示选中的运行时与来源。
-- **示例**：
-```json5
-{
-    "containerRuntime": "podman"
-}
-```
-
-#### updateCheck
-- **类型**：布尔
-- **默认值**：`true`
-- **说明**：`serve` 是否每天最多向 GitHub Release 查询一次新版本，并在网页右下角提示。仅全局配置生效；请求只带固定的 `User-Agent`，不附带任何本机信息；设为 `false` 则完全不发请求。
-- **示例**：
-```json5
-{
-    "updateCheck": false
-}
-```
-
-#### mirrors
-- **类型**：对象，键为 `apt` / `npm` / `pip`
-- **默认值**：不设置（各工具使用官方默认源）
-- **说明**：容器内的软件源。值必须是 `http://` 或 `https://` 地址，空字符串或缺省表示官方默认源。仅全局配置生效，在**新建容器**时生效，镜像本身不变：`npm` 注入环境变量 `NPM_CONFIG_REGISTRY`，`pip` 注入 `PIP_INDEX_URL`（`http` 源会同时设置 `PIP_TRUSTED_HOST`），`apt` 在容器创建后改写 `/etc/apt` 里的源（只填镜像站主机，如 `https://mirrors.aliyun.com`，保留 `/ubuntu`、`/ubuntu-ports` 路径）。你在 `env` 里自己设置的同名变量优先。Web 向导和「系统设置」里也可以选择预设源或自定义。
-- **示例**：
-```json5
-{
-    "mirrors": {
-        "apt": "https://mirrors.aliyun.com",
-        "npm": "https://registry.npmmirror.com/",
-        "pip": "https://mirrors.aliyun.com/pypi/simple/"
-    }
-}
-```
-
-#### serverUser
-- **类型**：字符串
-- **默认值**：`admin`
-- **说明**：网页服务登录用户名（`serve` 模式）
-- **环境变量**：`MANYOYO_SERVER_USER`
-- **示例**：
-```json5
-{
-    "serverUser": "admin"
-}
-```
-
-#### serverPass
-- **类型**：字符串
-- **默认值**：未设置时自动生成随机密码
-- **说明**：网页服务登录密码（`serve` 模式）
-- **环境变量**：`MANYOYO_SERVER_PASS`
-- **示例**：
-```json5
-{
-    "serverPass": "change-this-password"
-}
-```
-
-#### serve.title
-- **类型**：对象 `{ title?: string }`
-- **优先级**：`runs.<name>.serve.title` > 全局配置 `serve.title`
-- **说明**：网页 `<title>`。不设置该字段时按当前会话 Agent 名动态显示（原有行为）；一旦设置 `title`（包括空字符串），则固定显示该值，不再随会话切换变化
-- **示例**：
-```json5
-{
-    "serve": {
-        "title": "My MANYOYO"  // 留空字符串 "" 则固定显示为空
-    }
-}
-```
-
-### 环境变量配置
-
-#### envFile
-- **类型**：字符串数组
-- **合并方式**：累加合并
-- **说明**：环境文件列表，按顺序加载（仅支持绝对路径）
-- **示例**：
-```json5
-{
-    "envFile": [
-        "/abs/path/anthropic_claudecode.env",
-        "/abs/path/secrets.env"
-    ]
-}
-```
-
-#### env
-- **类型**：对象（map）
-- **合并方式**：按 key 合并，后者覆盖前者
-- **说明**：直接指定环境变量
-- **示例**：
-```json5
-{
-    "env": {
-        "DEBUG": "true",
-        "LOG_LEVEL": "info"
-    }
-}
-```
-
-### 挂载卷配置
-
-#### volumes
-- **类型**：字符串数组
-- **合并方式**：累加合并
-- **说明**：额外的挂载卷
-- **格式**：`宿主机路径:容器路径[:选项]`
-- **路径规则**：宿主机路径支持绝对路径，也支持 `~` / `$HOME` 前缀（会在运行前展开为绝对路径）
-- **示例**：
-```json5
-{
-    "volumes": [
-        "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json",
-        "~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright",
-        "/tmp/cache:/workspace/cache:ro"  // 只读挂载
-    ]
-}
-```
-
-#### ports
-- **类型**：字符串数组
-- **合并方式**：累加合并
-- **说明**：额外的端口映射（透传为 `--publish`）
-- **格式**：Docker/Podman `--publish` 支持的映射字符串
-- **示例**：
-```json5
-{
-    "ports": [
-        "8080:80",
-        "127.0.0.1:8443:443"
-    ]
-}
-```
-
-### 服务配置
-
-#### plugins.playwright
-- **类型**：对象
-- **说明**：`manyoyo playwright` / `manyoyo plugin playwright` 的 Playwright 插件配置
-- **示例**：
-```json5
-{
-    "plugins": {
-        "playwright": {
-            "runtime": "mixed",  // mixed | container | host
-            "enabledScenes": ["mcp-cont-headless", "mcp-cont-headed", "mcp-host-headless", "mcp-host-headed", "cli-host-headless", "cli-host-headed", "dev-host-headed"],
-            "cliSessionScene": "cli-host-headless",
-            "mcpDefaultHost": "host.docker.internal",
-            "vncPasswordEnvKey": "VNC_PASSWORD",
-            "extensionProdversion": "132.0.0.0",
-            "navigatorPlatform": "MacIntel",
-            "disableWebRTC": false,
-            "devtoolsActivePortPath": "",
-            "devtoolsCdpTimeout": 60000,
-            "ports": {
-                "mcpContHeadless": 8931,
-                "mcpContHeaded": 8932,
-                "mcpHostHeadless": 8933,
-                "mcpHostHeaded": 8934,
-                "cliHostHeadless": 8935,
-                "cliHostHeaded": 8936,
-                "mcpContHeadedNoVnc": 6080
-            }
+    "imageVersion": "2.1.0-full",
+    "runs": {
+        "claude": {
+            "envFile": ["/abs/path/anthropic_claudecode.env"],
+            "yolo": "c"
         }
     }
 }
 ```
 
-`runs.<name>.plugins.playwright` 可继续覆盖全局 `plugins.playwright`，便于区分不同运行配置。
+## 容器与镜像
 
-- `manyoyo playwright ext-download` 会下载扩展到 `~/.manyoyo/plugin/playwright/extensions/`（临时目录会自动清理）。
-- `manyoyo playwright up <scene> --ext-path <path> --ext-name <name>` 可为任意场景追加扩展目录（两者均可多次使用，最终都会转为 Playwright 的扩展加载参数）。
-- `cliSessionScene` 用于指定 `my run` 默认注入的 `playwright-cli` 宿主场景；启动对应 `cli-host-*` 场景后，容器内的 `playwright-cli open` 会自动附着到宿主浏览器。
-- 宿主机 agent 控制宿主机 Chrome：先在 Chrome 的 `chrome://inspect/#remote-debugging` 启用远程调试，再执行 `manyoyo playwright up dev-host-headed`；命令会写出宿主机可用的 `PLAYWRIGHT_MCP_CONFIG`，并输出宿主机启动示例。
-- 容器内 agent 控制宿主机 Chrome：将 `cliSessionScene` 设为 `dev-host-headed`，并挂载 `DevToolsActivePort`；`my run` 会自动注入容器内可用的 attach 配置。
-- `devtoolsActivePortPath` 留空时会自动查找常见 Chrome/Chromium/Brave 路径；如果 manyoyo 在容器内运行，可把宿主文件挂载到 `/root/Library/Application Support/Google/Chrome/DevToolsActivePort` 或显式配置该路径。
-- `dev-host-headed` 会控制真实浏览器实例，可能访问已有登录态、Cookie 与打开页面；仅在可信本机环境使用。
-- 启动 `cli-host-headed` 时会自动创建 `~/.manyoyo/.cache/ms-playwright`；如需让容器内 `playwright-cli` 复用宿主缓存，可把 `~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright` 加入 `volumes`。
-- `navigatorPlatform` 用于注入 `navigator.platform`（默认 `MacIntel`，与内置 UA 保持一致）。
-- `disableWebRTC` 设为 `true` 时会附加禁用 WebRTC 的启动参数并注入脚本屏蔽相关 API。
+| 字段 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `containerName` | 字符串 | `my-{月日-时分}` | 容器名，支持 `{now}`（→ `MMDD-HHmm`） |
+| `hostPath` | 字符串 | 当前目录 | 挂载到容器的宿主机工作目录 |
+| `containerPath` | 字符串 | 同 `hostPath` | 容器内工作目录 |
+| `imageName` | 字符串 | `ghcr.io/xcanwin/manyoyo` | 镜像名（不含版本） |
+| `imageVersion` | 字符串 | 无 | 格式 `x.y.z-后缀`，如 `2.1.0-common`、`2.1.0-full` |
+| `containerMode` | 字符串 | `common` | `common` / `dind` / `sock`，见 [容器模式](../reference/container-modes.md) |
+| `imageBuildArgs` | 字符串数组 | 无 | 构建参数 `KEY=VALUE`，追加合并，如 `TOOL=common` |
 
-### 命令配置
+## 环境、挂载与端口
 
-#### shellPrefix
-- **类型**：字符串
-- **说明**：命令前缀，通常用于设置临时环境变量
-- **示例**：
+| 字段 | 类型 | 合并规则 | 说明 |
+| --- | --- | --- | --- |
+| `envFile` | 字符串数组 | 追加 | 环境文件，**仅支持绝对路径** |
+| `env` | 对象 | 按 key 覆盖 | 直接指定环境变量 |
+| `volumes` | 字符串数组 | 追加 | `宿主机路径:容器路径[:ro]`，宿主机路径支持绝对路径与 `~` / `$HOME` 前缀 |
+| `ports` | 字符串数组 | 追加 | 透传为 `--publish`，如 `"8080:80"` |
+
 ```json5
 {
-    "shellPrefix": "DEBUG=1"
+    "env": { "TZ": "Asia/Shanghai" },
+    "volumes": ["~/.ssh:/root/.ssh:ro"],
+    "ports": ["127.0.0.1:8443:443"]
 }
 ```
 
-#### shell
-- **类型**：字符串
-- **说明**：要执行的主命令
-- **示例**：
-```json5
-{
-    "shell": "claude"
-}
-```
+挂载与 `sock` 模式的安全提示见 [安全说明](../guide/security.md)。
 
-#### shellSuffix
-- **类型**：字符串
-- **说明**：命令后缀，追加在 `shell` 后面（例如 `-c`、`resume --last`）
-- **优先级**：可被命令行 `--ss` 或 `-- ...` 覆盖（其中 `-- ...` 优先级最高）
-- **示例**：
+## 命令
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `yolo` | 字符串 | `c` / `gm` / `cx` / `oc`（或 `claude` / `gemini` / `codex` / `opencode`），跳过权限确认，详见 [智能体](../reference/agents.md) |
+| `shellPrefix` | 字符串 | 命令前缀，常用于临时环境变量 |
+| `shell` | 字符串 | 主命令，如 `claude` |
+| `shellSuffix` | 字符串 | 追加在 `shell` 后，如 `resume --last`；可被 `--ss` 或 `-- ...` 覆盖（后者最高） |
+| `first` | 对象 | 仅在**新建容器后**执行一次，复用容器时不执行；含 `shellPrefix` / `shell` / `shellSuffix`（覆盖型）、`env`（按 key 合并）、`envFile`（追加） |
+| `agentPromptCommand` | 字符串 | 网页 AGENT 模式的提示词命令模板，须含 `{prompt}`；为空时按 `shell` / `yolo` 自动推断 |
+| `quiet` | 字符串数组 | 静默显示，可选 `tip` / `cmd` / `full` |
+
 ```json5
 {
+    "first": { "shell": "echo setup-once", "env": { "BOOTSTRAP": "1" } },
     "shell": "codex",
     "shellSuffix": "resume --last"
 }
 ```
 
-#### agentPromptCommand
-- **类型**：字符串
-- **说明**：`serve` 网页 `AGENT` 模式的提示词执行模板，必须包含 `{prompt}` 占位符
-- **优先级**：`createOptions.agentPromptCommand > runs.<name>.agentPromptCommand > 全局 agentPromptCommand > 空`
-- **自动推断**：当该值为空时，系统会基于 `shell/yolo` 合成后的完整命令主体自动识别常见 Agent（`claude/gemini/codex/opencode`）并填充默认模板
-- **连续上下文**：有历史时会优先尝试 Agent 恢复命令；恢复失败或不支持时自动注入最近历史窗口
-- **示例**：
-```json5
-{
-    "agentPromptCommand": "codex exec --plain-text {prompt}"
-}
-```
+## 全局专属字段
 
-#### first
-- **类型**：对象（map）
-- **说明**：仅在新建容器后、常规命令前执行一次；复用已有容器时不执行
-- **字段**：
-  - `first.shellPrefix` / `first.shell` / `first.shellSuffix`：覆盖型（`runs.<name>.first` > 全局 `first`）
-  - `first.env`：按 key 合并（全局 `first.env` + `runs.<name>.first.env`）
-  - `first.envFile`：数组累加（全局 `first.envFile` + `runs.<name>.first.envFile`）
-- **示例**：
-```json5
-{
-    "first": {
-        "shell": "echo setup-once",
-        "env": {
-            "BOOTSTRAP": "1"
-        },
-        "envFile": ["/abs/path/first.env"]
-    }
-}
-```
+以下字段只在全局配置生效，不支持 `runs.<name>`。
 
-#### yolo
-- **类型**：字符串
-- **可选值**：`c`, `gm`, `cx`, `oc`（或完整名称 `claude`, `gemini`, `codex`, `opencode`）
-- **说明**：YOLO 模式快捷方式，跳过权限确认
-- **示例**：
-```json5
-{
-    "yolo": "c"  // 等同于 claude --dangerously-skip-permissions
-}
-```
+| 字段 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `containerRuntime` | 字符串 | `auto` | `auto` / `docker` / `podman`；`auto` 优先私有 Podman，其次 daemon 可用的 docker / podman。`manyoyo doctor` 会显示选中的运行时 |
+| `updateCheck` | 布尔 | `true` | `serve` 每天最多查询一次新版本；请求不带本机信息，`false` 则完全不请求 |
+| `mirrors` | 对象 | 官方源 | 容器内软件源 `apt` / `npm` / `pip`（`http(s)://` 地址，留空为官方源），新建容器时生效；`apt` 只填镜像站主机，如 `https://mirrors.aliyun.com`。`env` 里的同名变量优先 |
 
-### 其他配置
+## 网页服务
 
-#### quiet
-- **类型**：字符串数组
-- **可选值**：`tip`, `cmd`, `full`
-- **说明**：静默显示选项
-- **示例**：
-```json5
-{
-    "quiet": ["tip", "cmd"]  // 不显示提示和命令
-}
-```
+| 字段 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `serverUser` | 字符串 | `admin` | 登录用户名，环境变量 `MANYOYO_SERVER_USER` |
+| `serverPass` | 字符串 | 随机生成 | 登录密码，环境变量 `MANYOYO_SERVER_PASS` |
+| `serve.title` | 字符串 | 按会话 Agent 名动态显示 | 一旦设置（含空字符串）即固定显示；`runs.<name>.serve` 优先于全局 |
+| `serve.quickChat` | 对象 | 无 | 网页「快捷对话」：`path` 为工作根目录，`run` 为使用的 `runs.<name>` |
 
-#### imageBuildArgs
-- **类型**：字符串数组
-- **合并方式**：累加合并
-- **说明**：镜像构建参数，传递给 Dockerfile
-- **格式**：`KEY=VALUE`
-- **示例**：
-```json5
-{
-    "imageBuildArgs": [
-        "TOOL=common",
-        "GIT_SSL_NO_VERIFY=true"
-    ]
-}
-```
+认证与对外监听的注意事项见 [网页服务](../guide/web.md) 与 [安全说明](../guide/security.md)。
 
-## 配置路径规则
+## 插件
 
-### 运行配置路径解析
-
-```bash
-# 从 manyoyo.json 的 runs 读取
-manyoyo run -r claude
-# 加载：~/.manyoyo/manyoyo.json 的 runs.claude
-```
-
-### 全局配置
-
-全局配置始终从固定位置加载：
-```bash
-~/.manyoyo/manyoyo.json
-```
-
-## 配置合并规则
-
-参考[配置系统概览](./README.md#优先级机制)了解详细的合并规则。
-
-简要说明：
-
-### 覆盖型参数
-取最高优先级的值：
-```
-命令行参数 > runs.<name> > 全局配置 > 默认值
-```
-
-其中 `serverUser` / `serverPass` 的优先级为：
-```
-命令行参数 > runs.<name> > 全局配置 > 环境变量 > 默认值
-```
-
-### 合并型参数
-按顺序累加合并：
-```
-全局配置 + runs.<name> + 命令行参数
-```
-
-### 首次预执行参数
-`first` 仅用于新建容器阶段，支持命令行覆盖/追加：
-```
-first.shellPrefix/shell/shellSuffix: 命令行参数 > runs.<name>.first > 全局 first
-first.env: 全局 first.env + runs.<name>.first.env + 命令行 --first-env（按 key 覆盖）
-first.envFile: 全局 first.envFile + runs.<name>.first.envFile + 命令行 --first-env-file
-```
-
-## 完整配置示例
-
-### 示例：全局配置
-
-```json5
-// ~/.manyoyo/manyoyo.json
-{
-    // 使用自定义镜像
-    "imageName": "ghcr.io/xcanwin/manyoyo",
-    "imageVersion": "2.1.0-full",
-
-    // 全局环境变量
-    "env": {
-        "TZ": "Asia/Shanghai",
-        "LANG": "en_US.UTF-8"
-    },
-
-    // 默认静默提示
-    "quiet": ["tip"]
-}
-```
-
-### 示例：Claude Code 运行配置
-
-```json5
-// ~/.manyoyo/manyoyo.json（片段）
-{
-    // 加载 Claude 环境变量
-    "envFile": ["/abs/path/anthropic_claudecode.env"],
-
-    // 使用 YOLO 模式
-    "yolo": "c",
-
-    // 额外挂载 SSH 配置
-    "volumes": [
-        "~/.ssh:/root/.ssh:ro"
-    ]
-}
-```
-
-### 示例：Codex 运行配置
-
-```json5
-// ~/.manyoyo/manyoyo.json（片段）
-{
-    // 加载 Codex 环境变量
-    "envFile": ["/abs/path/openai_[gpt]_codex.env"],
-
-    // 挂载认证文件
-    "volumes": [
-        "/Users/pc_user/.codex/auth.json:/root/.codex/auth.json"
-    ],
-
-    // 使用 YOLO 模式
-    "yolo": "cx"
-}
-```
-
-### 示例：Docker-in-Docker 配置
-
-```json5
-// ~/.manyoyo/manyoyo.json（片段）
-{
-    // 使用 Docker-in-Docker 模式
-    "containerMode": "dind",
-
-    // 容器名称
-    "containerName": "my-dind",
-
-    // 额外挂载 Docker 配置
-    "volumes": [
-        "~/.docker:/root/.docker:ro"
-    ]
-}
-```
-
-### 示例：项目特定配置
-
-```json5
-// ./myproject/.manyoyo.json
-{
-    // 项目容器名称
-    "containerName": "my-myproject",
-
-    // 项目环境变量
-    "env": {
-        "PROJECT_NAME": "myproject",
-        "NODE_ENV": "development"
-    },
-
-    // 使用项目本地环境文件
-    "envFile": ["/abs/path/local.env"]
-}
-```
+`plugins.playwright` 配置 `manyoyo playwright`，`runs.<name>.plugins.playwright` 可覆盖全局。字段与场景说明见 [Playwright 插件](../advanced/playwright.md)，默认值见 `manyoyo.example.json`。
 
 ## 调试配置
 
-### 查看最终配置
-
 ```bash
-# 显示所有配置源的合并结果
-manyoyo config show
-
-# 显示特定运行配置的合并结果
-manyoyo config show -r claude
-
-# 显示将要执行的命令
-manyoyo config command -r claude
+manyoyo config show             # 全局配置合并结果
+manyoyo config show -r claude   # 某个运行配置的合并结果
+manyoyo config command -r claude  # 将要执行的命令
 ```
 
-### 常见配置问题
+配置没生效时先确认是有效的 JSON5，再用 `config show` 看最终值；`envFile` 没加载时确认是绝对路径。
 
-#### 配置未生效
+## 下一步
 
-**症状**：修改配置文件后，参数没有生效
-
-**解决方案**：
-1. 检查配置文件格式（必须是有效的 JSON5）
-2. 确认文件路径正确
-3. 使用 `config show` 查看最终配置
-4. 注意覆盖型参数只取最高优先级的值
-
-```bash
-# 验证 runs.claude 配置格式
-cat ~/.manyoyo/manyoyo.json | jq '.runs.claude'
-
-# 查看最终配置
-manyoyo config show -r claude
-```
-
-#### 配置冲突
-
-**症状**：多个配置源设置了同一参数，不确定哪个生效
-
-**解决方案**：
-1. 理解优先级规则（覆盖型 vs 合并型）
-2. 使用 `config show` 查看最终值
-3. 必要时移除低优先级配置中的冲突项
-
-#### 环境变量未加载
-
-**症状**：配置文件中指定了 envFile，但环境变量未生效
-
-**解决方案**：
-1. 确认环境文件路径正确
-2. 检查环境文件格式
-3. 使用 `config show` 查看加载的环境文件列表
-4. 在容器中运行 `env` 命令验证
-
-```bash
-# 查看配置中的环境文件
-manyoyo config show -r claude | grep envFile
-
-# 在容器中验证环境变量
-manyoyo run -r claude -x env | grep ANTHROPIC
-```
-
-## 最佳实践
-
-### 1. 分层配置
-
-```bash
-# 全局配置：设置通用选项
-~/.manyoyo/manyoyo.json
-
-# 运行配置：设置工具特定选项（manyoyo.json 的 runs）
-~/.manyoyo/manyoyo.json (runs.claude / runs.codex)
-
-# 项目配置：设置项目特定选项
-./project/.manyoyo.json
-```
-
-### 2. 使用注释
-
-```json5
-{
-    // 生产环境配置
-    "imageVersion": "2.1.0-full",
-
-    // 开发时可以临时切换
-    // "imageVersion": "2.1.0-common",
-
-    "envFile": [
-        "/abs/path/anthropic_base.env",    // 基础配置
-        "/abs/path/anthropic_secrets.env"  // 敏感信息
-    ]
-}
-```
-
-### 3. 版本控制
-
-```bash
-# 提交到版本控制
-.manyoyo.json           # 项目配置
-manyoyo.example.json     # 配置示例
-
-# 排除敏感信息
-.gitignore:
-  *.env
-  secrets.json
-```
-
-### 4. 配置模板
-
-创建配置模板供团队使用：
-```bash
-# 编辑 runs 配置
-vim ~/.manyoyo/manyoyo.json
-```
-
-## 相关文档
-
-- [配置系统概览](./README.md) - 了解配置优先级机制
-- [环境变量详解](./environment.md) - 学习如何配置环境变量
-- [配置示例](./examples.md) - 查看更多实用示例
-- [网页服务认证与安全实践](../advanced/web-server-auth.md) - `serve` 模式认证与安全基线
+- [配置系统概览](./README.md)
+- [环境变量详解](./environment.md)
+- [配置示例](./examples.md)

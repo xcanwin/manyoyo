@@ -1,78 +1,50 @@
-# Troubleshooting Guide
+---
+title: FAQ | MANYOYO
+description: Common MANYOYO problems indexed by symptom, covering install, login, permissions, images and environment variables, each with the shortest path to a fix.
+---
 
-Use this page to quickly locate common MANYOYO issues and run the shortest diagnostic path.
+# FAQ
 
-## Quick Entry
+Find your symptom; if it is not here, use the "Minimal diagnosis" at the bottom.
 
-- Build failures: [`build-errors`](./build-errors.md)
-- Runtime failures: [`runtime-errors`](./runtime-errors.md)
+## Install and start
 
-## Quick Reference
+**The Linux installer says there is no Docker / Podman**
+Install one and re-run the install command; it resumes: `sudo apt update && sudo apt install -y podman`, or follow Docker's documentation. The installer never runs `sudo` for you.
 
-| Symptom | Possible Cause | Quick Command | Details |
-| --- | --- | --- | --- |
-| `manyoyo build` fails | network/disk/permission | `df -h`, `manyoyo build --iv 2.1.0-common` | [Build Issues](./build-errors.md) |
-| `pinging container registry failed` | local image not built | `manyoyo build --iv 2.1.0-common` | [Image Pull Failures](./build-errors.md#image-pull-failures) |
-| `permission denied` | Docker/Podman permission issue | `groups`, `docker ps` | [Permission Issues](./runtime-errors.md#permission-denied) |
-| env vars not effective | invalid `envFile` path/format | `manyoyo config show --ef /abs/path/example.env` | [Env Var Issues](./runtime-errors.md#environment-variables-not-taking-effect) |
+**The browser did not open automatically**
+The terminal prints a one-time login URL; open it within 60 seconds, or run `manyoyo` again after it expires. For SSH and other machines without a graphical session see [First Run](../guide/first-run.md).
 
-## Minimal Diagnostic Flow
+**I forgot the login password**
+Running `manyoyo` on the machine signs you in automatically, no password needed. To reset it, run `manyoyo setup` or edit `serverPass` in `~/.manyoyo/manyoyo.json`.
 
-1. Basic checks
+**I want to go back to the previous version after upgrading**
+`manyoyo update --rollback`, see [Daily Use](../guide/daily.md).
 
-```bash
-manyoyo -v
-node --version
-docker --version   # or podman --version
-```
+## Running and images
 
-2. Inspect final config and command
+**`permission denied`**
+Docker / Podman permissions are insufficient. First make sure `docker ps` runs on its own; see [Permission Issues](./runtime-errors.md#permission-denied).
 
-```bash
-manyoyo config show
-manyoyo config command
-manyoyo config show -r claude
-```
+**`pinging container registry failed` / image pull failure**
+The registry is unreachable. Check your proxy or build locally, see [Image Pull Failures](../advanced/build-errors.md#image-pull-failures).
 
-3. Check images and containers
+**Environment variables have no effect**
+`envFile` must be an absolute path. Check with `manyoyo config show --ef /abs/path/example.env`; details in [Environment Variable Issues](./runtime-errors.md#environment-variables-not-taking-effect).
 
-```bash
-docker images | grep manyoyo   # or podman images
-manyoyo ps
-```
+**`manyoyo build` fails**
+Most users never need to build. If you must, see [Image Build Issues](../advanced/build-errors.md).
 
-4. Verify env file loading (`--ef` only accepts absolute paths)
+## Minimal diagnosis
 
 ```bash
-manyoyo config show --ef /abs/path/anthropic_claudecode.env
-manyoyo run --ef /abs/path/anthropic_claudecode.env -x env | grep ANTHROPIC
+manyoyo doctor                  # check container runtime, image, config and ports
+manyoyo doctor --fix            # repair what can be repaired
+manyoyo config show -r claude   # the final resolved configuration
+manyoyo config command -r claude  # the container command that would run
+manyoyo ps                      # container status
 ```
 
-## Config Checks
+## Getting help
 
-- Run profiles are under `runs.<name>` in `~/.manyoyo/manyoyo.json`.
-- `manyoyo run -r <name>` reads `runs.<name>` from `~/.manyoyo/manyoyo.json`.
-- `envFile` must be an array of absolute paths.
-
-## Getting Help
-
-1. Collect diagnostic info
-
-```bash
-uname -a
-manyoyo -v
-manyoyo config show
-manyoyo ps
-```
-
-2. Export logs
-
-```bash
-manyoyo build --iv 2.1.0-common 2>&1 | tee build-error.log
-docker logs <container-name> 2>&1 | tee runtime-error.log  # or podman logs
-```
-
-3. Submit an issue
-
-- Repo: [GitHub Issues](https://github.com/xcanwin/manyoyo/issues)
-- Include: reproduction steps, logs, system info, and redacted config snippets.
+Open an issue at [GitHub Issues](https://github.com/xcanwin/manyoyo/issues) with reproduction steps, error logs, `manyoyo -v` and system information, and a redacted config snippet. More runtime problems are in [Runtime Issues](./runtime-errors.md).

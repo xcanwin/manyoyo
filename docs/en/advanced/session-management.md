@@ -1,628 +1,125 @@
 # Session Management
 
-This page introduces MANYOYO's session management mechanism, including session creation, resumption, persistence, and best practices.
+This page explains how to create, resume, keep, and clean up container sessions. A session is one container plus the agent's working state and conversation history inside it.
 
-> Note: Run profiles should be under `runs.<name>` in `~/.manyoyo/manyoyo.json`; use absolute paths for `envFile` and map style for `env`.
+> Put run profiles in `runs.<name>` of `~/.manyoyo/manyoyo.json`; use absolute paths for `envFile` and an object for `env`.
 
-## What is a Session
-
-In MANYOYO, a **Session** refers to:
-- A running container instance
-- The working state of the AI agent inside the container
-- The agent's conversation history and context
-
-## Session Lifecycle
-
-```
-Create → Run → Pause/Exit → Resume → Delete
-  ↓      ↓         ↓          ↓       ↓
-Container AI Work Container   Continue  Cleanup
-          Running  Preserved  Work
-```
-
-## Creating Sessions
-
-### Auto-named Sessions
+## Create a Session
 
 ```bash
-# Auto-generate container name (based on timestamp)
-manyoyo run -y c
-# Generated name like: my-0204-1430
-
-# View container name
-manyoyo ps
-```
-
-**Naming Rule**: `my-{MMDD}-{HHMM}`
-- Example: `my-0204-1430` means created on Feb 4 at 14:30
-
-### Named Sessions
-
-```bash
-# Create named session (recommended)
+# Named session (recommended, easy to resume)
 manyoyo run -n my-project -y c
 
-# Advantages:
-# - Easy to remember
-# - Convenient for managing multiple projects
-# - Configuration files can use fixed names
+# Without a name, one is generated as my-{MMDD}-{HHmm}; see it with manyoyo ps
+manyoyo run -y c
+
+# Fix name and options with a run profile
+manyoyo run -r project-a
 ```
 
-### Creating Sessions Using Configuration Files
-
-```bash
-# Method 1: Run configuration (recommended)
-cat > ~/.manyoyo/manyoyo.json << 'EOF'
+```json
 {
     "runs": {
         "project-a": {
             "containerName": "my-project-a",
+            "hostPath": "/abs/path/project-a",
             "envFile": ["/abs/path/anthropic_claudecode.env"],
             "yolo": "c"
         }
     }
 }
-EOF
-
-manyoyo run -r project-a
-
-# Method 2: Run profile with project path
-cat > ~/.manyoyo/manyoyo.json << 'EOF'
-{
-    "runs": {
-        "project-b": {
-            "containerName": "my-myproject",
-            "hostPath": "/abs/path/myproject",
-            "containerPath": "/abs/path/myproject",
-            "envFile": ["/abs/path/anthropic_claudecode.env"],
-            "yolo": "c"
-        }
-    }
-}
-EOF
-
-manyoyo run -r project-b
 ```
 
-## Session Resumption
+`containerName` supports the `{now}` template (expands to `MMDD-HHmm`).
 
-### Exit Prompt
+## Choices on Exit
 
-When you exit a container session, the system will prompt:
+After the agent exits, MANYOYO asks whether to keep the container:
 
-```
-Container exited, please select an action:
-  y - Keep container running in background (default)
-  n - Remove container
-  1 - Re-enter using the initial command
-  r - Resume initial command session (agent commands only)
-  x - Execute a new command
-  i - Enter interactive shell
-```
+| Option | Effect |
+|--------|--------|
+| `y` (default) | Keep the container in the background to resume later |
+| `n` | Delete the container; data and history are lost |
+| `1` | Re-enter with the first command (container label `manyoyo.default_cmd`) |
+| `r` | Append the resume argument to the first command (only shown when it is an agent) |
+| `x` | Enter and run a new command |
+| `i` | Open an interactive shell |
 
-### Option Descriptions
-
-#### y - Keep Running (Recommended)
+To hide the prompt use the `-q` quiet items (see [CLI Options](../reference/cli-options.md)); for one-off tasks use `--rm-on-exit` to delete on exit:
 
 ```bash
-# After selecting 'y', container runs in background
-# You can resume the session later
-
-# Resume Claude Code session
-manyoyo run -n my-project -- -c
-
-# Resume Codex session
-manyoyo run -n my-project -- resume --last
-
-# Resume Gemini session
-manyoyo run -n my-project -- -r
-```
-
-**Use Cases**:
-- Temporarily away, continue work later
-- Need to preserve AI conversation history
-- Testing not complete, need to continue
-
-#### n - Remove Container
-
-```bash
-# After selecting 'n', container is removed
-# All data and history are lost
-```
-
-**Use Cases**:
-- One-time testing
-- Don't need to preserve history
-- Want to free resources
-
-#### 1 - Re-enter
-
-```bash
-# After selecting '1', re-enter using the startup command
-# For example, if started with 'manyoyo run -y c'
-# Then re-run 'claude --dangerously-skip-permissions'
-```
-
-**Use Cases**:
-- AI accidentally exited
-- Need to restart AI tool
-- Clear current session but keep container
-
-#### r - Resume Initial Command Session
-
-```bash
-# After selecting 'r', append the agent resume arg to the initial command
-# Example:
-#   Claude -> -r
-#   Codex  -> resume
-```
-
-**Use Cases**:
-- Initial command is an agent CLI
-- Want a fast resume path without manual input
-
-#### x - Execute New Command
-
-```bash
-# After selecting 'x', can execute any command
-# Prompt to input command
-
-# Example:
-x
-Enter command to execute: npm test
-```
-
-**Use Cases**:
-- Need to run tests
-- Check modifications made by AI
-- Execute custom scripts
-
-#### i - Enter Shell
-
-```bash
-# After selecting 'i', enter /bin/bash
-
-# You can:
-$ ls -la              # View files
-$ git status          # Check code
-$ npm test            # Run tests
-$ claude --version    # Check tool version
-```
-
-**Use Cases**:
-- Need to manually check
-- Debug issues
-- Run multiple commands
-
-### Agent-specific Resume Commands
-
-Different AI CLI tools have different resume methods:
-
-#### Claude Code
-
-```bash
-# Resume last session
-manyoyo run -n my-session -- -c
-manyoyo run -n my-session -- --continue
-
-# View available sessions
-manyoyo run -n my-session -x "claude --list-sessions"
-```
-
-#### Codex
-
-```bash
-# Resume last session
-manyoyo run -n my-session -- resume --last
-
-# Resume specific session
-manyoyo run -n my-session -- resume <session-id>
-
-# List all sessions
-manyoyo run -n my-session -- list
-```
-
-#### Gemini
-
-```bash
-# Resume session
-manyoyo run -n my-session -- -r
-manyoyo run -n my-session -- --resume
-
-# Clear session history
-manyoyo run -n my-session -- --clear
-```
-
-#### OpenCode
-
-```bash
-# Resume session
-manyoyo run -n my-session -- -c
-manyoyo run -n my-session -- --continue
-```
-
-## Session Persistence
-
-### Container Persistence
-
-Container state is managed by Docker/Podman:
-
-```bash
-# View all sessions (including stopped)
-manyoyo ps
-docker ps -a | grep my
-
-# Container status
-docker ps -a --format "table {{.Names}}\t{{.Status}}"
-```
-
-### Data Persistence
-
-#### 1. Working Directory Mount
-
-```bash
-# Mount current directory by default
-manyoyo run -y c  # Current directory auto-mounted
-
-# Specify working directory
-manyoyo run --hp /path/to/project -y c
-
-# Code modifications are saved on host
-```
-
-#### 2. Additional Data Mount
-
-```bash
-# Mount data directory
-manyoyo run -v "/data:/workspace/data" -y c
-
-# Mount configuration files
-manyoyo run -v "~/.gitconfig:/root/.gitconfig:ro" -y c
-```
-
-#### 3. Use Volumes (Recommended)
-
-```bash
-# Create persistent volume
-docker volume create myproject-data
-
-# Mount volume
-manyoyo run -v "myproject-data:/workspace/data" -y c
-
-# Data persists after container removal
-```
-
-### AI Conversation History Persistence
-
-Different AI tools store history in different locations:
-
-#### Claude Code
-
-```bash
-# History stored inside container
-# Location: ~/.claude/sessions/
-
-# Mount session directory (optional)
-manyoyo run -v "~/.claude:/root/.claude" -y c
-```
-
-#### Codex
-
-```bash
-# History stored inside container
-# Location: ~/.codex/sessions/
-
-# Mount session directory
-manyoyo run -v "~/.codex:/root/.codex" -y c
-```
-
-## Multi-session Management
-
-### Parallel Sessions
-
-```bash
-# Project A
-manyoyo run -n project-a --hp ~/projects/a -y c
-
-# Project B
-manyoyo run -n project-b --hp ~/projects/b -y c
-
-# Project C
-manyoyo run -n project-c --hp ~/projects/c -y c
-
-# View all sessions
-manyoyo ps
-```
-
-### Session Switching
-
-```bash
-# Work in project A
-manyoyo run -n project-a -- -c
-
-# Switch to project B
-manyoyo run -n project-b -- -c
-
-# Switch to project C
-manyoyo run -n project-c -- -c
-```
-
-### Session Isolation
-
-Each session is completely independent:
-- Independent file system
-- Independent environment variables
-- Independent AI conversation history
-- Independent process space
-
-## Session Cleanup
-
-### Manual Cleanup
-
-```bash
-# Remove single session
-manyoyo rm my-session
-manyoyo rm my-session
-
-# Or use Docker command
-docker rm -f my-session
-```
-
-### Automatic Cleanup
-
-```bash
-# One-time session (auto-remove after exit)
 manyoyo run -n temp --rm-on-exit -y c
-
-# Use cases:
-# - Temporary testing
-# - Quick verification
-# - Don't need to preserve history
 ```
 
-### Clean Up Containers
+## Resume a Session
+
+While the container exists, re-enter it by name; arguments after `--` are appended to the first command:
 
 ```bash
-# List containers, confirm the name, then remove one by one
+manyoyo run -n my-project              # run the first command again
+manyoyo run -n my-project -- -r        # Claude / Gemini resume
+manyoyo run -n my-project -- resume    # Codex resume
+manyoyo run -n my-project -- -c        # OpenCode resume
+```
+
+Resume arguments follow `lib/agent-resume.js`: Claude/Gemini -> `-r`, Codex -> `resume`, OpenCode -> `-c`. The terminal hint after startup also prints the resume command for the current container. For more resume options see each agent's own `--help`.
+
+## What Persists
+
+- **While the container exists**: filesystem, environment variables, and agent history stay in the container; `manyoyo rm` removes all of it.
+- **Working directory**: the current directory is mounted by default; use `--hp` for another one. Code changes live on the host.
+- **Extra data**: mount with `-v` or `volumes`; named volumes survive container deletion.
+- **Conversation history**: stored inside the container (for example `~/.claude`, `~/.codex`). To keep it after deleting the container, mount that directory; for the risk of mounting host credentials or config directories see [Security Notes](../guide/security.md).
+
+```bash
+manyoyo run -n my-project -v "myproject-data:/workspace/data" -y c
+```
+
+## Multiple Sessions
+
+Each session has its own filesystem, environment, history, and processes. Use one per project:
+
+```bash
+manyoyo run -n project-a --hp ~/projects/a -y c
+manyoyo run -n project-b --hp ~/projects/b -y c
+manyoyo ps                          # list all sessions
+manyoyo run -n project-a -- -r      # back to A (Claude)
+```
+
+## Inspect and Enter
+
+```bash
+manyoyo ps                                  # list sessions
+manyoyo run -n my-project -x /bin/bash      # enter a running container
+docker logs --tail 100 my-project           # container logs (same for Podman)
+```
+
+## Clean Up
+
+Run `manyoyo ps` to confirm the name, then delete one by one. Avoid prefix-matching batch commands, which can remove unrelated containers:
+
+```bash
 manyoyo ps
 manyoyo rm <name>
 ```
 
-## Session Monitoring
-
-### View Session Status
+## Backup and Snapshot
 
 ```bash
-# List all MANYOYO sessions
-manyoyo ps
-
-# Detailed status
-docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-
-# Resource usage
-docker stats $(docker ps -q --filter "name=my")
+docker cp my-project:/root/.claude ./claude-backup    # back up agent history
+docker commit my-project my-project:snapshot          # save current state as an image
 ```
 
-### View Session Logs
-
-```bash
-# View container logs
-docker logs my-session
-
-# Real-time logs
-docker logs -f my-session
-
-# Last 100 lines
-docker logs --tail 100 my-session
-```
-
-### Enter Running Session
-
-```bash
-# Enter shell to check
-manyoyo run -n my-session -x /bin/bash
-
-# View processes
-$ ps aux
-
-# View files
-$ ls -la
-
-# View environment variables
-$ env | grep ANTHROPIC
-```
-
-## Best Practices
-
-### 1. Naming Conventions
-
-```bash
-# Name by project
-my-webapp
-my-api
-my-mobile
-
-# Name by function
-my-dev
-my-test
-my-debug
-
-# Name by time (automatic)
-my-0204-1430
-```
-
-### 2. Configuration File Management
-
-```bash
-# Create configuration for each project
-~/.manyoyo/manyoyo.json
-└── runs
-    ├── webapp
-    ├── api
-    ├── mobile
-    └── debug
-
-# Quick start
-manyoyo run -r webapp
-manyoyo run -r api
-manyoyo run -r mobile
-```
-
-### 3. Data Backup
-
-```bash
-# Export container configuration
-docker inspect my-session > my-session.json
-
-# Backup mounted data
-tar -czf backup.tar.gz ~/projects/myproject
-
-# Backup AI history (optional)
-docker cp my-session:/root/.claude ./claude-backup
-```
-
-### 4. Regular Cleanup
-
-```bash
-# Weekly cleanup script
-cat > ~/cleanup-manyoyo.sh << 'EOF'
-#!/bin/bash
-# Clean up stopped containers older than 7 days
-docker ps -a --filter "name=my" --filter "status=exited" \
-    --format "{{.ID}} {{.CreatedAt}}" | \
-    awk '{if ($2 < systime() - 604800) print $1}' | \
-    xargs -r docker rm
-
-# Clean up dangling images
-docker image prune -f
-EOF
-
-chmod +x ~/cleanup-manyoyo.sh
-```
-
-### 5. Session Templates
-
-```bash
-# Create session template
-cat > ~/.manyoyo/manyoyo.json << 'EOF'
-{
-    "runs": {
-        "template": {
-            "containerName": "my-template",
-            "envFile": ["/abs/path/base.env", "/abs/path/secrets.env"],
-            "volumes": [
-                "~/.ssh:/root/.ssh:ro",
-                "~/.gitconfig:/root/.gitconfig:ro"
-            ],
-            "env": {
-                "TZ": "Asia/Shanghai"
-            }
-        }
-    }
-}
-EOF
-
-# Create new session based on template
-manyoyo run -r template
-# Copy runs.template to runs.newproject and update containerName
-```
-
-## Advanced Tips
-
-### Session Snapshots
-
-```bash
-# Commit container as image (save current state)
-docker commit my-session my-session:snapshot-$(date +%Y%m%d)
-
-# Create new session from snapshot
-docker run -it my-session:snapshot-20240204
-```
-
-### Session Export/Import
-
-```bash
-# Export session
-docker export my-session > my-session.tar
-
-# Import to another machine
-cat my-session.tar | docker import - my-session:imported
-```
-
-### Session Sharing
-
-```bash
-# Multi-person collaboration (same container)
-# Person A creates session
-manyoyo run -n shared-session -y c
-
-# Person B enters same session
-manyoyo run -n shared-session -x /bin/bash
-
-# Note: Not recommended for multiple people to use AI simultaneously
-```
+Snapshot images are not managed by `manyoyo`; list them with `manyoyo images` and remove them when no longer needed.
 
 ## Troubleshooting
 
-### Session Cannot Resume
+- **Container does not exist**: confirm the name with `manyoyo ps`; if deleted, run `manyoyo run -n <name> -y c` again.
+- **Agent forgets earlier conversation**: the container may be new, or the history directory was not mounted; see What Persists.
+- **Container fails to start**: check `docker logs <name>`, and if needed `manyoyo rm <name>` then recreate; for runtime problems see [Runtime Errors](../troubleshooting/runtime-errors.md).
 
-**Problem**: Container does not exist prompt
+## Next Steps
 
-**Solution**:
-```bash
-# Check if container exists
-manyoyo ps
-docker ps -a | grep my-session
-
-# If not exists, create new session
-manyoyo run -n my-session -y c
-```
-
-### AI History Lost
-
-**Problem**: After resuming session, AI doesn't remember previous conversations
-
-**Solution**:
-```bash
-# Check if container is newly created
-docker ps -a --format "{{.Names}}\t{{.CreatedAt}}"
-
-# Mount session directory (when creating next time)
-manyoyo run -v "~/.claude:/root/.claude" -n my-session -y c
-```
-
-### Container Cannot Start
-
-**Problem**: Session fails to start
-
-**Solution**:
-```bash
-# View container logs
-docker logs my-session
-
-# Remove and recreate
-manyoyo rm my-session
-manyoyo run -n my-session -y c
-```
-
-## Integration with Skills Marketplace
-
-If Skills Marketplace is installed, you can get more powerful session management features:
-
-```bash
-# List all sessions (including cloud)
-claude --list-sessions
-
-# Resume cloud session
-claude --resume-session <session-id>
-
-# Sync sessions to cloud
-claude --sync-sessions
-```
-
-## Related Documentation
-
-- [Basic Usage](../guide/basic-usage.md) - Learn basic commands
-- [AI Agents](../reference/agents.md) - Learn about each agent's session management
-- [Configuration Examples](../configuration/examples.md) - View configuration examples
-- [Container Modes](../reference/container-modes.md) - Learn about container management
+- [Basic Usage](../guide/basic-usage.md)
+- [AI Agents](../reference/agents.md)
+- [Security Notes](../guide/security.md)
