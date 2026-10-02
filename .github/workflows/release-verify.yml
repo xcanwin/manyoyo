@@ -69,6 +69,37 @@ jobs:
           test ! -e "$HOME/.manyoyo/app" && test ! -e "$HOME/.manyoyo/bin"
           echo "Linux ${{ matrix.arch }} 验证通过"
 
+  # 用户真正会敲的那条命令：从“这个 tag 里的” scripts/install.sh 安装（不依赖 main 上的版本），
+  # 同样走 SHA256SUMS 校验与 .run 启动；没有终端，所以脚本会自动按无头安装。
+  bootstrap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the tag (to use its scripts/install.sh)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Install with scripts/install.sh, check version, uninstall
+        run: |
+          set -eu
+          ver="${TAG#v}"
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          MANYOYO_VERSION="$ver" sh scripts/install.sh --no-open
+          m="$HOME/.manyoyo/bin/manyoyo"
+          test "$("$m" -v)" = "$ver"
+          # 安装成功后下载的安装包应被删除（注意 set -e 对 `! cmd` 不生效，必须用 if）
+          if ls "$HOME"/.manyoyo/downloads/*.run >/dev/null 2>&1; then echo "安装包没有被删除"; exit 1; fi
+          # 后台导入镜像（真实 docker load）：等标记出现，再卸载，避免与导入进程竞争
+          for i in $(seq 1 90); do
+            ls "$HOME"/.manyoyo/.install/image-loaded-* >/dev/null 2>&1 && break
+            sleep 5
+          done
+          ls "$HOME"/.manyoyo/.install/image-loaded-*
+          "$m" uninstall --yes
+          test ! -e "$HOME/.manyoyo/app" && test ! -e "$HOME/.manyoyo/bin"
+          echo "scripts/install.sh 验证通过"
+
   macos:
     strategy:
       fail-fast: false

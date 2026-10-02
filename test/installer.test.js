@@ -485,3 +485,264 @@ exit 0
         expect(result.stdout).toContain('只支持 macOS');
     });
 });
+
+describe('scripts/install.sh (the curl | sh bootstrap)', () => {
+    const http = require('http');
+    const crypto = require('crypto');
+    const { spawn } = require('child_process');
+    const BOOTSTRAP = path.join(__dirname, '../scripts/install.sh');
+    const sha = buf => crypto.createHash('sha256').update(buf).digest('hex');
+    const FAKE_RUN = '#!/bin/sh\n{ echo "name=$(basename "$0")"; for a in "$@"; do echo "arg=$a"; done; if [ -t 0 ]; then echo stdin=tty; else echo stdin=notty; fi; } > "$RECORD"\n';
+
+    let server;
+    let baseUrl;
+    let hits;
+    let files; // 服务器上 v9.9.9 的文件：name -> Buffer
+    let sums;  // SHA256SUMS 内容（默认按 files 生成）
+
+    function publish(names, { tamper = false } = {}) {
+        files = {};
+        names.forEach(name => { files[name] = Buffer.from(`${FAKE_RUN}# ${name}\n`); });
+        sums = Object.entries(files).map(([name, data]) => `${tamper ? 'e'.repeat(64) : sha(data)}  ${name}`).join('\n') + '\n';
+    }
+    const allRuns = ['macos-arm64', 'macos-x64', 'linux-arm64', 'linux-x64'].map(p => `manyoyo-9.9.9-${p}.run`);
+
+    beforeEach(async () => {
+        hits = [];
+        publish(allRuns);
+        server = http.createServer((req, res) => {
+            hits.push(req.url);
+            if (req.url === '/latest') { res.writeHead(302, { Location: '/releases/tag/v9.9.9' }); return res.end(); }
+            if (req.url === '/releases/tag/v9.9.9') { res.writeHead(200); return res.end('release page'); }
+            const m = req.url.match(/^\/dl\/v9\.9\.9\/(.+)$/);
+            if (!m) { res.writeHead(404); return res.end(); }
+            const name = decodeURIComponent(m[1]);
+            const data = name === 'SHA256SUMS' ? Buffer.from(sums) : files[name];
+            if (!data) { res.writeHead(404); return res.end(); }
+            const range = String(req.headers.range || '').match(/^bytes=(\d+)-$/);
+            if (range && Number(range[1]) >= data.length) { res.writeHead(416); return res.end(); }
+            if (range) {
+                res.writeHead(206, { 'Content-Range': `bytes ${range[1]}-${data.length - 1}/${data.length}` });
+                return res.end(data.subarray(Number(range[1])));
+            }
+            res.writeHead(200, { 'Content-Length': data.length });
+            return res.end(data);
+        });
+        await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+        baseUrl = `http://127.0.0.1:${server.address().port}`;
+    });
+    afterEach(() => new Promise(resolve => server.close(resolve)));
+
+    const downloads = () => path.join(home, '.manyoyo', 'downloads');
+    const record = () => path.join(root, 'record.txt');
+    const readRecord = () => fs.readFileSync(record(), 'utf8').trim().split('\n');
+
+    // 像 `curl … | sh` 一样把脚本从标准输入喂给 shell；detached 让子进程没有控制终端（模拟 CI / ssh host '…'）
+    function run({ shell = ['sh'], env = {}, args = [], viaPipe = true } = {}) {
+        return new Promise(resolve => {
+            const merged = {
+                PATH: safeBin, HOME: home, RECORD: record(), NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1',
+                MANYOYO_DOWNLOAD_BASE: `${baseUrl}/dl`, MANYOYO_LATEST_URL: `${baseUrl}/latest`,
+                MANYOYO_TEST_UNAME_S: 'Darwin', MANYOYO_TEST_UNAME_M: 'arm64', ...env
+            };
+            const [command, ...shellArgs] = shell;
+            const child = spawn(command, viaPipe ? [...shellArgs, '-s', '--', ...args] : [...shellArgs, BOOTSTRAP, ...args], { env: merged, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
+            let stdout = '';
+            let stderr = '';
+            child.stdout.on('data', d => { stdout += d; });
+            child.stderr.on('data', d => { stderr += d; });
+            child.on('close', status => resolve({ status, stdout, stderr }));
+            if (viaPipe) child.stdin.end(fs.readFileSync(BOOTSTRAP));
+            else child.stdin.end();
+        });
+    }
+
+    const shells = [['sh'], ['bash', '--posix']];
+
+    test.each(shells)('picks the package for the machine (%s)', async (...shell) => {
+        const cases = [
+            ['Darwin', 'arm64', 'manyoyo-9.9.9-macos-arm64.run'],
+            ['Darwin', 'x86_64', 'manyoyo-9.9.9-macos-x64.run'],
+            ['Linux', 'aarch64', 'manyoyo-9.9.9-linux-arm64.run'],
+            ['Linux', 'x86_64', 'manyoyo-9.9.9-linux-x64.run']
+        ];
+        for (const [uname, machine, expected] of cases) {
+            const result = await run({ shell, env: { MANYOYO_TEST_UNAME_S: uname, MANYOYO_TEST_UNAME_M: machine } });
+            expect(result.stderr).not.toContain('❌');
+            expect(result.status).toBe(0);
+            expect(readRecord()).toContain(`name=${expected}`);
+        }
+    });
+
+    test('an unsupported system or CPU fails with the npm alternative and downloads nothing', async () => {
+        const windows = await run({ env: { MANYOYO_TEST_UNAME_S: 'MINGW64_NT-10.0' } });
+        expect(windows.status).not.toBe(0);
+        expect(windows.stderr).toContain('npm install -g @xcanwin/manyoyo');
+        const cpu = await run({ env: { MANYOYO_TEST_UNAME_M: 'riscv64' } });
+        expect(cpu.status).not.toBe(0);
+        expect(cpu.stderr).toContain('npm install -g @xcanwin/manyoyo');
+        expect(hits).toEqual([]);
+        expect(fs.existsSync(record())).toBe(false);
+    });
+
+    test('MANYOYO_VERSION wins and skips the latest lookup; without it the version comes from the releases/latest redirect', async () => {
+        const pinned = await run({ env: { MANYOYO_VERSION: 'v9.9.9' } });
+        expect(pinned.status).toBe(0);
+        expect(hits).not.toContain('/latest');
+
+        hits = [];
+        const latest = await run();
+        expect(latest.status).toBe(0);
+        expect(hits[0]).toBe('/latest');
+        expect(latest.stdout).toContain('MANYOYO 9.9.9');
+
+        const bad = await run({ env: { MANYOYO_VERSION: '9.9' } });
+        expect(bad.status).not.toBe(0);
+        expect(bad.stderr).toContain('版本号格式不对');
+    });
+
+    test('a split package (only .run.001, .run.002 listed) downloads every volume and starts the first', async () => {
+        publish(['manyoyo-9.9.9-macos-arm64.run.001', 'manyoyo-9.9.9-macos-arm64.run.002']);
+        const result = await run({ env: { MANYOYO_KEEP_DOWNLOAD: '1' } });
+        expect(result.status).toBe(0);
+        expect(readRecord()).toContain('name=manyoyo-9.9.9-macos-arm64.run.001');
+        expect(fs.readdirSync(downloads()).sort()).toEqual(['manyoyo-9.9.9-macos-arm64.run.001', 'manyoyo-9.9.9-macos-arm64.run.002']);
+    });
+
+    test('a single file wins over volumes when both are listed', async () => {
+        publish(['manyoyo-9.9.9-macos-arm64.run', 'manyoyo-9.9.9-macos-arm64.run.001']);
+        const result = await run();
+        expect(result.status).toBe(0);
+        expect(readRecord()).toContain('name=manyoyo-9.9.9-macos-arm64.run');
+        expect(hits.some(url => url.endsWith('.run.001'))).toBe(false);
+    });
+
+    test('a release without a package for this machine says so', async () => {
+        publish(['manyoyo-9.9.9-linux-x64.run']);
+        const result = await run();
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain('没有适合 macos-arm64 的安装包');
+    });
+
+    test('a checksum mismatch deletes the bad file, fails, and never runs the package', async () => {
+        publish(allRuns, { tamper: true });
+        const result = await run();
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain('校验失败');
+        expect(fs.readdirSync(downloads()).filter(name => name.endsWith('.run'))).toEqual([]);
+        expect(fs.existsSync(record())).toBe(false);
+    });
+
+    test('resumes a partial download', async () => {
+        const name = 'manyoyo-9.9.9-macos-arm64.run';
+        fs.mkdirSync(downloads(), { recursive: true });
+        fs.writeFileSync(path.join(downloads(), name), files[name].subarray(0, 20));
+        const result = await run();
+        expect(result.status).toBe(0);
+        expect(readRecord()).toContain(`name=${name}`);
+    });
+
+    test('a garbage partial file that cannot be resumed is replaced instead of failing', async () => {
+        const name = 'manyoyo-9.9.9-macos-arm64.run';
+        fs.mkdirSync(downloads(), { recursive: true });
+        fs.writeFileSync(path.join(downloads(), name), Buffer.alloc(5000, 1)); // 比服务器上的文件还大，续传请求会被拒
+        const result = await run();
+        expect(result.status).toBe(0);
+    });
+
+    test('without a terminal the package gets --headless; user arguments pass through and an explicit --gui is respected', async () => {
+        const plain = await run();
+        expect(readRecord()).toEqual(expect.arrayContaining(['arg=--headless', 'stdin=notty']));
+
+        const gui = await run({ args: ['--gui'] });
+        expect(gui.status).toBe(0);
+        const lines = readRecord();
+        expect(lines).toContain('arg=--gui');
+        expect(lines).not.toContain('arg=--headless');
+
+        const noOpen = await run({ args: ['--no-open'] });
+        expect(noOpen.status).toBe(0);
+        expect(readRecord()).toEqual(expect.arrayContaining(['arg=--no-open', 'arg=--headless']));
+        expect(plain.status).toBe(0);
+    });
+
+    test('with a terminal available the package reads it (</dev/tty) and no --headless is added', async () => {
+        if (spawnSync('script', ['--version']).error) return; // 没有 script 命令就跳过
+        // 必须异步：同步 spawn 会卡住本进程里的 HTTP 替身，下载永远等不到响应
+        await new Promise(resolve => {
+            const child = spawn('script', ['-qec', `sh -c 'cat "${BOOTSTRAP}" | sh'`, '/dev/null'], {
+                env: {
+                    PATH: safeBin, HOME: home, RECORD: record(), NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1',
+                    MANYOYO_DOWNLOAD_BASE: `${baseUrl}/dl`, MANYOYO_LATEST_URL: `${baseUrl}/latest`,
+                    MANYOYO_TEST_UNAME_S: 'Darwin', MANYOYO_TEST_UNAME_M: 'arm64'
+                },
+                stdio: ['pipe', 'pipe', 'pipe']
+            });
+            child.on('close', resolve);
+            child.on('error', resolve);
+            child.stdin.end();
+        });
+        if (!fs.existsSync(record())) { console.warn('skip: no pty available'); return; }
+        const lines = readRecord();
+        expect(lines).toContain('stdin=tty');
+        expect(lines).not.toContain('arg=--headless');
+    });
+
+    test('the package is deleted after a successful install, kept with MANYOYO_KEEP_DOWNLOAD=1, and kept when the installer fails', async () => {
+        const ok = await run();
+        expect(ok.status).toBe(0);
+        expect(fs.readdirSync(downloads()).filter(name => name.endsWith('.run'))).toEqual([]);
+        expect(fs.readdirSync(downloads()).filter(name => name.startsWith('SHA256SUMS'))).toEqual([]);
+
+        const keep = await run({ env: { MANYOYO_KEEP_DOWNLOAD: '1' } });
+        expect(keep.status).toBe(0);
+        expect(fs.readdirSync(downloads())).toEqual(['manyoyo-9.9.9-macos-arm64.run']);
+
+        // 安装包本身失败：退出码透传，文件保留，下次重跑不必重新下载
+        fs.rmSync(downloads(), { recursive: true, force: true });
+        const failing = Buffer.from('#!/bin/sh\nexit 7\n');
+        files['manyoyo-9.9.9-macos-arm64.run'] = failing;
+        sums = `${sha(failing)}  manyoyo-9.9.9-macos-arm64.run\n`;
+        const bad = await run();
+        expect(bad.status).toBe(7);
+        expect(fs.readdirSync(downloads())).toEqual(['manyoyo-9.9.9-macos-arm64.run']);
+    });
+
+    test('the whole script lives in main() and is only invoked on the last line (a truncated curl | sh stream runs nothing)', () => {
+        const lines = fs.readFileSync(BOOTSTRAP, 'utf8').trimEnd().split('\n');
+        expect(lines[lines.length - 1]).toBe('main "$@"');
+        expect(lines.some(line => line === 'main() {')).toBe(true);
+        // 截断在 main 之前或之中：要么什么都没执行，要么是语法错误
+        const text = lines.join('\n');
+        const cut = text.slice(0, text.indexOf('curl -fL -C -'));
+        const result = spawnSync('sh', [], { input: cut, env: { PATH: safeBin, HOME: home }, encoding: 'utf8' });
+        expect(result.status).not.toBe(0);
+        expect(fs.existsSync(path.join(home, '.manyoyo'))).toBe(false);
+    });
+
+    test('a network failure keeps the partial file for the next run instead of restarting from zero', async () => {
+        const name = 'manyoyo-9.9.9-macos-arm64.run';
+        fs.mkdirSync(downloads(), { recursive: true });
+        fs.writeFileSync(path.join(downloads(), name), files[name].subarray(0, 20));
+        const dead = http.createServer((req, res) => (req.url.endsWith('/SHA256SUMS') ? res.end(sums) : req.socket.destroy()));
+        await new Promise(resolve => dead.listen(0, '127.0.0.1', resolve));
+        const result = await run({ env: { MANYOYO_DOWNLOAD_BASE: `http://127.0.0.1:${dead.address().port}/dl/` } });
+        await new Promise(resolve => dead.close(resolve));
+        expect(result.status).not.toBe(0);
+        expect(fs.readFileSync(path.join(downloads(), name)).length).toBe(20);
+    });
+
+    test('the bootstrap itself: valid POSIX sh, shellcheck-clean when available, no sudo, no $VAR glued to non-ASCII, references the offline installer', () => {
+        const text = fs.readFileSync(BOOTSTRAP, 'utf8');
+        expect(spawnSync('sh', ['-n', BOOTSTRAP]).status).toBe(0);
+        if (fs.existsSync('/usr/bin/dash')) expect(spawnSync('dash', ['-n', BOOTSTRAP]).status).toBe(0);
+        const shellcheck = spawnSync('shellcheck', ['--version']);
+        if (!shellcheck.error) expect(spawnSync('shellcheck', ['-s', 'sh', '-x', '-e', 'SC1091', BOOTSTRAP], { encoding: 'utf-8' }).status).toBe(0);
+        const code = text.replace(/^\s*#.*$/gm, '');
+        expect(code).not.toMatch(/\bsudo\b/);
+        expect(code).not.toMatch(/api\.github\.com/);
+        expect(text.split('\n').filter(line => /\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7f]/.test(line))).toEqual([]);
+        expect(text).toContain('scripts/offline/install.sh');
+        expect(fs.readFileSync(path.join(SCRIPTS, 'install.sh'), 'utf8')).toContain('scripts/install.sh');
+    });
+});

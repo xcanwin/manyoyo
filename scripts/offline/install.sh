@@ -1,6 +1,7 @@
 #!/bin/sh
 # MANYOYO 离线安装器（POSIX sh，只用 macOS / Linux 自带命令；不联网、不用 brew/git/python3，不执行 sudo）。
 # 由 .run 头部解开负载后调用：sh install/install.sh [--no-open] [--headless|--gui]
+# 注意：这是 .run 内部的安装器；用户在终端里 curl | sh 运行的下载引导脚本是仓库里的 scripts/install.sh，它只负责下载、校验并启动 .run。
 # Linux 包（MANYOYO_OS=linux）不带 Podman：使用系统里已有的 podman / docker。
 # 幂等：每一步先检测，已完成就跳过；中途失败直接重跑即可续上。日志：~/.manyoyo/logs/install/
 #

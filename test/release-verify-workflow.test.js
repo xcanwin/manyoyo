@@ -29,6 +29,14 @@ describe('release-verify workflow', () => {
         expect(text).not.toContain('-lite');
     });
 
+    test('also installs through the tag\'s own scripts/install.sh (not main) and checks the download is cleaned up', () => {
+        expect(text).toContain('uses: actions/checkout@v7');
+        expect(text).toContain('ref: ${{ inputs.tag }}');
+        expect(text).toContain('MANYOYO_VERSION="$ver" sh scripts/install.sh --no-open');
+        expect(text).not.toMatch(/raw\.githubusercontent|raw\/main/);
+        expect(text).not.toMatch(/^\s*! ls /m); // set -e 对 `! cmd` 不生效，检查会变成空操作
+    });
+
     test('exercises install, version, update (latest) and uninstall on every platform', () => {
         for (const needle of ['--no-open', '已是最新版本', 'uninstall --yes', 'MANYOYO_TEST_SKIP_MACHINE=1']) expect(text).toContain(needle);
     });
