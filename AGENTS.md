@@ -179,6 +179,17 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 改了代码就要重新触发 `offline-macos.yml` / `offline-linux.yml` 并在干净用户下重测；镜像（`ghcr.io/xcanwin/manyoyo:<imageVersion>`）只有 Dockerfile 或 `docker/` 变化才需要重发，且要先于离线包。
 - 发版顺序（维护者）：本机装好 shellcheck 跑 `npm test`（CI 的 ubuntu 自带，本地没有会静默跳过）→ 合并 main → （Dockerfile/`docker/` 有变先 `image-publish.yml`）触发 `offline-macos.yml` 与 `offline-linux.yml` → `gh release create <tag> --target main --notes-file …`（说明以 `scripts/release-notes-template.md` 开头；会触发 npm 发布，发布前测试失败要先删 Release 与 tag 再来）→ `release-offline.yml`（`macosRunId` + `linuxRunId`，一次上传两个平台）→ `release-verify.yml`（`tag=<tag>`，游客身份在 Linux x64/arm64 与 macOS arm64/Intel 的 runner 上验证安装、`update`、卸载；macOS 不启动虚拟机）。macOS 真实虚拟机启动、浏览器向导、Agent 对话只能在真机偶尔抽查。
 
+## 开发流程踩坑（踩过才知道）
+
+- 全新检出先 `npm run build:web`（生成 `lib/web/index.html`）再 `npm test`，否则 Web 页面用例失败；CI 的 `npm-publish.yml` 已先构建。
+- 用脚本/工具整文件重写 `.sh` 会丢可执行位：提交前看 `git diff --cached --summary`，不应出现 `mode change`。
+- 文档：frontmatter 的 `description` 含英文冒号加空格必须加引号，正文里裸 `<name>` 会被当 Vue 标签，须放进反引号；否则 `docs:build` 报错。移动页面先登记 `redirects.json`，再跑 `npm run docs:check`。
+- 测试里起本进程的 HTTP 替身时，被测子进程必须异步 `spawn`；`spawnSync` 会卡住替身，表现为无输出超时。兼容性回归用仓库内 fixture（`test/fixtures/`），不要依赖 git tag（CI 浅克隆拿不到）。
+- 改 workflow 后先用 `python3 -c "import yaml; yaml.safe_load(open('<文件>'))"` 校验语法；`set -e` 下 `! cmd` 不会失败，检查“不存在”要写 `if cmd; then exit 1; fi`。
+- 开发容器若 PID 1 是 `tail -f /dev/null`，孤儿进程不会被回收，僵尸耗尽 cgroup 的 pids 上限后测试随机报“无法创建线程”/`spawn EAGAIN`；这时用 `docker run --rm -v "$PWD:$PWD" -w "$PWD" node:22-bookworm bash -lc '<命令>'` 在干净容器里验证，并让维护者重启容器。不要用 `pkill -f` / `pgrep -f` 匹配带自己命令行的模式，会杀掉自己的 shell。
+- 子 agent 批量精简文档后，必须抽查事实（命令、参数、默认值以代码为准），删掉其自述“未核实”的新增内容。
+- 在没有 git 凭据的环境推送：`git -c credential.helper='!gh auth git-credential' push origin <分支>`。发布后 `npm view` 可能几分钟内仍是旧版本，以 npm-publish 日志里的 `+ @xcanwin/manyoyo@<版本>` 为准再复查。
+
 ## 版本对齐
 
 - 镜像版本读取 `package.json` 的 `imageVersion`（格式 `x.y.z-variant`），与 `version` 字段独立。
