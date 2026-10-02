@@ -17,6 +17,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - 多方案时给出清晰选项，避免来回确认。
 - 功能演进默认直接切换：除非明确要求，否则不引入兼容层、过渡开关、旧路径提示等历史包袱。
 - 未明确要求时不自动提交；需要提交时先给出 commit message 和命令让用户确认。
+- 推送与其他对外动作（合并 main、触发 workflow、发布）一律先要明确授权，有凭据也不例外。
 - 文档保持简洁、减少重复，保留可导航性与兼容链接。
 
 ## 项目结构
@@ -188,7 +189,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 改 workflow 后先用 `python3 -c "import yaml; yaml.safe_load(open('<文件>'))"` 校验语法；`set -e` 下 `! cmd` 不会失败，检查“不存在”要写 `if cmd; then exit 1; fi`。
 - 开发容器若 PID 1 是 `tail -f /dev/null`，孤儿进程不会被回收，僵尸耗尽 cgroup 的 pids 上限后测试随机报“无法创建线程”/`spawn EAGAIN`；这时用 `docker run --rm -v "$PWD:$PWD" -w "$PWD" node:22-bookworm bash -lc '<命令>'` 在干净容器里验证，并让维护者重启容器。不要用 `pkill -f` / `pgrep -f` 匹配带自己命令行的模式，会杀掉自己的 shell。
 - 子 agent 批量精简文档后，必须抽查事实（命令、参数、默认值以代码为准），删掉其自述“未核实”的新增内容。
-- 在没有 git 凭据的环境推送：`git -c credential.helper='!gh auth git-credential' push origin <分支>`。发布后 `npm view` 可能几分钟内仍是旧版本，以 npm-publish 日志里的 `+ @xcanwin/manyoyo@<版本>` 为准再复查。
+- 推送、合并 main、触发 workflow、发 Release/npm 等对外动作，**即使已有 git/gh 凭据，也必须先得到用户明确授权**，授权只对当次指定的动作有效。获授权后若环境没配 git 凭据，可用 `git -c credential.helper='!gh auth git-credential' push origin <分支>`。发布后 `npm view` 可能几分钟内仍是旧版本，以 npm-publish 日志里的 `+ @xcanwin/manyoyo@<版本>` 为准再复查。
 
 ## 版本对齐
 
