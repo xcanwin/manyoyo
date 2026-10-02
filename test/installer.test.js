@@ -341,6 +341,15 @@ describe('offline installer (sh)', () => {
         expect(fs.existsSync(state('launched.log'))).toBe(false);
     });
 
+    test('the "installer package can be deleted" hint is shown for a direct run but not when scripts/install.sh already cleans up', () => {
+        const direct = install(writePayload(path.join(root, 'payload')));
+        expect(direct.status).toBe(0);
+        expect(direct.stdout).toContain('安装包（.run 文件）现在可以删除');
+        const viaBootstrap = install(writePayload(path.join(root, 'payload2')), { MANYOYO_FROM_BOOTSTRAP: '1' });
+        expect(viaBootstrap.status).toBe(0);
+        expect(viaBootstrap.stdout).not.toContain('现在可以删除');
+    });
+
     test('rejects unknown arguments', () => {
         const result = install(writePayload(path.join(root, 'payload')), {}, ['--bogus']);
         expect(result.status).toBe(2);
@@ -492,7 +501,7 @@ describe('scripts/install.sh (the curl | sh bootstrap)', () => {
     const { spawn } = require('child_process');
     const BOOTSTRAP = path.join(__dirname, '../scripts/install.sh');
     const sha = buf => crypto.createHash('sha256').update(buf).digest('hex');
-    const FAKE_RUN = '#!/bin/sh\n{ echo "name=$(basename "$0")"; for a in "$@"; do echo "arg=$a"; done; if [ -t 0 ]; then echo stdin=tty; else echo stdin=notty; fi; } > "$RECORD"\n';
+    const FAKE_RUN = '#!/bin/sh\n{ echo "name=$(basename "$0")"; for a in "$@"; do echo "arg=$a"; done; echo "bootstrap=${MANYOYO_FROM_BOOTSTRAP:-}"; if [ -t 0 ]; then echo stdin=tty; else echo stdin=notty; fi; } > "$RECORD"\n';
 
     let server;
     let baseUrl;
@@ -652,7 +661,7 @@ describe('scripts/install.sh (the curl | sh bootstrap)', () => {
 
     test('without a terminal the package gets --headless; user arguments pass through and an explicit --gui is respected', async () => {
         const plain = await run();
-        expect(readRecord()).toEqual(expect.arrayContaining(['arg=--headless', 'stdin=notty']));
+        expect(readRecord()).toEqual(expect.arrayContaining(['arg=--headless', 'stdin=notty', 'bootstrap=1']));
 
         const gui = await run({ args: ['--gui'] });
         expect(gui.status).toBe(0);

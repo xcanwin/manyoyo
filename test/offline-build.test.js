@@ -133,7 +133,8 @@ describe('.run packaging', () => {
     describe('running a split package directly from .run.001', () => {
         async function makeSplit(name = 'vsp', parts = 3) {
             const probe = fs.readFileSync(await makeRun(name, 0, 60000));
-            const volumeBytes = Math.ceil(probe.length / parts);
+            // 正式包的头部（VOLUMES 字段等）比探测包略长几个字节：留出余量，避免恰好多出一卷而偶发失败
+            const volumeBytes = Math.ceil((probe.length + 1024) / parts);
             const run = await makeRun(name, volumeBytes, 60000);
             const original = fs.readFileSync(run);
             const files = await splitFile(run, volumeBytes);

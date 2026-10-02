@@ -71,7 +71,7 @@ manyoyo run -y c   # 在沙箱里以 YOLO 模式启动 Claude Code
 
 ## 安全须知
 
-MANYOYO 降低风险，但不是“绝对安全”：主要隔离手段是容器而不是虚拟机；`YOLO / SOLO` 仍可能执行危险命令；`sock` 模式会暴露宿主机 Docker socket；对外监听必须设强密码。详见[安全须知](https://xcanwin.github.io/manyoyo/reference/container-modes)。
+MANYOYO 降低风险，但不是“绝对安全”：主要隔离手段是容器而不是虚拟机；`YOLO / SOLO` 仍可能执行危险命令；`sock` 模式会暴露宿主机 Docker socket；对外监听必须设强密码。详见[安全须知](https://xcanwin.github.io/manyoyo/guide/security)。
 
 ## 文档
 

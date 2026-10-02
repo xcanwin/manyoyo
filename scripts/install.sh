@@ -133,6 +133,8 @@ main() {
         case "$arg" in --headless|--gui) force_flag=1 ;; esac
     done
 
+    # 告诉安装包它是被引导脚本下载的（引导脚本会自己删除安装包，安装包不必再提示“可以删除”）
+    export MANYOYO_FROM_BOOTSTRAP=1
     status=0
     if [ -t 0 ]; then
         sh "$first_file" "$@" || status=$?
