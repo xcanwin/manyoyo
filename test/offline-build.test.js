@@ -402,26 +402,26 @@ describe('full assembly with stand-in components', () => {
     const walk = (dir, prefix = '') => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
         e.isDirectory() ? walk(path.join(dir, e.name), `${prefix}${e.name}/`) : [`${prefix}${e.name}`]);
 
-    test('arm64: produces full/lite/app packages with the documented layout, checksums and patch record', async () => {
+    test('arm64: produces the full package and the app package (no lite, no release-manifest) with the documented layout, checksums and patch record', async () => {
         const out = path.join(root, 'out');
         const result = await build('arm64', out);
         const names = result.files.map(f => f.name).sort();
         expect(names).toEqual([
             'FILES-macos-arm64.txt'.replace('FILES-', 'SHA256SUMS-').replace('.txt', ''),
             'manyoyo-9.9.9-macos-arm64-app.tar.gz',
-            'manyoyo-9.9.9-macos-arm64-lite.run',
-            'manyoyo-9.9.9-macos-arm64.run',
-            'release-manifest-macos-arm64.json'
+            'manyoyo-9.9.9-macos-arm64.run'
         ].sort());
+        expect(fs.existsSync(path.join(out, 'manyoyo-9.9.9-macos-arm64-lite.run'))).toBe(false);
+        expect(fs.readdirSync(out).filter(name => name.startsWith('release-manifest'))).toEqual([]);
 
         // SHA256SUMS 与真实文件一致
         const sums = fs.readFileSync(path.join(out, 'SHA256SUMS-macos-arm64'), 'utf8').trim().split('\n');
-        expect(sums).toHaveLength(3);
+        expect(sums).toHaveLength(2);
         for (const line of sums) {
             const [hash, name] = line.split('  ');
             expect(await sha256File(path.join(out, name))).toBe(hash);
         }
-        expect(fs.readFileSync(path.join(out, 'FILES-macos-arm64.txt'), 'utf8').trim().split('\n')).toHaveLength(5);
+        expect(fs.readFileSync(path.join(out, 'FILES-macos-arm64.txt'), 'utf8').trim().split('\n')).toHaveLength(3);
 
         // full：解开校验目录结构
         const full = extract(path.join(out, 'manyoyo-9.9.9-macos-arm64.run'), path.join(root, 'x-full'));
@@ -452,16 +452,6 @@ describe('full assembly with stand-in components', () => {
         // 打包出来的 install.sh 就是仓库里的那份（不是占位）
         expect(fs.readFileSync(path.join(full, 'install/install.sh'), 'utf8')).toBe(fs.readFileSync(path.join(__dirname, '../scripts/offline/install.sh'), 'utf8'));
 
-        // lite：没有 Podman 与 VM 磁盘，但有镜像
-        const lite = extract(path.join(out, 'manyoyo-9.9.9-macos-arm64-lite.run'), path.join(root, 'x-lite'));
-        const liteFiles = walk(lite);
-        expect(liteFiles.some(f => f.startsWith('runtime/') || f.startsWith('vm/'))).toBe(false);
-        expect(liteFiles).toEqual(expect.arrayContaining(['images/manyoyo-9.9.9-common-arm64.tar.gz', 'app/node/bin/node']));
-        expect(JSON.parse(fs.readFileSync(path.join(lite, 'manifest.json'), 'utf8')).components.podman).toBeUndefined();
-        const liteEnv = fs.readFileSync(path.join(lite, 'install/env.sh'), 'utf8');
-        expect(liteEnv).toContain("MANYOYO_KIND='lite'");
-        expect(liteEnv).toContain("MANYOYO_VM_FILE=''");
-
         // app：只有 Node + manyoyo
         const appDir = path.join(root, 'x-app');
         fs.mkdirSync(appDir);
@@ -469,6 +459,9 @@ describe('full assembly with stand-in components', () => {
         const appFiles = walk(appDir);
         expect(appFiles).toEqual(expect.arrayContaining(['manifest.json', 'node/bin/node', 'manyoyo/lib/app.js']));
         expect(appFiles.some(f => f.startsWith('install/') || f.startsWith('runtime/') || f.startsWith('vm/') || f.startsWith('images/'))).toBe(false);
+        // 升级时 manyoyo update 据此提示 Podman / 虚拟机磁盘有变化（取代原来的 release-manifest）
+        const appManifest = JSON.parse(fs.readFileSync(path.join(appDir, 'manifest.json'), 'utf8'));
+        expect(appManifest.runtime).toEqual({ podmanVersion: result.componentInfo.podman.version, vmDiskSha256: sha('vm-disk') });
     });
 
     test('tar metadata is normalized: root-owned entries and a fixed mtime', async () => {
@@ -516,8 +509,7 @@ describe('full assembly with stand-in components', () => {
         expect(result.files.map(f => f.name).sort()).toEqual([
             'SHA256SUMS-linux-x64',
             'manyoyo-9.9.9-linux-x64-app.tar.gz',
-            'manyoyo-9.9.9-linux-x64.run',
-            'release-manifest-linux-x64.json'
+            'manyoyo-9.9.9-linux-x64.run'
         ]);
         const dir = extract(path.join(out, 'manyoyo-9.9.9-linux-x64.run'), path.join(root, 'x-linux'));
         const files = walk(dir);
@@ -537,6 +529,7 @@ describe('full assembly with stand-in components', () => {
             return JSON.parse(fs.readFileSync(path.join(appDir, 'manifest.json'), 'utf8'));
         })();
         expect(appManifest).toEqual(expect.objectContaining({ os: 'linux', arch: 'x64', kind: 'app' }));
+        expect(appManifest.runtime).toBeUndefined(); // Linux 包不带 Podman / 虚拟机磁盘
         expect(resolveLock('arm64', 'linux').node.url).toContain('linux-arm64');
         expect(resolveLock('arm64', 'linux').podman).toBeUndefined();
         expect(() => resolveLock('arm64', 'windows')).toThrow(/不支持的平台/);
@@ -547,9 +540,15 @@ describe('full assembly with stand-in components', () => {
         const result = await build('arm64', out, { volumeBytes: 2048 });
         const volumes = result.files.map(f => f.name).filter(name => /\.run\.\d{3}$/.test(name));
         expect(volumes.length).toBeGreaterThan(2);
-        const fullParts = volumes.filter(name => !name.includes('-lite')).map(name => path.join(out, name));
-        const joined = await joinVolumes(fullParts, path.join(root, 'joined.run'));
+        const joined = await joinVolumes(volumes.map(name => path.join(out, name)), path.join(root, 'joined.run'));
         expect(spawnSync('sh', [joined, '--check'], { encoding: 'utf-8' }).status).toBe(0);
+    });
+
+    test('the default volume size keeps the biggest package (x64, ~2.0 GB) in one file under the GitHub 2 GiB asset limit', () => {
+        const { DEFAULT_VOLUME_BYTES } = require('../scripts/offline/pack');
+        expect(DEFAULT_VOLUME_BYTES).toBe(2100000000);
+        expect(DEFAULT_VOLUME_BYTES).toBeGreaterThan(2000007070);
+        expect(DEFAULT_VOLUME_BYTES).toBeLessThan(2 * 1024 ** 3);
     });
 
     test('refuses to build without an image archive, with a hint to run the image workflow', async () => {

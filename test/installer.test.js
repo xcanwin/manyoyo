@@ -270,17 +270,6 @@ describe('offline installer (sh)', () => {
         expect(fs.existsSync(path.join(home, '.manyoyo/runtime/podman/bin/podman'))).toBe(true);
     });
 
-    test('the lite package needs a running runtime and says what to do otherwise', () => {
-        const payload = writePayload(path.join(root, 'payload'), { kind: 'lite' });
-        const missing = install(payload);
-        expect(missing.status).toBe(1);
-        expect(missing.stdout).toContain('精简包需要已经在运行的 Docker 或 Podman');
-        expect(fs.existsSync(path.join(home, '.manyoyo/app'))).toBe(false);
-
-        script(path.join(fakeBin, 'podman'), 'echo "podman $*" >> "$FAKE_STATE/calls.log"; exit 0');
-        expect(install(writePayload(path.join(root, 'payload2'), { kind: 'lite' })).status).toBe(0);
-    });
-
     test.each([
         ['not macOS', { MANYOYO_TEST_UNAME_S: 'Linux' }, '只支持 macOS'],
         ['wrong architecture', { MANYOYO_TEST_UNAME_M: 'x86_64' }, 'arm64 版'],

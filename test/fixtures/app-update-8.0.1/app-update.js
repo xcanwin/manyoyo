@@ -125,11 +125,11 @@ function parseSha256Sums(text) {
     return result;
 }
 
-// Release 里只有一个校验清单 SHA256SUMS，列出全部安装包与升级包
 function releaseAssetNames(version, targetArch, targetOs = 'macos') {
     return {
         app: `manyoyo-${version}-${targetOs}-${targetArch}-app.tar.gz`,
-        sums: 'SHA256SUMS'
+        sums: `SHA256SUMS-${targetOs}-${targetArch}`,
+        manifest: `release-manifest-${targetOs}-${targetArch}.json`
     };
 }
 
@@ -189,7 +189,7 @@ function pruneApps(appRoot, keep) {
 async function installAppUpdate({ appRoot, release, fetchImpl = fetch, targetArch = arch(), targetOs = 'macos', run = defaultRun, log = () => {}, tmpRoot = os.tmpdir() }) {
     const names = releaseAssetNames(release.version, targetArch, targetOs);
     const appUrl = release.assets[names.app];
-    const sumsUrl = release.assets[names.sums];
+    const sumsUrl = release.assets[names.sums] || release.assets.SHA256SUMS;
     if (!appUrl || !sumsUrl) {
         throw new UpdateError('NO_ASSET', `Release ${release.version} 里没有适合这台机器（${targetOs}-${targetArch}）的升级包（需要 ${names.app} 与 ${names.sums}）。`);
     }
@@ -262,15 +262,16 @@ function rollbackApp({ appRoot }) {
 
 /**
  * Podman / VM 磁盘版本变化只提示，不自动替换（需要下载新的完整包）。
- * installed：安装器写的 ~/.manyoyo/.install/installed.json；remoteRuntime：升级包 manifest.json 里的 runtime（{ podmanVersion, vmDiskSha256 }，仅 macOS 包有）。
+ * installed：安装器写的 ~/.manyoyo/.install/installed.json；remoteManifest：Release 里的 release-manifest（含完整包 manifest）。
  */
-function describeRuntimeChange(installed, remoteRuntime) {
-    if (!installed || !installed.podmanVersion || !remoteRuntime || !remoteRuntime.podmanVersion) return '';
-    const podmanChanged = remoteRuntime.podmanVersion !== installed.podmanVersion;
-    const vmChanged = Boolean(installed.vmDiskSha256) && Boolean(remoteRuntime.vmDiskSha256) && remoteRuntime.vmDiskSha256 !== installed.vmDiskSha256;
+function describeRuntimeChange(installed, remoteManifest) {
+    const remote = remoteManifest && remoteManifest.manifest && remoteManifest.manifest.components;
+    if (!installed || !installed.podmanVersion || !remote || !remote.podman) return '';
+    const podmanChanged = remote.podman.version !== installed.podmanVersion;
+    const vmChanged = Boolean(installed.vmDiskSha256) && remote.vmDisk && remote.vmDisk.sha256 !== installed.vmDiskSha256;
     if (!podmanChanged && !vmChanged) return '';
     const parts = [];
-    if (podmanChanged) parts.push(`Podman ${installed.podmanVersion} → ${remoteRuntime.podmanVersion}`);
+    if (podmanChanged) parts.push(`Podman ${installed.podmanVersion} → ${remote.podman.version}`);
     if (vmChanged) parts.push('虚拟机磁盘有更新');
     return `新版本捆绑的运行环境有变化（${parts.join('，')}）。本次只升级了 manyoyo 本体；要换 Podman / 虚拟机，请下载新的完整安装包重新安装。`;
 }

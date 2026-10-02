@@ -894,16 +894,8 @@ async function updateOfflineInstall(mode, options, globalConfig) {
     console.log(`${GREEN}✅ 更新完成: ${installed} → ${result.version}（上一版本 ${result.previous || '无'} 已保留，可用 ${MANYOYO_NAME} update --rollback 回滚）${NC}`);
 
     // Podman / VM 磁盘有变化只提示（需要新的完整包）
-    try {
-        const names = appUpdate.releaseAssetNames(release.version, appUpdate.arch(), appUpdate.platformOs());
-        if (release.assets[names.manifest]) {
-            const remote = JSON.parse(await appUpdate.fetchText(fetch, release.assets[names.manifest]));
-            const hint = appUpdate.describeRuntimeChange(appUpdate.readInstalledRecord(os.homedir()), remote);
-            if (hint) console.log(`${YELLOW}ℹ️  ${hint}${NC}`);
-        }
-    } catch (error) {
-        // 提示信息拿不到不影响升级
-    }
+    const runtimeHint = appUpdate.describeRuntimeChange(appUpdate.readInstalledRecord(os.homedir()), result.manifest.runtime);
+    if (runtimeHint) console.log(`${YELLOW}ℹ️  ${runtimeHint}${NC}`);
 
     // 新版本要求的镜像不存在就拉取；仍用旧镜像的容器只列出来，不动
     const imageName = String(globalConfig.imageName || 'ghcr.io/xcanwin/manyoyo');

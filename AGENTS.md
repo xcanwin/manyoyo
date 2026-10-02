@@ -24,7 +24,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `bin/manyoyo.js`：CLI 入口与主流程编排（2200+ 行单文件）。
 - `lib/agent-adapters/`：`resolveYoloCommand` 单一数据源，CLI 与 Web 共用，新增 YOLO 智能体只需改这里。
 - `lib/uninstall.js` / `proxy-config.js` / `offline-import.js`：`manyoyo uninstall`（精确移除带标记的 PATH 块、停服务与私有 machine、用户数据逐项询问）、安装时把用户的代理设置抄进私有 Podman 的 `containers.conf`、离线包后台导入镜像时的状态标记（serve/CLI 据此等待而不是去仓库拉）。安装脚本在 `scripts/offline/install.sh`（POSIX sh，只用 macOS / Linux 自带命令，不执行 sudo；Linux 包 `MANYOYO_OS=linux`：不带 Podman，检测系统 docker/podman，缺失时给 apt 指引，测试见 `test/installer.test.js`）。Linux 包由 `offline-linux.yml` 构建（`build.js --platform linux`，内部 kind 为 lite，扫描用 `scan-allowlist-linux.json`）。
-- `lib/app-update.js` / `update-check.js` / `download-verified.js`：离线包安装的增量升级（查最新 Release → 只下 `-app.tar.gz` 并校验 → `app/<版本>/` + 原子切换 `current` + 保留上一版本 + `update --rollback`，npm 安装不经过这里）、serve 每天最多一次的新版本检查（`updateCheck` 可关，请求不带本机信息，结果走 `GET /api/system/update`）、带 SHA256 校验的下载。升级包命名约定：`manyoyo-<ver>-<os>-<arch>-app.tar.gz`、`SHA256SUMS-<os>-<arch>`、`release-manifest-<os>-<arch>.json`（`os` 为 `macos` 或 `linux`，包内 manifest 的 `os` 字段会被校验），必须上传到 GitHub Release（`release-offline.yml` 的 `os` 输入分平台上传）。
+- `lib/app-update.js` / `update-check.js` / `download-verified.js`：离线包安装的增量升级（查最新 Release → 只下 `-app.tar.gz` 并校验 → `app/<版本>/` + 原子切换 `current` + 保留上一版本 + `update --rollback`，npm 安装不经过这里）、serve 每天最多一次的新版本检查（`updateCheck` 可关，请求不带本机信息，结果走 `GET /api/system/update`）、带 SHA256 校验的下载。升级包命名约定：`manyoyo-<ver>-<os>-<arch>-app.tar.gz` 与单一校验清单 `SHA256SUMS`（`os` 为 `macos` 或 `linux`，包内 manifest 的 `os` 字段会被校验；这两个名字已安装的 8.0.1 客户端按名查找，不能改），必须上传到 GitHub Release；Release 里只有 9 个资产：4 个 `.run`、4 个 `-app.tar.gz`、1 个 `SHA256SUMS`（`release-offline.yml` 一次运行合并上传两个平台，没有精简包与 `release-manifest`）。macOS 升级包的 `manifest.json` 带 `runtime: { podmanVersion, vmDiskSha256 }`，`manyoyo update` 据此提示是否需要换完整包。
 - `lib/headless.js` / `setup-cli.js` / `setup-config.js`：有头/无头判定（安装器与无参 `manyoyo` 共用，`--headless`/`--gui`/`MANYOYO_HEADLESS`）、无头环境的命令行配置向导 `manyoyo setup`（输入不回显、非 TTY 不挂起）、向导写配置的文本构造（与 `/api/setup/*` 同源，写入走 `lib/secure-file.js`）。
 - `lib/podman-passthrough.js`：`manyoyo podman <参数>` 透传私有 Podman、`manyoyo podman env` 输出只在当前终端定义 `podman` 函数的 shell 代码。
 - `lib/container-runtime.js` / `runtime-heal.js` / `error-hints.js`：容器运行时选择（配置 > 私有 Podman > daemon 可用的 docker/podman，返回 `{command, env, source}`，`env` 只传给运行时子进程）、daemon 不可用时的自愈（`podman machine start` / macOS `open -a Docker`）、原始错误到“原因 + 下一步”的映射。
@@ -42,7 +42,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `docker/`：多阶段 `manyoyo.Dockerfile`、构建缓存 `cache/`（Node.js、JDT LSP、gopls，2 天有效）、各 Agent 默认配置与 supervisor 模板 `res/`。
 - `docs/`：VitePress 文档，中文主维护 `docs/zh/`，英文 `docs/en/`，结构须一致。
 - `test/`：Jest（`*.test.js`），依赖真实容器运行时的用例在 `test/integration/`；前端 Vitest 在 `frontend/src/`（`*.test.ts(x)`，与源码同目录）。
-- `scripts/`、`assets/`、`manyoyo.example.json`：构建与发布脚本、资源、配置模板。`scripts/offline/`（离线包构建：下载校验、无 pkgutil 的 `.pkg` 解包、krunkit 补丁、`.run` 打包与分卷）与 `scripts/scan-release-artifacts.js`（发布产物隐私扫描）只在 CI 运行，发布产物不要在本机构建；`dist-offline/` 已被 `.gitignore` 忽略。
+- `scripts/`、`assets/`、`manyoyo.example.json`：构建与发布脚本、资源、配置模板。`scripts/offline/`（离线包构建：下载校验、无 pkgutil 的 `.pkg` 解包、krunkit 补丁、`.run` 打包；完整包默认不分卷，分卷只在超过 GitHub 单文件 2 GiB 时兜底）与 `scripts/scan-release-artifacts.js`（发布产物隐私扫描）只在 CI 运行，发布产物不要在本机构建；`dist-offline/` 已被 `.gitignore` 忽略。
 
 ## 构建、测试与开发命令
 
@@ -173,7 +173,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 发布产物（npm 包、离线包、镜像）只在 CI 构建并经 `scripts/scan-release-artifacts.js` 扫描：解不开/解包不完整的文件按“未扫描”失败，`--exclude` 必须 `^` 锚定，允许列表按具体文件放行（镜像里曾扫出 SSH 主机私钥）。
 - 含凭据的配置写入统一走 `lib/secure-file.js`（0600、临时文件 + rename）；`manyoyo.json` 的任何新写入点都不要直接 `writeFileSync`。
 - 改了代码就要重新触发 `offline-macos.yml` / `offline-linux.yml` 并在干净用户下重测；镜像（`ghcr.io/xcanwin/manyoyo:<imageVersion>`）只有 Dockerfile 或 `docker/` 变化才需要重发，且要先于离线包。
-- 发版顺序（维护者）：本机装好 shellcheck 跑 `npm test`（CI 的 ubuntu 自带，本地没有会静默跳过）→ 合并 main → （Dockerfile/`docker/` 有变先 `image-publish.yml`）触发 `offline-macos.yml` 与 `offline-linux.yml` → `gh release create <tag> --target main --notes-file …`（会触发 npm 发布，发布前测试失败要先删 Release 与 tag 再来）→ `release-offline.yml` 分 `os=macos|linux` 各上传一次 → `release-verify.yml`（`tag=<tag>`，游客身份在 Linux x64/arm64 与 macOS arm64/Intel 的 runner 上验证安装、`update`、卸载；macOS 不启动虚拟机）。macOS 真实虚拟机启动、浏览器向导、Agent 对话只能在真机偶尔抽查。
+- 发版顺序（维护者）：本机装好 shellcheck 跑 `npm test`（CI 的 ubuntu 自带，本地没有会静默跳过）→ 合并 main → （Dockerfile/`docker/` 有变先 `image-publish.yml`）触发 `offline-macos.yml` 与 `offline-linux.yml` → `gh release create <tag> --target main --notes-file …`（说明以 `scripts/release-notes-template.md` 开头；会触发 npm 发布，发布前测试失败要先删 Release 与 tag 再来）→ `release-offline.yml`（`macosRunId` + `linuxRunId`，一次上传两个平台）→ `release-verify.yml`（`tag=<tag>`，游客身份在 Linux x64/arm64 与 macOS arm64/Intel 的 runner 上验证安装、`update`、卸载；macOS 不启动虚拟机）。macOS 真实虚拟机启动、浏览器向导、Agent 对话只能在真机偶尔抽查。
 
 ## 版本对齐
 

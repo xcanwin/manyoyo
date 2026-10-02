@@ -23,8 +23,10 @@ describe('release-verify workflow', () => {
     test('downloads anonymously from the public Release URL and checks the shipped checksum file', () => {
         expect(text).toContain('https://github.com/xcanwin/manyoyo/releases/download/');
         expect(text).not.toMatch(/GH_TOKEN|github\.token/);
-        expect(text).toContain('SHA256SUMS-linux-');
-        expect(text).toContain('SHA256SUMS-macos-');
+        expect(text).toContain('sums="SHA256SUMS"');
+        expect(text).not.toMatch(/SHA256SUMS-(linux|macos)-/);
+        expect(text).not.toContain('release-manifest');
+        expect(text).not.toContain('-lite');
     });
 
     test('exercises install, version, update (latest) and uninstall on every platform', () => {

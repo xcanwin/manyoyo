@@ -2,7 +2,7 @@
 'use strict';
 
 // 离线包构建（在 CI 的干净 macOS runner 上运行，不要在维护者本机构建并发布）。
-// 产物：完整包 .run、精简包 -lite.run、-app.tar.gz、SHA256SUMS、FILES.txt、release-manifest。
+// 产物：完整包 .run、-app.tar.gz、SHA256SUMS-<os>-<arch>（只供 release-offline 合并成 Release 的唯一 SHA256SUMS，不单独上传）、FILES.txt。
 // Linux 包（--platform linux，在 Linux runner 上构建）：只有 Node + manyoyo + 镜像归档，不带 Podman 与虚拟机磁盘，一种形态（内部 kind 为 lite）。
 // 用法: node scripts/offline/build.js --arch arm64|x64 --image-archive <manyoyo 镜像 tar.gz> [--platform macos|linux] [--out dist-offline]
 
@@ -121,10 +121,10 @@ async function buildOfflinePackages(options, injected = {}) {
     }
 
     // 2. 三种目录树（硬链接，不复制大文件）
-    deps.log('[3/5] 生成目录树（macOS: full / lite / app；Linux: lite / app）');
+    deps.log('[3/5] 生成目录树（macOS: full / app；Linux: lite / app）');
     const staging = path.join(workDir, 'staging');
     const trees = {};
-    const kinds = isLinux ? ['lite', 'app'] : ['full', 'lite', 'app'];
+    const kinds = isLinux ? ['lite', 'app'] : ['full', 'app'];
     for (const kind of kinds) {
         const tree = path.join(staging, kind);
         trees[kind] = tree;
@@ -154,6 +154,8 @@ async function buildOfflinePackages(options, injected = {}) {
         if (kind === 'app') delete kindComponents.image;
         const files = await inventoryDir(trees[kind]);
         manifests[kind] = buildManifest({ version, imageVersion, arch, kind, components: kindComponents, files, builtAt, platform });
+        // manyoyo update 据此提示 Podman / 虚拟机磁盘有变化（只 macOS 有）
+        if (kind === 'app' && !isLinux) manifests[kind].runtime = { podmanVersion: lock.podman.version, vmDiskSha256: vmSha };
         fs.writeFileSync(path.join(trees[kind], 'manifest.json'), `${JSON.stringify(manifests[kind], null, 2)}\n`);
     }
 
@@ -161,7 +163,7 @@ async function buildOfflinePackages(options, injected = {}) {
     deps.log('[4/5] 规范化打包');
     const outputs = [];
     const mtime = builtAt || undefined;
-    for (const [kind, suffix] of (isLinux ? [['lite', '']] : [['full', ''], ['lite', '-lite']])) {
+    for (const [kind, suffix] of (isLinux ? [['lite', '']] : [['full', '']])) {
         const payload = path.join(workDir, `payload-${kind}.tar.gz`);
         createNormalizedTar({ output: payload, cwd: trees[kind], entries: fs.readdirSync(trees[kind]).sort(), compression: 'gzip', mtime });
         const runPath = path.join(outDir, `${base}${suffix}.run`);
@@ -174,12 +176,10 @@ async function buildOfflinePackages(options, injected = {}) {
     outputs.push(await fileRecord(path.basename(appTar), appTar));
 
     // 4. 校验和与清单
-    deps.log('[5/5] 生成 SHA256SUMS 与产物清单');
+    deps.log('[5/5] 生成 SHA256SUMS');
     const sumsPath = path.join(outDir, `SHA256SUMS-${platform}-${arch}`);
     fs.writeFileSync(sumsPath, formatSha256Sums(outputs));
-    const releaseManifestPath = path.join(outDir, `release-manifest-${platform}-${arch}.json`);
-    fs.writeFileSync(releaseManifestPath, `${JSON.stringify({ version, imageVersion, arch, artifacts: outputs.map(({ name, size, sha256 }) => ({ name, size, sha256 })), manifest: manifests[isLinux ? 'lite' : 'full'] }, null, 2)}\n`);
-    const deliverables = [...outputs, await fileRecord(path.basename(sumsPath), sumsPath), await fileRecord(path.basename(releaseManifestPath), releaseManifestPath)];
+    const deliverables = [...outputs, await fileRecord(path.basename(sumsPath), sumsPath)];
     fs.writeFileSync(path.join(outDir, `FILES-${platform}-${arch}.txt`), `${deliverables.map(item => path.relative(process.cwd(), item.path)).join('\n')}\n`);
 
     return { version, imageVersion, arch, outDir, workDir, files: deliverables, trees, manifests, componentInfo };

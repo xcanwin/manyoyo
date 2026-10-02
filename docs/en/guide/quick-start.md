@@ -13,15 +13,13 @@ Goal: **download the offline package → one command → browser**. You do not n
 
 Open [GitHub Releases](https://github.com/xcanwin/manyoyo/releases/latest) and pick a `.run` file for your Mac:
 
-| Your Mac | `uname -m` output | Full package (recommended) | Lite package |
-|---|---|---|---|
-| Apple silicon (M series) | `arm64` | `manyoyo-<version>-macos-arm64.run` | `manyoyo-<version>-macos-arm64-lite.run` |
-| Intel | `x86_64` | `manyoyo-<version>-macos-x64.run` | `manyoyo-<version>-macos-x64-lite.run` |
+| Your Mac | `uname -m` output | Package |
+|---|---|---|
+| Apple silicon (M series) | `arm64` | `manyoyo-<version>-macos-arm64.run` |
+| Intel | `x86_64` | `manyoyo-<version>-macos-x64.run` |
 
-- The **full package** (about 1.8GB) bundles Node.js, the container runtime (Podman and its VM) and the MANYOYO image, and works on a clean Mac.
-- The **lite package** (about 0.8GB) bundles only Node.js, MANYOYO and the image, and requires Docker Desktop / OrbStack / Podman to be installed and running already.
-- To verify the download yourself, also fetch `SHA256SUMS-macos-<arch>` from the same page (optional: the package verifies itself during installation).
-- If a file is split into volumes (`.run.001`, `.run.002`, ...), download all of them into one directory and use `.run.001` wherever the commands below say `.run` (for example `sh manyoyo-*-macos-arm64.run.001`); the package joins and verifies the volumes itself and tells you which volume is missing or has the wrong size. Alternative: merge manually with `cat manyoyo-*.run.* > manyoyo-merged.run` and use it as a normal `.run`.
+- The package (about 1.8GB) bundles Node.js, the container runtime (Podman and its VM) and the MANYOYO image, and works on a clean Mac. Macs that already run Docker Desktop / OrbStack use the same package; the installer reuses the existing runtime.
+- To verify the download yourself, also fetch `SHA256SUMS` from the same page (optional: the package verifies itself during installation).
 
 **Download tip for slow networks**: the files are large, so use a resumable download and continue after an interruption:
 
@@ -36,11 +34,10 @@ aria2 and other download managers work too.
 The package verifies itself before installing, so this step is usually unnecessary. To compare with the checksum on the Release page:
 
 ```bash
-# one line with the file name = match; no output = mismatch, download again (use SHA256SUMS-macos-x64 on Intel)
-grep "$(shasum -a 256 manyoyo-*-macos-arm64.run | cut -d' ' -f1)" SHA256SUMS-macos-arm64
+# one line with the file name = match; no output = mismatch, download again
+grep "$(shasum -a 256 manyoyo-*-macos-arm64.run | cut -d' ' -f1)" SHA256SUMS
 ```
 
-For split volumes (`.run.001` ...) just run `sh manyoyo-*.run.001 --check`; it only verifies and changes nothing.
 
 ## 3. Install with one command
 

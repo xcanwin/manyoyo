@@ -394,12 +394,11 @@ main() {
             log "• 检测到可用的 ${EXTERNAL_CMD}，复用它，不安装内置 Podman 与虚拟机磁盘"
         fi
     else
+        # 不带 Podman 的包只有 Linux 版：复用系统里已有的 docker / podman
         if EXTERNAL_CMD="$(detect_external_runtime)"; then
             MODE=external
-        elif [ "${MANYOYO_OS:-macos}" = linux ]; then
-            explain_no_runtime_linux
         else
-            fail "精简包需要已经在运行的 Docker 或 Podman，但没有检测到。" "先启动 Docker Desktop / OrbStack / Podman machine 后重试，或改用包含 Podman 的完整包。"
+            explain_no_runtime_linux
         fi
     fi
 

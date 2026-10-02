@@ -3,7 +3,7 @@
 # 覆盖：Linux x64 / arm64 完整安装（真实 docker、真实镜像导入）；macOS arm64 / Intel 用真实 macOS 的 sh（bash 3.2）跑安装器，
 # 跳过虚拟机（GitHub 的 macOS runner 没有嵌套虚拟化，MANYOYO_TEST_SKIP_MACHINE），其余步骤（校验、解压、PATH、包装脚本、update、卸载）都是真的。
 # 不覆盖：macOS 上真正启动 Podman 虚拟机、浏览器向导、Agent 对话——这些仍需维护者偶尔在真机验证。
-# 前提：tag 必须是 Release 的“最新版本”（update 用例断言“已是最新版本”）；两个平台的 release-offline 都已上传。
+# 前提：tag 必须是 Release 的“最新版本”（update 用例断言“已是最新版本”）；release-offline 已上传（一次含两个平台）。
 
 name: Verify Release
 
@@ -41,11 +41,10 @@ jobs:
           base="https://github.com/xcanwin/manyoyo/releases/download/${TAG}"
           mkdir -p "$RUNNER_TEMP/rv" && cd "$RUNNER_TEMP/rv"
           run_file="manyoyo-${ver}-linux-${{ matrix.arch }}.run"
-          sums="SHA256SUMS-linux-${{ matrix.arch }}"
+          sums="SHA256SUMS"
           curl -sSL -f -O "${base}/${run_file}"
           curl -sSL -f -O "${base}/${sums}"
-          curl -sSL -f -O "${base}/release-manifest-linux-${{ matrix.arch }}.json"
-          grep -q "$(sha256sum "$run_file" | cut -d' ' -f1)" "$sums"
+          grep -q "$(sha256sum "$run_file" | cut -d' ' -f1)  ${run_file}" "$sums"
           echo "校验值与 ${sums} 一致"
       - name: Install headless, import image, update, uninstall
         run: |
@@ -89,14 +88,13 @@ jobs:
           ver="${TAG#v}"
           base="https://github.com/xcanwin/manyoyo/releases/download/${TAG}"
           mkdir -p "$RUNNER_TEMP/rv" && cd "$RUNNER_TEMP/rv"
-          sums="SHA256SUMS-macos-${{ matrix.arch }}"
+          sums="SHA256SUMS"
           curl -sSL -f -O "${base}/${sums}"
-          curl -sSL -f -O "${base}/release-manifest-macos-${{ matrix.arch }}.json"
-          # 完整包可能被拆成 .run.001/.002…：按 SHA256SUMS 里列出的文件名下载并校验
+          # 正常情况下完整包是单个 .run；超过 GitHub 单文件上限才会分卷 .run.001/.002…：按 SHA256SUMS 里列出的文件名下载并校验
           files="$(awk '{print $2}' "$sums" | grep -E "^manyoyo-${ver}-macos-${{ matrix.arch }}\.run(\.[0-9]{3})?$")"
           for f in $files; do
             curl -sSL -f -O "${base}/${f}"
-            grep -q "$(shasum -a 256 "$f" | cut -d' ' -f1)" "$sums"
+            grep -q "$(shasum -a 256 "$f" | cut -d' ' -f1)  ${f}" "$sums"
           done
           echo "$files" > files.txt
           cat files.txt

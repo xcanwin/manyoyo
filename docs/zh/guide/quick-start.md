@@ -13,15 +13,13 @@ description: 下载离线包，一条命令装好 MANYOYO 与容器环境，浏�
 
 打开 [GitHub Releases](https://github.com/xcanwin/manyoyo/releases/latest)，按你的 Mac 选一个 `.run` 文件：
 
-| 你的 Mac | 在终端执行 `uname -m` 的结果 | 完整包（推荐） | 精简包 |
-|---|---|---|---|
-| Apple 芯片（M 系列） | `arm64` | `manyoyo-<版本>-macos-arm64.run` | `manyoyo-<版本>-macos-arm64-lite.run` |
-| Intel | `x86_64` | `manyoyo-<版本>-macos-x64.run` | `manyoyo-<版本>-macos-x64-lite.run` |
+| 你的 Mac | 在终端执行 `uname -m` 的结果 | 安装包 |
+|---|---|---|
+| Apple 芯片（M 系列） | `arm64` | `manyoyo-<版本>-macos-arm64.run` |
+| Intel | `x86_64` | `manyoyo-<版本>-macos-x64.run` |
 
-- **完整包**约 1.8GB：自带 Node.js、容器运行环境（Podman 与虚拟机）和 MANYOYO 镜像，纯净的 Mac 直接可用。
-- **精简包**约 0.8GB：只带 Node.js、MANYOYO 和镜像，要求你已经装好并启动了 Docker Desktop / OrbStack / Podman。
-- 想额外校验的话，再下载同一页上对应架构的 `SHA256SUMS-macos-<arch>`（可选：安装包安装时会自动校验自身）。
-- 文件如果被拆成 `.run.001`、`.run.002` 等分卷，把它们全部下载到同一个目录，后面的 `.run` 文件名换成 `.run.001`（例如 `sh manyoyo-*-macos-arm64.run.001`）即可，安装包会自己按序拼接并校验，缺卷或大小不对时会提示是哪一卷。备选：`cat manyoyo-*.run.* > manyoyo-合并.run` 手动合并后当普通 `.run` 使用。
+- 安装包约 1.8GB：自带 Node.js、容器运行环境（Podman 与虚拟机）和 MANYOYO 镜像，纯净的 Mac 直接可用；已经装了 Docker Desktop / OrbStack 的 Mac 也用这个包，安装器会直接复用已有的运行环境。
+- 想额外校验的话，再下载同一页上的 `SHA256SUMS`（可选：安装包安装时会自动校验自身）。
 
 **国内下载提示**：文件较大，建议使用支持断点续传的方式，下载中断后可以接着下：
 
@@ -36,11 +34,10 @@ curl -L -C - -O <Release 页面里该文件的下载地址>
 安装包在安装前会自动校验自身，通常不需要这一步。想对照 Release 页面上的校验值，可以用：
 
 ```bash
-# 有输出（带文件名的一行）= 一致；没有任何输出 = 不一致，请重新下载（Intel 用 SHA256SUMS-macos-x64）
-grep "$(shasum -a 256 manyoyo-*-macos-arm64.run | cut -d' ' -f1)" SHA256SUMS-macos-arm64
+# 有输出（带文件名的一行）= 一致；没有任何输出 = 不一致，请重新下载
+grep "$(shasum -a 256 manyoyo-*-macos-arm64.run | cut -d' ' -f1)" SHA256SUMS
 ```
 
-分卷（`.run.001` 等）直接运行 `sh manyoyo-*.run.001 --check` 即可，只校验、不改动系统。
 
 ## 3. 一条命令安装
 
