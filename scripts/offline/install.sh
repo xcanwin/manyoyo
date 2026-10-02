@@ -219,7 +219,7 @@ install_podman() {
     mkdir -p "$PODMAN_ROOT"
     # 只替换程序目录；config/ 与 data/（machine、镜像存储）属于用户数据，重装不能动
     for sub in bin lib share; do
-        rm -rf "$PODMAN_ROOT/$sub"
+        rm -rf "${PODMAN_ROOT:?}/${sub:?}"
         [ -d "$here/runtime/podman/$sub" ] && mv "$here/runtime/podman/$sub" "$PODMAN_ROOT/$sub"
     done
     clear_quarantine "$PODMAN_ROOT"
@@ -260,6 +260,7 @@ add_path_block() {
     if [ -s "$target" ] && [ "$(tail -c 1 "$target" | wc -l | tr -d ' ')" = 0 ]; then
         printf '\n' >> "$target"
     fi
+    # shellcheck disable=SC2016  # 下面是写进用户 shell 配置的字面文本，$PATH / $HOME 必须原样保留
     {
         printf '\n'
         printf '%s\n' '# >>> manyoyo >>>'
