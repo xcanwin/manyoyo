@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:single": "npm run build && node scripts/emit-html.mjs",
+    "build:release": "tsc -b && vite build -c vite.release.config.ts && node scripts/emit-release.mjs",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc -b --noEmit",

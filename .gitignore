@@ -23,3 +23,5 @@ libpod/
 lib/web/index.html
 .claude/
 dist-offline/
+.release/
+scripts/release/console.html

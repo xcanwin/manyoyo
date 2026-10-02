@@ -1,6 +1,6 @@
 'use strict';
 
-// 网页前端（frontend/）的构建 / 开发 / 测试入口：node scripts/web.js <build|dev|test>
+// 网页前端（frontend/）的构建 / 开发 / 测试入口：node scripts/web.js <build|build-release|dev|test>
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -9,6 +9,7 @@ const frontendDir = path.join(__dirname, '..', 'frontend');
 const shell = process.platform === 'win32';
 const COMMANDS = {
     build: ['run', 'build:single'],
+    'build-release': ['run', 'build:release'],
     dev: ['run', 'dev'],
     test: ['test']
 };
@@ -25,7 +26,7 @@ function run(args) {
 
 const action = process.argv[2];
 if (!COMMANDS[action]) {
-    console.error('用法: node scripts/web.js <build|dev|test>');
+    console.error('用法: node scripts/web.js <build|build-release|dev|test>');
     process.exit(2);
 }
 

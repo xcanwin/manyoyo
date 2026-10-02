@@ -36,7 +36,8 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `lib/global-config.js` / `init-config.js` / `json5-text-edit.js`：`~/.manyoyo/manyoyo.json` 读写与 `imageVersion` 同步、`init` 初始化、JSON5 局部定位替换。
 - `lib/log-path.js` / `serve-log.js` / `serve-log-reader.js`：日志分目录规则、脱敏与进程快照、倒序分页读取。
 - `lib/core/`：会话控制事件的创建/校验/投影与 `FileEventStore`（JSONL 追加日志 + 快照）；`app-error.js` 暂未接入 `sendJson`。
-- `lib/doctor.js`、`capacity.js`、`codex-output.js`、`agent-resume.js`、`dev-release.js`：环境诊断、容量估算、Codex JSONL 解析、会话恢复参数推断、发布向导。
+- `lib/doctor.js`、`capacity.js`、`codex-output.js`、`agent-resume.js`：环境诊断、容量估算、Codex JSONL 解析、会话恢复参数推断。
+- `scripts/release/`：发布控制台（维护者工具，不进 npm 包）。`npm run release` 在 `127.0.0.1:3900` 启动网页（令牌 + Host/Origin 校验，只能选择固定阶段、不能提交任意命令）：状态完全由 git / GitHub / npm 的真实状态推出（`facts.js` → `stages.js`），可随时中断续跑；阶段执行在 `actions.js`，任务执行器 `jobs.js`（single / 逐步确认 step / 一次确认 auto），对外动作每次都要确认。页面源码在 `frontend/release.html` + `frontend/src/release/`，`npm run build:release` 构建成 `scripts/release/console.html`（已忽略，首次运行自动构建）。`--status` 只在终端看状态，`--dry-run` 对外动作只打印命令。
 - `lib/plugin/`：插件路由与 Playwright 插件（场景管理、MCP 集成、compose/Dockerfile 模板）。
 - `lib/web/`：`serve` 网页服务；`server.js` 单文件 6000+ 行，靠 `Grep "^function <名>"` 定位，不要整文件读。
 - `frontend/`：默认 Web 前端（`/` 路由，登录页 `/auth/login`；React + shadcn/ui），独立 Vite + React + TS 项目，约 70 个源文件；组件地图见该目录 `AGENTS.md`。
@@ -69,7 +70,7 @@ npm start                # 从源码运行无参入口（打开网页界面）�
 npm install -g . / npm link   # 本地全局安装或软链 CLI
 npm run build:web        # 构建默认前端单文件产物 lib/web/index.html，随 npm run prepack 自动执行
 npm run dev:web          # 默认前端本地开发；npm run test:web 跑其 Vitest
-npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
+npm run release          # 维护者发布控制台（网页，127.0.0.1:3900）；--status 终端看状态，--dry-run 彩排；npm run build:release 单独构建页面
 # 根目录除 lint:sh（只管安装脚本）外没有 lint 脚本；前端的真检查是下面两条
 
 # 改 frontend/ 必跑这两条（根目录的 npm test 不含它们）
@@ -150,7 +151,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 环境文件解析：`manyoyo config show --ef /abs/path/myenv.env`；容器调试：`manyoyo run -n <name> -x /bin/bash`。
 - 环境诊断：`manyoyo doctor`（人类可读）/ `manyoyo doctor --json`（脚本消费），可加 `--port <port>`。
 - 镜像构建：`manyoyo build --iv <x.y.z-后缀>`（如 `1.8.4-common`），可加 `--iba TOOL=common`。
-- 维护者发布：`npm run dev:release`（`-- --yes` 自动确认，`-- --version <x.y.z>` 指定版本）。
+- 维护者发布：`npm run release`，按页面「下一步」推进；也可「一键发布」整段（合并 main → 验证）。
 - 局域网监听：`manyoyo serve 0.0.0.0:3000 -U <user> -P <pass>`；未显式设 `-P/--pass`（或 `serverPass` / `MANYOYO_SERVER_PASS`）时启动会生成随机密码并打印到终端。
 - 调接口先登录拿 cookie：`curl --noproxy '*' -c /tmp/manyoyo.cookie -X POST http://127.0.0.1:3000/auth/login -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pass>"}'`，之后带 `-b /tmp/manyoyo.cookie` 访问。
 - 常用接口：`GET /api/sessions`（列表）、`GET /api/sessions/<name>/audit`（导出会话审计）、`POST /api/sessions/<name>/remove-with-history`（删除对话历史但保留容器）。
@@ -210,7 +211,6 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 ## 提交与 PR 指引
 
 - 简短中文动词短语，文档用 `docs:` 前缀，不超过 50 字；确需补充背景时最多追加一句精简摘要，不写分点列表、不写验证过程。
-- `npm run dev:release` 的发布提交使用 `commit-diff` 产出：标题不加范围前缀，正文可使用要点列表；此例外不适用于日常提交。
 - 提交信息里不写 `Co-Authored-By`、生成工具署名等任何尾注。
 - 未明确要求时不自动提交；需要时先给出 commit message 和命令让用户确认。
 - PR 需包含：变更摘要、测试结果（如 `npm test`）、相关文档更新说明。

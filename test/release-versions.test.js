@@ -1,5 +1,3 @@
-const path = require('path');
-const { execSync } = require('child_process');
 const {
     parseReleaseVersion,
     buildVersionSuggestions,
@@ -7,22 +5,9 @@ const {
     pickLatestVersionTag,
     normalizeCommitMessage,
     extractAgentMessageFromCodexJsonl
-} = require('../lib/dev-release');
+} = require('../scripts/release/versions');
 
-const DEV_RELEASE_SCRIPT = path.join(__dirname, '..', 'scripts', 'dev-release.js');
-
-describe('Dev Release Helpers', () => {
-    test('--help should display maintainer release help', () => {
-        const output = execSync(`node ${DEV_RELEASE_SCRIPT} --help`, { encoding: 'utf-8' });
-        expect(output).toContain('manyoyo dev release');
-        expect(output).toContain('维护者发布向导');
-        expect(output).toContain('--version');
-        expect(output).toContain('--yes');
-        expect(output).toContain('$commit-diff');
-        expect(output).toContain('默认通过 manyoyo run 在容器内自动执行 commit-diff');
-        expect(output).toContain('推送当前分支');
-    });
-
+describe('Release version helpers', () => {
     test('parseReleaseVersion should parse x.y.z', () => {
         expect(parseReleaseVersion('5.6.1')).toEqual({
             major: 5,
