@@ -14,7 +14,8 @@ Requires Node.js >= 22 and Docker or Podman.
 ```bash
 git clone https://github.com/xcanwin/manyoyo.git && cd manyoyo
 npm install
-node bin/manyoyo.js --help      # run directly
+npm start                       # run the no-argument entry directly (opens the web UI)
+npm run serve:dev               # debug the web service in the foreground (127.0.0.1:3000)
 npm link                        # or link the global commands manyoyo / my
 ```
 
@@ -24,6 +25,8 @@ npm link                        # or link the global commands manyoyo / my
 npm run test:unit               # during development: Jest unit tests + frontend Vitest (fast)
 npm test                        # before committing: Jest with coverage + frontend Vitest
 npm run test:integration        # integration tests that need a real container runtime
+npm run test:installer          # only the installer script tests
+npm run lint:sh                 # shellcheck the installer scripts (needs shellcheck installed)
 ```
 
 ## Web frontend
@@ -46,6 +49,7 @@ The docs use **VitePress** and are deployed to GitHub Pages by GitHub Actions af
 npm ci --include=optional        # install first, then build; do not run them in parallel
 npm run docs:dev                 # local development, listens on 127.0.0.1:5173 only
 npm run docs:build               # build and check dead links
+npm run docs:check               # build, then check redirect pages, canonicals, descriptions and sitemap
 ```
 
 ## Release outline

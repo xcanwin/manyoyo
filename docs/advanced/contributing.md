@@ -14,7 +14,8 @@ description: 面向贡献者：从源码运行 MANYOYO、运行测试、构建�
 ```bash
 git clone https://github.com/xcanwin/manyoyo.git && cd manyoyo
 npm install
-node bin/manyoyo.js --help      # 直接运行
+npm start                       # 直接运行无参入口（打开网页界面）
+npm run serve:dev               # 前台调试网页服务（127.0.0.1:3000）
 npm link                        # 或链接成全局命令 manyoyo / my
 ```
 
@@ -24,6 +25,8 @@ npm link                        # 或链接成全局命令 manyoyo / my
 npm run test:unit               # 开发阶段：Jest 单测 + 前端 Vitest（快）
 npm test                        # 提交前：带覆盖率的 Jest + 前端 Vitest
 npm run test:integration        # 需要真实容器运行时的集成测试
+npm run test:installer          # 只跑安装脚本用例
+npm run lint:sh                 # shellcheck 检查安装脚本（需本机装有 shellcheck）
 ```
 
 ## 网页前端
@@ -46,6 +49,7 @@ npm run dev:web                  # 热更新开发（另开终端运行 manyoyo 
 npm ci --include=optional        # 必须先安装依赖，再构建，不能并行
 npm run docs:dev                 # 本地开发，默认只监听 127.0.0.1:5173
 npm run docs:build               # 构建并检查死链
+npm run docs:check               # 构建后再检查跳转页、canonical、description 与 sitemap
 ```
 
 ## 发布概要

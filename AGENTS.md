@@ -55,17 +55,21 @@ npm test                 # 提交前：Jest 覆盖率（输出 coverage/）+ fro
                          # 需要真实 docker/podman 的用例都在 test/integration/，
                          # docker info / podman info 失败时自动跳过并打印原因
 npm run test:integration # 只跑 test/integration/（容器运行时集成测试）
+npm run test:installer   # 只跑安装脚本用例（改 scripts/install.sh / scripts/offline/*.sh 时）
+npm run lint:sh          # shellcheck 检查安装脚本；本机没有 shellcheck 会明确报错（不会静默跳过）
 npx jest test/manyoyo.test.js            # 单个测试文件
 npx jest --testNamePattern="关键词"       # 按测试名称匹配
 
 # 文档：必须先 ci 安装再构建，不能并行
 npm run docs:dev|build|preview   # build 会检查 dead links；dev 听 127.0.0.1:5173，preview 听 4173
+npm run docs:check               # docs:build + scripts/check-docs-seo.js（跳转页、canonical、description、sitemap）
 
-npm install -g . / npm link / npm run install-link   # 本地全局安装或软链 CLI
+npm start                # 从源码运行无参入口（打开网页界面）；npm run serve:dev 前台调试 serve（127.0.0.1:3000）
+npm install -g . / npm link   # 本地全局安装或软链 CLI
 npm run build:web        # 构建默认前端单文件产物 lib/web/index.html，随 npm run prepack 自动执行
 npm run dev:web          # 默认前端本地开发；npm run test:web 跑其 Vitest
 npm run dev:release      # 维护者发布向导（--yes 自动确认，--version 指定版本）
-# 根目录没有 lint 脚本；前端的真检查是下面两条
+# 根目录除 lint:sh（只管安装脚本）外没有 lint 脚本；前端的真检查是下面两条
 
 # 改 frontend/ 必跑这两条（根目录的 npm test 不含它们）
 cd frontend && npm run typecheck   # tsc -b --noEmit（必须 -b，否则一个文件都不检查）
@@ -178,7 +182,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 ## 版本对齐
 
 - 镜像版本读取 `package.json` 的 `imageVersion`（格式 `x.y.z-variant`），与 `version` 字段独立。
-- `test/doc-example-version.test.js` 强制 `README.md`、`docs/{zh,en}/guide/quick-start.md`、`basic-usage.md`、`reference/cli-options.md` 的镜像版本与 `package.json.imageVersion` 同主版本，改 `imageVersion` 后不同步这 7 个文件会导致 `npm test` 失败。
+- `test/doc-example-version.test.js` 扫描 `README.md` 与 `docs/**/*.md`（排除 `docs/.vitepress/`），所有 `x.y.z-后缀` 镜像版本示例必须与 `package.json.imageVersion` 同主版本，改 `imageVersion` 后不同步会导致 `npm test` 失败；确需保留的历史示例写进该测试的 `ALLOWED_HISTORICAL_VERSIONS` 白名单（文件 + 版本 + 原因），默认为空。
 - `README.md` 的快速开始与主流程示例须与 `version` / `imageVersion` 对齐；`docs/`、`docs/en/` 的历史/场景示例可用其他版本，但必须保持 `x.y.z-后缀` 格式并标注用途。
 - `package.json.playwrightCliVersion` 是 Playwright CLI 版本的单一来源；镜像内安装 `@playwright/cli` 时禁止改回 `@latest`，也不要误用 `dependencies.playwright` 作为版本来源。
 - 包含文件 `README.md`、`LICENSE`、`docker/manyoyo.Dockerfile`、`manyoyo.example.json` 需与发布一致；`bin/manyoyo.js` 变更时同步检查 `package.json` 的 `bin` 字段。
