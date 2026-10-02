@@ -9,6 +9,9 @@ const { renderInstallEnv } = require('../scripts/offline/install-env');
 const SCRIPTS = path.join(__dirname, '../scripts/offline');
 const IMAGE_SHA = 'b'.repeat(64);
 
+// 每个用例会多次同步拉起 sh 安装器；全量并发跑测试时默认 5s 偶尔不够（曾出现一次偶发超时）
+jest.setTimeout(30000);
+
 // 隔离 PATH：系统命令的符号链接，但不含真实的 docker / podman（否则会被安装器当成“已有运行时”）
 let safeBin;
 beforeAll(() => {
