@@ -499,6 +499,49 @@ describe('full assembly with stand-in components', () => {
         expect(result.componentInfo.podman.machineProvider).toBe('applehv');
     });
 
+    test('linux: one package without Podman / VM disk, linux file names, os recorded, no Podman download', async () => {
+        const out = path.join(root, 'out-linux');
+        const repo = makeRepo();
+        const fixtures = makeFixtures();
+        const downloads = [];
+        const result = await buildOfflinePackages({ arch: 'x64', platform: 'linux', repoRoot: repo, outDir: out, imageArchive: fixtures.image }, {
+            run: makeRun(repo),
+            log: () => {},
+            download: async ({ url }) => { downloads.push(url); return fixtures.nodeTgz; },
+            fetchVmDisk: async () => { throw new Error('linux 包不应获取 VM 磁盘'); },
+            stagePodman: async () => { throw new Error('linux 包不应暂存 Podman'); }
+        });
+        expect(downloads).toHaveLength(1);
+        expect(downloads[0]).toContain('linux-x64');
+        expect(result.files.map(f => f.name).sort()).toEqual([
+            'SHA256SUMS-linux-x64',
+            'manyoyo-9.9.9-linux-x64-app.tar.gz',
+            'manyoyo-9.9.9-linux-x64.run',
+            'release-manifest-linux-x64.json'
+        ]);
+        const dir = extract(path.join(out, 'manyoyo-9.9.9-linux-x64.run'), path.join(root, 'x-linux'));
+        const files = walk(dir);
+        expect(files.some(f => f.startsWith('runtime/') || f.startsWith('vm/'))).toBe(false);
+        expect(files).toEqual(expect.arrayContaining(['install/install.sh', 'app/node/bin/node', 'images/manyoyo-9.9.9-common-x64.tar.gz']));
+        const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+        expect(manifest).toEqual(expect.objectContaining({ os: 'linux', arch: 'x64', kind: 'lite' }));
+        expect(manifest.components.podman).toBeUndefined();
+        const env = fs.readFileSync(path.join(dir, 'install/env.sh'), 'utf8');
+        expect(env).toContain("MANYOYO_OS='linux'");
+        expect(env).toContain("MANYOYO_KIND='lite'");
+        expect(env).toMatch(/MANYOYO_MIN_GLIBC='2\.\d+'/);
+        const appManifest = (() => {
+            const appDir = path.join(root, 'x-linux-app');
+            fs.mkdirSync(appDir);
+            tar('-xzf', path.join(out, 'manyoyo-9.9.9-linux-x64-app.tar.gz'), '-C', appDir);
+            return JSON.parse(fs.readFileSync(path.join(appDir, 'manifest.json'), 'utf8'));
+        })();
+        expect(appManifest).toEqual(expect.objectContaining({ os: 'linux', arch: 'x64', kind: 'app' }));
+        expect(resolveLock('arm64', 'linux').node.url).toContain('linux-arm64');
+        expect(resolveLock('arm64', 'linux').podman).toBeUndefined();
+        expect(() => resolveLock('arm64', 'windows')).toThrow(/不支持的平台/);
+    });
+
     test('splits an oversized .run into volumes that join back to a valid installer', async () => {
         const out = path.join(root, 'out');
         const result = await build('arm64', out, { volumeBytes: 2048 });
@@ -521,7 +564,7 @@ describe('scan allowlists and offline workflow', () => {
     const { validateAllowlist, scanTargets } = require('../scripts/scan-release-artifacts');
     const readJson = rel => JSON.parse(fs.readFileSync(path.join(__dirname, '..', rel), 'utf8'));
 
-    test.each(['scripts/offline/scan-allowlist.json', 'scripts/offline/scan-allowlist-image.json'])('%s is narrow, justified and compiles', rel => {
+    test.each(['scripts/offline/scan-allowlist.json', 'scripts/offline/scan-allowlist-linux.json', 'scripts/offline/scan-allowlist-image.json'])('%s is narrow, justified and compiles', rel => {
         const entries = readJson(rel);
         expect(() => validateAllowlist(entries)).not.toThrow();
         entries.forEach(entry => {
@@ -541,6 +584,41 @@ describe('scan allowlists and offline workflow', () => {
             'email:full/app/manyoyo/lib/own.js',
             'local-path:full/app/manyoyo/lib/own.js'
         ]);
+    });
+
+    test('the linux package allowlist is anchored to lite/, pins the local-path values, and never waves through manyoyo\'s own files', async () => {
+        const entries = readJson('scripts/offline/scan-allowlist-linux.json');
+        entries.forEach(entry => expect(entry.pathPattern).toMatch(/^\^lite\//));
+        entries.filter(entry => entry.rule === 'local-path').forEach(entry => expect(entry.valuePattern).toBeTruthy());
+
+        const tree = path.join(root, 'lite');
+        fs.mkdirSync(path.join(tree, 'app/node/bin'), { recursive: true });
+        fs.mkdirSync(path.join(tree, 'app/manyoyo/lib'), { recursive: true });
+        fs.writeFileSync(path.join(tree, 'app/node/bin/node'), 'built at /home/iojs/x and /home/alice/y');
+        fs.writeFileSync(path.join(tree, 'app/manyoyo/lib/own.js'), '// /home/iojs/work alice@example.com');
+        const result = await scanTargets([tree], { allowlist: entries });
+        expect(result.hits.map(h => `${h.rule}:${h.file}`).sort()).toEqual([
+            'email:lite/app/manyoyo/lib/own.js',
+            'local-path:lite/app/manyoyo/lib/own.js',
+            'local-path:lite/app/node/bin/node'
+        ]);
+        // 同样的内容放在别的根目录下不会被放行（路径锚定）
+        const other = path.join(root, 'other/app/node/bin');
+        fs.mkdirSync(other, { recursive: true });
+        fs.writeFileSync(path.join(other, 'node'), 'built at /home/iojs/x');
+        expect((await scanTargets([path.join(root, 'other')], { allowlist: entries })).hits).toHaveLength(1);
+    });
+
+    test('the image allowlist only waves through the known third-party PEM strings, not private keys elsewhere (e.g. /opt, /root/.local, own code)', async () => {
+        const layer = path.join(root, 'layer-pk');
+        fs.mkdirSync(path.join(layer, 'opt/app'), { recursive: true });
+        fs.mkdirSync(path.join(layer, 'usr/bin'), { recursive: true });
+        fs.writeFileSync(path.join(layer, 'opt/app/id_key'), '-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n');
+        fs.writeFileSync(path.join(layer, 'usr/bin/ssh'), 'strings: -----BEGIN OPENSSH PRIVATE KEY-----');
+        const tarPath = path.join(root, 'img-pk.tar');
+        tar('-cf', tarPath, '-C', layer, '.');
+        const result = await scanTargets([tarPath], { allowlist: readJson('scripts/offline/scan-allowlist-image.json') });
+        expect(result.hits.map(h => `${h.rule}:${h.file.split('!/').pop()}`)).toEqual(['private-key:opt/app/id_key']);
     });
 
     test('the image allowlist never covers the image config/history (outside the layer file trees)', async () => {
@@ -585,5 +663,21 @@ describe('scan allowlists and offline workflow', () => {
         // 产物名带前缀与版本号，zip 一眼能认
         expect(text).toContain('name: manyoyo-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}');
         expect(text).toContain('name: manyoyo-image-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}');
+    });
+    test('linux workflow: manual only, scans (linux allowlist + image allowlist) before uploading, explicit file list, no secrets, no Release, no Podman', () => {
+        const text = fs.readFileSync(path.join(__dirname, '../.github/workflows/offline-linux.yml'), 'utf8');
+        const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\nenv:'));
+        expect(onBlock).toContain('workflow_dispatch:');
+        expect(onBlock).not.toMatch(/^\s*(push|pull_request|schedule|release):/m);
+        expect(text).toContain('name: Build Linux Offline Packages');
+        expect(text.indexOf('scripts/scan-release-artifacts.js')).toBeLessThan(text.indexOf('actions/upload-artifact@v7', text.indexOf('name: Build package')));
+        expect(text).toContain('scan-allowlist-linux.json');
+        expect(text).toContain('scan-allowlist-image.json');
+        expect(text).toContain('--platform linux');
+        expect(text).toContain('steps.files.outputs.list');
+        expect(text).not.toMatch(/secrets\./);
+        expect(text).not.toMatch(/gh release|softprops|action-gh-release|npm publish|docker push|podman/);
+        expect(text).toContain('packages: read');
+        expect(text).toContain('name: manyoyo-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}');
     });
 });

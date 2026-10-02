@@ -19,6 +19,8 @@ describe('release-offline workflow', () => {
         expect(text).toContain("'^v[0-9]+\\.[0-9]+\\.[0-9]+$'");
         expect(text).toContain("'^[0-9]+$'");
         expect(text).toContain('Build Offline Packages');
+        expect(text).toContain('Build Linux Offline Packages');
+        expect(text).toContain('grep -qx "$WORKFLOW_NAME"');
         expect(text).toContain("grep -qx 'success'");
     });
 
@@ -28,9 +30,18 @@ describe('release-offline workflow', () => {
         expect(verify).toBeGreaterThan(-1);
         expect(upload).toBeGreaterThan(verify);
         expect(text).toContain('不属于版本');
-        expect(text).toContain('release-manifest-macos-');
+        expect(text).toContain('release-manifest-${OS_NAME}-');
+        expect(text).toContain('options:\n          - macos\n          - linux');
         expect(text).toContain('-app.tar.gz');
         expect(text).not.toMatch(/gh release upload "\$TAG" (assets\/)?\*/);
+    });
+
+    test('the platform decides workflow name, artifact pattern and file names; linux never overwrites the combined SHA256SUMS', () => {
+        expect(text).toContain('pattern: manyoyo-*-${{ inputs.os }}-*');
+        expect(text).toContain('"manyoyo-${VERSION}-${OS_NAME}-${arch}-app.tar.gz"');
+        expect(text).toContain('if [ "$OS_NAME" = macos ]; then');
+        expect(text).toContain('[ "$OS_NAME" = macos ] && FILES="$FILES SHA256SUMS"');
+        expect(text).toContain('os 只能是 macos 或 linux');
     });
 
     test('uses least privilege and no secrets other than the built-in token', () => {

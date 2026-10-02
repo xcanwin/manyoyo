@@ -4,7 +4,8 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 
 **动 `lib/web/` 或 `frontend-shadcn/` 之前，先读对应目录的 `AGENTS.md` 再看代码**——`lib/web/AGENTS.md`（Web 服务端：流式协议、终端 WebSocket、同步 IO 与保活的既有结论）、`frontend-shadcn/AGENTS.md`（默认 Web 前端：组件地图、移动端与样式规范）。这两份写的都是读代码看不出来、踩过才知道的约束，跳过它们等于把同一个坑再踩一遍。
 
-- 运行环境：Node.js >= 22，容器运行时支持 `podman` 或 `docker`。
+- 运行环境：Node.js >= 22，容器运行时支持 `podman` 或 `docker`。macOS 离线包（及 Linux 离线包）自带 Node.js，完整 macOS 包还自带私有 Podman。
+- 默认镜像是 `ghcr.io/xcanwin/manyoyo`（本地没有时自动拉取）；向导与快捷对话的默认工作目录是 `~/.manyoyo/work/`（7.x 遗留的 `workpath/` 仅在卸载时询问）。
 - CLI 入口：`manyoyo` 与 `my` 指向同一可执行文件 `bin/manyoyo.js`。
 - `serve` 网页模式采用全局认证网关；除登录路由外，所有页面与接口默认都需认证。
 
@@ -22,8 +23,10 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 
 - `bin/manyoyo.js`：CLI 入口与主流程编排（2200+ 行单文件）。
 - `lib/agent-adapters/`：`resolveYoloCommand` 单一数据源，CLI 与 Web 共用，新增 YOLO 智能体只需改这里。
-- `lib/uninstall.js` / `proxy-config.js` / `offline-import.js`：`manyoyo uninstall`（精确移除带标记的 PATH 块、停服务与私有 machine、用户数据逐项询问）、安装时把用户的代理设置抄进私有 Podman 的 `containers.conf`、离线包后台导入镜像时的状态标记（serve/CLI 据此等待而不是去仓库拉）。安装脚本在 `scripts/offline/install.sh`（POSIX sh，只用 macOS 自带命令，测试见 `test/installer.test.js`）。
-- `lib/app-update.js` / `update-check.js` / `download-verified.js`：离线包安装的增量升级（查最新 Release → 只下 `-app.tar.gz` 并校验 → `app/<版本>/` + 原子切换 `current` + 保留上一版本 + `update --rollback`，npm 安装不经过这里）、serve 每天最多一次的新版本检查（`updateCheck` 可关，请求不带本机信息，结果走 `GET /api/system/update`）、带 SHA256 校验的下载。升级包命名约定：`manyoyo-<ver>-macos-<arch>-app.tar.gz`、`SHA256SUMS-macos-<arch>`、`release-manifest-macos-<arch>.json`，必须上传到 GitHub Release。
+- `lib/uninstall.js` / `proxy-config.js` / `offline-import.js`：`manyoyo uninstall`（精确移除带标记的 PATH 块、停服务与私有 machine、用户数据逐项询问）、安装时把用户的代理设置抄进私有 Podman 的 `containers.conf`、离线包后台导入镜像时的状态标记（serve/CLI 据此等待而不是去仓库拉）。安装脚本在 `scripts/offline/install.sh`（POSIX sh，只用 macOS / Linux 自带命令，不执行 sudo；Linux 包 `MANYOYO_OS=linux`：不带 Podman，检测系统 docker/podman，缺失时给 apt 指引，测试见 `test/installer.test.js`）。Linux 包由 `offline-linux.yml` 构建（`build.js --platform linux`，内部 kind 为 lite，扫描用 `scan-allowlist-linux.json`）。
+- `lib/app-update.js` / `update-check.js` / `download-verified.js`：离线包安装的增量升级（查最新 Release → 只下 `-app.tar.gz` 并校验 → `app/<版本>/` + 原子切换 `current` + 保留上一版本 + `update --rollback`，npm 安装不经过这里）、serve 每天最多一次的新版本检查（`updateCheck` 可关，请求不带本机信息，结果走 `GET /api/system/update`）、带 SHA256 校验的下载。升级包命名约定：`manyoyo-<ver>-<os>-<arch>-app.tar.gz`、`SHA256SUMS-<os>-<arch>`、`release-manifest-<os>-<arch>.json`（`os` 为 `macos` 或 `linux`，包内 manifest 的 `os` 字段会被校验），必须上传到 GitHub Release（`release-offline.yml` 的 `os` 输入分平台上传）。
+- `lib/headless.js` / `setup-cli.js` / `setup-config.js`：有头/无头判定（安装器与无参 `manyoyo` 共用，`--headless`/`--gui`/`MANYOYO_HEADLESS`）、无头环境的命令行配置向导 `manyoyo setup`（输入不回显、非 TTY 不挂起）、向导写配置的文本构造（与 `/api/setup/*` 同源，写入走 `lib/secure-file.js`）。
+- `lib/podman-passthrough.js`：`manyoyo podman <参数>` 透传私有 Podman、`manyoyo podman env` 输出只在当前终端定义 `podman` 函数的 shell 代码。
 - `lib/container-runtime.js` / `runtime-heal.js` / `error-hints.js`：容器运行时选择（配置 > 私有 Podman > daemon 可用的 docker/podman，返回 `{command, env, source}`，`env` 只传给运行时子进程）、daemon 不可用时的自愈（`podman machine start` / macOS `open -a Docker`）、原始错误到“原因 + 下一步”的映射。
 - `lib/mirrors.js`：全局配置 `mirrors`（apt/npm/pip 软件源）在容器层生效——npm/pip 走环境变量，apt 在创建后以固定脚本改写（地址只经 env 传入）；预设源在 `lib/setup.js` 的 `MIRROR_PRESETS`，镜像本身不变。
 - `lib/container-run.js` / `container-modes.js` / `image-build.js`：容器运行参数构造、common/dind/sock 模式解析、镜像构建与缓存。
@@ -162,6 +165,14 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 使用 `serve 0.0.0.0:<port>` 对外监听时必须设置强密码，并通过防火墙限制访问来源。
 - 新增容器模式或挂载选项时不放宽安全校验；`sock` 模式需明确安全风险提示（可访问宿主机 Docker socket）。
 - 调整容器内 Playwright CLI 浏览器安装链路时，必须保证 `playwright-cli install-browser` 安装到全局 `@playwright/cli` 自带的 Playwright，而不是仓库本地 `node_modules/playwright`。
+
+## 离线包与安装器的踩坑（读代码看不出来）
+
+- 安装脚本（`scripts/offline/install.sh`、`finish-import.sh`、`.run` 头）在 macOS 上由 bash 3.2 当 sh 执行：**变量名后紧跟中文/全角字符必须写 `${VAR}`**（否则 `set -u` 下直接崩溃，Linux 的 dash 复现不了），`test/installer.test.js` 有防回归。发布前必须在真实 macOS 新用户下跑一遍，容器里的测试覆盖不到。
+- 清理镜像不要用 `rmi --force`：Podman 会连带删除正在使用该镜像的容器。安装器遇到已存在的私有 machine 不 `rm` 也不 `init`；`update` / `build` / 安装 / 卸载（`--yes`）都不得删除用户的旧容器。
+- 发布产物（npm 包、离线包、镜像）只在 CI 构建并经 `scripts/scan-release-artifacts.js` 扫描：解不开/解包不完整的文件按“未扫描”失败，`--exclude` 必须 `^` 锚定，允许列表按具体文件放行（镜像里曾扫出 SSH 主机私钥）。
+- 含凭据的配置写入统一走 `lib/secure-file.js`（0600、临时文件 + rename）；`manyoyo.json` 的任何新写入点都不要直接 `writeFileSync`。
+- 改了代码就要重新触发 `offline-macos.yml` / `offline-linux.yml` 并在干净用户下重测；镜像（`ghcr.io/xcanwin/manyoyo:<imageVersion>`）只有 Dockerfile 或 `docker/` 变化才需要重发，且要先于离线包。
 
 ## 版本对齐
 

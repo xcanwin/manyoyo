@@ -1,0 +1,24 @@
+[
+    {
+        "rule": "local-path",
+        "pathPattern": "^lite/app/node/bin/node$",
+        "valuePattern": "^/home/iojs$",
+        "reason": "Node.js 官方 Linux 二进制内嵌的上游构建账号路径（nodejs.org 构建环境的 iojs 用户），与本项目构建机无关"
+    },
+    {
+        "rule": "email",
+        "pathPattern": "^lite/app/node/(bin/node|LICENSE)$",
+        "reason": "Node.js 官方二进制与 LICENSE 里的第三方依赖作者邮箱"
+    },
+    {
+        "rule": "local-path",
+        "pathPattern": "^lite/app/manyoyo/node_modules/",
+        "valuePattern": "^/home/(playwright|pwuser)$",
+        "reason": "Playwright 官方 npm 包类型定义/打包代码里的示例路径（Docker 镜像用户名 playwright / pwuser）"
+    },
+    {
+        "rule": "email",
+        "pathPattern": "^lite/app/manyoyo/node_modules/",
+        "reason": "第三方 npm 包 package.json / 许可证里的作者邮箱（manyoyo 自身代码在 app/manyoyo/lib 与 bin，不在此树，仍受扫描）"
+    }
+]

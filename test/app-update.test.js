@@ -20,14 +20,14 @@ let server;
 let base;
 let state;
 
-function buildAppTarball(version, { arch = ARCH, kind = 'app', skip = [] } = {}) {
+function buildAppTarball(version, { arch = ARCH, kind = 'app', skip = [], osName } = {}) {
     const dir = path.join(root, `pkg-${version}-${kind}`);
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(path.join(dir, 'node/bin'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'manyoyo/bin'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'node/bin/node'), 'node');
     fs.writeFileSync(path.join(dir, 'manyoyo/bin/manyoyo.js'), `// ${version}`);
-    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ version, kind, arch, imageVersion: `${version}-common` }));
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ version, kind, arch, imageVersion: `${version}-common`, ...(osName ? { os: osName } : {}) }));
     skip.forEach(rel => fs.rmSync(path.join(dir, rel), { recursive: true, force: true }));
     const tgz = path.join(root, `pkg-${version}-${kind}.tar.gz`);
     const r = spawnSync('tar', ['-czf', tgz, '-C', dir, ...fs.readdirSync(dir)]);
@@ -61,9 +61,9 @@ function startServer(handlerOverrides = {}) {
     }));
 }
 
-function publish(version, { tamperSums = false, tarball, extraAssets = {}, arch = ARCH } = {}) {
-    const names = appUpdate.releaseAssetNames(version, arch);
-    const data = tarball || buildAppTarball(version, { arch });
+function publish(version, { tamperSums = false, tarball, extraAssets = {}, arch = ARCH, osName } = {}) {
+    const names = appUpdate.releaseAssetNames(version, arch, osName || 'macos');
+    const data = tarball || buildAppTarball(version, { arch, osName });
     state.files[names.app] = data;
     state.files[names.sums] = `${tamperSums ? 'f'.repeat(64) : sha(data)}  ${names.app}\n`;
     const assets = [names.app, names.sums, ...Object.keys(extraAssets)].map(name => ({ name, browser_download_url: `${base}/dl/${encodeURIComponent(name)}` }));
@@ -188,6 +188,44 @@ describe('installAppUpdate / rollbackApp', () => {
         const downloaded = state.hits.map(h => decodeURIComponent(h.url)).filter(u => u.startsWith('/dl/')).map(u => u.slice(4)).sort();
         expect(downloaded).toEqual([`SHA256SUMS-macos-${ARCH}`, `manyoyo-9.0.0-macos-${ARCH}-app.tar.gz`].sort());
         expect(fs.readdirSync(appRoot).filter(n => n.startsWith('.tmp-') || n.startsWith('.current.'))).toEqual([]);
+    });
+
+    test('linux: looks for the linux-named assets only and accepts a linux manifest', async () => {
+        expect(appUpdate.releaseAssetNames('9.0.0', 'x64', 'linux')).toEqual({
+            app: 'manyoyo-9.0.0-linux-x64-app.tar.gz',
+            sums: 'SHA256SUMS-linux-x64',
+            manifest: 'release-manifest-linux-x64.json'
+        });
+        expect(appUpdate.releaseAssetNames('9.0.0', 'arm64').app).toBe('manyoyo-9.0.0-macos-arm64-app.tar.gz'); // 默认仍是 macOS
+        expect(appUpdate.platformOs()).toBe(process.platform === 'linux' ? 'linux' : 'macos');
+
+        seedInstalled('1.0.0');
+        await startServer();
+        publish('9.0.0', { osName: 'linux' });
+        const release = await fetchLatestRelease({ apiBase: base });
+        const result = await installAppUpdate({ appRoot, release, fetchImpl: fetch, tmpRoot: root, targetOs: 'linux' });
+        expect(result.version).toBe('9.0.0');
+        const downloaded = state.hits.map(h => decodeURIComponent(h.url)).filter(u => u.startsWith('/dl/')).map(u => u.slice(4)).sort();
+        expect(downloaded).toEqual([`SHA256SUMS-linux-${ARCH}`, `manyoyo-9.0.0-linux-${ARCH}-app.tar.gz`].sort());
+    });
+
+    test('a release that only has macOS assets gives a clear error on linux, and a mismatching manifest os is refused', async () => {
+        seedInstalled('1.0.0');
+        await startServer();
+        publish('9.0.0'); // 只有 macos 资产
+        const release = await fetchLatestRelease({ apiBase: base });
+        await expect(installAppUpdate({ appRoot, release, fetchImpl: fetch, tmpRoot: root, targetOs: 'linux' }))
+            .rejects.toMatchObject({ code: 'NO_ASSET', message: expect.stringContaining(`linux-${ARCH}`) });
+
+        // 资产名是 linux，但包里的 manifest 声明是 macos：拒绝
+        const names = appUpdate.releaseAssetNames('9.0.1', ARCH, 'linux');
+        const wrong = buildAppTarball('9.0.1', { osName: 'macos' });
+        state.files[names.app] = wrong;
+        state.files[names.sums] = `${sha(wrong)}  ${names.app}\n`;
+        state.release = { tag_name: 'v9.0.1', assets: [names.app, names.sums].map(name => ({ name, browser_download_url: `${base}/dl/${encodeURIComponent(name)}` })) };
+        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root, targetOs: 'linux' }))
+            .rejects.toMatchObject({ code: 'BAD_PACKAGE' });
+        expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe('1.0.0');
     });
 
     test('only the current and the previous version are kept; older ones and stale temp dirs are cleaned', async () => {

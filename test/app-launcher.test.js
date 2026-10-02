@@ -50,6 +50,22 @@ describe('app launcher', () => {
         expect(logs.join('\n')).toContain('关闭服务: manyoyo serve 127.0.0.1:45678 --stop');
     });
 
+    test('headless: starts serve but never issues a token or opens a browser; prints ssh -L, stop command and password guidance', async () => {
+        const deps = baseDeps({ headless: true, issueToken: jest.fn(() => 't'.repeat(64)) });
+        const result = await launchApp(deps);
+
+        expect(deps.spawnServe).toHaveBeenCalledWith(45678);
+        expect(deps.issueToken).not.toHaveBeenCalled();
+        expect(deps.open).not.toHaveBeenCalled();
+        expect(result).toEqual(expect.objectContaining({ reused: false, opened: false, headless: true, baseUrl: 'http://127.0.0.1:45678' }));
+        const out = logs.join('\n');
+        expect(out).toContain('http://127.0.0.1:45678');
+        expect(out).toContain('ssh -L 45678:127.0.0.1:45678');
+        expect(out).toContain('关闭服务: manyoyo serve 127.0.0.1:45678 --stop');
+        expect(out).toContain('manyoyo setup');
+        expect(out).not.toContain('token=');
+    });
+
     test('reuses a live instance without spawning', async () => {
         fs.mkdirSync(path.dirname(statePath), { recursive: true });
         fs.writeFileSync(statePath, JSON.stringify({ host: '127.0.0.1', port: 3111, pid: 99 }));

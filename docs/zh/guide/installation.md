@@ -9,7 +9,7 @@ description: MANYOYO 安装指南，涵盖 Node.js 与 Docker/Podman 前置条�
 
 ## 推荐：离线安装包（macOS）
 
-macOS 用户优先使用[离线安装包](./quick-start.md)：自带 Node.js、容器运行环境与镜像，无需管理员密码。下面的 npm / 包管理器 / 源码方式适用于 Linux、Windows(WSL)，以及已经装好 Node.js 与 Docker / Podman 的用户。
+macOS 与 Linux（Debian / Ubuntu）用户优先使用[离线安装包](./quick-start.md)：macOS 完整包自带 Node.js、容器运行环境与镜像，Linux 包自带 Node.js 与镜像、使用你系统里的 Podman / Docker，都无需管理员密码（安装器不执行 `sudo`）。下面的 npm / 包管理器 / 源码方式适用于 Windows(WSL)，以及已经装好 Node.js 与 Docker / Podman、想自己管理版本的用户。
 
 ## 系统要求
 

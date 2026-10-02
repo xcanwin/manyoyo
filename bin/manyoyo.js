@@ -17,6 +17,9 @@ const { describeError } = require('../lib/error-hints');
 const { ensureRuntimeReady, runCommandAsync } = require('../lib/runtime-heal');
 const { ensureImagePresent, pullImageProcess } = require('../lib/image-pull');
 const { readImportState, waitForImport } = require('../lib/offline-import');
+const { runPodmanCommand } = require('../lib/podman-passthrough');
+const { detectHeadless, parseLauncherArgs } = require('../lib/headless');
+const { runSetupCli, createPrompter } = require('../lib/setup-cli');
 const { pruneDanglingImages: pruneDanglingImagesSafely } = require('../lib/image-prune');
 const { runUninstall, readPid, defaultIsManyoyoServe, defaultKill } = require('../lib/uninstall');
 const appUpdate = require('../lib/app-update');
@@ -865,10 +868,10 @@ function installManyoyo(name) {
 }
 
 // 升级后让旧版本的后台服务退出（pid 必须确实是 manyoyo serve），下次执行 manyoyo 就会启动新版本
-function stopBackgroundApp() {
+function stopBackgroundApp({ quiet = false } = {}) {
     const pid = readPid(path.join(os.homedir(), '.manyoyo', 'serve', 'app.json'));
     if (pid && pid !== process.pid && defaultIsManyoyoServe(pid) && defaultKill(pid)) {
-        console.log(`${GREEN}✅ 已停止旧版本的后台服务 (pid ${pid})，下次执行 ${MANYOYO_NAME} 会启动新版本。${NC}`);
+        if (!quiet) console.log(`${GREEN}✅ 已停止旧版本的后台服务 (pid ${pid})，下次执行 ${MANYOYO_NAME} 会启动新版本。${NC}`);
     }
 }
 
@@ -911,12 +914,12 @@ async function updateOfflineInstall(mode, options, globalConfig) {
         return;
     }
     console.log(`${CYAN}⬇️  发现新版本 ${release.version}，只下载 manyoyo 本体（数十 MB）${NC}`);
-    const result = await appUpdate.installAppUpdate({ appRoot, release, log: line => console.log(`   ${line}`) });
+    const result = await appUpdate.installAppUpdate({ appRoot, release, targetOs: appUpdate.platformOs(), log: line => console.log(`   ${line}`) });
     console.log(`${GREEN}✅ 更新完成: ${installed} → ${result.version}（上一版本 ${result.previous || '无'} 已保留，可用 ${MANYOYO_NAME} update --rollback 回滚）${NC}`);
 
     // Podman / VM 磁盘有变化只提示（需要新的完整包）
     try {
-        const names = appUpdate.releaseAssetNames(release.version, appUpdate.arch());
+        const names = appUpdate.releaseAssetNames(release.version, appUpdate.arch(), appUpdate.platformOs());
         if (release.assets[names.manifest]) {
             const remote = JSON.parse(await appUpdate.fetchText(fetch, release.assets[names.manifest]));
             const hint = appUpdate.describeRuntimeChange(appUpdate.readInstalledRecord(os.homedir()), remote);
@@ -1460,6 +1463,17 @@ Notes:
         .option('--rollback', '离线包安装：切回上一版本')
         .action(options => selectAction('update', { update: true, rollback: Boolean(options.rollback) }));
 
+    program.command('podman [args...]')
+        .description('用 MANYOYO 的私有 Podman 执行命令（参数原样传给 podman）；eval "$(manyoyo podman env)" 可在当前终端定义 podman 函数')
+        .helpOption(false)
+        .allowUnknownOption()
+        .passThroughOptions()
+        .action(args => selectAction('podman', { podmanArgs: args || [] }));
+
+    program.command('setup')
+        .description('命令行配置向导（无头环境：SSH、没有图形界面）：选 Agent、填 Key、设登录密码，可选软件源')
+        .action(() => selectAction('setup', {}));
+
     program.command('install <name>')
         .description(`安装 ${MANYOYO_NAME} 命令 (docker-cli-plugin)`)
         .action(name => selectAction('install', { install: name }));
@@ -1476,9 +1490,10 @@ Notes:
     // Docker CLI plugin mode - remove first arg if running as plugin
     normalizeDockerPluginArgv(process.argv);
 
-    // No args: start (or reuse) the local web app and open the browser, already logged in
-    if (process.argv.length <= 2) {
-        await runAppLauncher();
+    // No args (or only --headless / --gui): start (or reuse) the local web app; open the browser already logged in unless headless
+    const launcherArgs = parseLauncherArgs(process.argv.slice(2));
+    if (launcherArgs) {
+        await runAppLauncher({ force: launcherArgs.force });
     }
 
     // Pre-handle -x/--shell-full: treat all following args as a single command
@@ -1513,7 +1528,7 @@ Notes:
 
     UPDATE_CHECK_ENABLED = config.updateCheck !== false;
     MIRRORS = normalizeMirrors(config.mirrors);
-    const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin', 'doctor', 'uninstall']);
+    const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin', 'doctor', 'uninstall', 'podman', 'setup']);
     if (isServerStopMode) {
         noDockerActions.add('serve');
     }
@@ -1524,6 +1539,29 @@ Notes:
     if (options.update) {
         await updateManyoyo(options, config);
         process.exit(0);
+    }
+
+    if (selectedAction === 'setup') {
+        const interactive = Boolean(process.stdin.isTTY);
+        const code = await runSetupCli({
+            isTTY: interactive,
+            prompter: interactive ? createPrompter() : null,
+            configPath: getManyoyoConfigPath(),
+            defaultWorkpath: path.join(os.homedir(), '.manyoyo', 'work'),
+            validateHostPath: value => validateHostPathOrThrow(value),
+            commandName: MANYOYO_NAME,
+            log: line => console.log(line),
+            // 新密码要让后台服务重新读配置：先停掉旧的，再按当前环境（有头 / 无头）启动
+            afterSave: async () => {
+                stopBackgroundApp({ quiet: true });
+                await runAppLauncher({ exit: false });
+            }
+        });
+        process.exit(code);
+    }
+
+    if (selectedAction === 'podman') {
+        process.exit(runPodmanCommand(options.podmanArgs, { commandName: MANYOYO_NAME }));
     }
 
     if (selectedAction === 'uninstall') {
@@ -2344,9 +2382,12 @@ async function handlePostExit(runtime, defaultCommand) {
     }
 }
 
-async function runAppLauncher() {
+async function runAppLauncher({ force = null, exit = true } = {}) {
     try {
+        const { headless } = detectHeadless({ force });
         await launchApp({
+            headless,
+            authUser: String(readManyoyoConfig().config.serverUser || '').trim() || 'admin',
             statePath: getAppStatePath(),
             isProcessRunning,
             spawnServe: port => {
@@ -2366,8 +2407,10 @@ async function runAppLauncher() {
         });
     } catch (e) {
         console.error(`${RED}${e.message}${NC}`);
+        if (!exit) return false;
         process.exit(1);
     }
+    if (!exit) return true;
     process.exit(0);
 }
 

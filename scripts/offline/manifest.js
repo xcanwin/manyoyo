@@ -26,12 +26,13 @@ async function inventoryDir(rootDir, { exclude = [] } = {}) {
     return items;
 }
 
-function buildManifest({ version, imageVersion, arch, kind, components, files, builtAt }) {
+function buildManifest({ version, imageVersion, arch, kind, components, files, builtAt, platform = 'macos' }) {
     const manifest = {
         schemaVersion: 1,
         name: 'manyoyo',
         version,
         imageVersion,
+        os: platform,
         arch,
         kind,
         components,

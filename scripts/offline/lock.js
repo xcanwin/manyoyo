@@ -21,6 +21,17 @@ const LOCK = {
             }
         }
     },
+    // Linux 包的 Node（同一份 SHASUMS256.txt；glibc 版官方二进制，x64 / arm64）
+    nodeLinux: {
+        arm64: {
+            file: `node-v${NODE_VERSION}-linux-arm64.tar.gz`,
+            sha256: '724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5'
+        },
+        x64: {
+            file: `node-v${NODE_VERSION}-linux-x64.tar.gz`,
+            sha256: '6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff'
+        }
+    },
     // Apple Silicon 用 6.x；Intel 只有 5.8.x 仍提供 amd64 安装包（方案决策）
     podman: {
         arm64: {
@@ -43,15 +54,22 @@ const LOCK = {
 
 const ARCHES = Object.keys(LOCK.node.arch);
 
-function resolveLock(arch) {
+const PLATFORMS = ['macos', 'linux'];
+
+// Linux 包不带 Podman 与虚拟机磁盘（用系统的 podman / docker），所以没有 podman 条目
+function resolveLock(arch, platform = 'macos') {
     if (!ARCHES.includes(arch)) {
         throw new Error(`不支持的架构: ${arch}（可选 ${ARCHES.join(' / ')}）`);
     }
-    const node = LOCK.node.arch[arch];
-    return {
-        node: { version: LOCK.node.version, file: node.file, url: `${LOCK.node.baseUrl}/${node.file}`, sha256: node.sha256 },
-        podman: { ...LOCK.podman[arch] }
+    if (!PLATFORMS.includes(platform)) {
+        throw new Error(`不支持的平台: ${platform}（可选 ${PLATFORMS.join(' / ')}）`);
+    }
+    const node = platform === 'linux' ? LOCK.nodeLinux[arch] : LOCK.node.arch[arch];
+    const result = {
+        node: { version: LOCK.node.version, file: node.file, url: `${LOCK.node.baseUrl}/${node.file}`, sha256: node.sha256 }
     };
+    if (platform === 'macos') result.podman = { ...LOCK.podman[arch] };
+    return result;
 }
 
-module.exports = { LOCK, ARCHES, resolveLock };
+module.exports = { LOCK, ARCHES, PLATFORMS, resolveLock };

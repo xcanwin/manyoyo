@@ -1,10 +1,11 @@
 #!/bin/sh
-# MANYOYO 离线安装器（POSIX sh，只用 macOS 自带命令；不联网、不用 brew/git/python3）。
-# 由 .run 头部解开负载后调用：sh install/install.sh [--no-open]
+# MANYOYO 离线安装器（POSIX sh，只用 macOS / Linux 自带命令；不联网、不用 brew/git/python3，不执行 sudo）。
+# 由 .run 头部解开负载后调用：sh install/install.sh [--no-open] [--headless|--gui]
+# Linux 包（MANYOYO_OS=linux）不带 Podman：使用系统里已有的 podman / docker。
 # 幂等：每一步先检测，已完成就跳过；中途失败直接重跑即可续上。日志：~/.manyoyo/logs/install/
 #
 # 测试钩子（仅用于测试，发布包默认不设置）：
-#   MANYOYO_TEST_HOME / _UNAME_S / _UNAME_M / _MACOS_VERSION / _FREE_MB / _SHELL
+#   MANYOYO_TEST_HOME / _UNAME_S / _UNAME_M / _MACOS_VERSION / _GLIBC / _FREE_MB / _SHELL
 #   MANYOYO_TEST_SKIP_MACHINE=1  跳过 podman machine 步骤
 #   MANYOYO_TEST_SKIP_OPEN=1     安装后不启动 manyoyo / 不打开浏览器
 set -eu
@@ -14,10 +15,13 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 . "$here/install/env.sh"
 
 OPEN_AFTER=1
+LAUNCH_FLAGS=""
 for arg in "$@"; do
     case "$arg" in
         --no-open) OPEN_AFTER=0 ;;
-        -h|--help) echo "用法: sh manyoyo-*.run [--no-open]"; exit 0 ;;
+        # 有头 / 无头由 manyoyo 无参启动器判定；这两个参数只是强制覆盖
+        --headless|--gui) LAUNCH_FLAGS="$arg" ;;
+        -h|--help) echo "用法: sh manyoyo-*.run [--no-open] [--headless|--gui]"; exit 0 ;;
         *) echo "未知参数: $arg" >&2; exit 2 ;;
     esac
 done
@@ -58,7 +62,7 @@ sha256_of() {
 # macOS 没有 timeout 命令：后台跑 + 看门狗
 with_timeout() {
     secs="$1"; shift
-    "$@" >/dev/null 2>&1 &
+    "$@" >"${WT_OUT:-/dev/null}" 2>&1 &
     cmd_pid=$!
     ( sleep "$secs"; kill "$cmd_pid" 2>/dev/null ) >/dev/null 2>&1 &
     watcher=$!
@@ -73,8 +77,12 @@ with_timeout() {
 # 1. 环境检查
 # ---------------------------------------------------------------------------
 check_platform() {
+    if [ "${MANYOYO_OS:-macos}" = linux ]; then
+        check_platform_linux
+        return 0
+    fi
     step_os="${MANYOYO_TEST_UNAME_S:-$(uname -s)}"
-    [ "$step_os" = Darwin ] || fail "这个安装包只支持 macOS（当前系统：${step_os}）。" "请在 Mac 上运行；Linux / Windows 暂不支持。"
+    [ "$step_os" = Darwin ] || fail "这个安装包只支持 macOS（当前系统：${step_os}）。" "请在 Mac 上运行；Linux 请下载 linux 版安装包，Windows 暂不支持。"
 
     raw_arch="${MANYOYO_TEST_UNAME_M:-$(uname -m)}"
     case "$raw_arch" in
@@ -88,8 +96,74 @@ check_platform() {
     mac_major="${mac_version%%.*}"
     [ "$mac_major" -ge "$MANYOYO_MIN_MACOS" ] 2>/dev/null || fail "macOS 版本过低：${mac_version}，需要 $MANYOYO_MIN_MACOS 或更高。" "请先升级 macOS，或改用文档里的其它安装方式。"
 
+    check_free_space
+}
+
+check_free_space() {
     free_mb="${MANYOYO_TEST_FREE_MB:-$(df -k "$HOME_DIR" | awk 'NR==2 { print int($4 / 1024) }')}"
     [ "$free_mb" -ge "$MANYOYO_MIN_FREE_MB" ] 2>/dev/null || fail "磁盘空间不足：可用约 ${free_mb}MB，至少需要 ${MANYOYO_MIN_FREE_MB}MB。" "清理磁盘后重新运行安装包。"
+}
+
+# a.b 形式的版本比较：$1 >= $2 返回 0
+version_at_least() {
+    awk -v a="$1" -v b="$2" 'BEGIN { split(a, x, "."); split(b, y, "."); if (x[1] + 0 != y[1] + 0) exit !(x[1] + 0 > y[1] + 0); exit !(x[2] + 0 >= y[2] + 0) }'
+}
+
+check_platform_linux() {
+    step_os="${MANYOYO_TEST_UNAME_S:-$(uname -s)}"
+    [ "$step_os" = Linux ] || fail "这个安装包只支持 Linux（当前系统：${step_os}）。" "macOS 请下载 macos 版安装包，Windows 暂不支持。"
+
+    raw_arch="${MANYOYO_TEST_UNAME_M:-$(uname -m)}"
+    case "$raw_arch" in
+        x86_64|amd64) cur_arch=x64 ;;
+        aarch64|arm64) cur_arch=arm64 ;;
+        *) fail "不认识的 CPU 架构：${raw_arch}。" "请使用 x86_64（x64）或 aarch64（arm64）的 Linux。" ;;
+    esac
+    [ "$cur_arch" = "$MANYOYO_ARCH" ] || fail "安装包是 $MANYOYO_ARCH 版，但当前机器是 ${cur_arch}。" "请下载 $cur_arch 对应的安装包（uname -m 为 x86_64 选 x64，aarch64 选 arm64）。"
+
+    glibc_raw="${MANYOYO_TEST_GLIBC:-$(getconf GNU_LIBC_VERSION 2>/dev/null || true)}"
+    glibc_version="$(printf '%s' "$glibc_raw" | awk '{ print $NF }')"
+    [ -n "$glibc_version" ] || fail "没有检测到 glibc（可能是 Alpine 等 musl 系统）。" "请在 Debian 12 / Ubuntu 22.04 或更高版本的发行版上安装。"
+    version_at_least "$glibc_version" "$MANYOYO_MIN_GLIBC" || fail "系统 glibc 版本过低：${glibc_version}，需要 $MANYOYO_MIN_GLIBC 或更高（Ubuntu 22.04 / Debian 12 起）。" "请升级发行版，或改用文档里的其它安装方式。"
+
+    check_free_space
+}
+
+# Linux 没有可用的 podman / docker：给出“原因 + 下一步”，不替用户执行 sudo
+explain_no_runtime_linux() {
+    me="${USER:-$(id -un 2>/dev/null || echo user)}"
+    tmp_out="$STATE/runtime-probe.txt"
+    found=""
+    for candidate in docker podman; do
+        command -v "$candidate" >/dev/null 2>&1 || continue
+        found="$candidate"
+        WT_OUT="$tmp_out" with_timeout 5 "$candidate" info || true
+        probe="$(cat "$tmp_out" 2>/dev/null || true)"
+        rm -f "$tmp_out"
+        case "$candidate" in
+            docker)
+                if printf '%s' "$probe" | grep -qi 'permission denied'; then
+                    log "• 检测到 docker，但当前用户（${me}）没有权限访问它。"
+                    log "  可以执行：sudo usermod -aG docker ${me}，然后重新登录；或改用 rootless podman（sudo apt install podman）。"
+                else
+                    log "• 检测到 docker，但 daemon 没有响应。"
+                    log "  可以执行：sudo systemctl start docker。"
+                fi ;;
+            podman)
+                if printf '%s' "$probe" | grep -qiE 'subuid|subgid|newuidmap|newgidmap|cannot find (uid|gid)'; then
+                    log "• 检测到 podman，但 rootless 所需的用户映射没有配置好。"
+                    log "  可以执行：sudo apt install uidmap && sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 ${me}，然后 podman system migrate，并重新登录。"
+                else
+                    log "• 检测到 podman，但 podman info 失败：$(printf '%s' "$probe" | head -n 1)"
+                    log "  请先在终端里确认 podman info 能正常输出。"
+                fi ;;
+        esac
+    done
+    if [ -z "$found" ]; then
+        log "• 没有检测到 docker 或 podman。Linux 版安装包不自带容器运行环境，请先安装其中一个。"
+        log "  Debian / Ubuntu：sudo apt update && sudo apt install -y podman（安装器不会替你执行 sudo）；也可以按 Docker 官方文档安装 docker。"
+    fi
+    fail "没有可用的容器运行环境（docker 或 podman）。" "按上面的提示装好并确认 docker info / podman info 能正常输出，然后重新运行本安装包即可续上。"
 }
 
 # daemon 可用的 docker / podman（沿用 T02 的“daemon 可用优先”规则，这里只做最小判断，其余交给 manyoyo）
@@ -199,7 +273,9 @@ add_path_block() {
 }
 
 setup_path() {
-    user_shell="$(basename "${MANYOYO_TEST_SHELL:-${SHELL:-/bin/zsh}}")"
+    default_shell=/bin/zsh
+    [ "${MANYOYO_OS:-macos}" = linux ] && default_shell=/bin/bash
+    user_shell="$(basename "${MANYOYO_TEST_SHELL:-${SHELL:-$default_shell}}")"
     case "$user_shell" in
         zsh) add_path_block "$HOME_DIR/.zprofile"; add_path_block "$HOME_DIR/.zshrc" ;;
         bash)
@@ -300,7 +376,11 @@ write_installed_record() {
 # main
 # ---------------------------------------------------------------------------
 main() {
-    log "MANYOYO $MANYOYO_VERSION 离线安装（$MANYOYO_KIND / ${MANYOYO_ARCH}）"
+    if [ "${MANYOYO_OS:-macos}" = linux ]; then
+        log "MANYOYO $MANYOYO_VERSION 离线安装（linux / ${MANYOYO_ARCH}）"
+    else
+        log "MANYOYO $MANYOYO_VERSION 离线安装（$MANYOYO_KIND / ${MANYOYO_ARCH}）"
+    fi
     check_platform
 
     MODE=private
@@ -315,6 +395,8 @@ main() {
     else
         if EXTERNAL_CMD="$(detect_external_runtime)"; then
             MODE=external
+        elif [ "${MANYOYO_OS:-macos}" = linux ]; then
+            explain_no_runtime_linux
         else
             fail "精简包需要已经在运行的 Docker 或 Podman，但没有检测到。" "先启动 Docker Desktop / OrbStack / Podman machine 后重试，或改用包含 Podman 的完整包。"
         fi
@@ -348,7 +430,8 @@ main() {
     log "  安装包（.run 文件）现在可以删除。"
 
     if [ "$OPEN_AFTER" = 1 ]; then
-        "$ROOT/bin/manyoyo" || log "• 自动打开失败，请新开终端后输入 manyoyo"
+        # shellcheck disable=SC2086
+        "$ROOT/bin/manyoyo" $LAUNCH_FLAGS || log "• 自动打开失败，请新开终端后输入 manyoyo"
     fi
 }
 

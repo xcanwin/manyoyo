@@ -59,7 +59,7 @@ exit 0
 `);
 }
 
-function writePayload(dir, { kind = 'full', arch = 'arm64', version = '9.9.9', manifestExtra = '' } = {}) {
+function writePayload(dir, { kind = 'full', arch = 'arm64', version = '9.9.9', manifestExtra = '', platform = 'macos' } = {}) {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(path.join(dir, 'install'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'app/node/bin'), { recursive: true });
@@ -86,7 +86,7 @@ function writePayload(dir, { kind = 'full', arch = 'arm64', version = '9.9.9', m
         fs.mkdirSync(path.join(dir, 'vm'), { recursive: true });
         fs.writeFileSync(path.join(dir, 'vm/disk.raw.zst'), 'disk');
     }
-    fs.writeFileSync(path.join(dir, 'install/env.sh'), renderInstallEnv({ version, imageVersion: `${version}-common`, arch, kind, componentInfo }));
+    fs.writeFileSync(path.join(dir, 'install/env.sh'), renderInstallEnv({ version, imageVersion: `${version}-common`, arch, kind, componentInfo, platform }));
     fs.writeFileSync(path.join(dir, 'manifest.json'), `{"version":"${version}","kind":"${kind}"${manifestExtra}}\n`);
     return dir;
 }
@@ -387,5 +387,109 @@ describe('install env generation', () => {
         expect(renderInstallEnv(base)).toContain("MANYOYO_KIND='lite'");
         expect(() => renderInstallEnv({ ...base, version: "1.0.0'; rm -rf ~; '" })).toThrow(/不允许的字符/);
         expect(() => renderInstallEnv({ ...base, componentInfo: { image: { ...base.componentInfo.image, ref: 'a b' } } })).toThrow(/不允许的字符/);
+    });
+});
+
+
+describe('offline installer (sh): Linux package', () => {
+    const linuxEnv = (extra = {}) => ({
+        MANYOYO_TEST_UNAME_S: 'Linux',
+        MANYOYO_TEST_UNAME_M: 'x86_64',
+        MANYOYO_TEST_GLIBC: 'glibc 2.35',
+        MANYOYO_TEST_SHELL: '/bin/bash',
+        MANYOYO_TEST_SKIP_MACHINE: '',
+        ...extra
+    });
+    const linuxPayload = (options = {}) => writePayload(path.join(root, 'payload'), { kind: 'lite', arch: 'x64', platform: 'linux', ...options });
+    // 替身 docker / podman：info 的行为由 FAKE_INFO 决定（ok / denied / subuid / down）
+    function writeFakeRuntime(name) {
+        script(path.join(fakeBin, name), `
+state="\${FAKE_STATE:?}"
+echo "${name} $*" >> "$state/calls.log"
+case "$1" in
+  info)
+    case "\${FAKE_INFO:-ok}" in
+      ok) exit 0 ;;
+      denied) echo "permission denied while trying to connect to the Docker daemon socket" >&2; exit 1 ;;
+      subuid) echo "ERRO[0000] cannot find UID/GID for user: no subuid ranges found" >&2; exit 1 ;;
+      *) echo "Cannot connect to the daemon" >&2; exit 1 ;;
+    esac ;;
+  load) echo "$3" >> "$state/loaded" ;;
+esac
+exit 0
+`);
+    }
+
+    test('without docker/podman: explains the apt command, never installs anything, and leaves ~/.manyoyo untouched except logs', () => {
+        const result = install(linuxPayload(), linuxEnv());
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain('没有检测到 docker 或 podman');
+        expect(result.stdout).toContain('sudo apt update && sudo apt install -y podman');
+        expect(result.stdout).toContain('重新运行本安装包即可续上');
+        expect(fs.existsSync(path.join(home, '.manyoyo/app'))).toBe(false);
+        expect(fs.existsSync(path.join(home, '.manyoyo/bin'))).toBe(false);
+    });
+
+    test('with a working docker: installs the app, loads the image with docker (no machine, no private Podman), writes PATH blocks for bash', async () => {
+        writeFakeRuntime('docker');
+        const result = install(linuxPayload(), linuxEnv());
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain('linux / x64');
+        expect(result.stdout).toContain('安装完成');
+        const m = path.join(home, '.manyoyo');
+        expect(fs.readlinkSync(path.join(m, 'app/current'))).toBe('9.9.9');
+        expect(fs.existsSync(path.join(m, 'runtime/podman'))).toBe(false);
+        expect(await waitFor(imported)).toBe(true);
+        expect(calls().some(line => line.startsWith('docker load -i'))).toBe(true);
+        expect(calls().some(line => line.includes('machine'))).toBe(false);
+        expect(blocks(path.join(home, '.bashrc'))).toBe(1);
+        const record = JSON.parse(read(path.join(m, '.install/installed.json')));
+        expect(record).toEqual(expect.objectContaining({ kind: 'lite', arch: 'x64', podmanVersion: '' }));
+    });
+
+    test('docker installed but the user has no permission: explains the docker group fix', () => {
+        writeFakeRuntime('docker');
+        const result = install(linuxPayload(), linuxEnv({ FAKE_INFO: 'denied' }));
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain('没有权限访问');
+        expect(result.stdout).toContain('usermod -aG docker');
+    });
+
+    test('rootless podman without subuid/subgid: explains uidmap and subuids', () => {
+        writeFakeRuntime('podman');
+        const result = install(linuxPayload(), linuxEnv({ FAKE_INFO: 'subuid' }));
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain('uidmap');
+        expect(result.stdout).toContain('--add-subuids');
+        expect(result.stdout).toContain('podman system migrate');
+    });
+
+    test('rejects an old glibc, the wrong OS and the wrong architecture with a next step', () => {
+        writeFakeRuntime('docker');
+        const old = install(linuxPayload(), linuxEnv({ MANYOYO_TEST_GLIBC: 'glibc 2.31' }));
+        expect(old.status).toBe(1);
+        expect(old.stdout).toContain('glibc 版本过低：2.31');
+        expect(old.stdout).toContain('Ubuntu 22.04');
+        expect(install(linuxPayload(), linuxEnv({ MANYOYO_TEST_GLIBC: 'glibc 2.36' })).status).toBe(0);
+
+        const mac = install(linuxPayload(), linuxEnv({ MANYOYO_TEST_UNAME_S: 'Darwin' }));
+        expect(mac.status).toBe(1);
+        expect(mac.stdout).toContain('只支持 Linux');
+        const arm = install(linuxPayload(), linuxEnv({ MANYOYO_TEST_UNAME_M: 'aarch64' }));
+        expect(arm.status).toBe(1);
+        expect(arm.stdout).toContain('请下载 arm64 对应的安装包');
+    });
+
+    test('--headless / --gui are passed through to the manyoyo launcher', () => {
+        writeFakeRuntime('docker');
+        const result = install(linuxPayload(), linuxEnv({ MANYOYO_TEST_SKIP_OPEN: '' }), ['--headless']);
+        expect(result.status).toBe(0);
+        expect(read(state('launched.log'))).toContain('args=--headless');
+    });
+
+    test('the macOS package still refuses to run on Linux', () => {
+        const result = install(writePayload(path.join(root, 'payload')), { MANYOYO_TEST_UNAME_S: 'Linux' });
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain('只支持 macOS');
     });
 });

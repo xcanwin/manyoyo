@@ -169,6 +169,22 @@ describe('runUninstall', () => {
         expect(h.logs.join('\n')).toContain('私有 Podman 里的容器与镜像会随虚拟机一起删除');
     });
 
+    test('Linux install (no private Podman): bash/profile PATH blocks are removed, user lines stay, and only manyoyo containers/images in the external runtime are asked about', async () => {
+        seedInstall({ privatePodman: false });
+        fs.writeFileSync(path.join(home, '.profile'), `export KEEP=1\n\n${BLOCK}\n`);
+        fs.writeFileSync(path.join(home, '.bashrc'), `alias g=git\n\n${BLOCK}\n`);
+        const h = harness(['y', 'n', 'n', 'n'], {
+            runOutput: (command, args) => (args[0] === 'ps' ? 'my-claude\n' : args[0] === 'images' ? 'ghcr.io/xcanwin/manyoyo:2.0.0-common\nalpine:latest\n' : ''),
+            options: { selectExternalRuntime: () => ({ command: 'podman', env: {} }) }
+        });
+        await runUninstall(h.options);
+        expect(fs.readFileSync(path.join(home, '.profile'), 'utf8')).toBe('export KEEP=1\n');
+        expect(fs.readFileSync(path.join(home, '.bashrc'), 'utf8')).toBe('alias g=git\n');
+        expect(h.asked[1]).toContain('删除这些容器与镜像');
+        // 回答了 n：既没删容器也没删镜像，更不会动运行时本身
+        expect(h.commands.filter(c => ['rm', 'rmi', 'machine'].includes(c.args[0]))).toEqual([]);
+    });
+
     test('a failing machine stop does not abort the uninstall', async () => {
         seedInstall();
         const h = harness(['y', '', ''], { options: { run: () => { throw new Error('machine not found\nmore'); } } });

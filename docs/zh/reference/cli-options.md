@@ -26,6 +26,9 @@ description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频�
 | `manyoyo prune` | 清理悬空镜像和 `<none>` 镜像 |
 | `manyoyo doctor` | 诊断容器运行时、镜像、配置、Agent、模式、插件和端口 |
 | `manyoyo update [--rollback]` | 更新 MANYOYO。离线包安装只下载 `-app.tar.gz`（数十 MB），校验 SHA256 后放进 `~/.manyoyo/app/<版本>/` 并原子切换 `current`，保留上一版本；`--rollback` 切回上一版本。npm 安装沿用 `npm update -g`；本地 file 安装会跳过。新版本捆绑的 Podman / 虚拟机磁盘有变化时只提示需要下载新的完整包 |
+| `manyoyo setup` | 命令行配置向导（无头环境：SSH、没有图形界面）：选 Agent、填 Key / Base URL / 模型、选工作目录（默认 `~/.manyoyo/work`）、设登录密码（≥8 位）、可选 apt / npm / pip 软件源；Key 和密码输入不回显。需要交互式终端，非终端输入会直接报错退出；保存后自动重启后台服务并打印端口转发提示 |
+| `manyoyo --headless` / `manyoyo --gui` | 无参启动器的有头 / 无头强制开关（也可设环境变量 `MANYOYO_HEADLESS=1/0`，命令行优先）。默认自动判断：SSH 会话、或 Linux 下没有 `DISPLAY` / `WAYLAND_DISPLAY` 视为无头。无头时不打开浏览器，打印 `ssh -L` 端口转发与关闭命令；安装包同样接受这两个参数 |
+| `manyoyo podman <参数...>` | 用 MANYOYO 的私有 Podman 执行命令，参数原样传给 podman（引号、`-a` 等都不会被 manyoyo 解析）；`eval "$(manyoyo podman env)"` 在当前终端定义 `podman` 函数，之后直接输入 `podman ps -a`，只在该终端有效，不改 PATH、不影响你自己安装的 Podman；fish 用 `--shell fish`。仅离线完整包安装后有私有 Podman |
 | `manyoyo uninstall` | 卸载离线包安装的 MANYOYO：停止后台服务与私有 Podman 虚拟机，删除 `~/.manyoyo/{bin,app,runtime}` 与 shell 配置里的 PATH 块；配置、会话历史、日志和 `work/`（及 7.x 的旧目录 `workpath/`） 逐项询问（默认保留）。`--yes` 只确认程序本身的卸载，不会删除任何用户数据；复用你自己的 Docker/Podman 时，只会询问是否删除 manyoyo 的容器和镜像，不会动运行时本身 |
 | `manyoyo`（无参数） | 在 `127.0.0.1` 随机端口后台启动（或复用）网页服务，并打开浏览器自动登录；实例记录在 `~/.manyoyo/serve/app.json`。登录用一次性令牌（60 秒内有效、用后即删，存于 `~/.manyoyo/serve/login-tokens/`，仅回环监听启用）；再次执行 `manyoyo` 会签发新令牌。没有浏览器打开器时，会在终端打印一次性登录地址。`-h/--help` 仍显示帮助 |
 

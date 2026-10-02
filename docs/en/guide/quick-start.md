@@ -7,7 +7,7 @@ description: Download the offline package, install MANYOYO and its container run
 
 Goal: **download the offline package → one command → browser**. You do not need to install Node.js, Docker or Podman first, and you do not need to build an image.
 
-> Offline packages currently support macOS (Apple silicon and Intel). For Linux, Windows, or if you already have npm / Docker / Podman, see [Installation](./installation.md) and [Migrate Existing Agent Configs](./migrate.md).
+> Offline packages support macOS (Apple silicon and Intel, the steps below) and Linux (Debian / Ubuntu, see [Linux](#linux-debian-ubuntu)). For Windows, or if you already have npm / Docker / Podman, see [Installation](./installation.md) and [Migrate Existing Agent Configs](./migrate.md).
 
 ## 1. Download
 
@@ -76,6 +76,43 @@ manyoyo serve 127.0.0.1:<port> --stop     # the port is in the address printed a
 ```
 
 After installation the downloaded `.run` file can be deleted.
+
+## Managing the private Podman
+
+The full offline package uses MANYOYO's bundled private Podman, which the system `podman` command cannot see.
+
+```bash
+manyoyo podman ps -a                 # run once
+eval "$(manyoyo podman env)"          # from now on in this terminal: podman ps -a, podman logs ...
+```
+
+The function only lives in the current terminal.
+
+## Linux (Debian / Ubuntu)
+
+There is one Linux package and it **does not bundle a container runtime**: it uses the Podman or Docker already on your system (the installer never runs `sudo` and never installs system software). Requires Ubuntu 22.04 / Debian 12 or newer (glibc 2.35+).
+
+```bash
+uname -m                                           # x86_64 -> x64, aarch64 -> arm64
+sha256sum -c SHA256SUMS-linux-x64                  # verify (SHA256SUMS-linux-arm64 for arm64)
+sh manyoyo-<version>-linux-x64.run                 # install
+```
+
+1. **Install a container runtime first** (the installer tells you if there is none; run the installer again afterwards and it resumes): `sudo apt update && sudo apt install -y podman`, or install docker following Docker's documentation. Common problems are explained by the installer: docker needs your user in the `docker` group, rootless podman needs `uidmap` and entries in `/etc/subuid` / `/etc/subgid`.
+2. **Headed vs. headless is detected automatically**:
+   - **Headed** (a graphical session, not SSH): same as macOS, the service starts and the browser opens for the web wizard.
+   - **Headless** (SSH login, no `DISPLAY` / `WAYLAND_DISPLAY`): no browser is opened; configure with the command line wizard `manyoyo setup`: pick an agent, enter the key, choose the work directory, set the login password, optionally apt / npm / pip mirrors (keys and passwords are not echoed).
+   - Override a wrong guess: the installer and `manyoyo` accept `--headless` / `--gui`, or set `MANYOYO_HEADLESS=1` (headless) / `0` (headed).
+3. **Using the web UI from a headless machine**: after setup the service runs on `127.0.0.1:<port>` in the background; forward the port from your own computer, then browse:
+
+   ```bash
+   ssh -L <port>:127.0.0.1:<port> <user>@<server>
+   # then open http://127.0.0.1:<port>; user admin, password is the one set in manyoyo setup
+   ```
+
+   Stop the service with `manyoyo serve 127.0.0.1:<port> --stop`.
+4. Upgrade, rollback and uninstall are the same as on macOS: `manyoyo update`, `manyoyo update --rollback`, `manyoyo uninstall` (uninstall only asks whether to delete manyoyo's containers and images; it never touches your Podman / Docker).
+5. Download tip: as on macOS, use `curl -L -C - -O <url>` for resumable downloads.
 
 ## Privacy
 

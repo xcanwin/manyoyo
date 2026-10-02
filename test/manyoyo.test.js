@@ -77,7 +77,7 @@ describe('MANYOYO CLI', () => {
                 const result = await new Promise(resolve => {
                     require('child_process').execFile('node', [BIN_PATH], {
                         encoding: 'utf-8',
-                        env: { ...process.env, HOME: tempHome, PATH: `${binDir}:${process.env.PATH}` }
+                        env: { ...process.env, HOME: tempHome, PATH: `${binDir}:${process.env.PATH}`, MANYOYO_HEADLESS: '0' }
                     }, (error, stdout) => resolve({ error, stdout }));
                 });
                 expect(result.error).toBeNull();
@@ -89,6 +89,51 @@ describe('MANYOYO CLI', () => {
                 expect(fs.statSync(tokenDir).mode & 0o777).toBe(0o700);
             } finally {
                 server.close();
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('no args headless (--headless): reuses the app but opens no browser, issues no token, prints ssh -L / stop / setup hints', async () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-headless-'));
+            const binDir = path.join(tempHome, 'bin');
+            const urlFile = path.join(tempHome, 'opened-url');
+            fs.mkdirSync(binDir, { recursive: true });
+            ['open', 'xdg-open'].forEach(name => writeExecutable(path.join(binDir, name), `#!/bin/sh\necho "$1" > "${urlFile}"\n`));
+            const server = require('http').createServer((req, res) => { res.setHeader('X-Manyoyo-Serve', '1'); res.writeHead(401); res.end('{}'); }).listen(0, '127.0.0.1');
+            await new Promise(resolve => server.once('listening', resolve));
+            const { port } = server.address();
+            const serveDir = path.join(tempHome, '.manyoyo', 'serve');
+            fs.mkdirSync(serveDir, { recursive: true });
+            fs.writeFileSync(path.join(serveDir, 'app.json'), JSON.stringify({ host: '127.0.0.1', port, pid: process.pid }));
+            try {
+                const result = await new Promise(resolve => {
+                    require('child_process').execFile('node', [BIN_PATH, '--headless'], {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome, PATH: `${binDir}:${process.env.PATH}`, MANYOYO_HEADLESS: '0' }
+                    }, (error, stdout) => resolve({ error, stdout }));
+                });
+                expect(result.error).toBeNull();
+                expect(result.stdout).toContain(`ssh -L ${port}:127.0.0.1:${port}`);
+                expect(result.stdout).toContain(`manyoyo serve 127.0.0.1:${port} --stop`);
+                expect(result.stdout).toContain('manyoyo setup');
+                expect(fs.existsSync(urlFile)).toBe(false);
+                expect(fs.existsSync(path.join(serveDir, 'login-tokens'))).toBe(false);
+            } finally {
+                server.close();
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('setup without a terminal does not hang: explains the alternatives and exits 1', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-setup-nontty-'));
+            try {
+                const result = require('child_process').spawnSync('node', [BIN_PATH, 'setup'], {
+                    encoding: 'utf-8', input: '', timeout: 20000, env: { ...process.env, HOME: tempHome }
+                });
+                expect(result.status).toBe(1);
+                expect(result.stdout).toContain('交互式终端');
+                expect(fs.existsSync(path.join(tempHome, '.manyoyo', 'manyoyo.json'))).toBe(false);
+            } finally {
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }
         });

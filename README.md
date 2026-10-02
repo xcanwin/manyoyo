@@ -68,7 +68,7 @@ manyoyo                                            # 之后：启动本机服务
 manyoyo update                                     # 升级；manyoyo uninstall 卸载
 ```
 
-详见[快速开始](https://xcanwin.github.io/manyoyo/zh/guide/quick-start)。
+Linux（Debian / Ubuntu）下载 `linux-x64` / `linux-arm64` 的 `.run` 同样一条命令安装（用系统里的 Podman / Docker，不执行 sudo），SSH 等无头环境用 `manyoyo setup` 命令行配置。详见[快速开始](https://xcanwin.github.io/manyoyo/zh/guide/quick-start)。
 
 已装好 npm 与 Podman / Docker（Linux、Windows 或其他安装方式）：
 
@@ -212,17 +212,13 @@ English Documentation:
 
 ## 安装与卸载
 
-安装：
+- macOS / Linux 离线包（推荐）：见上方「快速开始」，卸载用 `manyoyo uninstall`（只移除程序，配置、历史、工作目录逐项询问）。
+- npm：
 
 ```bash
-npm install -g @xcanwin/manyoyo
-```
-
-卸载：
-
-```bash
-npm uninstall -g @xcanwin/manyoyo
-rm -rf ~/.manyoyo/   # 可选
+npm install -g @xcanwin/manyoyo      # 安装
+npm uninstall -g @xcanwin/manyoyo    # 卸载
+rm -rf ~/.manyoyo/                   # 可选：删除配置与数据
 ```
 
 ## 许可证
