@@ -1,36 +1,55 @@
 ---
-title: CLI Reference | MANYOYO
-description: MANYOYO CLI structure, option ownership, and common commands based on the latest --help output.
+title: Command Cheat Sheet | MANYOYO
+description: Every MANYOYO command grouped as in --help, one line and one example each, plus a quick option reference.
 ---
 
-# CLI Reference
+# Command Cheat Sheet
 
-This page follows the current `manyoyo --help` and subcommand `--help` output. It focuses on command layout, option ownership, and high-frequency workflows.
+This page lists every command by the groups in `manyoyo --help`, one line and one example each. For all options of a command: `manyoyo <command> --help`.
 
-## Top-level commands
+## Open the web UI
 
-| Command | Purpose |
-| --- | --- |
-| `manyoyo run` | Start or reconnect to a container and run commands inside it |
-| `manyoyo build` | Build the sandbox image |
-| `manyoyo rm <name>` | Remove a container |
-| `manyoyo ps` | List containers |
-| `manyoyo images` | List images |
-| `manyoyo serve [listen]` | Start the web UI server, default `127.0.0.1:3000` |
-| `manyoyo playwright` | Manage the Playwright plugin service |
-| `manyoyo plugin` | Plugin namespace; common use is `plugin playwright ...` |
-| `manyoyo config show` | Print the final resolved configuration |
-| `manyoyo config command` | Print the generated container command |
-| `manyoyo init [agents]` | Initialize local Agent configs into `~/.manyoyo` |
-| `manyoyo install <name>` | Install the `manyoyo` command as a docker-cli-plugin |
-| `manyoyo prune` | Clean dangling and `<none>` images |
-| `manyoyo doctor` | Diagnose container runtime, image, config, agent, mode, plugin and port state |
-| `manyoyo update [--rollback]` | Update MANYOYO. Offline-package installs download only `-app.tar.gz` (tens of MB), verify its SHA256, put it in `~/.manyoyo/app/<version>/` and atomically switch `current`, keeping the previous version; `--rollback` switches back. npm installs keep using `npm update -g`; local file installs are skipped. If the new version bundles a different Podman / VM disk, you are only told to download the new full package |
-| `manyoyo setup` | Command line wizard for headless machines (SSH, no graphical session): pick an agent, enter key / Base URL / model, choose the work directory (default `~/.manyoyo/work`), set the login password (8+ chars), optionally apt / npm / pip mirrors; keys and passwords are not echoed. Needs an interactive terminal and exits with an explanation when stdin is not one; after saving it restarts the background service and prints the port-forwarding hint |
-| `manyoyo --headless` / `manyoyo --gui` | Force switches for the no-argument launcher (or set `MANYOYO_HEADLESS=1/0`; the flag wins). Detected automatically by default: an SSH session, or Linux without `DISPLAY` / `WAYLAND_DISPLAY`, counts as headless. Headless mode opens no browser and prints the `ssh -L` forwarding and stop commands; the installer accepts both flags too |
-| `manyoyo podman <args...>` | Run a command with MANYOYO's private Podman; args go to podman verbatim (quotes, `-a` etc. are not parsed by manyoyo). `eval "$(manyoyo podman env)"` defines a `podman` function in the current terminal so you can type `podman ps -a` directly; it only lives in that terminal, does not touch PATH or your own Podman; use `--shell fish` for fish. Private Podman exists only after a full offline-package install |
-| `manyoyo uninstall` | Uninstall the offline-package install of MANYOYO: stop the background service and the private Podman machine, delete `~/.manyoyo/{bin,app,runtime}` and the PATH block in your shell config; config, session history, logs and `work/` (and the 7.x legacy `workpath/`) are asked about one by one (kept by default). `--yes` only confirms removing the program itself and never deletes user data; when you reuse your own Docker/Podman it only asks whether to delete manyoyo's containers and images, never the runtime itself |
-| `manyoyo` (no arguments) | Start (or reuse) the web service in the background on a random `127.0.0.1` port and open the browser, already logged in; the instance is recorded in `~/.manyoyo/serve/app.json`. Login uses a one-time token (valid for 60 seconds, deleted on use, stored in `~/.manyoyo/serve/login-tokens/`, enabled only for loopback listening); running `manyoyo` again issues a fresh token. Without a browser opener, the one-time login URL is printed to the terminal. `-h/--help` still shows help |
+Run `manyoyo` with no arguments to open the web UI (the setup wizard starts on first use). Without a graphical session (SSH etc.) it prints port-forwarding hints instead; force the choice with `--headless` / `--gui`. See [Quick Start](../guide/quick-start.md).
+
+```bash
+manyoyo
+```
+
+## Daily
+
+| Command | Description | Example |
+| --- | --- | --- |
+| `update` | Upgrade to the latest version; `--rollback` returns to the previous one | `manyoyo update` |
+| `uninstall` | Uninstall MANYOYO (config and data are kept by default); `--yes` only confirms removing the program itself | `manyoyo uninstall` |
+| `setup` | Command line setup wizard (for machines without a graphical session) | `manyoyo setup` |
+| `doctor` | Diagnose container runtime, image, config and ports; `--json` prints JSON, `--fix` repairs what it can | `manyoyo doctor` |
+
+## Run from the command line
+
+| Command | Description | Example |
+| --- | --- | --- |
+| `run` | Start a container and run a command (reconnect if it already exists) | `manyoyo run -y c` |
+| `init [agents]` | Import existing local Agent configs into `~/.manyoyo` | `manyoyo init all` |
+| `config show` | Print the final resolved configuration | `manyoyo config show -r claude` |
+| `config command` | Print the container command that would run | `manyoyo config command -r claude` |
+
+## Containers and images
+
+| Command | Description | Example |
+| --- | --- | --- |
+| `ps` | List containers | `manyoyo ps` |
+| `images` | List images | `manyoyo images` |
+| `rm <name>` | Remove a container | `manyoyo rm my-0101-1200` |
+| `build` | Build the sandbox image | `manyoyo build --iv 2.1.0-common` |
+| `prune` | Remove dangling images | `manyoyo prune` |
+| `podman <args...>` | Run a command with the private Podman (args pass through verbatim; only after a full offline-package install) | `manyoyo podman ps -a` |
+
+## Web service and plugins
+
+| Command | Description | Example |
+| --- | --- | --- |
+| `serve [listen]` | Start the web service, default `127.0.0.1:3000` | `manyoyo serve 127.0.0.1:3000 -d` |
+| `playwright` | Manage the Playwright plugin service | `manyoyo playwright up mcp-host-headless` |
 
 ## Option ownership
 
@@ -55,10 +74,10 @@ These commands share the same core runtime options:
 | `--worktrees-root <path>` / `--wtr <path>` | Set the project-level Git worktrees root, absolute paths only; implicitly enables `--worktrees` |
 | `--sp` / `-s` / `--ss` / `-- <args...>` | Compose prefix, main command, and suffix args |
 | `-x, --shell-full <command...>` | Pass the full command directly; mutually exclusive with `--sp/-s/--ss/--` |
-| `-y, --yolo <cli>` | Start supported Agents in no-confirmation mode |
+| `-y, --yolo <cli>` | Start an Agent in no-confirmation mode: `c`=Claude, `cx`=Codex, `gm`=Gemini, `oc`=OpenCode |
 | `--first-shell*` / `--first-env*` | Run only when the container is created for the first time |
 | `--rm-on-exit` | Remove the container after exit; `run` only |
-| `-q, --quiet <item>` | Quiet selected output, repeatable |
+| `-q, --quiet <item>` | Hide selected output, repeatable: `cnew` create/connect notice, `crm` delete notice, `tip` first-command tips, `cmd` command to run, `askkeep` shorter keep-container prompt, `full` all of them |
 
 ### `serve`
 
@@ -147,7 +166,6 @@ manyoyo serve 0.0.0.0:3000 -U admin -P strong-password
 # Playwright
 manyoyo playwright ls
 manyoyo playwright up mcp-host-headless
-manyoyo plugin playwright up mcp-host-headless
 manyoyo playwright up cli-host-headless
 manyoyo playwright up dev-host-headed
 manyoyo playwright mcp-add --host localhost

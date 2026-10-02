@@ -117,7 +117,7 @@ describe('manyoyo plugin commands', () => {
     });
 
     test('playwright help examples use prefixed mcp scenes', () => {
-        const output = execSync(`node ${BIN_PATH} --help`, { encoding: 'utf-8' });
+        const output = execSync(`node ${BIN_PATH} playwright --help`, { encoding: 'utf-8' });
         expect(output).toContain('playwright up mcp-host-headless');
         expect(output).toContain('playwright up cli-host-headless');
         expect(output).not.toContain('plugin playwright up mcp-host-headless');

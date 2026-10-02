@@ -1,36 +1,55 @@
 ---
-title: 命令参考 | MANYOYO
-description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频命令速查。
+title: 命令速查 | MANYOYO
+description: 按 --help 分组列出 MANYOYO 全部命令，每条一行说明加一个示例，并附常用参数速查。
 ---
 
-# 命令参考
+# 命令速查
 
-本文以当前 `manyoyo --help` 与各子命令 `--help` 为准，优先说明命令分层、参数归属和高频用法。
+本页按 `manyoyo --help` 的分组列出全部命令，每条一行说明加一个示例。查看某条命令的全部选项：`manyoyo <命令> --help`。
 
-## 主命令结构
+## 打开网页界面
 
-| 命令 | 用途 |
-| --- | --- |
-| `manyoyo run` | 启动或连接容器，并在容器内执行命令 |
-| `manyoyo build` | 构建沙箱镜像 |
-| `manyoyo rm <name>` | 删除指定容器 |
-| `manyoyo ps` | 列举容器 |
-| `manyoyo images` | 列举镜像 |
-| `manyoyo serve [listen]` | 启动网页交互服务，默认 `127.0.0.1:3000` |
-| `manyoyo playwright` | 管理 Playwright 插件服务 |
-| `manyoyo plugin` | 插件命名空间；目前常见用法是 `plugin playwright ...` |
-| `manyoyo config show` | 显示最终生效配置 |
-| `manyoyo config command` | 显示将执行的容器命令 |
-| `manyoyo init [agents]` | 初始化本机 Agent 配置到 `~/.manyoyo` |
-| `manyoyo install <name>` | 安装 manyoyo 命令（docker-cli-plugin） |
-| `manyoyo prune` | 清理悬空镜像和 `<none>` 镜像 |
-| `manyoyo doctor` | 诊断容器运行时、镜像、配置、Agent、模式、插件和端口 |
-| `manyoyo update [--rollback]` | 更新 MANYOYO。离线包安装只下载 `-app.tar.gz`（数十 MB），校验 SHA256 后放进 `~/.manyoyo/app/<版本>/` 并原子切换 `current`，保留上一版本；`--rollback` 切回上一版本。npm 安装沿用 `npm update -g`；本地 file 安装会跳过。新版本捆绑的 Podman / 虚拟机磁盘有变化时只提示需要下载新的完整包 |
-| `manyoyo setup` | 命令行配置向导（无头环境：SSH、没有图形界面）：选 Agent、填 Key / Base URL / 模型、选工作目录（默认 `~/.manyoyo/work`）、设登录密码（≥8 位）、可选 apt / npm / pip 软件源；Key 和密码输入不回显。需要交互式终端，非终端输入会直接报错退出；保存后自动重启后台服务并打印端口转发提示 |
-| `manyoyo --headless` / `manyoyo --gui` | 无参启动器的有头 / 无头强制开关（也可设环境变量 `MANYOYO_HEADLESS=1/0`，命令行优先）。默认自动判断：SSH 会话、或 Linux 下没有 `DISPLAY` / `WAYLAND_DISPLAY` 视为无头。无头时不打开浏览器，打印 `ssh -L` 端口转发与关闭命令；安装包同样接受这两个参数 |
-| `manyoyo podman <参数...>` | 用 MANYOYO 的私有 Podman 执行命令，参数原样传给 podman（引号、`-a` 等都不会被 manyoyo 解析）；`eval "$(manyoyo podman env)"` 在当前终端定义 `podman` 函数，之后直接输入 `podman ps -a`，只在该终端有效，不改 PATH、不影响你自己安装的 Podman；fish 用 `--shell fish`。仅离线完整包安装后有私有 Podman |
-| `manyoyo uninstall` | 卸载离线包安装的 MANYOYO：停止后台服务与私有 Podman 虚拟机，删除 `~/.manyoyo/{bin,app,runtime}` 与 shell 配置里的 PATH 块；配置、会话历史、日志和 `work/`（及 7.x 的旧目录 `workpath/`） 逐项询问（默认保留）。`--yes` 只确认程序本身的卸载，不会删除任何用户数据；复用你自己的 Docker/Podman 时，只会询问是否删除 manyoyo 的容器和镜像，不会动运行时本身 |
-| `manyoyo`（无参数） | 在 `127.0.0.1` 随机端口后台启动（或复用）网页服务，并打开浏览器自动登录；实例记录在 `~/.manyoyo/serve/app.json`。登录用一次性令牌（60 秒内有效、用后即删，存于 `~/.manyoyo/serve/login-tokens/`，仅回环监听启用）；再次执行 `manyoyo` 会签发新令牌。没有浏览器打开器时，会在终端打印一次性登录地址。`-h/--help` 仍显示帮助 |
+不带参数运行 `manyoyo`，打开网页界面（首次使用进入配置向导）。无图形界面（SSH 等）时自动改为打印端口转发提示；判断不对时用 `--headless` / `--gui` 强制指定。详见[快速开始](../guide/quick-start.md)。
+
+```bash
+manyoyo
+```
+
+## 日常
+
+| 命令 | 说明 | 示例 |
+| --- | --- | --- |
+| `update` | 升级到最新版本；`--rollback` 回到上一版本 | `manyoyo update` |
+| `uninstall` | 卸载 MANYOYO（配置和数据默认保留）；`--yes` 只确认卸载程序本身 | `manyoyo uninstall` |
+| `setup` | 命令行配置向导（无图形界面时使用） | `manyoyo setup` |
+| `doctor` | 诊断容器运行时、镜像、配置和端口；`--json` 输出 JSON，`--fix` 自动修复 | `manyoyo doctor` |
+
+## 命令行运行
+
+| 命令 | 说明 | 示例 |
+| --- | --- | --- |
+| `run` | 启动容器并运行命令（容器已存在则连接） | `manyoyo run -y c` |
+| `init [agents]` | 导入本机已有的 Agent 配置到 `~/.manyoyo` | `manyoyo init all` |
+| `config show` | 显示最终生效的配置 | `manyoyo config show -r claude` |
+| `config command` | 显示将执行的容器命令 | `manyoyo config command -r claude` |
+
+## 容器与镜像
+
+| 命令 | 说明 | 示例 |
+| --- | --- | --- |
+| `ps` | 列出容器 | `manyoyo ps` |
+| `images` | 列出镜像 | `manyoyo images` |
+| `rm <name>` | 删除指定容器 | `manyoyo rm my-0101-1200` |
+| `build` | 构建沙箱镜像 | `manyoyo build --iv 2.1.0-common` |
+| `prune` | 清理悬空镜像 | `manyoyo prune` |
+| `podman <参数...>` | 用私有 Podman 执行命令（参数原样传入，仅离线完整包安装后可用） | `manyoyo podman ps -a` |
+
+## 网页服务与插件
+
+| 命令 | 说明 | 示例 |
+| --- | --- | --- |
+| `serve [listen]` | 启动网页服务，默认 `127.0.0.1:3000` | `manyoyo serve 127.0.0.1:3000 -d` |
+| `playwright` | 管理 Playwright 插件服务 | `manyoyo playwright up mcp-host-headless` |
 
 ## 参数归属
 
@@ -55,10 +74,10 @@ description: 基于最新 --help 的 MANYOYO CLI 结构、常用参数与高频�
 | `--worktrees-root <path>` / `--wtr <path>` | 指定项目级 Git worktrees 根目录，仅支持绝对路径；传入后会隐式启用 `--worktrees` |
 | `--sp` / `-s` / `--ss` / `-- <args...>` | 组合前缀、主命令和后缀参数 |
 | `-x, --shell-full <command...>` | 直接传完整命令；与 `--sp/-s/--ss/--` 互斥 |
-| `-y, --yolo <cli>` | 快速进入 Agent 的免确认模式 |
+| `-y, --yolo <cli>` | 以免确认模式启动 Agent：`c`=Claude、`cx`=Codex、`gm`=Gemini、`oc`=OpenCode |
 | `--first-shell*` / `--first-env*` | 仅首次创建容器时执行 |
 | `--rm-on-exit` | 退出后自动删除容器，仅 `run` 支持 |
-| `-q, --quiet <item>` | 静默输出，可多次使用 |
+| `-q, --quiet <item>` | 隐藏部分输出，可多次使用：`cnew` 创建/连接容器提示、`crm` 删除容器提示、`tip` 首次命令提示、`cmd` 将执行的命令、`askkeep` 简化保留容器提问、`full` 全部 |
 
 ### `serve`
 
@@ -147,7 +166,6 @@ manyoyo serve 0.0.0.0:3000 -U admin -P strong-password
 # Playwright
 manyoyo playwright ls
 manyoyo playwright up mcp-host-headless
-manyoyo plugin playwright up mcp-host-headless
 manyoyo playwright up cli-host-headless
 manyoyo playwright up dev-host-headed
 manyoyo playwright mcp-add --host localhost

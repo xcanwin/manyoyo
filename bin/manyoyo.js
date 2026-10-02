@@ -7,7 +7,7 @@ const os = require('os');
 const crypto = require('crypto');
 const net = require('net');
 const readline = require('readline');
-const { Command } = require('commander');
+const { Command, Help } = require('commander');
 const { startWebServer } = require('../lib/web/server');
 const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/container-run');
 const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = require('../lib/global-config');
@@ -50,8 +50,7 @@ const {
 } = require('../lib/serve-log');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_DEFAULT } = require('../package.json');
 const IMAGE_VERSION_BASE = String(IMAGE_VERSION_DEFAULT || '1.0.0').split('-')[0];
-const GLOBAL_CONFIG_IMAGE_VERSION = String(readManyoyoConfig().config.imageVersion || '').trim();
-const IMAGE_VERSION_HELP_EXAMPLE = GLOBAL_CONFIG_IMAGE_VERSION || IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
+const IMAGE_VERSION_HELP_EXAMPLE = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
 
 // Helper function to format date like bash $(date +%m%d-%H%M)
 function formatDate() {
@@ -70,11 +69,6 @@ function detectCommandName() {
 
     const rawArgv1 = process.argv[1] || '';
     const baseName = path.basename(rawArgv1).replace(/\.(cjs|mjs|js)$/i, '');
-
-    if (baseName === 'docker-manyoyo') {
-        const pluginCommand = String(process.argv[2] || '').trim();
-        return pluginCommand || 'manyoyo';
-    }
 
     return baseName || 'manyoyo';
 }
@@ -472,7 +466,7 @@ function parseImageVersionTag(version) {
 function validateImageVersion(value) {
     validateName('imageVersion', value, /^[A-Za-z0-9][A-Za-z0-9_.-]*$/);
     if (!parseImageVersionTag(value)) {
-        console.error(`${RED}⚠️  错误: imageVersion 格式必须为 <x.y.z-后缀>，例如 1.7.4-common。当前值: ${value}${NC}`);
+        console.error(`${RED}⚠️  错误: imageVersion 格式必须为 <x.y.z-后缀>，例如 ${IMAGE_VERSION_HELP_EXAMPLE}。当前值: ${value}${NC}`);
         process.exit(1);
     }
 }
@@ -849,24 +843,6 @@ async function ensureDocker(configuredRuntime, options = {}) {
     return true;
 }
 
-function installManyoyo(name) {
-    const MANYOYO_FILE = fs.realpathSync(__filename);
-    switch (name) {
-        case 'docker-cli-plugin':
-            const pluginDir = path.join(process.env.HOME, '.docker/cli-plugins');
-            fs.mkdirSync(pluginDir, { recursive: true });
-            const targetPath = path.join(pluginDir, 'docker-manyoyo');
-            if (fs.existsSync(targetPath)) {
-                fs.unlinkSync(targetPath);
-            }
-            fs.symlinkSync(MANYOYO_FILE, targetPath);
-            break;
-        default:
-            console.log("");
-    }
-    process.exit(0);
-}
-
 // 升级后让旧版本的后台服务退出（pid 必须确实是 manyoyo serve），下次执行 manyoyo 就会启动新版本
 function stopBackgroundApp({ quiet = false } = {}) {
     const pid = readPid(path.join(os.homedir(), '.manyoyo', 'serve', 'app.json'));
@@ -1102,26 +1078,6 @@ function pruneDanglingImages() {
     });
 }
 
-function maybeHandleDockerPluginMetadata(argv) {
-    if (argv[2] !== 'docker-cli-plugin-metadata') {
-        return false;
-    }
-    console.log(JSON.stringify({
-        "SchemaVersion": "0.1.0",
-        "Vendor": "xcanwin",
-        "Version": "v1.0.0",
-        "Description": "AI Agent CLI Sandbox"
-    }, null, 4));
-    return true;
-}
-
-function normalizeDockerPluginArgv(argv) {
-    const dockerPluginPath = path.join(process.env.HOME || '', '.docker/cli-plugins/docker-manyoyo');
-    if (argv[1] === dockerPluginPath && argv[2] === 'manyoyo') {
-        argv.splice(2, 1);
-    }
-}
-
 function normalizeShellFullArgv(argv) {
     const shellFullIndex = argv.findIndex(arg => arg === '-x' || arg === '--shell-full');
     if (shellFullIndex !== -1 && shellFullIndex < argv.length - 1) {
@@ -1183,7 +1139,7 @@ function applyRunStyleOptions(command, options = {}) {
         .option('--cp, --cont-path <path>', '设置容器工作目录')
         .option('-m, --cont-mode <mode>', '设置容器嵌套模式 (common, dind, sock; 注意: sock 模式可访问宿主机 Docker socket，风险较高)')
         .option('--in, --image-name <name>', '指定镜像名称')
-        .option('--iv, --image-ver <version>', '指定镜像版本 (格式: x.y.z-后缀，如 1.7.4-common)');
+        .option('--iv, --image-ver <version>', `指定镜像版本 (格式: x.y.z-后缀，如 ${IMAGE_VERSION_HELP_EXAMPLE})`);
 
     appendArrayOption(command, '-e, --env <env>', '设置环境变量 XXX=YYY (可多次使用)');
     appendArrayOption(command, '--ef, --env-file <file>', '从环境文件加载变量 (仅支持绝对路径，如 /abs/path.env; 相对路径会报错)');
@@ -1200,7 +1156,7 @@ function applyRunStyleOptions(command, options = {}) {
         .option('--first-shell <command>', '首次预执行命令 (仅新建容器生效; 容器已存在时忽略)')
         .option('--first-shell-suffix <command>', '首次预执行命令后缀 (仅新建容器生效; 容器已存在时忽略)')
         .option('-x, --shell-full <command...>', '完整命令 (与 --sp/-s/--ss/-- 互斥)')
-        .option('-y, --yolo <cli>', '使 AGENT 无需确认 (claude(c), gemini(gm), codex(cx), opencode(oc))');
+        .option('-y, --yolo <cli>', '以免确认模式启动 Agent: c=Claude, cx=Codex, gm=Gemini, oc=OpenCode');
     appendArrayOption(command, '--first-env <env>', '首次预执行环境变量 XXX=YYY (可多次使用)');
     appendArrayOption(command, '--first-env-file <file>', '首次预执行环境变量文件 (仅支持绝对路径，如 /abs/path.env)');
 
@@ -1208,7 +1164,7 @@ function applyRunStyleOptions(command, options = {}) {
         command.option('--rm-on-exit', '退出后自动删除容器 (一次性模式)');
     }
 
-    appendArrayOption(command, '-q, --quiet <item>', '静默输出 (可多次使用: cnew, crm, tip, cmd, full)');
+    appendArrayOption(command, '-q, --quiet <item>', '隐藏部分输出 (可多次使用，可选项见下方“-q 可选项”)');
 
     if (includeServePreview) {
         command
@@ -1313,46 +1269,82 @@ async function setupCommander() {
 
     program
         .name(MANYOYO_NAME)
+        .optionsGroup('选项:')
+        .commandsGroup('其他:')
         .version(BIN_VERSION, '-v, --version', '显示版本')
-        .description('MANYOYO - AI Agent CLI Sandbox\nhttps://github.com/xcanwin/manyoyo')
+        .helpOption('-h, --help', '显示帮助')
+        .helpCommand('help [command]', '显示指定命令的帮助')
+        .configureHelp({
+            optionDescription(option) {
+                return Help.prototype.optionDescription.call(this, option).replace(/\s*\(default: \[\]\)/, '');
+            }
+        })
+        .description(`MANYOYO - AI Agent CLI Sandbox
+https://github.com/xcanwin/manyoyo
+
+不带参数直接运行，打开网页界面（首次使用进入配置向导）:
+  ${MANYOYO_NAME}              自动判断有无图形界面
+  ${MANYOYO_NAME} --headless   强制按无图形界面处理（不打开浏览器，用密码登录）
+  ${MANYOYO_NAME} --gui        强制按有图形界面处理（自动打开浏览器）`)
         .addHelpText('after', `
-配置文件:
-  ~/.manyoyo/manyoyo.json   全局配置文件 (JSON5格式，支持注释)
-  ~/.manyoyo/run/c.json     运行配置示例
-
-路径规则:
-  run -r name               → ~/.manyoyo/manyoyo.json 的 runs.name
-  run --ef /abs/path.env    → 绝对路径环境文件
-  run --ss "<args>"         → 显式设置命令后缀
-  run -- <args...>          → 直接透传命令后缀（优先级最高）
-
 示例:
-  ${MANYOYO_NAME} update                              更新 MANYOYO 到最新版本
-  ${MANYOYO_NAME} build --iv ${IMAGE_VERSION_HELP_EXAMPLE} --yes       构建镜像
-  ${MANYOYO_NAME} build --update-agents --yes         仅更新已有镜像内已存在的 Agent CLI
-  ${MANYOYO_NAME} init all                            从本机 Agent 配置初始化 ~/.manyoyo
-  ${MANYOYO_NAME} run -r claude                       使用 manyoyo.json 的 runs.claude 快速启动
-  ${MANYOYO_NAME} run -r codex --ss "resume --last"   使用命令后缀
-  ${MANYOYO_NAME} run -n test --ef /path/ab.env -y c  使用绝对路径环境变量文件
-  ${MANYOYO_NAME} run -n test -- -c                   恢复之前会话
-  ${MANYOYO_NAME} run -x "echo 123"                   使用完整命令
-  ${MANYOYO_NAME} serve 127.0.0.1:3000                启动本机网页服务
-  ${MANYOYO_NAME} serve 127.0.0.1:3000 -d             后台启动；未设密码时会打印本次随机密码
-  ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P 123 -d  后台启动并监听全部网卡
-  ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P 123 -d --restart  重启指定后台网页服务
-  ${MANYOYO_NAME} playwright up mcp-host-headless     启动 playwright MCP 宿主场景（默认/推荐）
-  ${MANYOYO_NAME} playwright up cli-host-headless     启动 playwright CLI 宿主场景（供容器内 playwright-cli 附着）
-  ${MANYOYO_NAME} run -n test -q tip -q cmd           多次使用静默选项
+  ${MANYOYO_NAME}                          打开网页界面
+  ${MANYOYO_NAME} init all                 导入本机已有的 Agent 配置
+  ${MANYOYO_NAME} run -y c                 在沙箱里以免确认模式启动 Claude Code
+  ${MANYOYO_NAME} run -r claude            使用 manyoyo.json 的 runs.claude 启动
+  ${MANYOYO_NAME} update                   升级到最新版本
+
+配置文件: ~/.manyoyo/manyoyo.json (JSON5 格式，支持注释)
+各命令的更多用法: ${MANYOYO_NAME} <命令> --help
         `);
 
-    const runCommand = program.command('run').description('启动（容器不存在时）或连接（容器已存在时）容器并执行命令');
+    // 日常
+    program.command('update')
+        .helpGroup('日常:')
+        .description('升级到最新版本')
+        .option('--rollback', '回到上一版本')
+        .action(options => selectAction('update', { update: true, rollback: Boolean(options.rollback) }));
+
+    program.command('uninstall')
+        .helpGroup('日常:')
+        .description('卸载 MANYOYO（配置和数据默认保留）')
+        .option('--yes', '确认卸载程序本身，不再询问（不会删除配置、历史、日志、工作目录和外部运行时里的容器镜像）')
+        .action(options => selectAction('uninstall', options));
+
+    program.command('setup')
+        .helpGroup('日常:')
+        .description('命令行配置向导（无图形界面时使用）')
+        .action(() => selectAction('setup', {}));
+
+    program.command('doctor')
+        .helpGroup('日常:')
+        .description('诊断容器运行时、镜像、配置和端口')
+        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+        .option('--port <port>', '检查指定监听端口')
+        .option('--json', '以 JSON 输出稳定诊断结果')
+        .option('--fix', '自动修复可修复项（启动容器环境、拉取镜像、生成默认配置，端口占用时给出建议端口）')
+        .action(options => selectAction('doctor', { ...options, doctor: true }));
+
+    // 命令行运行
+    const runCommand = program.command('run').helpGroup('命令行运行:').description('启动容器并运行命令（容器已存在则连接）');
     runCommand.addHelpText('after', `
-Examples:
+示例:
   ${MANYOYO_NAME} run -r codex
+  ${MANYOYO_NAME} run -n test --ef /path/ab.env -y c
+  ${MANYOYO_NAME} run -n test -- -c
+  ${MANYOYO_NAME} run -r codex --ss "resume --last"
   ${MANYOYO_NAME} run --rm-on-exit -x /bin/bash -lc "node -v"
   ${MANYOYO_NAME} run -n demo --first-shell "npm ci" -s "npm test"
 
-Notes:
+-q 可选项（可多次使用）:
+  cnew     隐藏“创建/连接容器”提示
+  crm      隐藏“删除容器”提示
+  tip      隐藏首次命令与恢复会话提示
+  cmd      隐藏将执行的命令
+  askkeep  简化“是否保留容器”的提问
+  full     隐藏以上全部
+
+说明:
   参数优先级与合并规则（标量覆盖、数组追加、env 按 key 合并）请用 ${MANYOYO_NAME} config show --help 或查看文档。
 `);
     applyRunStyleOptions(runCommand);
@@ -1362,60 +1354,13 @@ Notes:
         selectAction('run', options);
     });
 
-    const buildCommand = program.command('build').description('构建 manyoyo 沙箱镜像');
-    buildCommand
-        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-        .option('--in, --image-name <name>', '指定镜像名称')
-        .option('--iv, --image-ver <version>', '指定镜像版本 (格式: x.y.z-后缀，如 1.7.4-common)')
-        .option('--update-agents', '仅更新已有镜像内 Agent CLI 到 latest (Claude/Codex/Gemini/OpenCode)')
-        .option('--yes', '所有提示自动确认 (用于CI/脚本)');
-    appendArrayOption(buildCommand, '--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)');
-    buildCommand.action(options => selectAction('build', options));
+    const initCommand = program.command('init [agents]').helpGroup('命令行运行:').description('导入本机已有的 Agent 配置到 ~/.manyoyo');
+    initCommand
+        .option('--yes', '所有提示自动确认 (用于CI/脚本)')
+        .action((agents, options) => selectAction('init', { ...options, initConfig: agents === undefined ? 'all' : agents }));
 
-    const removeCommand = program.command('rm <name>').description('删除指定容器');
-    removeCommand
-        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-        .action((name, options) => selectAction('rm', { ...options, contName: name }));
-
-    program.command('ps')
-        .description('列举容器')
-        .action(() => selectAction('ps', { contList: true }));
-
-    program.command('images')
-        .description('列举镜像')
-        .action(() => selectAction('images', { imageList: true }));
-
-    const serveCommand = program.command('serve [listen]').description('启动网页交互服务 (默认 127.0.0.1:3000)');
-    applyRunStyleOptions(serveCommand, { includeRmOnExit: false, includeWebAuthOptions: true });
-    serveCommand.option('-d, --detach', '后台启动网页服务并立即返回');
-    serveCommand.option('--stop', '停止后台网页服务；必须显式传入 listen');
-    serveCommand.option('--restart', '重启后台网页服务；必须显式传入 listen');
-    serveCommand.action((listen, options) => {
-        selectAction('serve', {
-            ...options,
-            server: listen === undefined ? true : listen,
-            serverUser: options.user,
-            serverPass: options.pass
-        });
-    });
-
-    const playwrightCommand = program.command('playwright').description('管理 playwright 插件服务（推荐）');
-    registerPlaywrightAliasCommands(playwrightCommand);
-
-    const pluginCommand = program.command('plugin').description('管理 manyoyo 插件');
-    pluginCommand.command('ls')
-        .description('列出可用插件与启用场景')
-        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-        .action(options => selectPluginAction({
-            action: 'ls',
-            pluginName: 'playwright',
-            scene: 'all'
-        }, options));
-    const pluginPlaywrightCommand = pluginCommand.command('playwright').description('管理 playwright 插件服务');
-    registerPlaywrightAliasCommands(pluginPlaywrightCommand);
-
-    const configCommand = program.command('config').description('查看解析后的配置或命令');
-    const configShowCommand = configCommand.command('show').description('显示最终生效配置并退出');
+    const configCommand = program.command('config').helpGroup('命令行运行:').description('查看生效的配置或将执行的命令');
+    const configShowCommand = configCommand.command('show').description('显示最终生效的配置');
     applyRunStyleOptions(configShowCommand, { includeRmOnExit: false, includeServePreview: true });
     enableShellSuffixPassThrough(configShowCommand);
     configShowCommand.action((options, command) => {
@@ -1432,7 +1377,7 @@ Notes:
         selectAction('config-show', finalOptions);
     });
 
-    const configRunCommand = configCommand.command('command').description('显示将执行的 docker run 命令并退出');
+    const configRunCommand = configCommand.command('command').description('显示将执行的容器命令');
     applyRunStyleOptions(configRunCommand, { includeRmOnExit: false });
     enableShellSuffixPassThrough(configRunCommand);
     configRunCommand.action((options, command) => {
@@ -1440,55 +1385,86 @@ Notes:
         selectAction('config-command', options);
     });
 
-    program.command('uninstall')
-        .description('卸载离线包安装的 MANYOYO：停止服务，删除程序与 PATH 配置，用户数据逐项询问（--yes 不会删用户数据）')
-        .option('--yes', '确认卸载程序本身，不再询问（不会删除配置、历史、日志、工作目录和外部运行时里的容器镜像）')
-        .action(options => selectAction('uninstall', options));
+    // 容器与镜像
+    program.command('ps')
+        .helpGroup('容器与镜像:')
+        .description('列出容器')
+        .action(() => selectAction('ps', { contList: true }));
 
-    const initCommand = program.command('init [agents]').description('初始化 Agent 配置到 ~/.manyoyo');
-    initCommand
-        .option('--yes', '所有提示自动确认 (用于CI/脚本)')
-        .action((agents, options) => selectAction('init', { ...options, initConfig: agents === undefined ? 'all' : agents }));
+    program.command('images')
+        .helpGroup('容器与镜像:')
+        .description('列出镜像')
+        .action(() => selectAction('images', { imageList: true }));
 
-    program.command('doctor')
-        .description('诊断容器运行时、镜像、配置、Agent、模式、插件和端口')
+    const removeCommand = program.command('rm <name>').helpGroup('容器与镜像:').description('删除指定容器');
+    removeCommand
         .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-        .option('--port <port>', '检查指定监听端口')
-        .option('--json', '以 JSON 输出稳定诊断结果')
-        .option('--fix', '自动修复可修复项（启动容器环境、拉取镜像、生成默认配置，端口占用时给出建议端口）')
-        .action(options => selectAction('doctor', { ...options, doctor: true }));
+        .action((name, options) => selectAction('rm', { ...options, contName: name }));
 
-    program.command('update')
-        .description('更新 MANYOYO（离线包安装只下载变化部分并保留上一版本；若检测为本地 file 安装则跳过）')
-        .option('--rollback', '离线包安装：切回上一版本')
-        .action(options => selectAction('update', { update: true, rollback: Boolean(options.rollback) }));
+    const buildCommand = program.command('build').helpGroup('容器与镜像:').description('构建沙箱镜像');
+    buildCommand
+        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+        .option('--in, --image-name <name>', '指定镜像名称')
+        .option('--iv, --image-ver <version>', `指定镜像版本 (格式: x.y.z-后缀，如 ${IMAGE_VERSION_HELP_EXAMPLE})`)
+        .option('--update-agents', '仅更新已有镜像内 Agent CLI 到 latest (Claude/Codex/Gemini/OpenCode)')
+        .option('--yes', '所有提示自动确认 (用于CI/脚本)');
+    appendArrayOption(buildCommand, '--iba, --image-build-arg <arg>', '构建镜像时传参给dockerfile (可多次使用)');
+    buildCommand.action(options => selectAction('build', options));
+
+    program.command('prune')
+        .helpGroup('容器与镜像:')
+        .description('清理悬空镜像')
+        .action(() => selectAction('prune', { imageRemove: true }));
 
     program.command('podman [args...]')
-        .description('用 MANYOYO 的私有 Podman 执行命令（参数原样传给 podman）；eval "$(manyoyo podman env)" 可在当前终端定义 podman 函数')
+        .helpGroup('容器与镜像:')
+        .description('用私有 Podman 执行命令（参数原样传入）')
         .helpOption(false)
         .allowUnknownOption()
         .passThroughOptions()
         .action(args => selectAction('podman', { podmanArgs: args || [] }));
 
-    program.command('setup')
-        .description('命令行配置向导（无头环境：SSH、没有图形界面）：选 Agent、填 Key、设登录密码，可选软件源')
-        .action(() => selectAction('setup', {}));
+    // 网页服务与插件
+    const serveCommand = program.command('serve [listen]').helpGroup('网页服务与插件:').description('启动网页服务 (默认 127.0.0.1:3000)');
+    serveCommand.addHelpText('after', `
+示例:
+  ${MANYOYO_NAME} serve 127.0.0.1:3000                   启动本机网页服务
+  ${MANYOYO_NAME} serve 127.0.0.1:3000 -d                后台启动；未设密码时会打印本次随机密码
+  ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P <密码> -d  后台启动并监听全部网卡
+  ${MANYOYO_NAME} serve 0.0.0.0:3000 -U admin -P <密码> -d --restart  重启指定后台网页服务
+`);
+    applyRunStyleOptions(serveCommand, { includeRmOnExit: false, includeWebAuthOptions: true });
+    serveCommand.option('-d, --detach', '后台启动网页服务并立即返回');
+    serveCommand.option('--stop', '停止后台网页服务；必须显式传入 listen');
+    serveCommand.option('--restart', '重启后台网页服务；必须显式传入 listen');
+    serveCommand.action((listen, options) => {
+        selectAction('serve', {
+            ...options,
+            server: listen === undefined ? true : listen,
+            serverUser: options.user,
+            serverPass: options.pass
+        });
+    });
 
-    program.command('install <name>')
-        .description(`安装 ${MANYOYO_NAME} 命令 (docker-cli-plugin)`)
-        .action(name => selectAction('install', { install: name }));
+    const playwrightCommand = program.command('playwright').helpGroup('网页服务与插件:').description('管理 Playwright 插件服务');
+    playwrightCommand.addHelpText('after', `
+示例:
+  ${MANYOYO_NAME} playwright up mcp-host-headless     启动 MCP 宿主场景（默认/推荐）
+  ${MANYOYO_NAME} playwright up cli-host-headless     启动 CLI 宿主场景（供容器内 playwright-cli 附着）
+`);
+    registerPlaywrightAliasCommands(playwrightCommand);
 
-    program.command('prune')
-        .description('清理悬空镜像和 <none> 镜像')
-        .action(() => selectAction('prune', { imageRemove: true }));
-
-    // Docker CLI plugin metadata check
-    if (maybeHandleDockerPluginMetadata(process.argv)) {
-        process.exit(0);
-    }
-
-    // Docker CLI plugin mode - remove first arg if running as plugin
-    normalizeDockerPluginArgv(process.argv);
+    const pluginCommand = program.command('plugin', { hidden: true }).description('管理 manyoyo 插件');
+    pluginCommand.command('ls')
+        .description('列出可用插件与启用场景')
+        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+        .action(options => selectPluginAction({
+            action: 'ls',
+            pluginName: 'playwright',
+            scene: 'all'
+        }, options));
+    const pluginPlaywrightCommand = pluginCommand.command('playwright').description('管理 playwright 插件服务');
+    registerPlaywrightAliasCommands(pluginPlaywrightCommand);
 
     // No args (or only --headless / --gui): start (or reuse) the local web app; open the browser already logged in unless headless
     const launcherArgs = parseLauncherArgs(process.argv.slice(2));
@@ -1528,7 +1504,7 @@ Notes:
 
     UPDATE_CHECK_ENABLED = config.updateCheck !== false;
     MIRRORS = normalizeMirrors(config.mirrors);
-    const noDockerActions = new Set(['init', 'update', 'install', 'config-show', 'plugin', 'doctor', 'uninstall', 'podman', 'setup']);
+    const noDockerActions = new Set(['init', 'update', 'config-show', 'plugin', 'doctor', 'uninstall', 'podman', 'setup']);
     if (isServerStopMode) {
         noDockerActions.add('serve');
     }
@@ -1831,7 +1807,6 @@ Notes:
     if (isPsMode) { getContList(); process.exit(0); }
     if (isImagesMode) { getImageList(); process.exit(0); }
     if (isPruneMode) { pruneDanglingImages(); process.exit(0); }
-    if (selectedAction === 'install') { installManyoyo(options.install); process.exit(0); }
 
     return {
         yesMode,

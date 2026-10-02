@@ -29,6 +29,13 @@ describe('podman passthrough', () => {
         expect(errors.join('\n')).toContain('没有找到');
     });
 
+    test('--help prints usage even without a private Podman', () => {
+        const logs = [];
+        const code = runPodmanCommand(['--help'], { homeDir: home, log: line => logs.push(line) });
+        expect(code).toBe(0);
+        expect(logs.join('\n')).toContain('用法');
+    });
+
     test('passes args verbatim (quotes, dashes, spaces) with the private env', () => {
         const paths = installFakePodman();
         const calls = [];
