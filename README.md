@@ -3,8 +3,7 @@
 </p>
 
 # <p align="center"><a href="https://github.com/xcanwin/manyoyo">MANYOYO（慢悠悠）</a></p>
-<p align="center">面向 AI Agent CLI 的 Docker / Podman 安全沙箱。</p>
-<p align="center">用于隔离 Claude Code、Codex、Gemini、OpenCode 等命令行智能体，降低宿主机风险，并保持可复现的运行环境。</p>
+<p align="center">让 Claude Code / Codex / Gemini / OpenCode 在容器里放心跑 YOLO 模式：AI 随便折腾，伤不到你的电脑。</p>
 <p align="center">
   <a href="https://www.npmjs.com/package/@xcanwin/manyoyo"><img alt="npm" src="https://img.shields.io/npm/v/@xcanwin/manyoyo?style=flat-square" /></a>
   <a href="https://github.com/xcanwin/manyoyo/actions/workflows/npm-publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/xcanwin/manyoyo/npm-publish.yml?style=flat-square" /></a>
@@ -21,75 +20,47 @@
 
 ---
 
-## 为什么是 MANYOYO
+## 安装
 
-AI Agent CLI 往往需要：
-
-- 访问代码仓库
-- 执行 shell 命令
-- 读写文件
-- 安装依赖或调用容器能力
-
-直接在宿主机上裸跑这些工具，风险边界通常不清晰。**MANYOYO** 的目标不是替代容器平台，而是把常见 Agent CLI 的运行方式收敛到一个更清晰、可复现、可审计的沙箱入口。
-
-你可以把它理解为：
-
-- 面向 Agent CLI 的运行包装层
-- 面向团队协作的配置与镜像约定
-- 面向高风险模式的显式边界说明
-
-## 核心能力
-
-- **多 Agent 支持**：支持 `claude`、`gemini`、`codex`、`opencode`
-- **容器隔离**：基于 Docker / Podman 运行，降低宿主机暴露面
-- **YOLO / SOLO 工作流**：适配跳过权限确认的高效率模式
-- **统一配置入口**：集中管理 `runs.<name>`、环境变量、挂载与镜像参数
-- **命令可预览**：支持查看配置合并结果与最终命令拼装
-- **会话与 Web 模式**：支持容器会话管理与网页访问入口
-- **镜像可定制**：支持 common / full / 自定义工具集镜像
-
-## 快速开始
-
-macOS 用户（推荐）：从 [Releases](https://github.com/xcanwin/manyoyo/releases/latest) 下载对应架构的离线包，一条命令装好，浏览器里完成向导，不需要先装 Node.js、Docker 或 Podman：
+### macOS / Linux（推荐）
 
 ```bash
-sh manyoyo-*-macos-arm64.run     # 下载好 .run 后只需这一条：安装并自动打开浏览器（Intel 芯片把 arm64 换成 x64）
+curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
 ```
 
-安装包会在安装前自动校验自身，不需要另外校验。之后日常：`manyoyo` 启动并打开浏览器，`manyoyo update` 升级，`manyoyo uninstall` 卸载。不确定芯片类型时，在终端执行 `uname -m`（`arm64` 选 arm64，`x86_64` 选 x64）。
+装完浏览器自动打开，按向导选 Agent、填 Key 就能开始对话。macOS 不需要预装任何东西；Linux 需要已有 Docker 或 Podman。
 
-Linux（Debian / Ubuntu）下载 `linux-x64` / `linux-arm64` 的 `.run` 同样一条命令安装（用系统里的 Podman / Docker，不执行 sudo），SSH 等无头环境用 `manyoyo setup` 命令行配置。详见[快速开始](https://xcanwin.github.io/manyoyo/zh/guide/quick-start)。
-
-已装好 npm 与 Podman / Docker（Linux、Windows 或其他安装方式）：
+### 已有 Node.js 和 Docker/Podman
 
 ```bash
 npm install -g @xcanwin/manyoyo
-manyoyo init all
-manyoyo run -r claude
-manyoyo serve 127.0.0.1:3000 -U admin -P 123456 # Web UI 模式
+manyoyo
 ```
 
-默认镜像 `ghcr.io/xcanwin/manyoyo` 首次使用时自动拉取；需要自定义镜像时再执行 `manyoyo build --iv 2.1.0-common`。
+## 日常使用
 
-系统要求：
+```bash
+manyoyo            # 打开网页界面
+manyoyo update     # 升级
+manyoyo uninstall  # 卸载（配置和数据默认保留）
+```
 
-- Node.js >= 22
-- Podman（推荐）或 Docker
+## 命令行用法（可选）
 
-注意：
+```bash
+manyoyo init all   # 把本机已有的 Agent 配置搬进来
+manyoyo run -y c   # 在沙箱里以 YOLO 模式启动 Claude Code
+```
 
-- `YOLO / SOLO` 会跳过权限确认，只适合在可控环境中使用
-- `sock` 模式会暴露宿主机 Docker socket，不属于强隔离
+默认镜像 `ghcr.io/xcanwin/manyoyo` 首次使用时自动拉取；需要自定义镜像时再执行 `manyoyo build --iv 2.1.0-common`。更多命令见[命令速查](https://xcanwin.github.io/manyoyo/zh/reference/cli-options)。
 
-## 适合什么场景
+## 它能做什么
 
-- 在容器中运行 **Claude Code YOLO / SOLO**
-- 为 **Codex CLI** 提供独立于宿主机的运行边界
-- 隔离运行 **Gemini CLI / OpenCode** 的代码任务
-- 用统一镜像和配置管理团队 Agent 环境
-- 在调试和自动化任务中快速切换 Agent 与 `/bin/bash`
-
-## 裸跑 vs MANYOYO
+- **多 Agent**：`claude`、`codex`、`gemini`、`opencode` 一个入口
+- **容器隔离**：基于 Docker / Podman，Agent 只能看到你给它的工作目录
+- **网页界面**：浏览器里对话、看文件、开终端，手机也能用
+- **统一配置**：运行配置、环境变量、挂载与镜像参数集中在 `~/.manyoyo/manyoyo.json`
+- **一条命令**安装、升级、卸载
 
 | 对比项 | 裸跑 Agent CLI | MANYOYO |
 | --- | --- | --- |
@@ -97,119 +68,15 @@ manyoyo serve 127.0.0.1:3000 -U admin -P 123456 # Web UI 模式
 | 运行边界 | 分散 | 集中到容器与配置 |
 | 环境复现 | 弱 | 强（镜像 + 配置） |
 | 高风险模式说明 | 通常依赖工具自身 | 明确提示 YOLO / SOLO / sock 风险 |
-| 团队统一性 | 弱 | 更强 |
 
-## 安全边界
+## 安全须知
 
-MANYOYO 可以降低风险，但不是“绝对安全”：
+MANYOYO 降低风险，但不是“绝对安全”：主要隔离手段是容器而不是虚拟机；`YOLO / SOLO` 仍可能执行危险命令；`sock` 模式会暴露宿主机 Docker socket；对外监听必须设强密码。详见[安全须知](https://xcanwin.github.io/manyoyo/zh/reference/container-modes)。
 
-- 它的主要隔离手段是容器，不是虚拟机
-- `YOLO / SOLO` 仍然可能执行危险命令
-- `sock` 模式本质上会把宿主机容器控制权暴露给容器
-- 自定义挂载、环境变量和网络访问会直接影响实际安全边界
+## 文档
 
-相关文档：
-
-- [AI 智能体说明](https://xcanwin.github.io/manyoyo/zh/reference/agents)
-- [容器模式说明](https://xcanwin.github.io/manyoyo/zh/reference/container-modes)
-- [网页认证与安全](https://xcanwin.github.io/manyoyo/zh/advanced/web-server-auth)
-
-## 常用命令
-
-```bash
-# 初始化与迁移
-manyoyo init all
-
-# 启动常见 Agent
-manyoyo run -y c
-manyoyo run -y gm
-manyoyo run -y cx
-manyoyo run -y oc
-
-# 更新
-manyoyo update
-
-# 容器与调试
-manyoyo ps
-manyoyo images
-manyoyo run -n my-dev -x /bin/bash
-manyoyo rm my-dev
-
-# Web UI 模式
-manyoyo serve 127.0.0.1:3000
-manyoyo serve 127.0.0.1:3000 -U admin -P 123456
-manyoyo serve 127.0.0.1:3000 -U admin -P 123456 -d
-manyoyo serve 127.0.0.1:3000 -d   # 未设置密码时会打印本次随机密码
-manyoyo serve 127.0.0.1:3000 --stop   # 停止指定后台服务
-manyoyo serve 127.0.0.1:3000 -U admin -P 123456 -d --restart   # 重启指定后台服务
-
-# 查看配置与命令拼装
-manyoyo config show
-manyoyo config command
-```
-
-## 镜像构建
-
-```bash
-# common 版本
-manyoyo build --iv 2.1.0-common
-
-# full 版本
-manyoyo build --iv 2.1.0-full
-
-# 仅更新已有镜像内 Agent CLI 到 latest，不重建 Dockerfile
-manyoyo build --iv 2.1.0-full --update-agents --yes
-
-# 自定义工具集
-manyoyo build --iba TOOL=go,codex,java,gemini
-```
-
-说明：
-
-- 首次构建会把依赖缓存到 `docker/cache/`
-- 在缓存有效期内重复构建，通常会更快
-- `imageVersion` 格式必须为 `x.y.z-后缀`
-
-## 配置模型
-
-MANYOYO 的配置重点不是“多”，而是“可预测”：
-
-- 标量值按 `命令行参数 > runs.<name> > 全局配置 > 默认值` 覆盖
-- 数组值按 `全局配置 -> runs.<name> -> 命令行参数` 追加合并
-- `env` 使用 map 合并，按 key 覆盖
-
-相关文档：
-
-- [配置系统概览](https://xcanwin.github.io/manyoyo/zh/configuration/)
-- [配置文件详解](https://xcanwin.github.io/manyoyo/zh/configuration/config-files)
-- [环境变量详解](https://xcanwin.github.io/manyoyo/zh/configuration/environment)
-
-## 文档入口
-
-中文文档：
-
-- [快速开始](https://xcanwin.github.io/manyoyo/zh/guide/quick-start)
-- [安装详解](https://xcanwin.github.io/manyoyo/zh/guide/installation)
-- [CLI 选项](https://xcanwin.github.io/manyoyo/zh/reference/cli-options)
-- [故障排查](https://xcanwin.github.io/manyoyo/zh/troubleshooting/)
-
-English Documentation:
-
-- [Quick Start](https://xcanwin.github.io/manyoyo/en/guide/quick-start)
-- [Installation](https://xcanwin.github.io/manyoyo/en/guide/installation)
-- [CLI Options](https://xcanwin.github.io/manyoyo/en/reference/cli-options)
-- [Troubleshooting](https://xcanwin.github.io/manyoyo/en/troubleshooting/)
-
-## 安装与卸载
-
-- macOS / Linux 离线包（推荐）：见上方「快速开始」，卸载用 `manyoyo uninstall`（只移除程序，配置、历史、工作目录逐项询问）。
-- npm：
-
-```bash
-npm install -g @xcanwin/manyoyo      # 安装
-npm uninstall -g @xcanwin/manyoyo    # 卸载
-rm -rf ~/.manyoyo/                   # 可选：删除配置与数据
-```
+- 中文：<https://xcanwin.github.io/manyoyo/>（[安装](https://xcanwin.github.io/manyoyo/zh/guide/quick-start)、[命令速查](https://xcanwin.github.io/manyoyo/zh/reference/cli-options)、[配置](https://xcanwin.github.io/manyoyo/zh/configuration/)、[故障排查](https://xcanwin.github.io/manyoyo/zh/troubleshooting/)）
+- English: <https://xcanwin.github.io/manyoyo/en/>
 
 ## 许可证
 
@@ -217,7 +84,4 @@ MIT
 
 ## 贡献
 
-欢迎提交 Issue 和 Pull Request。
-
-- Issues: <https://github.com/xcanwin/manyoyo/issues>
-- Repository: <https://github.com/xcanwin/manyoyo>
+欢迎提交 [Issue](https://github.com/xcanwin/manyoyo/issues) 和 Pull Request。

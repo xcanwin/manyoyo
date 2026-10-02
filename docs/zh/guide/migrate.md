@@ -5,7 +5,7 @@ description: 宿主机已可用 Claude/Codex/Gemini/OpenCode 时，最快把配�
 
 # 迁移已有 Agent 配置
 
-本页面针对已经装好 npm / Docker 或 Podman、且宿主机上已有可用 Agent 的用户（刚开始用 MANYOYO 请先看[快速开始](./quick-start.md)）：
+本页面针对已经装好 npm / Docker 或 Podman、且宿主机上已有可用 Agent 的用户（刚开始用 MANYOYO 请先看[安装](./quick-start.md)）：
 - 宿主机上已经能运行 `claude` / `codex` / `gemini` / `opencode`
 - 已经能访问大模型（环境变量或本地认证已配置）
 

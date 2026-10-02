@@ -5,7 +5,7 @@ description: Fastest path for users who already run Claude/Codex/Gemini/OpenCode
 
 # Migrate Existing Agent Configs
 
-This page is for users who already have npm / Docker or Podman set up and a working agent on the host (new to MANYOYO? start with [Quick Start](./quick-start.md)). You already:
+This page is for users who already have npm / Docker or Podman set up and a working agent on the host (new to MANYOYO? start with [Install](./quick-start.md)). You already:
 - can run `claude` / `codex` / `gemini` / `opencode` on host
 - already have model access configured (env vars or local auth)
 

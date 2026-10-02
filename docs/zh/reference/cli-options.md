@@ -9,7 +9,7 @@ description: 按 --help 分组列出 MANYOYO 全部命令，每条一行说明�
 
 ## 打开网页界面
 
-不带参数运行 `manyoyo`，打开网页界面（首次使用进入配置向导）。无图形界面（SSH 等）时自动改为打印端口转发提示；判断不对时用 `--headless` / `--gui` 强制指定。详见[快速开始](../guide/quick-start.md)。
+不带参数运行 `manyoyo`，打开网页界面（首次使用进入配置向导）。无图形界面（SSH 等）时自动改为打印端口转发提示；判断不对时用 `--headless` / `--gui` 强制指定。详见[日常使用](../guide/daily.md)。
 
 ```bash
 manyoyo

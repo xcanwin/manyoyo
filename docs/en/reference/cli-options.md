@@ -9,7 +9,7 @@ This page lists every command by the groups in `manyoyo --help`, one line and on
 
 ## Open the web UI
 
-Run `manyoyo` with no arguments to open the web UI (the setup wizard starts on first use). Without a graphical session (SSH etc.) it prints port-forwarding hints instead; force the choice with `--headless` / `--gui`. See [Quick Start](../guide/quick-start.md).
+Run `manyoyo` with no arguments to open the web UI (the setup wizard starts on first use). Without a graphical session (SSH etc.) it prints port-forwarding hints instead; force the choice with `--headless` / `--gui`. See [Daily Use](../guide/daily.md).
 
 ```bash
 manyoyo

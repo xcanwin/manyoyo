@@ -201,7 +201,7 @@ export default defineConfig({
         siteTitle: 'MANYOYO 文档',
         nav: [
           { text: '首页', link: '/zh/' },
-          { text: '快速开始', link: '/zh/guide/quick-start' },
+          { text: '安装', link: '/zh/guide/quick-start' },
           {
             text: '文档',
             items: [
@@ -220,7 +220,9 @@ export default defineConfig({
               text: '基础指南',
               collapsed: false,
               items: [
-                { text: '快速开始', link: '/zh/guide/quick-start' },
+                { text: '安装', link: '/zh/guide/quick-start' },
+                { text: '第一次使用', link: '/zh/guide/first-run' },
+                { text: '日常使用', link: '/zh/guide/daily' },
                 { text: '迁移已有 Agent 配置', link: '/zh/guide/migrate' },
                 { text: '安装详解', link: '/zh/guide/installation' },
                 { text: '基础用法', link: '/zh/guide/basic-usage' }
@@ -291,7 +293,7 @@ export default defineConfig({
         siteTitle: 'MANYOYO Docs',
         nav: [
           { text: 'Home', link: '/en/' },
-          { text: 'Quick Start', link: '/en/guide/quick-start' },
+          { text: 'Install', link: '/en/guide/quick-start' },
           {
             text: 'Documentation',
             items: [
@@ -310,7 +312,9 @@ export default defineConfig({
               text: 'Basic Guide',
               collapsed: false,
               items: [
-                { text: 'Quick Start', link: '/en/guide/quick-start' },
+                { text: 'Install', link: '/en/guide/quick-start' },
+                { text: 'First Run', link: '/en/guide/first-run' },
+                { text: 'Daily Use', link: '/en/guide/daily' },
                 { text: 'Migrate Existing Agent Configs', link: '/en/guide/migrate' },
                 { text: 'Installation', link: '/en/guide/installation' },
                 { text: 'Basic Usage', link: '/en/guide/basic-usage' }

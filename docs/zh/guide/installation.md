@@ -7,9 +7,9 @@ description: MANYOYO 安装指南，涵盖 Node.js 与 Docker/Podman 前置条�
 
 本页面提供 MANYOYO 的详细安装指南，包括前置条件、安装步骤和镜像构建。
 
-## 推荐：离线安装包（macOS）
+## 推荐：一键安装
 
-macOS 与 Linux（Debian / Ubuntu）用户优先使用[离线安装包](./quick-start.md)：macOS 完整包自带 Node.js、容器运行环境与镜像，Linux 包自带 Node.js 与镜像、使用你系统里的 Podman / Docker，都无需管理员密码（安装器不执行 `sudo`）。下面的 npm / 包管理器 / 源码方式适用于 Windows(WSL)，以及已经装好 Node.js 与 Docker / Podman、想自己管理版本的用户。
+macOS 与 Linux（Debian / Ubuntu）用户优先用[一条命令安装](./quick-start.md)，无需管理员密码（安装器不执行 `sudo`）。下面的 npm / 包管理器 / 源码方式适用于 Windows(WSL)，以及已经装好 Node.js 与 Docker / Podman、想自己管理版本的用户。
 
 ## 系统要求
 
@@ -480,11 +480,22 @@ manyoyo rm <名称>
 manyoyo prune
 ```
 
+## 离线包结构
+
+给维护者和想了解安装包内部的用户。一键安装脚本 `scripts/install.sh` 只负责下载、校验并启动 `.run`；真正的安装逻辑在 `.run` 解开后的 `install/install.sh`。
+
+- **Release 里的资产**：每个平台（`macos` / `linux`）× 芯片（`arm64` / `x64`）各有一个安装包 `manyoyo-<版本>-<系统>-<芯片>.run` 和一个升级包 `manyoyo-<版本>-<系统>-<芯片>-app.tar.gz`，外加一个校验清单 `SHA256SUMS`，共 9 个文件。`-app.tar.gz` 是 `manyoyo update` 自动下载的（只含 Node.js 与 manyoyo，几十 MB），不需要手动下载。
+- **安装包自校验**：`.run` 在安装前会校验自身。想只校验、不安装：`sh manyoyo-*.run --check`；列出内容：`--list`；只解开到某个目录：`--extract <目录>`。
+- **手动对照校验值**：`grep "$(shasum -a 256 manyoyo-*-macos-arm64.run | cut -d' ' -f1)" SHA256SUMS`，有输出（带文件名的一行）就是一致。
+- **先看脚本再执行**：`sed -n '1,/^__MANYOYO_PAYLOAD_BELOW__$/p' manyoyo-*.run`。
+- **分卷**：单个文件超过 GitHub 的 2 GiB 上限时才会拆成 `.run.001`、`.run.002` 等。把它们全部下载到同一个目录，对第 1 卷执行 `sh manyoyo-*.run.001`，安装包会自己按序拼接并校验；也可以 `cat manyoyo-*.run.* > manyoyo-合并.run` 手动合并后当普通 `.run` 使用。
+- **安装位置**：`~/.manyoyo/app/<版本>/` 是程序，`app/current` 指向当前版本，升级时原子切换并保留上一版本以便 `update --rollback`。
+
 ## 下一步
 
 安装完成后，您可以：
 
-1. [快速开始](./quick-start.md) - 了解基本使用流程
+1. [安装](./quick-start.md) - 一条命令装好
 2. [基础用法](./basic-usage.md) - 学习常用命令和操作
 3. [配置系统](../configuration/README.md) - 设置环境变量和配置文件
 4. [命令参考](../reference/cli-options.md) - 查看所有命令行选项

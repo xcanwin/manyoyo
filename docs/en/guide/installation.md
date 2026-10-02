@@ -7,9 +7,9 @@ description: Complete MANYOYO installation guide covering Node.js and Docker/Pod
 
 This page provides a detailed installation guide for MANYOYO, including prerequisites, installation steps, and image building.
 
-## Recommended: offline package (macOS)
+## Recommended: one-line install
 
-On macOS and Linux (Debian / Ubuntu) prefer the [offline package](./quick-start.md): the macOS full package bundles Node.js, the container runtime and the image; the Linux package bundles Node.js and the image and uses the Podman / Docker already on your system. Neither needs an administrator password (the installer never runs `sudo`). The npm / package manager / source methods below are for Windows (WSL), and for users who already have Node.js and Docker / Podman and want to manage versions themselves.
+On macOS and Linux (Debian / Ubuntu) prefer the [one-line install](./quick-start.md); it needs no administrator password (the installer never runs `sudo`). The npm / package manager / source methods below are for Windows (WSL), and for users who already have Node.js and Docker / Podman and want to manage versions themselves.
 
 ## System Requirements
 
@@ -480,11 +480,22 @@ manyoyo rm <name>
 manyoyo prune
 ```
 
+## Offline Package Layout
+
+For maintainers and anyone curious about what is inside. The one-line installer `scripts/install.sh` only downloads, verifies and starts the `.run`; the real installation logic is `install/install.sh` inside the unpacked `.run`.
+
+- **Assets on a Release**: for each platform (`macos` / `linux`) × chip (`arm64` / `x64`) there is one installer `manyoyo-<version>-<os>-<arch>.run` and one upgrade package `manyoyo-<version>-<os>-<arch>-app.tar.gz`, plus one checksum list `SHA256SUMS`, 9 files in total. The `-app.tar.gz` is downloaded by `manyoyo update` automatically (only Node.js and manyoyo, tens of MB); you do not need to download it.
+- **Self-verification**: the `.run` verifies itself before installing. To only verify without installing: `sh manyoyo-*.run --check`; to list the contents: `--list`; to unpack into a directory only: `--extract <dir>`.
+- **Compare checksums by hand**: `grep "$(shasum -a 256 manyoyo-*-macos-arm64.run | cut -d' ' -f1)" SHA256SUMS`; one line with the file name means a match.
+- **Read the script before running it**: `sed -n '1,/^__MANYOYO_PAYLOAD_BELOW__$/p' manyoyo-*.run`.
+- **Volumes**: a file is split into `.run.001`, `.run.002`, ... only when it would exceed GitHub's 2 GiB limit. Download all of them into one directory and run `sh manyoyo-*.run.001`; the installer joins and verifies them itself. You can also merge by hand with `cat manyoyo-*.run.* > manyoyo-merged.run` and use it as a normal `.run`.
+- **Install location**: `~/.manyoyo/app/<version>/` holds the program, `app/current` points to the active version; upgrades switch it atomically and keep the previous version for `update --rollback`.
+
 ## Next Steps
 
 After installation, you can:
 
-1. [Quick Start](./quick-start.md) - Learn basic usage workflow
+1. [Install](./quick-start.md) - one command to get set up
 2. [Basic Usage](./basic-usage.md) - Learn common commands and operations
 3. [Configuration System](../configuration/README.md) - Set environment variables and configuration files
 4. [Command Reference](../reference/cli-options.md) - View all command-line options
