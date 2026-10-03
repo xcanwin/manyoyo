@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "8.2.1",
+    "version": "8.3.0",
     "imageVersion": "2.1.0-common",
     "playwrightCliVersion": "0.1.21",
     "description": "MANYOYO – open-source AI agent sandbox: run AI coding agents (Claude Code / Codex / Gemini) safely in Docker/Podman",
