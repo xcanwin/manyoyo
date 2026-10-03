@@ -50,9 +50,11 @@ If `raw.githubusercontent.com` is blocked too, use "Manual download" above.
 curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | MANYOYO_VERSION=8.1.0 sh
 # force headless (--headless) or graphical (--gui) handling
 curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh -s -- --headless
+# install only: no service, no browser, no question about how to configure (run manyoyo or manyoyo setup yourself afterwards)
+curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh -s -- --install-only
 ```
 
-By default it is detected automatically: an SSH session, or Linux without `DISPLAY` / `WAYLAND_DISPLAY`, counts as headless.
+By default it is detected automatically: an SSH session, or Linux without `DISPLAY` / `WAYLAND_DISPLAY`, counts as headless. On a headless machine with a terminal the installer asks whether to configure in the terminal or start the web UI, see [First Run](./first-run.md).
 :::
 
 ## If something goes wrong

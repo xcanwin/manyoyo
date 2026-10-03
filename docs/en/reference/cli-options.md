@@ -9,7 +9,7 @@ This page lists every command by the groups in `manyoyo --help`, one line and on
 
 ## Open the web UI
 
-Run `manyoyo` with no arguments to open the web UI (the setup wizard starts on first use). Without a graphical session (SSH etc.) it prints port-forwarding hints instead; force the choice with `--headless` / `--gui`. See [Daily Use](../guide/daily.md).
+Run `manyoyo` with no arguments to start the web service and open the web UI (the setup wizard starts on first use). Without a graphical session (SSH etc.) it prints port-forwarding hints instead; force the choice with `--headless` / `--gui`. See [Daily Use](../guide/daily.md).
 
 ```bash
 manyoyo
@@ -91,6 +91,7 @@ These commands share the same core runtime options:
 | `-d, --detach` | Start the web server in background and return immediately; if no password is set, prints the generated password for this run |
 | `--stop` | Stop a background web server; `[listen]` is required and targets that instance exactly |
 | `--restart` | Restart a background web server; `[listen]` is required, and it stops the matched instance before starting with current arguments |
+| `--list` | List running web services (listen address, PID, version, start command; the password shows as `******`); cannot be combined with other serve options |
 
 ### `build`
 

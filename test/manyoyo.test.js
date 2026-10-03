@@ -106,7 +106,71 @@ describe('MANYOYO CLI', () => {
                 expect(help('config --help')).toContain('显示将执行的容器命令');
             });
 
-            test('install subcommand was removed', () => {
+            test('serve --list shows running instances (from ~/.manyoyo/run/serve/*.pid), says so when none, and refuses other serve flags', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-servelist-'));
+            try {
+                const run = args => require('child_process').spawnSync('node', [BIN_PATH, ...args], { encoding: 'utf-8', env: { ...process.env, HOME: tempHome } });
+                expect(run(['serve', '--list']).stdout).toContain('没有正在运行的 serve。');
+                const dir = path.join(tempHome, '.manyoyo', 'run', 'serve');
+                fs.mkdirSync(dir, { recursive: true });
+                // 起一个真正的 serve 形态进程（命令行含 serve），否则会被当成 pid 复用而不列出
+                const sleeper = require('child_process').spawn('node', ['-e', 'setTimeout(() => {}, 30000)', 'serve', '-d'], { stdio: 'ignore' });
+                fs.writeFileSync(path.join(dir, '127.0.0.1_4567.pid'), `${sleeper.pid}\n`);
+                fs.writeFileSync(path.join(dir, '127.0.0.1_4568.pid'), '999999999\n'); // 已退出的不列出
+                const listed = run(['serve', '--list']);
+                expect(listed.status).toBe(0);
+                expect(listed.stdout).toMatch(/监听地址\s+PID\s+版本\s+启动命令/);
+                expect(listed.stdout).toContain('127.0.0.1:4567');
+                expect(listed.stdout).toContain(String(sleeper.pid));
+                sleeper.kill();
+                expect(listed.stdout).not.toContain('4568');
+                for (const extra of [['-d'], ['--stop'], ['--restart'], ['127.0.0.1:3000']]) {
+                    const refused = run(['serve', '--list', ...extra]);
+                    expect(refused.status).not.toBe(0);
+                    expect(refused.stderr).toContain('--list');
+                }
+                expect(execSync(`node ${BIN_PATH} serve --help`, { encoding: 'utf-8' })).toContain('--list');
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('--post-install without a terminal on a headless machine installs only: no service, no questions, next steps printed', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-postinstall-'));
+            try {
+                const result = require('child_process').spawnSync('node', [BIN_PATH, '--post-install', '--headless'], { encoding: 'utf-8', input: '', env: { ...process.env, HOME: tempHome } });
+                expect(result.status).toBe(0);
+                expect(result.stdout).toContain('没有启动任何服务');
+                expect(result.stdout).toContain('manyoyo setup');
+                expect(fs.existsSync(path.join(tempHome, '.manyoyo', 'serve', 'app.json'))).toBe(false);
+                expect(execSync(`node ${BIN_PATH} --help`, { encoding: 'utf-8' })).not.toContain('post-install');
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('--post-install on a headless machine with a terminal asks how to configure; Enter would pick 1, here 3 starts nothing (real pty)', async () => {
+            if (require('child_process').spawnSync('script', ['--version']).error) return; // 没有 script 命令就跳过
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-postinstall-tty-'));
+            try {
+                const output = await new Promise(resolve => {
+                    const child = require('child_process').spawn('script', ['-qec', `node ${BIN_PATH} --post-install --headless`, '/dev/null'], { env: { ...process.env, HOME: tempHome }, stdio: ['pipe', 'pipe', 'pipe'] });
+                    let text = '';
+                    child.stdout.on('data', chunk => { text += chunk; if (text.includes('请选择 [默认选1]') && !child.stdin.writableEnded) child.stdin.write('3\n'); });
+                    child.on('close', () => resolve(text));
+                    setTimeout(() => child.kill('SIGKILL'), 15000);
+                });
+                expect(output).toContain('这台机器没有图形界面，怎么完成首次配置？');
+                expect(output).toContain('1) 在终端里配置（推荐）');
+                expect(output).toContain('请选择 [默认选1]');
+                expect(output).toContain('没有启动任何服务');
+                expect(fs.existsSync(path.join(tempHome, '.manyoyo', 'serve', 'app.json'))).toBe(false);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('install subcommand was removed', () => {
                 const result = require('child_process').spawnSync('node', [BIN_PATH, 'install', 'docker-cli-plugin'], { encoding: 'utf-8' });
                 expect(result.status).not.toBe(0);
                 expect(result.stderr).toContain('unknown command');
