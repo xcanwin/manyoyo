@@ -1,4 +1,9 @@
 {
+    "attribution": {
+        "commit": "",
+        "pr": "",
+        "sessionUrl": false
+    },
     "statusLine": {
         "type": "command",
         "command": "bash /root/.claude/statusline.sh"

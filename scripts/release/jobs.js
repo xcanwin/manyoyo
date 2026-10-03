@@ -28,6 +28,8 @@ class JobRunner extends EventEmitter {
         this.events = [];
         this.seq = 0;
         this.pending = null;
+        this.recheckTimes = deps.recheckTimes === undefined ? 4 : deps.recheckTimes;
+        this.recheckDelayMs = deps.recheckDelayMs === undefined ? 10000 : deps.recheckDelayMs;
     }
 
     emitEvent(event) {
@@ -86,8 +88,14 @@ class JobRunner extends EventEmitter {
             const ctx = this.deps.makeCtx(line => this.emitEvent({ type: 'log', stage: id, line }), job.controller.signal);
             await this.deps.actions[id](ctx, job.params[id] || {}, facts);
             if (job.controller.signal.aborted) throw new ReleaseError('CANCELLED', '已取消');
-            facts = await this.deps.collect();
-            stage = computeStages(facts, this.deps.getState()).find(item => item.id === id);
+            // 外部状态（GitHub 的运行列表、npm 的 CDN）有传播延迟：刚做完立刻读可能还是旧的，多读几次再下结论
+            for (let attempt = 0; ; attempt += 1) {
+                facts = await this.deps.collect();
+                stage = computeStages(facts, this.deps.getState()).find(item => item.id === id);
+                if (stage.state === 'done' || attempt >= this.recheckTimes || job.controller.signal.aborted || this.deps.dryRun || id === 'manual') break;
+                this.emitEvent({ type: 'log', stage: id, line: `状态还没更新（${stage.state}），${this.recheckDelayMs / 1000} 秒后再确认（${attempt + 1}/${this.recheckTimes}）…` });
+                await (this.deps.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms))))(this.recheckDelayMs);
+            }
             this.emitEvent({ type: 'stage', stage: id, state: 'finished', result: stage.state, detail: stage.detail });
             if (!this.deps.dryRun && job.mode !== 'single' && stage.state !== 'done' && id !== 'manual') {
                 throw new ReleaseError('NOT_DONE', `「${def.title}」执行完但状态仍是 ${stage.state}：${stage.detail}`);
