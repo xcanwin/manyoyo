@@ -28,7 +28,8 @@ function makeWorld() {
         makeCtx: (log) => ({ log }),
         actions,
         describe: id => [`do ${id}`],
-        getState: () => ({})
+        getState: () => ({}),
+        recheckTimes: 0
     });
     return { world, actions, runner };
 }
@@ -138,6 +139,25 @@ describe('JobRunner', () => {
         expect(event.status).toBe('failed');
         expect(event.error).toContain('需要人工确认');
         expect(actions.image).not.toHaveBeenCalled();
+    });
+
+    test('a stage whose external state lags behind (GitHub run list, npm CDN) is re-checked before failing the run', async () => {
+        const { runner, actions, world } = makeWorld();
+        world.merged = true;
+        runner.recheckTimes = 3;
+        runner.recheckDelayMs = 1;
+        const original = runner.deps.collect;
+        let lag = 2; // 动作做完后，前两次读到的仍是旧状态
+        actions.packages.mockImplementation(async () => { world.built = true; });
+        runner.deps.collect = async () => {
+            const facts = await original();
+            if (world.built && lag > 0) { lag -= 1; return { ...facts, runs: { macos: [], linux: [], image: [], npm: [], assets: [], verify: [] } }; }
+            return facts;
+        };
+        const done = finished(runner);
+        runner.start({ stages: ['packages'], mode: 'auto', confirmed: true });
+        expect((await done).status).toBe('succeeded');
+        expect(runner.events.some(event => event.type === 'log' && /状态还没更新/.test(event.line))).toBe(true);
     });
 
     test('dry-run walks through every stage even though nothing changes (no BLOCKED / NOT_DONE stops)', async () => {
