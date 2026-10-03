@@ -133,3 +133,22 @@ describe('global-config', () => {
         }
     });
 });
+
+describe('global-config 格式保持', () => {
+    test('imageVersion 缺失时插入且保留注释，头部注释含 { 不受影响', () => {
+        const fs = require('fs');
+        const os = require('os');
+        const path = require('path');
+        const { syncGlobalImageVersion } = require('../lib/global-config');
+        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'my-gc-'));
+        try {
+            fs.mkdirSync(path.join(home, '.manyoyo'));
+            const p = path.join(home, '.manyoyo', 'manyoyo.json');
+            fs.writeFileSync(p, '// 注释 {x}\n{\n    // 保留\n    yolo: "c",\n}\n');
+            syncGlobalImageVersion('2.0.0-common', { homeDir: home });
+            expect(fs.readFileSync(p, 'utf-8')).toBe('// 注释 {x}\n{\n    imageVersion: "2.0.0-common",\n    // 保留\n    yolo: "c",\n}\n');
+        } finally {
+            fs.rmSync(home, { recursive: true, force: true });
+        }
+    });
+});

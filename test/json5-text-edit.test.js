@@ -89,3 +89,16 @@ describe('upsertValueByPath indentation', () => {
         expect(JSON5.parse(text).runs.claude.env.K).toBe('v');
     });
 });
+
+describe('upsertValueByPath 格式保持', () => {
+    test('空对象插入不产生空行', () => {
+        const text = upsertValueByPath('{\n}\n', ['runs', 'a'], '{}');
+        expect(text).toBe('{\n    runs: {\n        a: {},\n    },\n}\n');
+    });
+
+    test("'{' 行尾注释留在原行，且头部注释里的 { 不影响定位", () => {
+        const text = upsertValueByPath('// 头 {x}\n{ // 说明\n    a: 1,\n}\n', ['b'], '2');
+        expect(text).toBe('// 头 {x}\n{ // 说明\n    b: 2,\n    a: 1,\n}\n');
+        expect(JSON5.parse(text)).toEqual({ a: 1, b: 2 });
+    });
+});
