@@ -1,11 +1,11 @@
 ---
 title: 安装 | MANYOYO
-description: 一条命令安装 MANYOYO 与容器运行环境，浏览器自动打开向导，几分钟内开始使用 AI Agent 沙箱。
+description: 一条命令安装 MANYOYO 与容器运行环境，按屏幕提示完成配置，几分钟内开始使用 AI Agent 沙箱。
 ---
 
 # 安装
 
-在终端执行这一条命令，装完浏览器会自动打开向导：
+在终端执行这一条命令，装完按屏幕提示完成配置：
 
 ```bash
 curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
@@ -14,8 +14,8 @@ curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
 ## macOS / Linux（推荐）
 
 - **macOS**：不需要预装任何东西，安装包自带 Node.js、容器运行环境和 MANYOYO 镜像（约 1.8GB，下载需要几分钟）。
-- **Linux（Debian / Ubuntu，Ubuntu 22.04 / Debian 12 及以上）**：需要已经装好 Docker 或 Podman，没有时安装器会提示怎么装。
-- 整个过程不需要管理员密码，也不会改动系统目录。
+- **Linux（Ubuntu 22.04 / Debian 12 及以上）**：缺少容器环境时，安装器会说明原因，征得你同意后用 sudo 自动安装。
+- macOS 不需要管理员密码；Linux 只有在你同意安装缺失的组件时才会用到 sudo。
 
 装完后下一步：[第一次使用](./first-run.md)。
 

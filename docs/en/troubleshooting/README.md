@@ -9,8 +9,8 @@ Find your symptom; if it is not here, use the "Minimal diagnosis" at the bottom.
 
 ## Install and start
 
-**The Linux installer says there is no Docker / Podman**
-Install one and re-run the install command; it resumes: `sudo apt update && sudo apt install -y podman`, or follow Docker's documentation. The installer never runs `sudo` for you.
+**The Linux installer reports a missing container runtime or network component**
+Run the command the installer prints, then re-run the install command; it resumes. Without a terminal, or if you answer n, the installer never runs `sudo`. If a run fails after installing, `manyoyo doctor` finds the cause and prints the command.
 
 **The browser did not open automatically**
 The terminal prints a one-time login URL; open it within 60 seconds, or run `manyoyo` again after it expires. For SSH and other machines without a graphical session see [First Run](../guide/first-run.md).

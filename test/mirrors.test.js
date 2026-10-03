@@ -101,3 +101,33 @@ describe('mirror presets (single source of truth)', () => {
         expect(listMirrorPresets().apt.map(item => item.label)).toEqual(expect.arrayContaining(['清华', '中科大']));
     });
 });
+
+describe('runWithEnvFile', () => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const { runWithEnvFile } = require('../lib/container-run');
+
+    test('moves --env KEY=value into a 0600 env file that is removed after exec', () => {
+        const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-envfile-')), 'tmp');
+        let seen;
+        runWithEnvFile(['run', '-d', '--env', 'ANTHROPIC_AUTH_TOKEN=sk-secret', '--env', 'KEEP', '--env', 'A=b=c', 'img'], dir, args => {
+            seen = args;
+            const file = args[args.indexOf('--env-file') + 1];
+            expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+            expect(fs.statSync(dir).mode & 0o777).toBe(0o700);
+            expect(fs.readFileSync(file, 'utf8')).toBe('ANTHROPIC_AUTH_TOKEN=sk-secret\nA=b=c\n');
+        });
+        expect(seen.join(' ')).not.toContain('sk-secret');
+        expect(seen).toEqual(['run', '-d', '--env-file', expect.any(String), '--env', 'KEEP', 'img']);
+        expect(fs.readdirSync(dir)).toEqual([]);
+    });
+
+    test('removes the file when exec throws, and leaves args alone without KEY=value envs', () => {
+        const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-envfile-')), 'tmp');
+        expect(() => runWithEnvFile(['run', '--env', 'A=b'], dir, () => { throw new Error('boom'); })).toThrow('boom');
+        expect(fs.readdirSync(dir)).toEqual([]);
+        const untouched = ['run', '--env', 'KEEP'];
+        expect(runWithEnvFile(untouched, path.join(dir, 'none'), args => args)).toBe(untouched);
+    });
+});

@@ -3,7 +3,8 @@
 </p>
 
 # <p align="center"><a href="https://github.com/xcanwin/manyoyo">MANYOYO（慢悠悠）</a></p>
-<p align="center">让 Claude Code / Codex / Gemini / OpenCode 在容器里放心跑 YOLO 模式：AI 随便折腾，伤不到你的电脑。</p>
+<p align="center"><b>MANYOYO – open-source sandbox for running AI coding agents (Claude Code / Codex / Gemini) safely in Docker/Podman</b></p>
+<p align="center">开源 AI Agent 沙箱：让 Claude Code / Codex / Gemini / OpenCode 在容器里放心跑 YOLO 模式，AI 随便折腾，伤不到你的电脑。</p>
 <p align="center">
   <a href="https://www.npmjs.com/package/@xcanwin/manyoyo"><img alt="npm" src="https://img.shields.io/npm/v/@xcanwin/manyoyo?style=flat-square" /></a>
   <a href="https://github.com/xcanwin/manyoyo/actions/workflows/npm-publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/xcanwin/manyoyo/npm-publish.yml?style=flat-square" /></a>
@@ -12,7 +13,7 @@
 
 <p align="center">
   <a href="README.md"><b>中文</b></a> |
-  <a href="https://xcanwin.github.io/manyoyo/en/">English</a>
+  <a href="README.en.md">English</a>
 </p>
 <p align="center">
   文档：<a href="https://xcanwin.github.io/manyoyo/">https://xcanwin.github.io/manyoyo/</a>
@@ -28,7 +29,7 @@
 curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
 ```
 
-装完浏览器自动打开，按向导选 Agent、填 Key 就能开始对话。macOS 不需要预装任何东西；Linux 需要已有 Docker 或 Podman。
+装完按屏幕提示完成配置。macOS 不需要预装任何东西。Linux：缺少容器环境时，安装器会说明原因，征得你同意后用 sudo 自动安装。
 
 ### 已有 Node.js 和 Docker/Podman
 

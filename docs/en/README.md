@@ -1,7 +1,7 @@
 ---
 layout: home
-title: MANYOYO Docs | AI Agent CLI Security Sandbox
-description: MANYOYO lets Claude Code, Codex, Gemini and OpenCode run in YOLO mode inside a container so the AI can go wild without hurting your computer. One command to install.
+title: MANYOYO Docs | Open-source AI agent sandbox
+description: "MANYOYO is an open-source AI agent sandbox: run AI agents safely (Claude Code, Codex, Gemini, OpenCode in YOLO mode) inside Docker/Podman containers. One command to install."
 
 hero:
   name: MANYOYO
@@ -43,7 +43,7 @@ features:
 curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
 ```
 
-When it finishes the browser opens; follow the wizard to pick an agent and enter a key, then start chatting. macOS needs nothing installed first; Linux needs Docker or Podman. If you already have Node.js and Docker/Podman, `npm install -g @xcanwin/manyoyo` works too.
+When it finishes, follow the on-screen prompts to finish setup. macOS needs nothing installed first. Linux: if the container runtime is missing, the installer explains why and, with your consent, installs it with sudo. If you already have Node.js and Docker/Podman, `npm install -g @xcanwin/manyoyo` works too.
 
 ## What is it
 

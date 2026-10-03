@@ -9,7 +9,7 @@ description: MANYOYO 安装指南，涵盖 Node.js 与 Docker/Podman 前置条�
 
 ## 推荐：一键安装
 
-macOS 与 Linux（Debian / Ubuntu）用户优先用[一条命令安装](../guide/quick-start.md)，无需管理员密码（安装器不执行 `sudo`）。下面的 npm / 包管理器 / 源码方式适用于 Windows(WSL)，以及已经装好 Node.js 与 Docker / Podman、想自己管理版本的用户。
+macOS 与 Linux（Debian / Ubuntu）用户优先用[一条命令安装](../guide/quick-start.md)，macOS 无需管理员密码，Linux 只有缺少容器环境、且你同意时才会用 `sudo` 安装。下面的 npm / 包管理器 / 源码方式适用于 Windows(WSL)，以及已经装好 Node.js 与 Docker / Podman、想自己管理版本的用户。
 
 ## 系统要求
 

@@ -3,6 +3,13 @@
 const { describeError, formatErrorHint } = require('../lib/error-hints');
 
 describe('error hints', () => {
+    test('rootless podman missing network component maps to an executable command', () => {
+        const info = describeError('Error: could not find slirp4netns, the network namespace can\'t be configured', { osRelease: 'ID=ubuntu\n' });
+        expect(info.code).toBe('ROOTLESS_NETWORK_MISSING');
+        expect(info.action).toContain('sudo apt-get install -y slirp4netns');
+        expect(describeError('could not find pasta', { osRelease: 'ID=ubuntu\n' }).action).toContain('sudo apt-get install -y passt');
+    });
+
     test.each([
         ['Cannot connect to Podman. Please verify your connection', 'PODMAN_MACHINE_UNAVAILABLE', 'podman machine start'],
         ['unable to connect to Podman socket: failed to connect', 'PODMAN_MACHINE_UNAVAILABLE', 'podman machine start'],

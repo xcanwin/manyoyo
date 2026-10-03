@@ -78,3 +78,14 @@ describe('json5 text edit helpers', () => {
         });
     });
 });
+
+describe('upsertValueByPath indentation', () => {
+    const { upsertValueByPath } = require('../lib/json5-text-edit');
+    test('nested inserts keep a consistent 4-space indent and valid JSON5', () => {
+        const JSON5 = require('json5');
+        let text = '{\n    a: 1,\n}\n';
+        text = upsertValueByPath(text, ['runs', 'claude'], JSON.stringify({ env: { K: 'v' } }, null, 4));
+        expect(text).toBe('{\n    runs: {\n        claude: {\n            "env": {\n                "K": "v"\n            }\n        },\n    },\n    a: 1,\n}\n');
+        expect(JSON5.parse(text).runs.claude.env.K).toBe('v');
+    });
+});

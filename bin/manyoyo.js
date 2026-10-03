@@ -9,7 +9,7 @@ const net = require('net');
 const readline = require('readline');
 const { Command, Help } = require('commander');
 const { startWebServer } = require('../lib/web/server');
-const { buildContainerRunArgs, buildContainerRunCommand } = require('../lib/container-run');
+const { buildContainerRunArgs, buildContainerRunCommand, runWithEnvFile } = require('../lib/container-run');
 const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = require('../lib/global-config');
 const { resolveUpdateImageVersion } = require('../lib/image-version-policy');
 const { selectContainerRuntime, mergeRuntimeEnv } = require('../lib/container-runtime');
@@ -47,6 +47,7 @@ const { applyAptMirror } = require('../lib/mirrors');
 const {
     sanitizeSensitiveData,
     sanitizeServeLogText,
+    redactCommandArgs,
     formatServeLogValue,
     getServeProcessSnapshot
 } = require('../lib/serve-log');
@@ -728,6 +729,18 @@ async function ensureRunImage(runtime) {
     });
 }
 
+// 把 run 失败的 stderr 尾部（已打码）与可执行的修复提示拼进错误信息，而不是只剩一行 Command failed
+function explainCreateFailure(err) {
+    const raw = getCommandFailureText(err);
+    const tail = sanitizeServeLogText(String(err && err.stderr || '')).trim().split('\n').slice(-8).join('\n');
+    const info = describeError(raw, { command: DOCKER_CMD });
+    const parts = [err.message];
+    if (tail) parts.push(tail);
+    if (info && info.code === 'ROOTLESS_NETWORK_MISSING') parts.push(`提示: ${info.reason}\n${info.action}`);
+    err.message = parts.join('\n');
+    return err;
+}
+
 function showImagePullHint(err) {
     const info = describeError(getCommandFailureText(err), { imageRef: `${IMAGE_NAME}:${IMAGE_VERSION}` });
     if (!info || !['IMAGE_PULL_FAILED', 'IMAGE_NOT_FOUND'].includes(info.code)) {
@@ -753,7 +766,7 @@ function runCmd(cmd, args, options = {}) {
         if (options.ignoreError) {
             return result.stdout || '';
         }
-        const err = new Error(`Command failed: ${cmd} ${args.join(' ')}`);
+        const err = new Error(`Command failed: ${cmd} ${redactCommandArgs(args).join(' ')}`);
         err.stdout = result.stdout;
         err.stderr = result.stderr;
         err.status = result.status;
@@ -1473,6 +1486,9 @@ https://github.com/xcanwin/manyoyo
         await runAppLauncher({ force: launcherArgs.force });
     }
 
+    // 顶层 -V 与 -v 等价（commander 只允许一个短选项；子命令里的 -v 仍是 --volume，不受影响）
+    if (process.argv.length === 3 && process.argv[2] === '-V') process.argv[2] = '-v';
+
     // Pre-handle -x/--shell-full: treat all following args as a single command
     normalizeShellFullArgv(process.argv);
     normalizeWorktreeArgv(process.argv);
@@ -1581,8 +1597,10 @@ https://github.com/xcanwin/manyoyo
         };
     }
 
-    // Load run config if specified
-    const runConfig = options.run ? loadRunConfig(options.run, config) : {};
+    // Load run config if specified；doctor 不带 -r 且 runs 里只有一个配置时，按它检查
+    const runsMap = config.runs && typeof config.runs === 'object' && !Array.isArray(config.runs) ? Object.keys(config.runs) : [];
+    const runNameToLoad = options.run || (selectedAction === 'doctor' && runsMap.length === 1 ? runsMap[0] : '');
+    const runConfig = runNameToLoad ? loadRunConfig(runNameToLoad, config) : {};
     const globalFirstConfig = normalizeFirstConfig(config.first, '全局配置');
     const runFirstConfig = normalizeFirstConfig(runConfig.first, '运行配置');
 
@@ -2175,10 +2193,12 @@ async function createNewContainer(runtime) {
     // 使用数组参数执行命令（安全方式）
     try {
         const args = buildDockerRunArgs(runtime);
-        dockerExecArgs(args, { stdio: 'pipe' });
+        runWithEnvFile(args, path.join(os.homedir(), '.manyoyo', 'tmp'), finalArgs => dockerExecArgs(finalArgs, { stdio: 'pipe' }));
     } catch (e) {
         showImagePullHint(e);
-        throw e;
+        // 失败的 run 可能留下 Created 状态的容器；这个名字创建前不存在，所以只清理本次留下的这一个
+        try { dockerExecArgs(['rm', '-f', runtime.containerName], { stdio: 'pipe' }); } catch (cleanupError) { /* 尽力清理 */ }
+        throw explainCreateFailure(e);
     }
 
     // Wait for container to be ready
@@ -2223,7 +2243,7 @@ function buildDockerRunArgs(runtime) {
  * @returns {string} 命令字符串
  */
 function buildDockerRunCmd(runtime) {
-    const args = buildDockerRunArgs(runtime);
+    const args = redactCommandArgs(buildDockerRunArgs(runtime));
     return buildContainerRunCommand(DOCKER_CMD, args);
 }
 

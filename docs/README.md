@@ -1,7 +1,7 @@
 ---
 layout: home
-title: MANYOYO 文档 | AI 智能体 CLI 安全沙箱
-description: MANYOYO 让 Claude Code、Codex、Gemini、OpenCode 在容器里放心跑 YOLO 模式，AI 随便折腾，伤不到你的电脑。一条命令安装。
+title: MANYOYO 文档 | 开源 AI Agent 沙箱（AI agent sandbox）
+description: MANYOYO 是开源的 AI Agent 沙箱，让 Claude Code、Codex、Gemini、OpenCode 在 Docker/Podman 容器里安全运行 YOLO 模式（run AI agents safely）。一条命令安装。
 
 hero:
   name: MANYOYO
@@ -43,7 +43,7 @@ features:
 curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
 ```
 
-装完浏览器自动打开，按向导选 Agent、填 Key 就能开始对话。macOS 不需要预装任何东西；Linux 需要已有 Docker 或 Podman。已有 Node.js 和 Docker/Podman 的用户，也可以 `npm install -g @xcanwin/manyoyo`。
+装完按屏幕提示完成配置。macOS 不需要预装任何东西。Linux：缺少容器环境时，安装器会说明原因，征得你同意后用 sudo 自动安装。已有 Node.js 和 Docker/Podman 的用户，也可以 `npm install -g @xcanwin/manyoyo`。
 
 ## 它是什么
 

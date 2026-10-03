@@ -9,7 +9,7 @@ This page provides a detailed installation guide for MANYOYO, including prerequi
 
 ## Recommended: one-line install
 
-On macOS and Linux (Debian / Ubuntu) prefer the [one-line install](../guide/quick-start.md); it needs no administrator password (the installer never runs `sudo`). The npm / package manager / source methods below are for Windows (WSL), and for users who already have Node.js and Docker / Podman and want to manage versions themselves.
+On macOS and Linux (Debian / Ubuntu) prefer the [one-line install](../guide/quick-start.md); macOS needs no administrator password, and on Linux `sudo` is only used to install a missing container runtime, and only with your consent. The npm / package manager / source methods below are for Windows (WSL), and for users who already have Node.js and Docker / Podman and want to manage versions themselves.
 
 ## System Requirements
 

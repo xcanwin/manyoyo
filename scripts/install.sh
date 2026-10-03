@@ -67,6 +67,8 @@ main() {
     say "MANYOYO ${version}（${os_name} / ${arch_name}）"
 
     # 3. 校验清单 → 选出安装包文件名（优先单文件，没有再找分卷 .run.001…）
+    # 进度条只在终端里显示；日志 / CI 里（stderr 不是终端）会刷出几十 KB 的进度行
+    if [ -t 2 ]; then PROGRESS=-#; else PROGRESS=-sS; fi
     download_dir="${HOME}/.manyoyo/downloads"
     mkdir -p "$download_dir"
     chmod 700 "$download_dir" 2>/dev/null || true
@@ -108,7 +110,8 @@ main() {
         # 续传（-C -）。只有“服务器拒绝续传（HTTP 错误）”或“续传后校验不过”才删掉残留文件从头再下；
         # 网络中断等其他失败保留半截文件，下次重跑接着下
         curl_status=0
-        curl -fL -C - --retry 3 -# -o "$dest" "${DOWNLOAD_BASE}/${tag}/${name}" || curl_status=$?
+        # shellcheck disable=SC2086  # 进度条参数是单个固定选项
+        curl -fL -C - --retry 3 $PROGRESS -o "$dest" "${DOWNLOAD_BASE}/${tag}/${name}" || curl_status=$?
         if [ "$curl_status" -eq 0 ] && [ "$(sha256_of "$dest")" = "$expected" ]; then
             continue
         fi
@@ -116,7 +119,8 @@ main() {
             fail "下载 ${name} 中断（curl 退出码 ${curl_status}）。" "已下载的部分保留在 ${download_dir}，检查网络后重新运行会接着下载。"
         fi
         rm -f "$dest"
-        curl -fL --retry 3 -# -o "$dest" "${DOWNLOAD_BASE}/${tag}/${name}" || fail "下载 ${name} 失败。" "检查网络后重新运行；下载慢可以用 MANYOYO_DOWNLOAD_BASE 指向镜像地址。"
+        # shellcheck disable=SC2086
+        curl -fL --retry 3 $PROGRESS -o "$dest" "${DOWNLOAD_BASE}/${tag}/${name}" || fail "下载 ${name} 失败。" "检查网络后重新运行；下载慢可以用 MANYOYO_DOWNLOAD_BASE 指向镜像地址。"
         if [ "$(sha256_of "$dest")" != "$expected" ]; then
             rm -f "$dest"
             fail "${name} 校验失败，文件已删除。" "多半是下载中断或文件被改动，请重新运行脚本。"

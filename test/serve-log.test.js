@@ -38,3 +38,12 @@ describe('serve log sanitization', () => {
         expect(formatted).not.toContain('secret123');
     });
 });
+
+describe('redactCommandArgs', () => {
+    const { redactCommandArgs } = require('../lib/serve-log');
+    test('masks values of sensitive KEY=value args only', () => {
+        expect(redactCommandArgs(['run', '--env', 'ANTHROPIC_AUTH_TOKEN=sk-abcdef', '--env', 'MODE=fast', '--label', 'manyoyo.default_cmd=claude'])).toEqual(
+            ['run', '--env', 'ANTHROPIC_AUTH_TOKEN=****', '--env', 'MODE=fast', '--label', 'manyoyo.default_cmd=claude']
+        );
+    });
+});

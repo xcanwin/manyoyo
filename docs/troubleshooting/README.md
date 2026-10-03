@@ -9,8 +9,8 @@ description: MANYOYO 常见问题按症状索引：安装、登录、权限、�
 
 ## 安装与启动
 
-**Linux 安装时提示没有 Docker / Podman**
-装好再重新运行安装命令即可续上：`sudo apt update && sudo apt install -y podman`，或按 Docker 官方文档安装。安装器不会替你执行 `sudo`。
+**Linux 安装时提示缺少容器环境或网络组件**
+按提示执行安装器给出的那条命令，再重新运行安装命令即可续上；没有终端或你选了 n 时，安装器不会执行 `sudo`。已经装好后运行出错，`manyoyo doctor` 会查出原因并给出命令。
 
 **浏览器没有自动打开**
 终端会打印一次性登录地址，60 秒内访问即可；超时再执行一次 `manyoyo`。SSH 等无图形界面的机器见[第一次使用](../guide/first-run.md)。

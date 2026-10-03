@@ -412,8 +412,15 @@ describe('offline installer (sh): Linux package', () => {
         MANYOYO_TEST_GLIBC: 'glibc 2.35',
         MANYOYO_TEST_SHELL: '/bin/bash',
         MANYOYO_TEST_SKIP_MACHINE: '',
+        MANYOYO_TEST_TTY: path.join(root, 'no-tty'),
+        MANYOYO_TEST_OS_RELEASE: osRelease('ubuntu'),
         ...extra
     });
+    const osRelease = (id, like = '') => {
+        const file = path.join(root, `os-release-${id}`);
+        fs.writeFileSync(file, `NAME="x"\nID=${id}\n${like ? `ID_LIKE="${like}"\n` : ''}`);
+        return file;
+    };
     const linuxPayload = (options = {}) => writePayload(path.join(root, 'payload'), { kind: 'lite', arch: 'x64', platform: 'linux', ...options });
     // 替身 docker / podman：info 的行为由 FAKE_INFO 决定（ok / denied / subuid / down）
     function writeFakeRuntime(name) {
@@ -434,12 +441,14 @@ exit 0
 `);
     }
 
-    test('without docker/podman: explains the apt command, never installs anything, and leaves ~/.manyoyo untouched except logs', () => {
+    test('without docker/podman and without a terminal: prints a copy-pasteable apt command, never runs sudo, leaves ~/.manyoyo untouched except logs', () => {
+        writeFakeSudo();
         const result = install(linuxPayload(), linuxEnv());
         expect(result.status).toBe(1);
         expect(result.stdout).toContain('没有检测到 docker 或 podman');
-        expect(result.stdout).toContain('sudo apt update && sudo apt install -y podman');
-        expect(result.stdout).toContain('重新运行本安装包即可续上');
+        expect(result.stdout).toContain('执行：sudo apt-get install -y podman，然后重新运行安装命令');
+        expect(read(state('calls.log'))).not.toContain('sudo');
+        expect(result.stdout).toContain('直接重新运行安装包即可续上');
         expect(fs.existsSync(path.join(home, '.manyoyo/app'))).toBe(false);
         expect(fs.existsSync(path.join(home, '.manyoyo/bin'))).toBe(false);
     });
@@ -507,6 +516,127 @@ exit 0
         const result = install(writePayload(path.join(root, 'payload')), { MANYOYO_TEST_UNAME_S: 'Linux' });
         expect(result.status).toBe(1);
         expect(result.stdout).toContain('只支持 macOS');
+    });
+
+    // 替身 sudo：只记录调用，再执行 FAKE_SUDO_EFFECT（模拟包管理器装好了什么）
+    function writeFakeSudo() {
+        script(path.join(fakeBin, 'sudo'), `
+echo "sudo $*" >> "\${FAKE_STATE:?}/calls.log"
+[ -n "\${FAKE_SUDO_EFFECT:-}" ] && sh -c "$FAKE_SUDO_EFFECT"
+exit 0
+`);
+    }
+    // 替身 podman：rootless，网络组件是否存在由 $FAKE_STATE/net-ok 决定
+    function writeNetPodman(version = '4.9.3') {
+        script(path.join(fakeBin, 'podman'), `
+state="\${FAKE_STATE:?}"
+echo "podman $*" >> "$state/calls.log"
+case "$*" in
+  "--version") echo "podman version ${version}" ;;
+  *Security.Rootless*) echo true ;;
+  *Slirp4NetNS.Executable*|*Pasta.Executable*) [ -f "$state/net-ok" ] && echo /usr/bin/netcomp ;;
+  "load -i"*) echo "$3" >> "$state/loaded" ;;
+esac
+exit 0
+`);
+    }
+    const answer = text => {
+        const file = path.join(root, 'tty');
+        fs.writeFileSync(file, text);
+        return { MANYOYO_TEST_TTY: file };
+    };
+    const sudoCalls = () => calls().filter(line => line.startsWith('sudo '));
+
+    test('podman without the default network component (slirp4netns for 4.x), no terminal: fails before "安装完成" with the exact command, no sudo', () => {
+        writeNetPodman('4.9.3');
+        writeFakeSudo();
+        const result = install(linuxPayload(), linuxEnv());
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain('缺少 rootless 网络组件 slirp4netns');
+        expect(result.stdout).toContain('执行：sudo apt-get install -y slirp4netns，然后重新运行安装命令');
+        expect(result.stdout).not.toContain('安装完成');
+        expect(sudoCalls()).toEqual([]);
+        expect(fs.existsSync(path.join(home, '.manyoyo/app'))).toBe(false);
+    });
+
+    test('podman 5.x checks pasta and installs the passt package', () => {
+        writeNetPodman('5.2.1');
+        const result = install(linuxPayload(), linuxEnv());
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain('缺少 rootless 网络组件 pasta');
+        expect(result.stdout).toContain('sudo apt-get install -y passt');
+        expect(calls().some(line => line.includes('Host.Pasta.Executable'))).toBe(true);
+    });
+
+    test('with a terminal and answer n: nothing is executed, command is printed, exit non-zero', () => {
+        writeNetPodman();
+        writeFakeSudo();
+        const result = install(linuxPayload(), linuxEnv(answer('n\n')));
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain('现在执行吗？[默认选Y Y/n]');
+        expect(result.stdout).toContain('sudo apt-get install -y slirp4netns');
+        expect(sudoCalls()).toEqual([]);
+    });
+
+    test('with a terminal, empty answer means yes: runs sudo, re-checks, then finishes the install', async () => {
+        writeNetPodman();
+        writeFakeSudo();
+        const result = install(linuxPayload(), linuxEnv({ ...answer('\n'), FAKE_SUDO_EFFECT: ': > "$FAKE_STATE/net-ok"' }));
+        expect(result.status).toBe(0);
+        expect(sudoCalls()).toEqual(['sudo apt-get install -y slirp4netns']);
+        expect(result.stdout).toContain('✓ 已安装 slirp4netns');
+        expect(result.stdout).toContain('安装完成');
+        expect(await waitFor(imported)).toBe(true);
+    });
+
+    test('sudo ran but the component is still missing: fails instead of reporting success', () => {
+        writeNetPodman();
+        writeFakeSudo();
+        const result = install(linuxPayload(), linuxEnv(answer('y\n')));
+        expect(result.status).toBe(1);
+        expect(sudoCalls().length).toBe(1);
+        expect(result.stdout).not.toContain('安装完成');
+    });
+
+    test('podman with the network component present: no prompt, no sudo', async () => {
+        writeNetPodman();
+        writeFakeSudo();
+        fs.mkdirSync(path.join(root, 'state'), { recursive: true });
+        fs.writeFileSync(path.join(root, 'state/net-ok'), '');
+        const result = install(linuxPayload(), linuxEnv());
+        expect(result.status).toBe(0);
+        expect(result.stdout).not.toContain('网络组件');
+        expect(sudoCalls()).toEqual([]);
+        expect(await waitFor(imported)).toBe(true);
+    });
+
+    test('docker is never checked for rootless networking', async () => {
+        writeFakeRuntime('docker');
+        writeFakeSudo();
+        const result = install(linuxPayload(), linuxEnv());
+        expect(result.status).toBe(0);
+        expect(sudoCalls()).toEqual([]);
+        expect(await waitFor(imported)).toBe(true);
+    });
+
+    test('no runtime, terminal, answer y: installs podman with apt-get, then continues (and still checks the network component)', () => {
+        writeFakeSudo();
+        const effect = `cat > "${fakeBin}/podman" <<'EOF'\n#!/bin/sh\ncase "$*" in "--version") echo "podman version 4.9.3" ;; *Security.Rootless*) echo true ;; *Slirp4NetNS.Executable*) echo /usr/bin/slirp4netns ;; esac\nexit 0\nEOF\nchmod +x "${fakeBin}/podman"`;
+        const result = install(linuxPayload(), linuxEnv({ ...answer('y\n'), FAKE_SUDO_EFFECT: effect }));
+        expect(result.status).toBe(0);
+        expect(sudoCalls()).toEqual(['sudo apt-get install -y podman']);
+        expect(result.stdout).toContain('▶ 使用已有的 podman');
+    });
+
+    test('Fedora/RHEL family uses dnf (yum when dnf is absent); unknown distros only print an explanation', () => {
+        writeNetPodman();
+        const fedora = install(linuxPayload(), linuxEnv({ MANYOYO_TEST_OS_RELEASE: osRelease('rocky', 'rhel centos fedora') }));
+        expect(fedora.status).toBe(1);
+        expect(fedora.stdout).toMatch(/sudo (dnf|yum) install -y slirp4netns/);
+        const unknown = install(linuxPayload(), linuxEnv({ MANYOYO_TEST_OS_RELEASE: osRelease('arch') }));
+        expect(unknown.status).toBe(1);
+        expect(unknown.stdout).toContain('请用系统的包管理器安装 slirp4netns');
+        expect(unknown.stdout).not.toContain('sudo ');
     });
 });
 
@@ -765,6 +895,7 @@ describe('scripts/install.sh (the curl | sh bootstrap)', () => {
         const code = text.replace(/^\s*#.*$/gm, '');
         expect(code).not.toMatch(/\bsudo\b/);
         expect(code).not.toMatch(/api\.github\.com/);
+        expect(code).not.toMatch(/ -# /);
         expect(text.split('\n').filter(line => /\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7f]/.test(line))).toEqual([]);
         expect(text).toContain('scripts/offline/install.sh');
         expect(fs.readFileSync(path.join(SCRIPTS, 'install.sh'), 'utf8')).toContain('scripts/install.sh');
