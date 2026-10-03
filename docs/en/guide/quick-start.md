@@ -1,11 +1,11 @@
 ---
 title: Install | MANYOYO
-description: Install MANYOYO and its container runtime with one command; the browser opens the setup wizard and you can start using the AI agent sandbox in minutes.
+description: Install MANYOYO and its container runtime with one command; follow the on-screen prompts and you can start using the AI agent sandbox in minutes.
 ---
 
 # Install
 
-Run this one command in a terminal; the browser opens the setup wizard when it finishes:
+Run this one command in a terminal; follow the on-screen prompts when it finishes:
 
 ```bash
 curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
@@ -14,8 +14,8 @@ curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
 ## macOS / Linux (recommended)
 
 - **macOS**: nothing to install first. The package bundles Node.js, the container runtime and the MANYOYO image (about 1.8GB, a few minutes to download).
-- **Linux (Debian / Ubuntu, Ubuntu 22.04 / Debian 12 or newer)**: Docker or Podman must already be installed; the installer tells you how if it is missing.
-- No administrator password is needed and no system directory is touched.
+- **Linux (Ubuntu 22.04 / Debian 12 or newer)**: if the container runtime is missing, the installer explains why and, with your consent, installs it with sudo.
+- macOS needs no administrator password; Linux only uses sudo when you agree to install a missing component.
 
 Next: [First Run](./first-run.md).
 

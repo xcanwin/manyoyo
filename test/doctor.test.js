@@ -3,6 +3,52 @@
 const { runDoctorChecks, applyDoctorFixes } = require('../lib/doctor');
 
 describe('doctor checks', () => {
+    const podmanRun = ({ exe = '', runError = null } = {}) => (command, args) => {
+        const text = args.join(' ');
+        if (text === '--version') return 'podman version 4.9.3';
+        if (text.includes('Rootless')) return 'true';
+        if (text.includes('Executable')) return exe;
+        if (args[0] === 'info') return 'daemon';
+        if (args[0] === 'image') return 'image-id';
+        if (args[0] === 'run') { if (runError) throw runError; return ''; }
+        throw new Error('unexpected command');
+    };
+    const podmanOptions = runCommand => ({
+        selectRuntime: () => ({ command: 'podman', env: {}, source: 'podman-daemon' }),
+        runCommand, platform: 'linux', configExists: true, imageName: 'img', imageVersion: '1-common', agentCommand: 'claude', portStatus: 'available'
+    });
+
+    test('missing rootless network component is an error with the fix command, and skips the start test', async () => {
+        const calls = [];
+        const run = podmanRun();
+        const report = await runDoctorChecks(podmanOptions((c, a) => { calls.push(a[0]); return run(c, a); }));
+        const check = report.checks.find(item => item.code === 'ROOTLESS_NETWORK_MISSING');
+        expect(check).toEqual(expect.objectContaining({ status: 'error', action: expect.stringMatching(/install -y slirp4netns|slirp4netns/) }));
+        expect(report.ok).toBe(false);
+        expect(calls).not.toContain('run');
+    });
+
+    test('healthy rootless podman: network ok and a real container start passes', async () => {
+        const report = await runDoctorChecks(podmanOptions(podmanRun({ exe: '/usr/bin/slirp4netns' })));
+        expect(report.checks).toEqual(expect.arrayContaining([
+            expect.objectContaining({ code: 'ROOTLESS_NETWORK_OK', status: 'ok' }),
+            expect.objectContaining({ code: 'CONTAINER_START_OK', status: 'ok' })
+        ]));
+        expect(report.ok).toBe(true);
+    });
+
+    test('a failing real start is translated by error hints', async () => {
+        const error = Object.assign(new Error('Command failed'), { stderr: 'Error: Bind for 0.0.0.0:80 failed: port is already allocated' });
+        const report = await runDoctorChecks(podmanOptions(podmanRun({ exe: '/x', runError: error })));
+        expect(report.checks.find(item => item.code === 'CONTAINER_START_FAILED')).toEqual(expect.objectContaining({ status: 'error', summary: expect.stringContaining('端口') }));
+    });
+
+    test('no plugins configured is not a warning', async () => {
+        const report = await runDoctorChecks(podmanOptions(podmanRun({ exe: '/x' })));
+        expect(report.checks.find(item => item.code === 'PLUGIN_CONFIG_VALID')).toEqual(expect.objectContaining({ status: 'ok' }));
+        expect(report.checks.find(item => item.code === 'PLUGIN_CONFIG_INVALID')).toBeUndefined();
+    });
+
     test('reports stable codes for runtime, daemon, image, config, agent, mode and plugin state', async () => {
         const report = await runDoctorChecks({
             selectRuntime: () => ({ command: 'docker', env: {}, source: 'docker-daemon' }),
@@ -10,6 +56,7 @@ describe('doctor checks', () => {
                 if (args[0] === '--version') return `${command} 1.0`;
                 if (args[0] === 'info') return 'daemon';
                 if (args[0] === 'image') return 'image-id';
+                if (args[0] === 'run') return '';
                 throw new Error('unexpected command');
             },
             configExists: true,

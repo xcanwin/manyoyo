@@ -306,13 +306,8 @@ describe('MANYOYO CLI', () => {
             expect(output).toMatch(/^\d+\.\d+\.\d+/);
         });
 
-        test('-V should be rejected', () => {
-            expect(() => {
-                execSync(`node ${BIN_PATH} -V`, {
-                    encoding: 'utf-8',
-                    stdio: 'pipe'
-                });
-            }).toThrow();
+        test('-V is an alias of -v', () => {
+            expect(execSync(`node ${BIN_PATH} -V`, { encoding: 'utf-8' })).toMatch(/^\d+\.\d+\.\d+/);
         });
 
         test('default imageName is the prebuilt ghcr image, and build tags with the same name', () => {
@@ -1688,6 +1683,18 @@ exit 0
                 const report = JSON.parse(runWithHome(tempHome, ['doctor', '--json']).stdout);
                 expect(report.runtimeCommand).toBe('podman');
                 expect(report.runtimeSource).toBe('config');
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
+        test('doctor without -r checks the only configured run; top-level -V prints the version', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-doctor-run-'));
+            try {
+                writeGlobalConfig(tempHome, { containerRuntime: 'podman', runs: { claude: { yolo: 'c' } } });
+                const report = JSON.parse(runWithHome(tempHome, ['doctor', '--json']).stdout);
+                expect(report.checks.find(check => check.code === 'AGENT_CONFIGURED').status).toBe('ok');
+                expect(runWithHome(tempHome, ['-V']).stdout.trim()).toBe(runWithHome(tempHome, ['-v']).stdout.trim());
             } finally {
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }

@@ -1,5 +1,5 @@
 #!/bin/sh
-# MANYOYO 离线安装器（POSIX sh，只用 macOS / Linux 自带命令；不联网、不用 brew/git/python3，不执行 sudo）。
+# MANYOYO 离线安装器（POSIX sh，只用 macOS / Linux 自带命令；不联网、不用 brew/git/python3；只有 Linux 缺容器环境、且用户在终端里同意后，才会执行一条 sudo 安装命令）。
 # 由 .run 头部解开负载后调用：sh install/install.sh [--install-only] [--headless|--gui]
 # 注意：这是 .run 内部的安装器；用户在终端里 curl | sh 运行的下载引导脚本是仓库里的 scripts/install.sh，它只负责下载、校验并启动 .run。
 # Linux 包（MANYOYO_OS=linux）不带 Podman：使用系统里已有的 podman / docker。
@@ -7,6 +7,7 @@
 #
 # 测试钩子（仅用于测试，发布包默认不设置）：
 #   MANYOYO_TEST_HOME / _UNAME_S / _UNAME_M / _MACOS_VERSION / _GLIBC / _FREE_MB / _SHELL
+#   MANYOYO_TEST_OS_RELEASE=<文件>  代替 /etc/os-release；MANYOYO_TEST_TTY=<文件>  代替 /dev/tty（文件内容就是用户的回答）
 #   MANYOYO_TEST_SKIP_MACHINE=1  跳过 podman machine 步骤
 #   MANYOYO_TEST_SKIP_OPEN=1     安装后不启动 manyoyo / 不打开浏览器
 set -eu
@@ -130,7 +131,77 @@ check_platform_linux() {
     check_free_space
 }
 
-# Linux 没有可用的 podman / docker：给出“原因 + 下一步”，不替用户执行 sudo
+# 终端：有 /dev/tty 才能问用户；curl | sh 没有终端时只打印命令
+TTY_DEV="${MANYOYO_TEST_TTY:-/dev/tty}"
+has_tty() {
+    [ -r "$TTY_DEV" ] && ( : < "$TTY_DEV" ) 2>/dev/null
+}
+
+# 按发行版生成安装某个包的命令（Debian/Ubuntu 用 apt-get，Fedora/RHEL 用 dnf 或 yum）；不认识的发行版返回 1
+# 与 lib/rootless-network.js 的 installCommand 保持同一套规则
+install_cmd_for() {
+    ids="$(sed -n 's/^ID\(_LIKE\)\{0,1\}=//p' "${MANYOYO_TEST_OS_RELEASE:-/etc/os-release}" 2>/dev/null | tr -d "\"'" | tr '[:upper:]' '[:lower:]')"
+    for id in $ids; do
+        case "$id" in
+            debian|ubuntu) echo "sudo apt-get install -y $1"; return 0 ;;
+            fedora|rhel|centos)
+                if command -v dnf >/dev/null 2>&1; then echo "sudo dnf install -y $1"; else echo "sudo yum install -y $1"; fi
+                return 0 ;;
+        esac
+    done
+    return 1
+}
+
+# 有终端时显示原因与完整命令，征得同意（默认 Y）后执行；成功返回 0。
+# 没有终端、用户回答 n、命令执行失败都返回 1，由调用方打印可复制的命令并 fail。
+offer_sudo_install() {
+    cmd="$1"
+    [ -n "$cmd" ] || return 1
+    has_tty || return 1
+    log "  将执行：${cmd}（会用到 sudo，可能需要输入你的登录密码）"
+    printf '  现在执行吗？[默认选Y Y/n] ' > /dev/tty 2>/dev/null || printf '  现在执行吗？[默认选Y Y/n] '
+    answer=""
+    read -r answer < "$TTY_DEV" || answer=n
+    case "$answer" in
+        ""|y|Y|yes|YES|Yes) ;;
+        *) return 1 ;;
+    esac
+    sh -c "$cmd" < "$TTY_DEV" || return 1
+}
+
+# rootless podman 的默认网络组件缺失时打印组件名（podman 4.x 用 slirp4netns，5.x 起用 pasta）；其余情况没有输出
+rootless_network_missing() {
+    command -v podman >/dev/null 2>&1 || return 1
+    probe="$STATE/podman-probe.txt"
+    WT_OUT="$probe" with_timeout 5 podman info --format '{{.Host.Security.Rootless}}' || return 1
+    [ "$(tr -d ' \r\n' < "$probe")" = true ] || return 1
+    WT_OUT="$probe" with_timeout 5 podman --version || return 1
+    major="$(sed -n 's/[^0-9]*\([0-9][0-9]*\)\..*/\1/p' "$probe" | head -n 1)"
+    if [ "${major:-0}" -ge 5 ] 2>/dev/null; then comp=pasta; field=Pasta; else comp=slirp4netns; field=Slirp4NetNS; fi
+    WT_OUT="$probe" with_timeout 5 podman info --format "{{.Host.${field}.Executable}}" || return 1
+    exe="$(tr -d ' \r\n' < "$probe")"
+    rm -f "$probe"
+    [ -z "$exe" ] || return 1
+    echo "$comp"
+}
+
+# podman 缺默认网络组件时 info 照样成功，但第一次 run 才会失败：在这里提前查出来，同意后装好
+ensure_rootless_network() {
+    missing="$(rootless_network_missing)" || return 0
+    pkg="$missing"
+    [ "$missing" = pasta ] && pkg=passt
+    cmd="$(install_cmd_for "$pkg")" || cmd=""
+    log "• 检测到 podman，但缺少 rootless 网络组件 ${missing}，没有它容器创建不了网络。"
+    if offer_sudo_install "$cmd"; then
+        [ -z "$(rootless_network_missing)" ] && { log "✓ 已安装 ${pkg}"; return 0; }
+    fi
+    if [ -n "$cmd" ]; then
+        fail "podman 缺少网络组件 ${missing}。" "执行：${cmd}，然后重新运行安装命令。"
+    fi
+    fail "podman 缺少网络组件 ${missing}。" "请用系统的包管理器安装 ${pkg}，然后重新运行安装命令。"
+}
+
+# Linux 没有可用的 podman / docker：能装就征得同意后装 podman，否则给出“原因 + 下一步”
 explain_no_runtime_linux() {
     me="${USER:-$(id -un 2>/dev/null || echo user)}"
     tmp_out="$STATE/runtime-probe.txt"
@@ -161,8 +232,18 @@ explain_no_runtime_linux() {
         esac
     done
     if [ -z "$found" ]; then
-        log "• 没有检测到 docker 或 podman。Linux 版安装包不自带容器运行环境，请先安装其中一个。"
-        log "  Debian / Ubuntu：sudo apt update && sudo apt install -y podman（安装器不会替你执行 sudo）；也可以按 Docker 官方文档安装 docker。"
+        log "• 没有检测到 docker 或 podman。Linux 版安装包不自带容器运行环境。"
+        cmd="$(install_cmd_for podman)" || cmd=""
+        if offer_sudo_install "$cmd"; then
+            if EXTERNAL_CMD="$(detect_external_runtime)"; then
+                return 0
+            fi
+            log "• podman 已安装，但 podman info 仍然失败，请先在终端里确认它能正常输出。"
+        elif [ -n "$cmd" ]; then
+            fail "没有可用的容器运行环境（docker 或 podman）。" "执行：${cmd}，然后重新运行安装命令。"
+        else
+            log "  请先用系统的包管理器安装 podman 或 docker。"
+        fi
     fi
     fail "没有可用的容器运行环境（docker 或 podman）。" "按上面的提示装好并确认 docker info / podman info 能正常输出，然后重新运行本安装包即可续上。"
 }
@@ -397,7 +478,12 @@ main() {
             log "▶ 使用已有的 ${EXTERNAL_CMD}"
         else
             explain_no_runtime_linux
+            MODE=external
+            log "▶ 使用已有的 ${EXTERNAL_CMD}"
         fi
+    fi
+    if [ "${MANYOYO_OS:-macos}" = linux ] && [ "$MODE" = external ] && [ "$EXTERNAL_CMD" = podman ]; then
+        ensure_rootless_network
     fi
 
     install_app

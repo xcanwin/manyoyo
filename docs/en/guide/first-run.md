@@ -9,7 +9,7 @@ The first-time setup comes in two flavors, depending on whether your machine has
 
 ## With a graphical session: the web wizard
 
-When installation finishes the browser opens already signed in. Follow the four steps:
+When installation finishes, follow the on-screen prompts (with a graphical session the browser opens already signed in). Four steps:
 
 1. Pick an agent (Claude Code / Codex / Gemini / OpenCode)
 2. Enter your API key (or a compatible service's Base URL) and optionally click "Test connection"

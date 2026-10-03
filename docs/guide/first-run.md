@@ -9,7 +9,7 @@ description: 安装后的首次配置：网页向导四步选 Agent、填 Key、
 
 ## 有图形界面：网页向导
 
-安装完成后浏览器自动打开并已登录，按向导四步走：
+安装完成后按屏幕提示进入向导（有图形界面时浏览器自动打开并已登录），四步走：
 
 1. 选择 Agent（Claude Code / Codex / Gemini / OpenCode）
 2. 填 API Key（或兼容服务的 Base URL），可以点「测试连接」
