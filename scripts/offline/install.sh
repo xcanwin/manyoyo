@@ -1,6 +1,6 @@
 #!/bin/sh
 # MANYOYO 离线安装器（POSIX sh，只用 macOS / Linux 自带命令；不联网、不用 brew/git/python3，不执行 sudo）。
-# 由 .run 头部解开负载后调用：sh install/install.sh [--no-open] [--headless|--gui]
+# 由 .run 头部解开负载后调用：sh install/install.sh [--install-only] [--headless|--gui]
 # 注意：这是 .run 内部的安装器；用户在终端里 curl | sh 运行的下载引导脚本是仓库里的 scripts/install.sh，它只负责下载、校验并启动 .run。
 # Linux 包（MANYOYO_OS=linux）不带 Podman：使用系统里已有的 podman / docker。
 # 幂等：每一步先检测，已完成就跳过；中途失败直接重跑即可续上。日志：~/.manyoyo/logs/install/
@@ -19,10 +19,10 @@ OPEN_AFTER=1
 LAUNCH_FLAGS=""
 for arg in "$@"; do
     case "$arg" in
-        --no-open) OPEN_AFTER=0 ;;
+        --install-only) OPEN_AFTER=0 ;;
         # 有头 / 无头由 manyoyo 无参启动器判定；这两个参数只是强制覆盖
         --headless|--gui) LAUNCH_FLAGS="$arg" ;;
-        -h|--help) echo "用法: sh manyoyo-*.run [--no-open] [--headless|--gui]"; exit 0 ;;
+        -h|--help) echo "用法: sh manyoyo-*.run [--install-only] [--headless|--gui]"; echo "  --install-only  只安装，不启动服务、不打开浏览器、不问配置方式"; exit 0 ;;
         *) echo "未知参数: $arg" >&2; exit 2 ;;
     esac
 done
@@ -350,7 +350,7 @@ start_image_import() {
         mv "$here/$MANYOYO_IMAGE_FILE" "$archive"
     fi
     cp "$here/install/finish-import.sh" "$IMPORT_DIR/finish.sh"
-    log "▶ 在后台导入镜像（约 30–90 秒，向导可以先用）"
+    log "▶ 在后台导入镜像（约 30–90 秒，期间可以先配置）"
     MANYOYO_IMPORT_STATE="$STATE/image-loaded-$MANYOYO_IMAGE_SHA" \
     MANYOYO_IMPORT_MARKER="$IMPORT_DIR/loading.json" \
     MANYOYO_IMPORT_LOG="$LOG_DIR/import.log" \
@@ -378,11 +378,7 @@ write_installed_record() {
 # main
 # ---------------------------------------------------------------------------
 main() {
-    if [ "${MANYOYO_OS:-macos}" = linux ]; then
-        log "MANYOYO $MANYOYO_VERSION 离线安装（linux / ${MANYOYO_ARCH}）"
-    else
-        log "MANYOYO $MANYOYO_VERSION 离线安装（$MANYOYO_KIND / ${MANYOYO_ARCH}）"
-    fi
+    log "MANYOYO $MANYOYO_VERSION 安装（${MANYOYO_OS:-macos} / ${MANYOYO_ARCH}）"
     check_platform
 
     MODE=private
@@ -398,6 +394,7 @@ main() {
         # 不带 Podman 的包只有 Linux 版：复用系统里已有的 docker / podman
         if EXTERNAL_CMD="$(detect_external_runtime)"; then
             MODE=external
+            log "▶ 使用已有的 ${EXTERNAL_CMD}"
         else
             explain_no_runtime_linux
         fi
@@ -432,7 +429,8 @@ main() {
 
     if [ "$OPEN_AFTER" = 1 ]; then
         # shellcheck disable=SC2086
-        "$ROOT/bin/manyoyo" $LAUNCH_FLAGS || log "• 自动打开失败，请新开终端后输入 manyoyo"
+        # 下一步由 manyoyo 决定：有图形界面直接打开网页；无头时问怎么配置（没有终端则只安装）；顺带提示旧版残留
+        "$ROOT/bin/manyoyo" --post-install $LAUNCH_FLAGS || log "• 没能继续配置，请新开终端后输入 manyoyo"
     fi
 }
 

@@ -20,15 +20,23 @@ The progress bar at the top shows the container runtime and image preparation; y
 
 ## Without a graphical session (SSH, servers): the command line wizard
 
-An SSH session or a Linux machine without a graphical session does not open a browser; use the command line wizard instead:
+An SSH session or a Linux machine without a graphical session does not open a browser. The one-line installer asks how to finish the first setup:
+
+```
+1) Configure in the terminal (recommended)     <- Enter picks this and starts manyoyo setup
+2) Start the web UI and open it from your own computer (needs SSH port forwarding)
+3) Not now, I will run manyoyo setup later
+```
+
+You can enter the command line wizard any time:
 
 ```bash
 manyoyo setup
 ```
 
-It asks for the agent, key, work directory and login password, and optionally apt / npm / pip mirrors (keys and passwords are not echoed). It needs an interactive terminal.
+It follows the same four steps as the web wizard: agent → access (official API key or a compatible service, key and model) → work directory → login password, then optionally apt / npm / pip mirrors (keys and passwords are not echoed). It needs an interactive terminal; without one (scripts, CI, `ssh host '…'`) the installer only installs and starts no service, and you run `manyoyo setup` yourself afterwards.
 
-When it finishes, the service runs in the background on `127.0.0.1:<port>`. From **your own computer**, forward the port and open the browser:
+When it finishes, the web service runs in the background on `127.0.0.1:<port>`. From **your own computer**, forward the port and open the browser:
 
 ```bash
 ssh -L <port>:127.0.0.1:<port> <user>@<server>

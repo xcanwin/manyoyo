@@ -4,7 +4,7 @@
 # 只负责：判断系统与芯片 → 查最新版本 → 下载安装包（.run）→ 校验 SHA256 → 启动安装包。
 # 真正的安装逻辑在安装包解开后的 scripts/offline/install.sh（对应仓库里的 scripts/offline/install.sh），本脚本不新增任何权限，不执行 sudo。
 #
-# 参数（原样传给安装包）：--headless / --gui / --no-open
+# 参数（原样传给安装包）：--headless / --gui / --install-only（只安装，不启动服务、不打开浏览器、不问配置方式）
 # 环境变量：
 #   MANYOYO_VERSION=8.1.0           指定版本（默认最新 Release）
 #   MANYOYO_KEEP_DOWNLOAD=1         安装成功后保留下载的安装包（默认删除）

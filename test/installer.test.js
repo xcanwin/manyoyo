@@ -334,9 +334,9 @@ describe('offline installer (sh)', () => {
     test('launches manyoyo at the end unless told not to', () => {
         const opened = install(writePayload(path.join(root, 'payload')), { MANYOYO_TEST_SKIP_OPEN: '', MANYOYO_TEST_SKIP_MACHINE: '1' });
         expect(opened.status).toBe(0);
-        expect(read(state('launched.log'))).toContain('name=manyoyo');
+        expect(read(state('launched.log'))).toContain('name=manyoyo args=--post-install');
         fs.rmSync(state('launched.log'));
-        const quiet = install(writePayload(path.join(root, 'payload2')), { MANYOYO_TEST_SKIP_OPEN: '', MANYOYO_TEST_SKIP_MACHINE: '1' }, ['--no-open']);
+        const quiet = install(writePayload(path.join(root, 'payload2')), { MANYOYO_TEST_SKIP_OPEN: '', MANYOYO_TEST_SKIP_MACHINE: '1' }, ['--install-only']);
         expect(quiet.status).toBe(0);
         expect(fs.existsSync(state('launched.log'))).toBe(false);
     });
@@ -348,6 +348,19 @@ describe('offline installer (sh)', () => {
         const viaBootstrap = install(writePayload(path.join(root, 'payload2')), { MANYOYO_FROM_BOOTSTRAP: '1' });
         expect(viaBootstrap.status).toBe(0);
         expect(viaBootstrap.stdout).not.toContain('现在可以删除');
+    });
+
+    test('the old --no-open flag is gone (renamed to --install-only, no alias)', () => {
+        const result = install(writePayload(path.join(root, 'payload')), {}, ['--no-open']);
+        expect(result.status).toBe(2);
+        expect(result.stdout + result.stderr).toContain('未知参数');
+        expect(install(writePayload(path.join(root, 'payload2')), {}, ['--help']).stdout).toContain('--install-only');
+    });
+
+    test('the banner is just "安装" with the OS and chip (no "离线", no internal kind)', () => {
+        const mac = install(writePayload(path.join(root, 'payload')));
+        expect(mac.stdout).toContain('MANYOYO 9.9.9 安装（macos / arm64）');
+        expect(mac.stdout).not.toContain('离线');
     });
 
     test('rejects unknown arguments', () => {
@@ -435,7 +448,9 @@ exit 0
         writeFakeRuntime('docker');
         const result = install(linuxPayload(), linuxEnv());
         expect(result.status).toBe(0);
-        expect(result.stdout).toContain('linux / x64');
+        expect(result.stdout).toContain('安装（linux / x64）');
+        expect(result.stdout).not.toContain('离线');
+        expect(result.stdout).toContain('▶ 使用已有的 docker');
         expect(result.stdout).toContain('安装完成');
         const m = path.join(home, '.manyoyo');
         expect(fs.readlinkSync(path.join(m, 'app/current'))).toBe('9.9.9');
@@ -485,7 +500,7 @@ exit 0
         writeFakeRuntime('docker');
         const result = install(linuxPayload(), linuxEnv({ MANYOYO_TEST_SKIP_OPEN: '' }), ['--headless']);
         expect(result.status).toBe(0);
-        expect(read(state('launched.log'))).toContain('args=--headless');
+        expect(read(state('launched.log'))).toContain('args=--post-install --headless');
     });
 
     test('the macOS package still refuses to run on Linux', () => {
@@ -669,9 +684,9 @@ describe('scripts/install.sh (the curl | sh bootstrap)', () => {
         expect(lines).toContain('arg=--gui');
         expect(lines).not.toContain('arg=--headless');
 
-        const noOpen = await run({ args: ['--no-open'] });
-        expect(noOpen.status).toBe(0);
-        expect(readRecord()).toEqual(expect.arrayContaining(['arg=--no-open', 'arg=--headless']));
+        const installOnly = await run({ args: ['--install-only'] });
+        expect(installOnly.status).toBe(0);
+        expect(readRecord()).toEqual(expect.arrayContaining(['arg=--install-only', 'arg=--headless']));
         expect(plain.status).toBe(0);
     });
 

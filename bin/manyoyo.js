@@ -20,6 +20,8 @@ const { readImportState, waitForImport } = require('../lib/offline-import');
 const { runPodmanCommand } = require('../lib/podman-passthrough');
 const { detectHeadless, parseLauncherArgs } = require('../lib/headless');
 const { runSetupCli, createPrompter } = require('../lib/setup-cli');
+const { runPostInstall } = require('../lib/post-install');
+const { listServeInstances, formatServeTable } = require('../lib/serve-instances');
 const { pruneDanglingImages: pruneDanglingImagesSafely } = require('../lib/image-prune');
 const { runUninstall, readPid, defaultIsManyoyoServe, defaultKill } = require('../lib/uninstall');
 const appUpdate = require('../lib/app-update');
@@ -1274,7 +1276,7 @@ async function setupCommander() {
         .description(`MANYOYO - AI Agent CLI Sandbox
 https://github.com/xcanwin/manyoyo
 
-不带参数直接运行，打开网页界面（首次使用进入配置向导）:
+不带参数直接运行，会启动网页服务，打开网页界面（首次使用进入配置向导）:
   ${MANYOYO_NAME}              自动判断有无图形界面
   ${MANYOYO_NAME} --headless   强制按无图形界面处理（不打开浏览器，用密码登录）
   ${MANYOYO_NAME} --gui        强制按有图形界面处理（自动打开浏览器）`)
@@ -1429,6 +1431,7 @@ https://github.com/xcanwin/manyoyo
     serveCommand.option('-d, --detach', '后台启动网页服务并立即返回');
     serveCommand.option('--stop', '停止后台网页服务；必须显式传入 listen');
     serveCommand.option('--restart', '重启后台网页服务；必须显式传入 listen');
+    serveCommand.option('--list', '列出正在运行的网页服务（监听地址、PID、版本、启动命令）');
     serveCommand.action((listen, options) => {
         selectAction('serve', {
             ...options,
@@ -1457,6 +1460,12 @@ https://github.com/xcanwin/manyoyo
         }, options));
     const pluginPlaywrightCommand = pluginCommand.command('playwright').description('管理 playwright 插件服务');
     registerPlaywrightAliasCommands(pluginPlaywrightCommand);
+
+    // 安装包装完后调用的隐藏入口（不在帮助里）：按有头 / 无头决定下一步
+    if (process.argv[2] === '--post-install') {
+        await runPostInstallCommand(process.argv.slice(3));
+        process.exit(0);
+    }
 
     // No args (or only --headless / --gui): start (or reuse) the local web app; open the browser already logged in unless headless
     const launcherArgs = parseLauncherArgs(process.argv.slice(2));
@@ -1489,6 +1498,10 @@ https://github.com/xcanwin/manyoyo
     const isServerMode = options.server !== undefined;
     const isServerStopMode = Boolean(selectedAction === 'serve' && options.stop);
     const isServerRestartMode = Boolean(selectedAction === 'serve' && options.restart);
+    const isServerListMode = Boolean(selectedAction === 'serve' && options.list);
+    if (isServerListMode && (isServerStopMode || isServerRestartMode || options.detach || options.server !== true)) {
+        throw new Error('serve --list 不能与 listen、-d、--stop、--restart 同时使用');
+    }
 
     if (isServerStopMode && isServerRestartMode) {
         throw new Error('serve --stop 与 --restart 不能同时使用');
@@ -1497,11 +1510,16 @@ https://github.com/xcanwin/manyoyo
     UPDATE_CHECK_ENABLED = config.updateCheck !== false;
     MIRRORS = normalizeMirrors(config.mirrors);
     const noDockerActions = new Set(['init', 'update', 'config-show', 'plugin', 'doctor', 'uninstall', 'podman', 'setup']);
-    if (isServerStopMode) {
+    if (isServerStopMode || isServerListMode) {
         noDockerActions.add('serve');
     }
     if (!noDockerActions.has(selectedAction)) {
         await ensureDocker(config.containerRuntime, { deferHeal: selectedAction === 'serve' });
+    }
+
+    if (isServerListMode) {
+        console.log(formatServeTable(listServeInstances()));
+        process.exit(0);
     }
 
     if (options.update) {
@@ -1510,22 +1528,7 @@ https://github.com/xcanwin/manyoyo
     }
 
     if (selectedAction === 'setup') {
-        const interactive = Boolean(process.stdin.isTTY);
-        const code = await runSetupCli({
-            isTTY: interactive,
-            prompter: interactive ? createPrompter() : null,
-            configPath: getManyoyoConfigPath(),
-            defaultWorkpath: path.join(os.homedir(), '.manyoyo', 'work'),
-            validateHostPath: value => validateHostPathOrThrow(value),
-            commandName: MANYOYO_NAME,
-            log: line => console.log(line),
-            // 新密码要让后台服务重新读配置：先停掉旧的，再按当前环境（有头 / 无头）启动
-            afterSave: async () => {
-                stopBackgroundApp({ quiet: true });
-                await runAppLauncher({ exit: false });
-            }
-        });
-        process.exit(code);
+        process.exit(await runSetupCommand());
     }
 
     if (selectedAction === 'podman') {
@@ -2349,12 +2352,66 @@ async function handlePostExit(runtime, defaultCommand) {
     }
 }
 
+async function runSetupCommand() {
+    const interactive = Boolean(process.stdin.isTTY);
+    return runSetupCli({
+        isTTY: interactive,
+        prompter: interactive ? createPrompter() : null,
+        configPath: getManyoyoConfigPath(),
+        defaultWorkpath: path.join(os.homedir(), '.manyoyo', 'work'),
+        validateHostPath: value => validateHostPathOrThrow(value),
+        commandName: MANYOYO_NAME,
+        log: line => console.log(line),
+        // 新密码要让后台服务重新读配置：先停掉旧的，再按当前环境（有头 / 无头）启动
+        afterSave: async () => {
+            stopBackgroundApp({ quiet: true });
+            await runAppLauncher({ exit: false });
+        }
+    });
+}
+
+async function runPostInstallCommand(args) {
+    const launcher = parseLauncherArgs(args) || { force: null };
+    const { headless } = detectHeadless({ force: launcher.force });
+    const interactive = Boolean(process.stdin.isTTY);
+    let prompter = null; // 需要提问时才创建（有图形界面、没有终端都不需要，避免多余的 readline 占着 stdin）
+    try {
+        await runPostInstall({
+            headless,
+            interactive,
+            currentVersion: BIN_VERSION,
+            ownRoot: path.join(os.homedir(), '.manyoyo'),
+            commandName: MANYOYO_NAME,
+            log: line => console.log(line),
+            ask: text => {
+                if (!prompter) prompter = createPrompter();
+                return prompter.ask(text);
+            },
+            // 升级安装时先停掉旧版留下的本机服务，避免“复用”到旧代码
+            startApp: () => {
+                stopBackgroundApp({ quiet: true });
+                return runAppLauncher({ force: launcher.force, exit: false });
+            },
+            // 同一个 stdin 不能同时挂两个提示器：选完之后先关掉这个，再交给 setup 自己的
+            runSetup: async () => {
+                if (prompter) prompter.close();
+                return runSetupCommand();
+            },
+            listServes: () => listServeInstances()
+        });
+    } finally {
+        if (prompter) prompter.close();
+    }
+}
+
 async function runAppLauncher({ force = null, exit = true } = {}) {
     try {
         const { headless } = detectHeadless({ force });
+        const launcherConfig = readManyoyoConfig().config;
         await launchApp({
             headless,
-            authUser: String(readManyoyoConfig().config.serverUser || '').trim() || 'admin',
+            authUser: String(launcherConfig.serverUser || '').trim() || 'admin',
+            hasPassword: Boolean(String(launcherConfig.serverPass || process.env.MANYOYO_SERVER_PASS || '').trim()),
             statePath: getAppStatePath(),
             isProcessRunning,
             spawnServe: port => {

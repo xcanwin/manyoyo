@@ -53,7 +53,7 @@ jobs:
           cd "$RUNNER_TEMP/rv"
           export HOME="$RUNNER_TEMP/home"
           mkdir -p "$HOME"
-          sh "manyoyo-${ver}-linux-${{ matrix.arch }}.run" --no-open
+          sh "manyoyo-${ver}-linux-${{ matrix.arch }}.run" --install-only
           m="$HOME/.manyoyo/bin/manyoyo"
           test "$("$m" -v)" = "$ver"
           # 后台导入镜像（真实 docker load）：等标记出现
@@ -85,7 +85,7 @@ jobs:
           ver="${TAG#v}"
           export HOME="$RUNNER_TEMP/home"
           mkdir -p "$HOME"
-          MANYOYO_VERSION="$ver" sh scripts/install.sh --no-open
+          MANYOYO_VERSION="$ver" sh scripts/install.sh --install-only
           m="$HOME/.manyoyo/bin/manyoyo"
           test "$("$m" -v)" = "$ver"
           # 安装成功后下载的安装包应被删除（注意 set -e 对 `! cmd` 不生效，必须用 if）
@@ -138,7 +138,7 @@ jobs:
           export HOME="$RUNNER_TEMP/home"
           mkdir -p "$HOME"
           # 分卷：只对第 1 卷运行；真实 macOS 的 sh 是 bash 3.2，正好覆盖“变量后跟中文”这类问题
-          MANYOYO_TEST_SKIP_MACHINE=1 MANYOYO_TEST_FREE_MB=100000 sh "$first" --no-open
+          MANYOYO_TEST_SKIP_MACHINE=1 MANYOYO_TEST_FREE_MB=100000 sh "$first" --install-only
           m="$HOME/.manyoyo/bin/manyoyo"
           test "$("$m" -v)" = "$ver"
           "$m" update 2>&1 | tee update.out

@@ -50,9 +50,11 @@ curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | MANY
 curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | MANYOYO_VERSION=8.1.0 sh
 # 强制按无图形界面（--headless）或有图形界面（--gui）处理
 curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh -s -- --headless
+# 只安装：不启动服务、不打开浏览器、不问怎么配置（装完自己运行 manyoyo 或 manyoyo setup）
+curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh -s -- --install-only
 ```
 
-默认自动判断：SSH 登录、或 Linux 下没有 `DISPLAY` / `WAYLAND_DISPLAY` 视为无图形界面。
+默认自动判断：SSH 登录、或 Linux 下没有 `DISPLAY` / `WAYLAND_DISPLAY` 视为无图形界面。无图形界面且有终端时，安装结束会问你在终端里配置还是启动网页版，见[第一次使用](./first-run.md)。
 :::
 
 ## 遇到问题

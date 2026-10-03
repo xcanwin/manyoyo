@@ -45,8 +45,8 @@ const readConfig = () => JSON5.parse(fs.readFileSync(configPath, 'utf-8'));
 describe('manyoyo setup (command line wizard)', () => {
     test('writes agent, work dir and password in one atomic 0600 write; never prints secrets; then runs afterSave', async () => {
         const prompter = scripted({
-            // Agent=1(claude)、凭据种类=1、API 地址=跳过、模型、工作目录=默认、是否配软件源=n
-            answers: ['1', '1', '0', 'claude-x', '', 'n'],
+            // Agent=1(claude)、接入方式=1(官方)、凭据种类=1、模型、工作目录=默认、是否配软件源=n
+            answers: ['1', '1', '1', 'claude-x', '', 'n'],
             secrets: ['sk-ant-VERYSECRET', 'correct horse', 'correct horse']
         });
         const deps = baseDeps(prompter);
@@ -67,10 +67,47 @@ describe('manyoyo setup (command line wizard)', () => {
         expect(prompter.close).toHaveBeenCalled();
     });
 
+    test('follows the web wizard: four numbered steps, official or compatible access, Base URL before the key, default hints say "默认选N"', async () => {
+        const agent = require('../lib/setup').listSetupAgents()[0];
+        const customIndex = String(agent.baseUrlPresets.length + 1);
+        const prompter = scripted({
+            // Agent=1、接入方式=2(兼容)、凭据种类=1、Base URL=自定义(末项)、地址、模型、工作目录、软件源=n
+            answers: ['1', '2', '1', customIndex, 'https://llm.example.com/v1', 'm-1', '', 'n'],
+            secrets: ['tok-123456', 'password1', 'password1']
+        });
+        expect(await runSetupCli(baseDeps(prompter))).toBe(0);
+        const text = logs.join('\n');
+        for (const title of ['第 1 / 4 步 · 选择 Agent', '第 2 / 4 步 · 接入方式', '第 3 / 4 步 · 工作目录', '第 4 / 4 步 · 保存并开始']) expect(text).toContain(title);
+        expect(text.indexOf('第 1 / 4 步')).toBeLessThan(text.indexOf('第 2 / 4 步'));
+        expect(text).toContain('1) 官方 API Key');
+        expect(text).toContain('2) 兼容服务');
+        expect(prompter.asked.filter(item => item.startsWith('请选择 ')).every(item => item === '请选择 [默认选1]: ')).toBe(true);
+        const baseUrlAsked = prompter.asked.findIndex(item => item.includes('Base URL'));
+        expect(baseUrlAsked).toBeGreaterThan(-1);
+        expect(prompter.askedSecret[0]).toContain('API Key');
+        const config = readConfig();
+        expect(config.runs.claude.env.ANTHROPIC_BASE_URL).toBe('https://llm.example.com/v1');
+        expect(config.runs.claude.env.ANTHROPIC_MODEL).toBe('m-1');
+    });
+
+    test('the official mode does not ask for a Base URL and writes none', async () => {
+        const prompter = scripted({ answers: ['1', '1', '1', '', '', 'n'], secrets: ['tok-123456', 'password1', 'password1'] });
+        expect(await runSetupCli(baseDeps(prompter))).toBe(0);
+        expect(prompter.asked.some(item => item.includes('Base URL'))).toBe(false);
+        expect(readConfig().runs.claude.env.ANTHROPIC_BASE_URL).toBeUndefined();
+    });
+
+    test('a compatible service without a Base URL exits without writing', async () => {
+        const agent = require('../lib/setup').listSetupAgents()[0];
+        const prompter = scripted({ answers: ['1', '2', '1', String(agent.baseUrlPresets.length + 1), ''], secrets: ['tok-123456'] });
+        expect(await runSetupCli(baseDeps(prompter))).toBe(1);
+        expect(fs.existsSync(configPath)).toBe(false);
+    });
+
     test('keeps comments and unrelated settings of an existing config', async () => {
         fs.mkdirSync(path.dirname(configPath), { recursive: true });
         fs.writeFileSync(configPath, '{\n    // 我的注释\n    "containerRuntime": "docker",\n    "runs": { "claude": { "volumes": ["/data:/data"] } }\n}\n');
-        const prompter = scripted({ answers: ['1', '1', '0', '', '', 'n'], secrets: ['tok-123456', 'password1', 'password1'] });
+        const prompter = scripted({ answers: ['1', '1', '1', '', '', 'n'], secrets: ['tok-123456', 'password1', 'password1'] });
         expect(await runSetupCli(baseDeps(prompter))).toBe(0);
         const raw = fs.readFileSync(configPath, 'utf-8');
         expect(raw).toContain('// 我的注释');
@@ -82,7 +119,7 @@ describe('manyoyo setup (command line wizard)', () => {
 
     test('password: rejects weak ones and mismatches, then accepts', async () => {
         const prompter = scripted({
-            answers: ['1', '1', '0', '', '', 'n'],
+            answers: ['1', '1', '1', '', '', 'n'],
             secrets: ['tok-123456', 'short', 'password-one', 'password-two', 'password-ok1', 'password-ok1']
         });
         expect(await runSetupCli(baseDeps(prompter))).toBe(0);
@@ -92,7 +129,7 @@ describe('manyoyo setup (command line wizard)', () => {
     });
 
     test('gives up after three bad passwords without writing anything', async () => {
-        const prompter = scripted({ answers: ['1', '1', '0', '', '', 'n'], secrets: ['tok-123456', 'a', 'b', 'c'] });
+        const prompter = scripted({ answers: ['1', '1', '1', '', '', 'n'], secrets: ['tok-123456', 'a', 'b', 'c'] });
         expect(await runSetupCli(baseDeps(prompter))).toBe(1);
         expect(fs.existsSync(configPath)).toBe(false);
         expect(logs.join('\n')).toContain('失败次数过多');
@@ -101,7 +138,7 @@ describe('manyoyo setup (command line wizard)', () => {
     test('mirrors: preset, official default and a custom address are validated and saved', async () => {
         const prompter = scripted({
             // 软件源=y；apt 选第 2 个（清华）；npm 跳过；pip 选自定义（预设 4 个，自定义是第 5 项）并输入地址
-            answers: ['1', '1', '0', '', '', 'y', '2', '0', '5', 'https://pypi.example.com/simple'],
+            answers: ['1', '1', '1', '', '', 'y', '2', '0', '5', 'https://pypi.example.com/simple'],
             secrets: ['tok-123456', 'password-ok1', 'password-ok1']
         });
         expect(await runSetupCli(baseDeps(prompter))).toBe(0);
@@ -110,7 +147,7 @@ describe('manyoyo setup (command line wizard)', () => {
 
     test('a custom mirror with shell metacharacters is refused and asked again', async () => {
         const prompter = scripted({
-            answers: ['1', '1', '0', '', '', 'y', '0', '0', '5', 'https://x.example.com/$(id)', 'https://ok.example.com/simple'],
+            answers: ['1', '1', '1', '', '', 'y', '0', '0', '5', 'https://x.example.com/$(id)', 'https://ok.example.com/simple'],
             secrets: ['tok-123456', 'password-ok1', 'password-ok1']
         });
         expect(await runSetupCli(baseDeps(prompter))).toBe(0);
@@ -128,9 +165,9 @@ describe('manyoyo setup (command line wizard)', () => {
     });
 
     test('empty credential, relative work dir and an unusable work dir all exit without writing', async () => {
-        expect(await runSetupCli(baseDeps(scripted({ answers: ['1', '1', '0', '', '', 'n'], secrets: [''] })))).toBe(1);
-        expect(await runSetupCli(baseDeps(scripted({ answers: ['1', '1', '0', '', 'relative/dir'], secrets: ['tok-123456'] })))).toBe(1);
-        const failing = baseDeps(scripted({ answers: ['1', '1', '0', '', ''], secrets: ['tok-123456'] }), { validateHostPath: () => { throw new Error('不允许挂载根目录或home目录。'); } });
+        expect(await runSetupCli(baseDeps(scripted({ answers: ['1', '1', '1', '', '', 'n'], secrets: [''] })))).toBe(1);
+        expect(await runSetupCli(baseDeps(scripted({ answers: ['1', '1', '1', '', 'relative/dir'], secrets: ['tok-123456'] })))).toBe(1);
+        const failing = baseDeps(scripted({ answers: ['1', '1', '1', '', ''], secrets: ['tok-123456'] }), { validateHostPath: () => { throw new Error('不允许挂载根目录或home目录。'); } });
         expect(await runSetupCli(failing)).toBe(1);
         expect(logs.join('\n')).toContain('不允许挂载根目录');
         expect(fs.existsSync(configPath)).toBe(false);
@@ -139,7 +176,7 @@ describe('manyoyo setup (command line wizard)', () => {
     test('a corrupt existing config is not overwritten', async () => {
         fs.mkdirSync(path.dirname(configPath), { recursive: true });
         fs.writeFileSync(configPath, '{ this is not json');
-        const prompter = scripted({ answers: ['1', '1', '0', '', '', 'n'], secrets: ['tok-123456', 'password-ok1', 'password-ok1'] });
+        const prompter = scripted({ answers: ['1', '1', '1', '', '', 'n'], secrets: ['tok-123456', 'password-ok1', 'password-ok1'] });
         expect(await runSetupCli(baseDeps(prompter))).toBe(1);
         expect(fs.readFileSync(configPath, 'utf-8')).toBe('{ this is not json');
     });
