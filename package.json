@@ -46,6 +46,7 @@
         "docs:dev": "vitepress dev docs --host 127.0.0.1 --port 5173",
         "docs:build": "vitepress build docs",
         "docs:check": "npm run docs:build && node scripts/check-docs-seo.js",
+        "scan:image": "node scripts/scan-image.js",
         "docs:preview": "vitepress preview docs --host 127.0.0.1 --port 4173"
     },
     "homepage": "https://xcanwin.github.io/manyoyo/",

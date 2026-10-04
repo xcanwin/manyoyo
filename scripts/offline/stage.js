@@ -130,7 +130,16 @@ function findVmDiskFile(dataDir) {
  * 它下载的压缩磁盘就缓存在 <data>/containers/podman/machine/<provider>/cache/（M01 V2 实测可直接 `--image` 使用）。
  * 在临时 XDG 目录里执行，不碰任何真实用户数据。
  */
-function fetchVmDisk({ podmanDir, run, tmpRoot = os.tmpdir() }) {
+function fetchVmDisk({ podmanDir, run, tmpRoot = os.tmpdir(), cacheDir = '' }) {
+    // 缓存目录里已有磁盘（CI 按 Podman 版本 + 架构 + 周缓存）就直接用，省掉重新下载
+    if (cacheDir && fs.existsSync(cacheDir)) {
+        const hit = fs.readdirSync(cacheDir).find(name => /\.raw(\.(zst|xz|gz))?$/.test(name));
+        if (hit) {
+            const kept = path.join(tmpRoot, `manyoyo-vm-disk-${process.pid}-${hit}`);
+            fs.copyFileSync(path.join(cacheDir, hit), kept);
+            return { path: kept, fileName: hit };
+        }
+    }
     const tmp = fs.mkdtempSync(path.join(tmpRoot, 'manyoyo-vm-'));
     try {
         const config = path.join(tmp, 'config');
@@ -146,6 +155,10 @@ function fetchVmDisk({ podmanDir, run, tmpRoot = os.tmpdir() }) {
         if (!found) throw new Error('machine init 之后没有找到缓存的 VM 磁盘（cache/*.raw*）');
         const kept = path.join(tmpRoot, `manyoyo-vm-disk-${process.pid}-${path.basename(found)}`);
         fs.copyFileSync(found, kept);
+        if (cacheDir) {
+            fs.mkdirSync(cacheDir, { recursive: true });
+            fs.copyFileSync(found, path.join(cacheDir, path.basename(found)));
+        }
         return { path: kept, fileName: path.basename(found) };
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });

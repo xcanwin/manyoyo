@@ -95,7 +95,7 @@ async function buildOfflinePackages(options, injected = {}) {
         });
 
         deps.log('[2/5] 获取 VM 磁盘（未启动过的官方 machine-os）');
-        vm = await deps.fetchVmDisk({ podmanDir: path.join(components, 'runtime', 'podman'), run: deps.run, tmpRoot });
+        vm = await deps.fetchVmDisk({ podmanDir: path.join(components, 'runtime', 'podman'), run: deps.run, tmpRoot, cacheDir: process.env.MANYOYO_VM_DISK_CACHE_DIR || '' });
         vmSha = await sha256File(vm.path);
         fs.mkdirSync(path.join(components, 'vm'), { recursive: true });
         fs.copyFileSync(vm.path, path.join(components, 'vm', vm.fileName));
@@ -165,7 +165,7 @@ async function buildOfflinePackages(options, injected = {}) {
     const mtime = builtAt || undefined;
     for (const [kind, suffix] of (isLinux ? [['lite', '']] : [['full', '']])) {
         const payload = path.join(workDir, `payload-${kind}.tar.gz`);
-        createNormalizedTar({ output: payload, cwd: trees[kind], entries: fs.readdirSync(trees[kind]).sort(), compression: 'gzip', mtime });
+        createNormalizedTar({ output: payload, cwd: trees[kind], entries: fs.readdirSync(trees[kind]).sort(), compression: 'gzip-fast', mtime });
         const runPath = path.join(outDir, `${base}${suffix}.run`);
         await writeRunFile({ payloadPath: payload, outPath: runPath, name: `${base}${suffix}`, volumeBytes });
         fs.rmSync(payload, { force: true });

@@ -1,0 +1,265 @@
+# 一次运行构建 macOS（完整包 + app 升级包）与 Linux（.run + app 升级包）全部离线包并运行隐私扫描，只产出 workflow artifact。
+# 只能手动触发；不创建 Release、不推送任何东西。发布产物只能在这里（干净的 CI 环境）构建，不要在维护者本机构建上传。
+# 前提：镜像已由 "Publish Image" workflow 推送到 ghcr.io/xcanwin/manyoyo:<imageVersion>。
+#
+# 结构：image-archive（每个架构拉取并保存一次镜像、扫描一次）→ build-macos / build-linux（共四个平台 job，下载归档，不再自己拉取或扫描镜像）。
+# 镜像扫描结果按 “镜像 ID + 镜像允许列表 + 扫描器文件” 的哈希缓存：三者都没变就不会重复扫描（命中缓存时仍然是扫过的同一个镜像）。
+# 注意：workflow_dispatch 要求 workflow 文件已存在于默认分支；新文件在分支上无法手动触发。
+
+name: Build Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      imageVersion:
+        description: '镜像版本，格式 x.y.z-后缀（留空则读取 package.json 的 imageVersion，必须已发布到 ghcr.io）'
+        required: false
+        default: ''
+
+env:
+  IMAGE_NAME: ghcr.io/xcanwin/manyoyo
+
+jobs:
+  image-archive:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            platform: linux/arm64
+          - arch: x64
+            platform: linux/amd64
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve image version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.imageVersion }}
+        run: |
+          VERSION="${INPUT_VERSION}"
+          if [ -z "$VERSION" ]; then
+            VERSION="$(node -p "require('./package.json').imageVersion")"
+          fi
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[A-Za-z0-9][A-Za-z0-9_.-]*$'; then
+            echo "imageVersion 格式错误，必须为 x.y.z-后缀: $VERSION"
+            exit 1
+          fi
+          echo "imageVersion=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Pull and save the image for ${{ matrix.platform }}
+        id: image
+        run: |
+          mkdir -p image
+          docker pull --platform "${{ matrix.platform }}" "${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}"
+          echo "id=$(docker image inspect -f '{{.Id}}' "${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}" | sed 's/^sha256://')" >> "$GITHUB_OUTPUT"
+          docker save "${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}" | gzip -n > "image/manyoyo-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}.tar.gz"
+          ls -lh image
+
+      # 缓存只保存“扫描通过”这件事（空标记文件）：key 含镜像 ID、允许列表和扫描器的哈希，任何一个变了都会重新扫。
+      # 扫描失败时 job 失败，缓存不会被保存。
+      - name: Restore image scan result
+        id: scan-cache
+        uses: actions/cache@v5
+        with:
+          path: .scan-ok
+          key: image-scan-${{ matrix.arch }}-${{ steps.image.outputs.id }}-${{ hashFiles('scripts/offline/scan-allowlist-image.json', 'scripts/scan-release-artifacts.js') }}
+
+      - name: Scan image archive
+        if: steps.scan-cache.outputs.cache-hit != 'true'
+        run: |
+          node scripts/scan-release-artifacts.js --auto-identity --no-inventory \
+            --allowlist scripts/offline/scan-allowlist-image.json \
+            "image/manyoyo-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}.tar.gz"
+          mkdir -p .scan-ok
+          echo "${{ steps.image.outputs.id }}" > .scan-ok/image-id
+
+      - name: Image scan reused
+        if: steps.scan-cache.outputs.cache-hit == 'true'
+        run: echo "镜像 ${{ steps.image.outputs.id }}（${{ matrix.arch }}）已用同一允许列表与扫描器扫描通过，复用结果"
+
+      # 归档本身已是 gzip：artifact 不再压缩
+      - uses: actions/upload-artifact@v7
+        with:
+          name: manyoyo-image-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}
+          path: image/manyoyo-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}.tar.gz
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+
+  build-macos:
+    needs: image-archive
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # 产物名带版本号：manyoyo-<version>-macos-<arch>，下载下来的 zip 一眼能认
+      - name: Resolve versions
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.imageVersion }}
+        run: |
+          IMAGE_VERSION="${INPUT_VERSION}"
+          if [ -z "$IMAGE_VERSION" ]; then
+            IMAGE_VERSION="$(node -p "require('./package.json').imageVersion")"
+          fi
+          {
+            echo "version=$(node -p "require('./package.json').version")"
+            echo "imageVersion=$IMAGE_VERSION"
+            echo "podman=$(node -p "require('./scripts/offline/lock.js').resolveLock('${{ matrix.arch }}', 'macos').podman.version")"
+            echo "week=$(date -u +%G-W%V)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install GNU tar (reproducible, normalized archives)
+        run: |
+          brew install gnu-tar
+          echo "MANYOYO_TAR=$(brew --prefix)/opt/gnu-tar/libexec/gnubin/tar" >> "$GITHUB_ENV"
+
+      - run: npm ci --include=optional
+      - run: npm run build:web
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: manyoyo-image-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}
+          path: image
+
+      # 官方 machine-os 磁盘每次 `podman machine init` 都要重新下载（约 2.5 分钟）。
+      # key = Podman 版本 + 架构 + ISO 周：每周刷新一次，不会长期错过 machine-os 的安全修复。
+      - name: Restore VM disk cache
+        uses: actions/cache@v5
+        with:
+          path: vm-disk-cache
+          key: vm-disk-podman-${{ steps.version.outputs.podman }}-${{ matrix.arch }}-week-${{ steps.version.outputs.week }}
+
+      - name: Build packages
+        env:
+          MANYOYO_VM_DISK_CACHE_DIR: ${{ github.workspace }}/vm-disk-cache
+        run: |
+          node scripts/offline/build.js --arch "${{ matrix.arch }}" \
+            --image-archive "$(ls image/manyoyo-*-${{ matrix.arch }}.tar.gz)" \
+            --out dist-offline
+
+      # 发布前扫描：扫描失败即整个 job 失败，产物不会上传。
+      # full 目录树是 app 的超集，扫它即覆盖。其中 images/（镜像归档）已在 image-archive 里用镜像专用允许列表扫过，
+      # vm/（官方未启动过的 machine-os 磁盘，不透明压缩文件）由 manifest 记录的 SHA256 约束，不做字符串扫描。
+      - name: Scan packaged tree
+        run: |
+          node scripts/scan-release-artifacts.js --auto-identity --no-inventory \
+            --allowlist scripts/offline/scan-allowlist.json \
+            --exclude '^full/images(/|$)' --exclude '^full/vm(/|$)' \
+            dist-offline/work/staging/full
+
+      # 上传按构建脚本输出的显式文件清单，不用通配符，避免带上多余文件
+      - name: List deliverables
+        id: files
+        run: |
+          {
+            echo 'list<<MANYOYO_FILES_EOF'
+            cat "dist-offline/FILES-macos-${{ matrix.arch }}.txt"
+            echo 'MANYOYO_FILES_EOF'
+          } >> "$GITHUB_OUTPUT"
+          cat "dist-offline/FILES-macos-${{ matrix.arch }}.txt"
+
+      # .run / .tar.gz 都已压缩：artifact 不再压缩
+      - uses: actions/upload-artifact@v7
+        with:
+          name: manyoyo-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}
+          path: ${{ steps.files.outputs.list }}
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
+
+  build-linux:
+    needs: image-archive
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - arch: x64
+            runner: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # 产物名带版本号：manyoyo-<version>-linux-<arch>
+      - name: Resolve versions
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.imageVersion }}
+        run: |
+          IMAGE_VERSION="${INPUT_VERSION}"
+          if [ -z "$IMAGE_VERSION" ]; then
+            IMAGE_VERSION="$(node -p "require('./package.json').imageVersion")"
+          fi
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "imageVersion=$IMAGE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci --include=optional
+      - run: npm run build:web
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: manyoyo-image-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}
+          path: image
+
+      - name: Build package
+        run: |
+          node scripts/offline/build.js --platform linux --arch "${{ matrix.arch }}" \
+            --image-archive "image/manyoyo-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}.tar.gz" \
+            --out dist-offline
+
+      # 发布前扫描：扫描失败即整个 job 失败，产物不会上传。
+      # lite 目录树是 app 的超集，扫它即覆盖；其中 images/（镜像归档）已在 image-archive 里单独扫过。
+      - name: Scan packaged tree
+        run: |
+          node scripts/scan-release-artifacts.js --auto-identity --no-inventory \
+            --allowlist scripts/offline/scan-allowlist-linux.json \
+            --exclude '^lite/images(/|$)' \
+            dist-offline/work/staging/lite
+
+      # 上传按构建脚本输出的显式文件清单，不用通配符，避免带上多余文件
+      - name: List deliverables
+        id: files
+        run: |
+          {
+            echo 'list<<MANYOYO_FILES_EOF'
+            cat "dist-offline/FILES-linux-${{ matrix.arch }}.txt"
+            echo 'MANYOYO_FILES_EOF'
+          } >> "$GITHUB_OUTPUT"
+          cat "dist-offline/FILES-linux-${{ matrix.arch }}.txt"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: manyoyo-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}
+          path: ${{ steps.files.outputs.list }}
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error

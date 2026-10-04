@@ -17,20 +17,8 @@ describe('workflow runners are pinned', () => {
         }
     });
 
-    test('the offline workflow matrix runners are pinned macOS 15 images', () => {
-        const text = fs.readFileSync(path.join(dir, 'offline-macos.yml'), 'utf8');
-        const runners = [...text.matchAll(/runner:\s*(\S+)/g)].map(m => m[1]);
-        expect(runners.sort()).toEqual(['macos-15', 'macos-15-intel']);
-    });
-
-    test('the linux offline workflow matrix runners are pinned Ubuntu 24.04 images (x64 and arm64)', () => {
-        const text = fs.readFileSync(path.join(dir, 'offline-linux.yml'), 'utf8');
-        const runners = [...text.matchAll(/runner:\s*(\S+)/g)].map(m => m[1]);
-        expect(runners.sort()).toEqual(['ubuntu-24.04', 'ubuntu-24.04-arm']);
-    });
-
     test('the workflows we test ourselves use Node 24-based action majors (no Node 20 deprecation warnings)', () => {
-        for (const name of ['image-publish.yml', 'offline-macos.yml', 'offline-linux.yml']) {
+        for (const name of ['image-publish.yml', 'build-packages.yml', 'ci.yml']) {
             const text = fs.readFileSync(path.join(dir, name), 'utf8');
             expect(text).not.toMatch(/(checkout|setup-node|upload-artifact|download-artifact)@v4/);
             expect(text).not.toMatch(/docker\/(login|setup-buildx|setup-qemu)-action@v3|build-push-action@v6/);

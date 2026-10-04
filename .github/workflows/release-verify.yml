@@ -42,8 +42,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/rv" && cd "$RUNNER_TEMP/rv"
           run_file="manyoyo-${ver}-linux-${{ matrix.arch }}.run"
           sums="SHA256SUMS"
-          curl -sSL -f -O "${base}/${run_file}"
-          curl -sSL -f -O "${base}/${sums}"
+          curl -sSL -f --retry 3 --retry-all-errors -O "${base}/${run_file}"
+          curl -sSL -f --retry 3 --retry-all-errors -O "${base}/${sums}"
           grep -q "$(sha256sum "$run_file" | cut -d' ' -f1)  ${run_file}" "$sums"
           echo "校验值与 ${sums} 一致"
       - name: Install headless, import image, update, uninstall
@@ -62,7 +62,8 @@ jobs:
             sleep 5
           done
           ls "$HOME"/.manyoyo/.install/image-loaded-*
-          docker images --format '{{.Repository}}:{{.Tag}}' | grep -q '^ghcr.io/xcanwin/manyoyo:'
+          # runner 上 docker 与 podman 都有，安装器选哪个都算数（8.3.0 验证曾因安装器选了 podman 而在这里误判失败）
+          { docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null; podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null; } | grep -q '^ghcr.io/xcanwin/manyoyo:'
           "$m" update 2>&1 | tee update.out
           grep -q "已是最新版本 ${ver}" update.out
           "$m" uninstall --yes
@@ -120,11 +121,11 @@ jobs:
           base="https://github.com/xcanwin/manyoyo/releases/download/${TAG}"
           mkdir -p "$RUNNER_TEMP/rv" && cd "$RUNNER_TEMP/rv"
           sums="SHA256SUMS"
-          curl -sSL -f -O "${base}/${sums}"
+          curl -sSL -f --retry 3 --retry-all-errors -O "${base}/${sums}"
           # 正常情况下完整包是单个 .run；超过 GitHub 单文件上限才会分卷 .run.001/.002…：按 SHA256SUMS 里列出的文件名下载并校验
           files="$(awk '{print $2}' "$sums" | grep -E "^manyoyo-${ver}-macos-${{ matrix.arch }}\.run(\.[0-9]{3})?$")"
           for f in $files; do
-            curl -sSL -f -O "${base}/${f}"
+            curl -sSL -f --retry 3 --retry-all-errors -O "${base}/${f}"
             grep -q "$(shasum -a 256 "$f" | cut -d' ' -f1)  ${f}" "$sums"
           done
           echo "$files" > files.txt
