@@ -506,6 +506,21 @@ describe('full assembly with stand-in components', () => {
         expect(hashes(a)).toEqual(hashes(b));
     });
 
+    test('the .run payload is gzip level 1 (fastest) but the .run header still unpacks with plain tar -xzf', async () => {
+        const out = path.join(root, 'out-fast');
+        await build('arm64', out);
+        const runFile = path.join(out, 'manyoyo-9.9.9-macos-arm64.run');
+        const bytes = fs.readFileSync(runFile);
+        const start = bytes.indexOf(Buffer.from([0x1f, 0x8b, 0x08]));
+        expect(start).toBeGreaterThan(0);
+        expect(bytes[start + 8]).toBe(4); // gzip XFL=4：最快压缩
+        expect(bytes.subarray(0, start).toString('latin1')).toContain('tar -xzf');
+        // 应用升级包（用户下载的 -app.tar.gz）仍是默认级别
+        const app = fs.readFileSync(path.join(out, 'manyoyo-9.9.9-macos-arm64-app.tar.gz'));
+        expect(app[8]).not.toBe(4);
+        extract(runFile, path.join(root, 'fast-full'));
+    });
+
     test('x64: no krunkit stack, no patch, applehv stays usable', async () => {
         const out = path.join(root, 'out');
         const result = await build('x64', out);
