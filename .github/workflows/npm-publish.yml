@@ -1,28 +1,41 @@
-# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
-# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
+# 发布 npm 包。触发：Release 公开（published）时自动运行；也可手动对某个 tag 重跑（workflow_dispatch + tag 输入）。
+# Release 先以草稿建好并挂齐安装包，再由发布控制台公开——草稿不创建 tag，所以 npm 发布不会早于安装包就位。
+# 本工作流不创建 Release。预发布（prerelease）不触发 npm 发布，避免把它推到 latest 标签。
+# 注意：workflow_dispatch 要求本文件已存在于默认分支。
 
 name: Node.js Package
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布到 npm 的 tag，如 v8.3.2（对应 Release 已公开）'
+        required: true
+
+env:
+  TAG: ${{ inputs.tag || github.event.release.tag_name }}
 
 jobs:
   build:
+    if: github.event_name != 'release' || !github.event.release.prerelease
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - name: Verify tag matches package version
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
+          printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "tag 格式错误，应为 vX.Y.Z: $TAG"; exit 1; }
+          TAG_VERSION="${TAG#v}"
           PKG_VERSION="$(node -p "require('./package.json').version")"
-          if [ "$TAG" != "$PKG_VERSION" ]; then
-            echo "Tag version mismatch: tag=$TAG package.json=$PKG_VERSION"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag version mismatch: tag=$TAG_VERSION package.json=$PKG_VERSION"
             exit 1
           fi
       - run: npm ci --include=optional
@@ -38,6 +51,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -52,23 +67,3 @@ jobs:
             --allowlist scripts/release-scan-allowlist.json \
             "$RUNNER_TEMP"/pack/*.tgz
       - run: npm publish --access public --provenance
-
-  create-release:
-    needs: publish-npm
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write  # Required to create releases
-    steps:
-      - uses: actions/checkout@v7
-      - name: Create GitHub Release
-        run: |
-          # 已经有同名 Release（例如先手动建好草稿）就不重复创建
-          if gh release view ${{ github.ref_name }} >/dev/null 2>&1; then
-            echo "Release ${{ github.ref_name }} 已存在，跳过创建"
-          else
-            gh release create ${{ github.ref_name }} \
-              --title "${{ github.ref_name }}" \
-              --generate-notes
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
