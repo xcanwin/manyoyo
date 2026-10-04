@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { formatDateTime } from "@/lib/format"
+import { formatDateTime, formatTimestampCompact } from "@/lib/format"
 import {
   apiGet,
   apiPost,
@@ -302,18 +302,11 @@ export function AppSidebar({
     }
   }
 
-  // 年月日-时分秒，比 manyoyo.json 里 containerName 模板的 {now}（MMDD-HHmm）多带年份和秒数——
-  // 短时间内连点快捷对话时目录名/容器名不会撞车
-  function formatQuickChatTimestamp(date: Date): string {
-    const pad = (n: number) => String(n).padStart(2, "0")
-    return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
-  }
-
   async function runQuickChatWithConfig(quickChatPath: string, quickChatRun: string) {
     setQuickChatBusy(true)
     setActionError("")
     try {
-      const timestamp = formatQuickChatTimestamp(new Date())
+      const timestamp = formatTimestampCompact(new Date())
       const requestedDir = `${quickChatPath.replace(/\/+$/, "")}/${timestamp}`
       // mkdir 接口内部会展开 ~ 并返回解析后的绝对路径——新建容器要拿这个绝对路径，
       // 不能直接把带 ~ 的原始字符串传给 hostPath（Node fs 不认识 ~，会报路径不存在）
