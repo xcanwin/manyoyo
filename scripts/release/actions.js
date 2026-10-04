@@ -312,6 +312,7 @@ const ACTIONS = {
                 await ctx.sleep(consecutive > 0 ? 5000 : POLL_MS);
             }
         }
+        if (!ctx.dryRun) ctx.state.save({ npmVisible: { tag: facts.tag } });
         ctx.log(`npm 上已是 ${V}`);
     },
 

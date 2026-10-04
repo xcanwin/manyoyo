@@ -64,6 +64,8 @@ function computeStages(facts, state = {}) {
         result.push({ ...def, state: stateName, detail, ...extra });
     };
     const published = isPublished(facts);
+    // npm 的 CDN 节点同步有先后，单次读取会在新旧版本间来回跳；动作里连续几次读到新版本后会记下，之后不再因为一次读到旧版本而翻回未完成
+    const npmConfirmed = (state.npmVisible || {}).tag === facts.tag;
     const checks = (state.checklists || {})[facts.tag] || {};
     const manualLeft = MANUAL_CHECKLIST.filter(item => !checks[item.id]).length;
     // 公开的 Release 之前的阶段对这个版本已经是历史：之后 main 再前进（文档提交等）也不会把它们翻回未完成
@@ -75,7 +77,7 @@ function computeStages(facts, state = {}) {
         for (const id of ['preflight', 'commit', 'merge', 'image', 'packages', 'device', 'release', 'assets', 'publish']) add(id, 'done', text, id === 'release' ? { url: release.url } : {});
         add('version', 'done', `${text}；下一次发布需要先升版本`);
         add('verify', verifyOk ? 'done' : 'todo', verifyOk ? `验证通过（run #${verifyRun.databaseId}）` : verifyRun ? `上次验证 ${verifyRun.conclusion || verifyRun.status}` : '尚未验证');
-        add('npm', npm.version === V ? 'done' : 'todo', npm.version === V ? `npm 上已是 ${V}` : `npm 上是 ${npm.version || '未知'}，等待 ${V}（发布后可能延迟几分钟）`);
+        add('npm', npm.version === V || npmConfirmed ? 'done' : 'todo', npm.version === V || npmConfirmed ? `npm 上已是 ${V}` : `npm 上是 ${npm.version || '未知'}，等待 ${V}（发布后可能延迟几分钟）`);
         add('manual', manualLeft === 0 ? 'done' : 'todo', manualLeft === 0 ? '真机检查全部完成' : `还有 ${manualLeft} 项待勾选`);
         return result.sort((a, b) => STAGES.findIndex(item => item.id === a.id) - STAGES.findIndex(item => item.id === b.id));
     }
@@ -155,7 +157,7 @@ function computeStages(facts, state = {}) {
     else if (release.draft || !release.exists || !assetCheck.ok) add('verify', 'blocked', '先公开发布');
     else add('verify', 'todo', verifyRun ? `上次验证 ${verifyRun.conclusion || verifyRun.status}` : '尚未验证');
 
-    if (npm.version === V) add('npm', 'done', `npm 上已是 ${V}`);
+    if (npm.version === V || npmConfirmed) add('npm', 'done', `npm 上已是 ${V}`);
     else if (!release.exists || release.draft) add('npm', 'blocked', '先公开发布');
     else add('npm', 'todo', `npm 上是 ${npm.version || '未知'}，等待 ${V}（发布后可能延迟几分钟）`);
 

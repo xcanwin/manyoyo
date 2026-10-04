@@ -197,6 +197,15 @@ describe('review findings', () => {
     });
 });
 
+describe('npm visibility is remembered (CDN flap)', () => {
+    test('once the action saw the new version repeatedly, a single stale read no longer flips npm back to todo', () => {
+        const published = { ...merged, ...built, npm: { version: '8.1.0' }, release: { exists: true, draft: false, assets: names('8.2.0') } };
+        expect(byId(computeStages(facts(published), pre)).npm.state).toBe('todo');
+        expect(byId(computeStages(facts(published), { ...pre, npmVisible: { tag: 'v8.2.0' } })).npm.state).toBe('done');
+        expect(byId(computeStages(facts(published), { ...pre, npmVisible: { tag: 'v8.1.0' } })).npm.state).toBe('todo');
+    });
+});
+
 describe('actions', () => {
     function ctxFor(options = {}) {
         const calls = [];
