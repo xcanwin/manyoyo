@@ -14,7 +14,7 @@ description: 一个配置文件、四层优先级和最小示例，几分钟搞�
 ```json5
 {
     // 全局默认值
-    imageVersion: "2.1.0-common",
+    imageVersion: "2.1.1-common",
     runs: {
         // 命名的运行配置：manyoyo run -r claude
         claude: {
@@ -48,10 +48,10 @@ description: 一个配置文件、四层优先级和最小示例，几分钟搞�
 ## 最小示例
 
 ```bash
-# 全局：imageVersion 2.1.0-common；runs.demo：imageVersion 2.1.0-full，env VAR2
+# 全局：imageVersion 2.1.1-common；runs.demo：imageVersion 2.1.1-full，env VAR2
 # 命令行：-e VAR3=value3
 manyoyo run -r demo -e "VAR3=value3"
-# 镜像用 2.1.0-full（runs 覆盖全局）；VAR2、VAR3 以及全局 env 都生效
+# 镜像用 2.1.1-full（runs 覆盖全局）；VAR2、VAR3 以及全局 env 都生效
 ```
 
 ## 看最终结果

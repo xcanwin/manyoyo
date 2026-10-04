@@ -39,7 +39,7 @@ manyoyo run -n my-session -- -c     # 回到已有容器，并给智能体传恢
 }
 ```
 
-`manyoyo init all` 可一次生成这些条目。镜像选 `2.1.0-common` 或 `2.1.0-full` 均已包含这四个智能体。
+`manyoyo init all` 可一次生成这些条目。镜像选 `2.1.1-common` 或 `2.1.1-full` 均已包含这四个智能体。
 
 ## Claude Code
 
@@ -109,7 +109,7 @@ export OPENAI_BASE_URL="https://api.openai.com/v1"
 - **智能体启动后提示未登录或认证失败**：先 `manyoyo config show -r <name>` 确认 `envFile` 生效，再用 `manyoyo run -r <name> -x 'env | grep -E "ANTHROPIC|OPENAI|GEMINI"'` 看变量是否进了容器。改过 env 文件后需 `manyoyo rm <容器名>` 重建容器。
 - **恢复会话没有内容**：会话保存在容器里，容器被 `manyoyo rm` 删除后无法恢复；也要确认用的是上表对应智能体的恢复参数。
 - **想在容器里换另一个智能体**：`manyoyo run -n <容器名> -x /bin/bash` 进 shell，直接运行上表的完整命令；更省事的是为每个智能体建一个独立容器（如 `-n proj-claude`、`-n proj-codex`）。
-- **提示找不到命令**：用 `manyoyo run -x which claude`（或 gemini / codex / opencode）确认镜像里装了该智能体，必要时换 `2.1.0-full`。
+- **提示找不到命令**：用 `manyoyo run -x which claude`（或 gemini / codex / opencode）确认镜像里装了该智能体，必要时换 `2.1.1-full`。
 
 ## 下一步
 

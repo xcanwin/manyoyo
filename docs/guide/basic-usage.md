@@ -124,4 +124,4 @@ manyoyo config show --serve 127.0.0.1:3000
 
 ## Playwright 插件
 
-让 Agent 控制浏览器的插件，用法见 [Playwright 插件](../advanced/playwright.md)。
+让容器内的 Agent 操控浏览器（默认开箱即用，可切换 headed / chrome / vnc），用法见 [Playwright 插件](../advanced/playwright.md)。

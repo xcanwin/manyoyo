@@ -1,1110 +1,480 @@
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
+const http = require('http');
+const net = require('net');
 const os = require('os');
 const path = require('path');
-const { PlaywrightPlugin, EXTENSIONS } = require('../lib/plugin/playwright');
-const { playwrightCliVersion: PACKAGE_PLAYWRIGHT_CLI_VERSION } = require('../package.json');
+const { WebSocket, WebSocketServer } = require('ws');
+const fingerprint = require('../lib/plugin/fingerprint');
+const extensions = require('../lib/plugin/playwright-extensions');
+const { createRelay } = require('../lib/plugin/playwright-relay');
+const { PlaywrightPlugin, appendNoProxy } = require('../lib/plugin/playwright');
+const { buildContainerIntegration, mergeIntegration } = require('../lib/plugin');
+const { renderDefaultFiles } = require('../scripts/gen-playwright-res');
+const pkg = require('../package.json');
 
 const BIN_PATH = path.join(__dirname, '../bin/manyoyo.js');
+const ROOT = path.join(__dirname, '..');
+const OLD_SCENE_PATTERN = /mcp-host|cli-host|dev-host|mcp-cont|cliSessionScene|enabledScenes|mcpDefaultHost|cli-cont-headless/;
 
-function withTempHome(configObj, runner) {
-    const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-plugin-'));
-    const configDir = path.join(tempHome, '.manyoyo');
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(
-        path.join(configDir, 'manyoyo.json'),
-        `${JSON.stringify(configObj, null, 4)}\n`,
-        'utf8'
-    );
-
-    try {
-        return runner(tempHome);
-    } finally {
-        fs.rmSync(tempHome, { recursive: true, force: true });
-    }
+function makeHome() {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-pw-'));
 }
 
-describe('manyoyo plugin commands', () => {
-    test('playwright mcp-add prints scene endpoints', () => {
-        const output = execSync(`node ${BIN_PATH} playwright mcp-add --host localhost`, { encoding: 'utf-8' });
-        expect(output.startsWith('# 在容器中执行\n')).toBe(true);
-        expect(output).toContain('http://localhost:8931/mcp');
-        expect(output).toContain('http://localhost:8932/mcp');
-        expect(output).toContain('http://localhost:8933/mcp');
-        expect(output).toContain('http://localhost:8934/mcp');
-        expect(output).not.toContain('cli-host-headless');
+function newPlugin(home, config = {}) {
+    const sink = { out: '', err: '' };
+    const plugin = new PlaywrightPlugin({
+        homeDir: home,
+        globalConfig: config,
+        stdout: { write: text => { sink.out += text; } },
+        stderr: { write: text => { sink.err += text; } },
+        runtime: { command: 'docker', env: {} }
     });
+    return { plugin, sink };
+}
 
-    test('plugin playwright mcp-add supports namespace form', () => {
-        const output = execSync(`node ${BIN_PATH} plugin playwright mcp-add --host localhost`, { encoding: 'utf-8' });
-        expect(output).toContain('playwright-mcp-cont-headless');
-        expect(output).toContain('playwright-mcp-host-headed');
+function cli(home, args) {
+    return spawnSync(process.execPath, [BIN_PATH, ...args], {
+        encoding: 'utf8',
+        env: { ...process.env, HOME: home },
+        timeout: 60000
     });
+}
 
-    test('playwright cli-add prints playwright-cli skill install commands', () => {
-        const output = execSync(`node ${BIN_PATH} playwright cli-add`, { encoding: 'utf-8' });
-        expect(output.startsWith('# 在宿主机中执行\n')).toBe(true);
-        expect(output).not.toContain('cli.config.json');
-        expect(output).toContain(`npm install -g @playwright/cli@${PACKAGE_PLAYWRIGHT_CLI_VERSION}`);
-        expect(output).toContain('playwright-cli install --skills');
-        expect(output).not.toContain('"channel":"chromium"');
-        expect(output).toContain('~/.codex/skills/playwright-cli');
-        expect(output).toContain('~/.gemini/skills/playwright-cli');
-        expect(output).toContain('for target in ~/.claude/skills/playwright-cli ~/.codex/skills/playwright-cli ~/.gemini/skills/playwright-cli; do');
-        expect(output).toContain('mkdir -p "$target"');
-        expect(output).not.toContain('cp -R "$PLAYWRIGHT_CLI_INSTALL_DIR/.claude/skills/playwright-cli/." ~/.codex/skills/playwright-cli/');
-    });
-
-    test('plugin playwright cli-add supports namespace form', () => {
-        const output = execSync(`node ${BIN_PATH} plugin playwright cli-add`, { encoding: 'utf-8' });
-        expect(output).toContain('playwright-cli install --skills');
-        expect(output).toContain('~/.codex/skills/playwright-cli');
-    });
-
-    test('playwright mcp-add respects run profile plugins.playwright.runtime', () => {
-        withTempHome({
-            runs: {
-                onlyContainer: {
-                    plugins: {
-                        playwright: {
-                            runtime: 'container'
-                        }
-                    }
-                }
-            }
-        }, (tempHome) => {
-            const output = execSync(`node ${BIN_PATH} playwright mcp-add -r onlyContainer --host localhost`, {
-                encoding: 'utf-8',
-                env: { ...process.env, HOME: tempHome }
-            });
-
-            expect(output).toContain('playwright-mcp-cont-headless');
-            expect(output).toContain('playwright-mcp-cont-headed');
-            expect(output).not.toContain('playwright-mcp-host-headless');
-            expect(output).not.toContain('playwright-mcp-host-headed');
+function freePort() {
+    return new Promise(resolve => {
+        const server = net.createServer();
+        server.listen(0, '127.0.0.1', () => {
+            const { port } = server.address();
+            server.close(() => resolve(port));
         });
     });
+}
 
-    test('plugin unknown name should fail', () => {
-        expect(() => {
-            execSync(`node ${BIN_PATH} plugin unknown up`, {
-                encoding: 'utf-8',
-                stdio: 'pipe'
+describe('指纹单一数据源', () => {
+    test('default / ws 配置带齐指纹，cdp 配置不注入任何指纹', () => {
+        const profile = { locale: 'de-DE', timezoneId: 'Europe/Berlin', navigatorPlatform: 'Win32', disableWebRTC: true };
+        for (const kind of ['default', 'ws']) {
+            const cfg = fingerprint.buildContainerConfig(kind, { ...profile, endpoint: 'ws://h:1/t' });
+            expect(cfg.browser.initScript).toEqual([fingerprint.CONTAINER_INIT_SCRIPT_PATH]);
+            expect(cfg.browser.contextOptions).toEqual({
+                locale: 'de-DE',
+                timezoneId: 'Europe/Berlin',
+                viewport: null,
+                extraHTTPHeaders: { 'Accept-Language': 'de-DE,de;q=0.9' }
             });
-        }).toThrow();
+            expect(cfg.browser.contextOptions.userAgent).toBeUndefined();
+        }
+        const local = fingerprint.buildContainerConfig('default', profile).browser.launchOptions;
+        expect(local.headless).toBe(false);
+        expect(local.args).toEqual(expect.arrayContaining([
+            '--lang=de-DE',
+            '--window-size=1920,1080',
+            '--disable-blink-features=AutomationControlled',
+            '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+            '--disable-webrtc'
+        ]));
+        expect(local.args.join(' ')).not.toContain('--enable-automation');
+        expect(local.args.join(' ')).not.toContain('--user-agent');
+        const ws = fingerprint.buildContainerConfig('ws', { endpoint: 'ws://h:1/t' });
+        expect(ws.browser).toEqual(expect.objectContaining({ remoteEndpoint: 'ws://h:1/t', isolated: true }));
+        const server = fingerprint.buildServerConfig({ host: '0.0.0.0', port: 1, wsPath: '/t', ...profile });
+        expect(server.headless).toBe(false);
+        expect(server.args).toEqual(expect.arrayContaining(['--lang=de-DE', '--disable-blink-features=AutomationControlled', '--start-maximized']));
+
+        const cdp = fingerprint.buildContainerConfig('cdp', { ...profile, endpoint: 'ws://h:1/t' });
+        expect(cdp.browser).toEqual({ cdpEndpoint: 'ws://h:1/t', cdpTimeout: 60000 });
     });
 
-    test('playwright ext-download command exists and removes old options', () => {
-        const output = execSync(`node ${BIN_PATH} playwright ext-download --help`, { encoding: 'utf-8' });
-        expect(output).toContain('ext-download');
-        expect(output).toContain('--prodversion');
-        expect(output).not.toContain('--clean-tmp');
-        expect(output).not.toContain('--run');
+    test('initScript 默认不伪造 platform，配置了才注入', () => {
+        expect(fingerprint.buildInitScript()).not.toContain('platform');
+        expect(fingerprint.buildInitScript({ navigatorPlatform: 'MacIntel' })).toContain('"MacIntel"');
+        expect(fingerprint.buildInitScript({ disableWebRTC: true })).toContain('RTCPeerConnection');
     });
 
-    test('playwright help no longer lists ext-sync', () => {
-        const output = execSync(`node ${BIN_PATH} playwright --help`, { encoding: 'utf-8' });
-        expect(output).toContain('cli-add');
-        expect(output).toContain('ext-download');
-        expect(output).not.toContain('ext-sync');
+    test('docker/res/playwright 下的默认文件与指纹模块生成结果逐字节一致', () => {
+        for (const [name, content] of Object.entries(renderDefaultFiles())) {
+            expect(fs.readFileSync(path.join(ROOT, 'docker', 'res', 'playwright', name), 'utf8')).toBe(content);
+        }
     });
 
-    test('playwright up supports --ext-path and --ext-name options', () => {
-        const output = execSync(`node ${BIN_PATH} playwright up --help`, { encoding: 'utf-8' });
-        expect(output).toContain('--ext-path');
-        expect(output).toContain('--ext-name');
-        expect(output).not.toContain('--ext <path>');
-    });
-
-    test('playwright help examples use prefixed mcp scenes', () => {
-        const output = execSync(`node ${BIN_PATH} playwright --help`, { encoding: 'utf-8' });
-        expect(output).toContain('playwright up mcp-host-headless');
-        expect(output).toContain('playwright up cli-host-headless');
-        expect(output).not.toContain('plugin playwright up mcp-host-headless');
-        expect(output).not.toContain('playwright up host-headless');
-    });
-
-    test('playwright ls includes dev-host-headed scene', () => {
-        const output = execSync(`node ${BIN_PATH} playwright ls`, { encoding: 'utf-8' });
-        expect(output).toContain('dev-host-headed');
+    test('时区与语言默认跟随宿主机，可被配置覆盖', () => {
+        const home = makeHome();
+        try {
+            const host = fingerprint.detectHostProfile();
+            expect(newPlugin(home).plugin.profile()).toEqual(expect.objectContaining(host));
+            const overridden = newPlugin(home, { locale: 'fr-FR', timezoneId: 'Europe/Paris' }).plugin.profile();
+            expect(overridden).toEqual(expect.objectContaining({ locale: 'fr-FR', timezoneId: 'Europe/Paris' }));
+        } finally {
+            fs.rmSync(home, { recursive: true, force: true });
+        }
     });
 });
 
-describe('PlaywrightPlugin runtime filtering', () => {
-    test('container runtime should auto-detect docker first', () => {
-        const ensureCommandSpy = jest.spyOn(PlaywrightPlugin.prototype, 'ensureCommandAvailable')
-            .mockImplementation((command) => command === 'docker');
+describe('版本单一来源', () => {
+    test('@playwright/cli 依赖版本等于 playwrightCliVersion，旧依赖已删除', () => {
+        expect(pkg.dependencies['@playwright/cli']).toBe(pkg.playwrightCliVersion);
+        expect(pkg.dependencies.playwright).toBeUndefined();
+        expect(pkg.dependencies['@playwright/mcp']).toBeUndefined();
+    });
 
-        try {
-            const plugin = new PlaywrightPlugin();
-            expect(plugin.config.containerRuntime).toBe('docker');
-        } finally {
-            ensureCommandSpy.mockRestore();
+    test('宿主机用的 playwright-core 来自 @playwright/cli', () => {
+        const { plugin } = newPlugin(makeHome());
+        expect(plugin.corePath()).toContain(path.join('node_modules'));
+        const corePkg = require(path.join(plugin.corePath(), 'package.json'));
+        const cliPkg = require('@playwright/cli/package.json');
+        expect(corePkg.version).toBe(cliPkg.dependencies['playwright-core']);
+    });
+});
+
+describe('容器集成参数', () => {
+    let home;
+    beforeEach(() => { home = makeHome(); });
+    afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
+
+    test('挂的是只读目录而不是单文件，配置路径固定，docker 加 add-host', async () => {
+        const result = await buildContainerIntegration({ homeDir: home, runtimeCommand: 'docker' });
+        const current = path.join(home, '.manyoyo', 'plugin', 'playwright', 'current');
+        expect(result.volumeArgs).toEqual(['--volume', `${current}:/run/manyoyo-playwright:ro`]);
+        expect(fs.statSync(current).isDirectory()).toBe(true);
+        expect(fs.statSync(current).mode & 0o777).toBe(0o700);
+        expect(result.envArgs).toEqual(expect.arrayContaining([
+            '--env', 'PLAYWRIGHT_MCP_CONFIG=/run/manyoyo-playwright/config.json',
+            '--env', 'NO_UPDATE_NOTIFIER=1'
+        ]));
+        expect(result.extraArgs).toEqual(['--add-host', 'host.docker.internal:host-gateway']);
+        expect(fs.existsSync(path.join(current, 'config.json'))).toBe(true);
+        expect(fs.existsSync(path.join(current, 'stealth.init.js'))).toBe(true);
+    });
+
+    test('podman（含绝对路径）不加 add-host', async () => {
+        for (const command of ['podman', '/x/y/podman']) {
+            // eslint-disable-next-line no-await-in-loop
+            const result = await buildContainerIntegration({ homeDir: home, runtimeCommand: command });
+            expect(result.extraArgs).toEqual([]);
         }
     });
 
-    test('container runtime should fallback to podman when docker is unavailable', () => {
-        const ensureCommandSpy = jest.spyOn(PlaywrightPlugin.prototype, 'ensureCommandAvailable')
-            .mockImplementation((command) => command === 'podman');
-
-        try {
-            const plugin = new PlaywrightPlugin();
-            expect(plugin.config.containerRuntime).toBe('podman');
-        } finally {
-            ensureCommandSpy.mockRestore();
-        }
-    });
-
-    test('container runtime should respect explicit config', () => {
-        const ensureCommandSpy = jest.spyOn(PlaywrightPlugin.prototype, 'ensureCommandAvailable')
-            .mockImplementation(() => false);
-
-        try {
-            const plugin = new PlaywrightPlugin({
-                globalConfig: {
-                    containerRuntime: 'podman'
-                }
-            });
-            expect(plugin.config.containerRuntime).toBe('podman');
-        } finally {
-            ensureCommandSpy.mockRestore();
-        }
-    });
-
-    test('container runtime should use containerRuntime from the root global config', () => {
-        const ensureCommandSpy = jest.spyOn(PlaywrightPlugin.prototype, 'ensureCommandAvailable')
-            .mockImplementation(() => false);
-
-        try {
-            const plugin = new PlaywrightPlugin({ rootGlobalConfig: { containerRuntime: 'podman' } });
-            expect(plugin.config.containerRuntime).toBe('podman');
-        } finally {
-            ensureCommandSpy.mockRestore();
-        }
-    });
-
-    test('container runtime should prefer private podman and keep its env out of process.env', () => {
-        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-plugin-private-podman-'));
-        const homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(tempHome);
-        try {
-            const privateBin = path.join(tempHome, '.manyoyo', 'runtime', 'podman', 'bin', 'podman');
-            fs.mkdirSync(path.dirname(privateBin), { recursive: true });
-            fs.writeFileSync(privateBin, '#!/bin/sh\n', { mode: 0o755 });
-
-            const plugin = new PlaywrightPlugin();
-            expect(plugin.config.containerRuntime).toBe(privateBin);
-            expect(plugin.runtimeEnv.CONTAINERS_CONF).toBe(path.join(tempHome, '.manyoyo', 'runtime', 'podman', 'containers.conf'));
-            expect(plugin.ensureCommandAvailable(privateBin)).toBe(true);
-            expect(process.env.CONTAINERS_CONF).toBeUndefined();
-        } finally {
-            homedirSpy.mockRestore();
-            fs.rmSync(tempHome, { recursive: true, force: true });
-        }
-    });
-
-    test('cli session integration treats a podman absolute path as podman', () => {
-        const plugin = new PlaywrightPlugin();
-        jest.spyOn(plugin, 'readSceneEndpoint').mockReturnValue({ port: 9000, wsPath: '/x' });
-        jest.spyOn(plugin, 'writeSceneCliAttachConfig').mockImplementation(() => {});
-        const integration = plugin.buildCliSessionIntegration('/home/u/.manyoyo/runtime/podman/bin/podman');
-        expect(integration.extraArgs).toEqual([]);
-    });
-
-    test('runtime host only returns host scenes', () => {
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                runtime: 'host'
-            }
+    test('NO_PROXY 在已有值后追加而不是覆盖', async () => {
+        expect(appendNoProxy('localhost,10.0.0.0/8')).toBe('localhost,10.0.0.0/8,host.docker.internal,host.containers.internal');
+        expect(appendNoProxy('host.docker.internal')).toBe('host.docker.internal,host.containers.internal');
+        const result = await buildContainerIntegration({
+            homeDir: home,
+            runtimeCommand: 'docker',
+            envEntries: ['NO_PROXY=corp.example.com']
         });
-
-        expect(plugin.resolveTargets('all')).toEqual(['mcp-host-headless', 'mcp-host-headed', 'cli-host-headless', 'cli-host-headed', 'dev-host-headed']);
+        const value = result.envArgs.find(item => item.startsWith('NO_PROXY='));
+        expect(value).toBe('NO_PROXY=corp.example.com,host.docker.internal,host.containers.internal');
+        expect(result.envArgs).toContain('no_proxy=corp.example.com,host.docker.internal,host.containers.internal');
     });
 
-    test('enabled scenes works with runtime mixed', () => {
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                runtime: 'mixed',
-                enabledScenes: ['mcp-cont-headless', 'cli-host-headed']
-            }
+    test('mergeIntegration 保留用户 env、替换 NO_PROXY、volume 与参数去重', async () => {
+        const integration = await buildContainerIntegration({
+            homeDir: home,
+            runtimeCommand: 'docker',
+            envEntries: ['NO_PROXY=corp']
         });
-
-        expect(plugin.resolveTargets('all')).toEqual(['mcp-cont-headless', 'cli-host-headed']);
+        const runtime = {
+            containerEnvs: ['--env', 'A=1', '--env', 'NO_PROXY=corp', '--env', 'PLAYWRIGHT_MCP_CONFIG=/mine.json'],
+            containerVolumes: integration.volumeArgs,
+            containerExtraArgs: integration.extraArgs
+        };
+        const merged = mergeIntegration(runtime, integration);
+        const envs = merged.containerEnvs.filter((_, i) => i % 2 === 1);
+        expect(envs).toContain('A=1');
+        expect(envs).toContain('PLAYWRIGHT_MCP_CONFIG=/mine.json');
+        expect(envs.filter(item => item.startsWith('PLAYWRIGHT_MCP_CONFIG='))).toHaveLength(1);
+        expect(envs.filter(item => item.startsWith('NO_PROXY='))).toEqual(['NO_PROXY=corp,host.docker.internal,host.containers.internal']);
+        expect(merged.containerVolumes).toEqual(integration.volumeArgs);
+        expect(merged.containerExtraArgs).toEqual(integration.extraArgs);
     });
 
-    test('cliSessionScene accepts dev-host-headed', () => {
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                cliSessionScene: 'dev-host-headed'
-            }
-        });
-
-        expect(plugin.config.cliSessionScene).toBe('dev-host-headed');
+    test('CLI run 与 Web 建会话都走同一个集成入口，且一次性 setup 测试容器不注入', () => {
+        const bin = fs.readFileSync(BIN_PATH, 'utf8');
+        const server = fs.readFileSync(path.join(ROOT, 'lib', 'web', 'server.js'), 'utf8');
+        expect(bin).toContain('buildContainerIntegration');
+        expect(server).toContain('buildContainerIntegration');
+        const setupTest = server.slice(server.indexOf('manyoyo-setup-test-'));
+        expect(setupTest.slice(0, 1200)).not.toContain('buildWebPlaywrightIntegration');
     });
 
-    test('cont-headed non-up env should not require vnc password', () => {
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                runtime: 'container'
-            }
-        });
-        const env = plugin.containerEnv('mcp-cont-headed', '/tmp/playwright.json');
-        expect(typeof env.VNC_PASSWORD).toBe('string');
-        expect(env.VNC_PASSWORD.length).toBeGreaterThan(0);
+    test('原子替换：写入后 inode 改变、权限 0600', () => {
+        const { plugin } = newPlugin(home);
+        plugin.writeCurrentConfig({ mode: 'default' }, 'docker');
+        const configPath = path.join(plugin.currentDir, 'config.json');
+        const before = fs.statSync(configPath);
+        plugin.writeCurrentConfig({ mode: 'headed', port: 8935 }, 'docker');
+        const after = fs.statSync(configPath);
+        expect(after.ino).not.toBe(before.ino);
+        expect(after.mode & 0o777).toBe(0o600);
+        expect(JSON.parse(fs.readFileSync(configPath, 'utf8')).browser.remoteEndpoint).toMatch(/^ws:\/\/host\.docker\.internal:8935\/[0-9a-f]{64}$/);
     });
 
-    test('cont-headed up env should auto-generate 16-char password when env is missing', () => {
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                runtime: 'container'
-            }
-        });
-        const env = plugin.containerEnv('mcp-cont-headed', '/tmp/playwright.json', { requireVncPassword: true });
-
-        expect(typeof env.VNC_PASSWORD).toBe('string');
-        expect(env.VNC_PASSWORD).toMatch(/^[A-Za-z0-9]{16}$/);
+    test('预览命令（dryRun）不写任何文件也不改状态，但返回相同的参数', async () => {
+        const preview = await buildContainerIntegration({ homeDir: home, runtimeCommand: 'docker', dryRun: true });
+        expect(fs.existsSync(path.join(home, '.manyoyo'))).toBe(false);
+        const real = await buildContainerIntegration({ homeDir: home, runtimeCommand: 'docker' });
+        expect(preview.volumeArgs).toEqual(real.volumeArgs);
+        expect(preview.envArgs).toEqual(real.envArgs);
     });
 
-    test('mcp-host-headless scene config should include anti-detection baseline', () => {
-        const plugin = new PlaywrightPlugin();
-        const cfg = plugin.buildSceneConfig('mcp-host-headless');
-        const launchArgs = (((cfg || {}).browser || {}).launchOptions || {}).args || [];
-        const contextOptions = (((cfg || {}).browser || {}).contextOptions || {});
-
-        expect(Array.isArray(launchArgs)).toBe(true);
-        expect(launchArgs).toContain('--disable-blink-features=AutomationControlled');
-        expect(launchArgs).toContain('--force-webrtc-ip-handling-policy=disable_non_proxied_udp');
-        expect(launchArgs).toContain('--lang=zh-CN');
-        expect(launchArgs).toContain('--window-size=1366,768');
-        expect(launchArgs.find(arg => arg.startsWith('--user-agent='))).toBeTruthy();
-
-        expect(contextOptions.userAgent).toContain('Chrome/');
-        expect(contextOptions.locale).toBe('zh-CN');
-        expect(contextOptions.timezoneId).toBe('Asia/Shanghai');
-        expect(contextOptions.viewport).toEqual({ width: 1366, height: 768 });
-        expect(contextOptions.screen).toEqual({ width: 1366, height: 768 });
-        expect(contextOptions.extraHTTPHeaders).toEqual({ 'Accept-Language': 'zh-CN,zh;q=0.9' });
+    test('state 里的 pid 被无关进程复用时，不当成存活也不会被杀', async () => {
+        const { plugin } = newPlugin(home);
+        // 当前 jest 进程肯定活着，但不是 playwright-server / relay
+        const state = { mode: 'headed', port: await freePort(), pid: process.pid };
+        expect(await plugin.modeAlive(state)).toBe(false);
+        await plugin.stopCurrent(state);
+        expect(() => process.kill(process.pid, 0)).not.toThrow();
     });
 
-    test('mcp-host-headed scene config should not force viewport and screen size', () => {
-        const plugin = new PlaywrightPlugin();
-        const cfg = plugin.buildSceneConfig('mcp-host-headed');
-        const contextOptions = (((cfg || {}).browser || {}).contextOptions || {});
-
-        expect(contextOptions.userAgent).toContain('Chrome/');
-        expect(contextOptions.locale).toBe('zh-CN');
-        expect(contextOptions.timezoneId).toBe('Asia/Shanghai');
-        expect(contextOptions.viewport).toBeUndefined();
-        expect(contextOptions.screen).toBeUndefined();
-        expect(contextOptions.extraHTTPHeaders).toEqual({ 'Accept-Language': 'zh-CN,zh;q=0.9' });
+    test('同一模式下内容不变就不重写，podman 与 docker 的连接主机不同', () => {
+        const { plugin } = newPlugin(home);
+        plugin.writeState({ mode: 'headed', port: 8935 });
+        plugin.writeCurrentConfig({ mode: 'headed', port: 8935 }, 'podman');
+        const configPath = path.join(plugin.currentDir, 'config.json');
+        const ino = fs.statSync(configPath).ino;
+        plugin.writeCurrentConfig({ mode: 'headed', port: 8935 }, 'podman');
+        expect(fs.statSync(configPath).ino).toBe(ino);
+        expect(fs.readFileSync(configPath, 'utf8')).toContain('host.containers.internal');
     });
 
-    test('ensureSceneConfig should inject init script for navigator.platform alignment', () => {
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-init-script-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-init-script-run-'));
+    test('模式失效时回退默认配置并警告；状态目录不可写时 run 也不抛错', async () => {
+        const { plugin } = newPlugin(home);
+        plugin.writeState({ mode: 'headed', port: await freePort(), pid: 2 ** 22 + 12345 });
+        const result = await buildContainerIntegration({ homeDir: home, runtimeCommand: 'docker' });
+        expect(result.warning).toContain('manyoyo playwright up headed');
+        const config = JSON.parse(fs.readFileSync(path.join(plugin.currentDir, 'config.json'), 'utf8'));
+        expect(config.browser.remoteEndpoint).toBeUndefined();
+        expect(config.browser.launchOptions.headless).toBe(false);
+        expect(plugin.readState().mode).toBe('default');
+
+        const brokenHome = makeHome();
         try {
-            const plugin = new PlaywrightPlugin({
-                globalConfig: {
-                    configDir: tempConfigDir,
-                    runDir: tempRunDir
-                }
-            });
-            const cfgPath = plugin.ensureSceneConfig('mcp-host-headless');
-            const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-            const initScripts = cfg.browser && cfg.browser.initScript;
-            const initScriptPath = Array.isArray(initScripts) ? initScripts[0] : '';
-            const initScriptContent = fs.readFileSync(initScriptPath, 'utf8');
-
-            expect(Array.isArray(initScripts)).toBe(true);
-            expect(fs.existsSync(initScriptPath)).toBe(true);
-            expect(initScriptContent).toContain("Object.defineProperty(navProto, 'platform'");
-            expect(initScriptContent).toContain('MacIntel');
+            fs.mkdirSync(path.join(brokenHome, '.manyoyo'));
+            fs.writeFileSync(path.join(brokenHome, '.manyoyo', 'plugin'), 'not a directory');
+            const broken = await buildContainerIntegration({ homeDir: brokenHome, runtimeCommand: 'docker' });
+            expect(broken.volumeArgs).toEqual([]);
+            expect(broken.warning).toContain('Playwright 集成不可用');
         } finally {
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
+            fs.rmSync(brokenHome, { recursive: true, force: true });
         }
     });
 
-    test('disableWebRTC should append launch arg and disable script block', () => {
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-webrtc-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-webrtc-run-'));
-        try {
-            const plugin = new PlaywrightPlugin({
-                globalConfig: {
-                    configDir: tempConfigDir,
-                    runDir: tempRunDir,
-                    disableWebRTC: true
-                }
-            });
-            const cfgPath = plugin.ensureSceneConfig('mcp-host-headless');
-            const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-            const launchArgs = (((cfg || {}).browser || {}).launchOptions || {}).args || [];
-            const initScripts = cfg.browser && cfg.browser.initScript;
-            const initScriptPath = Array.isArray(initScripts) ? initScripts[0] : '';
-            const initScriptContent = fs.readFileSync(initScriptPath, 'utf8');
+    test('状态目录被删后下一次集成会重建', async () => {
+        const first = await buildContainerIntegration({ homeDir: home, runtimeCommand: 'docker' });
+        const root = path.join(home, '.manyoyo', 'plugin', 'playwright');
+        fs.rmSync(root, { recursive: true, force: true });
+        const second = await buildContainerIntegration({ homeDir: home, runtimeCommand: 'docker' });
+        expect(second.volumeArgs).toEqual(first.volumeArgs);
+        expect(fs.existsSync(path.join(root, 'current', 'config.json'))).toBe(true);
+    });
 
-            expect(launchArgs).toContain('--disable-webrtc');
-            expect(initScriptContent).toContain('RTCPeerConnection');
-            expect(initScriptContent).toContain('getUserMedia');
-        } finally {
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
+    test('token 持久化：重复读取相同，down 后重新生成；至少 32 字节', async () => {
+        const { plugin } = newPlugin(home);
+        const token = plugin.ensureToken();
+        expect(token).toMatch(/^[0-9a-f]{64}$/);
+        expect(newPlugin(home).plugin.ensureToken()).toBe(token);
+        expect(fs.statSync(plugin.tokenPath()).mode & 0o777).toBe(0o600);
+        await plugin.down();
+        expect(fs.existsSync(plugin.tokenPath())).toBe(false);
+        expect(plugin.ensureToken()).not.toBe(token);
+    });
+
+    test('status 发现配置文件被删会重建并提示', async () => {
+        const { plugin, sink } = newPlugin(home);
+        plugin.writeCurrentConfig({ mode: 'default' }, 'docker');
+        fs.rmSync(path.join(plugin.currentDir, 'config.json'));
+        fs.rmSync(path.join(plugin.currentDir, 'stealth.init.js'));
+        expect(await plugin.status()).toBe(0);
+        expect(sink.out).toContain('配置文件缺失，已重建');
+        expect(fs.existsSync(path.join(plugin.currentDir, 'config.json'))).toBe(true);
+        expect(fs.existsSync(path.join(plugin.currentDir, 'stealth.init.js'))).toBe(true);
+    });
+
+    test('down 回到默认配置并写 current/config.json', async () => {
+        const { plugin, sink } = newPlugin(home);
+        plugin.writeState({ mode: 'headed', port: 1, pid: 2 ** 22 + 1 });
+        expect(await plugin.down()).toBe(0);
+        expect(sink.out).toContain('回到默认模式');
+        expect(plugin.readState().mode).toBe('default');
+        expect(JSON.parse(fs.readFileSync(path.join(plugin.currentDir, 'config.json'), 'utf8')).browser.launchOptions).toBeDefined();
+    });
+});
+
+describe('命令行', () => {
+    let home;
+    beforeEach(() => { home = makeHome(); });
+    afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
+
+    test('up 不带参数输出模式表并以非 0 退出', () => {
+        const result = cli(home, ['playwright', 'up']);
+        expect(result.status).not.toBe(0);
+        for (const mode of ['headed', 'chrome', 'vnc']) {
+            expect(result.stdout).toContain(mode);
         }
     });
 
-    test('any scene can inject extension args via buildSceneConfig options', () => {
-        const extRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-'));
-        for (const [name] of EXTENSIONS) {
-            fs.mkdirSync(path.join(extRoot, name), { recursive: true });
-        }
-
-        try {
-            const plugin = new PlaywrightPlugin();
-            const extensionPaths = EXTENSIONS.map(([name]) => path.join(extRoot, name));
-            const cfg = plugin.buildSceneConfig('mcp-cont-headless', { extensionPaths });
-            const launchArgs = cfg.browser && cfg.browser.launchOptions && cfg.browser.launchOptions.args;
-
-            expect(Array.isArray(launchArgs)).toBe(true);
-            const disableExtensionsArg = launchArgs.find(arg => arg.startsWith('--disable-extensions-except='));
-            const loadExtensionsArg = launchArgs.find(arg => arg.startsWith('--load-extension='));
-            expect(disableExtensionsArg).toBeTruthy();
-            expect(loadExtensionsArg).toBeTruthy();
-            expect(disableExtensionsArg).toContain(path.join(extRoot, EXTENSIONS[0][0]));
-        } finally {
-            fs.rmSync(extRoot, { recursive: true, force: true });
-        }
+    test('旧场景名报未知模式并列出可用模式', () => {
+        const result = cli(home, ['playwright', 'up', 'mcp-host-headless']);
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain('未知模式: mcp-host-headless');
+        expect(result.stderr).toContain('headed, chrome, vnc');
     });
 
-    test('resolveExtensionInputs merges extension path and extension name', () => {
-        const extRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-inputs-'));
-        const extPath = path.join(extRoot, 'from-path');
-        const extNameRoot = path.join(extRoot, 'names-root');
-        const extName = 'adguard';
-        const extNamePath = path.join(extNameRoot, extName);
+    test('隐藏的 plugin 命名空间已删除', () => {
+        const result = cli(home, ['plugin', 'playwright', 'status']);
+        expect(result.status).not.toBe(0);
+    });
+
+    test('帮助与 mcp-add 里没有旧场景名', () => {
+        const help = cli(home, ['playwright', '--help']).stdout;
+        expect(help).not.toMatch(OLD_SCENE_PATTERN);
+        for (const mode of ['headed', 'chrome', 'vnc']) {
+            expect(help).toContain(mode);
+        }
+        const mcp = cli(home, ['playwright', 'mcp-add']);
+        expect(mcp.status).toBe(0);
+        expect(mcp.stdout).toContain('playwright-mcp');
+        expect(mcp.stdout).not.toMatch(OLD_SCENE_PATTERN);
+    });
+
+    test('status：默认模式退出码 0；当前模式不可用时退出码非 0 并回退默认', async () => {
+        expect(cli(home, ['playwright', 'status']).status).toBe(0);
+        const { plugin } = newPlugin(home);
+        plugin.writeState({ mode: 'headed', port: await freePort(), pid: 2 ** 22 + 7 });
+        const result = cli(home, ['playwright', 'status']);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('真实探测: 失败');
+        expect(plugin.readState().mode).toBe('default');
+    });
+
+    test('chrome 模式不支持扩展参数', () => {
+        const result = cli(home, ['playwright', 'up', 'chrome', '--ext-path', os.tmpdir()]);
+        expect(result.status).not.toBe(0);
+    });
+
+    test('源码里没有遗留的旧场景引用', () => {
+        const files = ['bin/manyoyo.js', 'lib/plugin/playwright.js', 'lib/plugin/index.js', 'lib/plugin/fingerprint.js', 'lib/web/server.js', 'manyoyo.example.json'];
+        for (const file of files) {
+            expect(fs.readFileSync(path.join(ROOT, file), 'utf8')).not.toMatch(OLD_SCENE_PATTERN);
+        }
+        expect(fs.existsSync(path.join(ROOT, 'lib', 'plugin', 'playwright-assets', 'compose-headed.yaml'))).toBe(false);
+    });
+});
+
+describe('扩展', () => {
+    let dir;
+    beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-')); });
+    afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+    function makeExt(name) {
+        const extPath = path.join(dir, name);
         fs.mkdirSync(extPath, { recursive: true });
-        fs.mkdirSync(extNamePath, { recursive: true });
         fs.writeFileSync(path.join(extPath, 'manifest.json'), '{"manifest_version":3}', 'utf8');
-        fs.writeFileSync(path.join(extNamePath, 'manifest.json'), '{"manifest_version":3}', 'utf8');
+        return extPath;
+    }
 
-        try {
-            const plugin = new PlaywrightPlugin();
-            plugin.extensionDirPath = () => extNameRoot;
-            const extensionPaths = plugin.resolveExtensionInputs({
-                extensionPaths: [extPath],
-                extensionNames: [extName]
-            });
-            const cfg = plugin.buildSceneConfig('mcp-host-headless', { extensionPaths });
-            const launchArgs = cfg.browser && cfg.browser.launchOptions && cfg.browser.launchOptions.args;
-
-            expect(Array.isArray(launchArgs)).toBe(true);
-            const disableExtensionsArg = launchArgs.find(arg => arg.startsWith('--disable-extensions-except='));
-            const loadExtensionsArg = launchArgs.find(arg => arg.startsWith('--load-extension='));
-            expect(disableExtensionsArg).toBeTruthy();
-            expect(loadExtensionsArg).toBeTruthy();
-            expect(disableExtensionsArg).toContain(extPath);
-            expect(disableExtensionsArg).toContain(extNamePath);
-        } finally {
-            fs.rmSync(extRoot, { recursive: true, force: true });
-        }
+    test('--ext-path 与 --ext-name 合并后生成启动参数', () => {
+        const fromPath = makeExt('from-path');
+        const named = makeExt(path.join('extensions', 'adguard'));
+        const resolved = extensions.resolveExtensionInputs(dir, { extensionPaths: [fromPath], extensionNames: ['adguard'] });
+        expect(resolved).toEqual([fromPath, named]);
+        const args = extensions.buildExtensionLaunchArgs(resolved);
+        expect(args[0]).toBe(`--disable-extensions-except=${fromPath},${named}`);
+        expect(args[1]).toBe(`--load-extension=${fromPath},${named}`);
+        expect(extensions.buildExtensionLaunchArgs([])).toEqual([]);
+        expect(() => extensions.resolveExtensionInputs(dir, { extensionNames: ['../x'] })).toThrow('扩展名称无效');
+        const comma = makeExt('a,b');
+        expect(() => extensions.resolveExtensionPaths([comma])).toThrow('不能包含逗号');
     });
 
-    test('playwright default runtime paths use plugin directory', () => {
-        const plugin = new PlaywrightPlugin();
-        expect(plugin.config.configDir).toContain(path.join('.manyoyo', 'plugin', 'playwright', 'config'));
-        expect(plugin.config.runDir).toContain(path.join('.manyoyo', 'plugin', 'playwright', 'run'));
-    });
-
-    test('container extension paths are mapped to in-container mount targets', () => {
-        const extRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-mount-'));
-        const extA = path.join(extRoot, 'a');
-        const extB = path.join(extRoot, 'b');
-        fs.mkdirSync(extA, { recursive: true });
-        fs.mkdirSync(extB, { recursive: true });
-        fs.writeFileSync(path.join(extA, 'manifest.json'), '{"manifest_version":3}', 'utf8');
-        fs.writeFileSync(path.join(extB, 'manifest.json'), '{"manifest_version":3}', 'utf8');
-
-        try {
-            const plugin = new PlaywrightPlugin();
-            const mapped = plugin.buildContainerExtensionMounts([extA, extB]);
-            expect(mapped.containerPaths[0]).toContain('/app/extensions/ext-1-');
-            expect(mapped.containerPaths[1]).toContain('/app/extensions/ext-2-');
-            expect(mapped.volumeMounts[0]).toBe(`${extA}:${mapped.containerPaths[0]}:ro`);
-            expect(mapped.volumeMounts[1]).toBe(`${extB}:${mapped.containerPaths[1]}:ro`);
-        } finally {
-            fs.rmSync(extRoot, { recursive: true, force: true });
-        }
-    });
-
-    test('container compose override file is generated and removable', () => {
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-compose-override-'));
-        try {
-            const plugin = new PlaywrightPlugin({
-                globalConfig: {
-                    runDir: tempRunDir
-                }
-            });
-            const mounts = ['/tmp/ext-a:/app/extensions/ext-1-a:ro'];
-            const overridePath = plugin.ensureContainerComposeOverride('mcp-cont-headless', mounts);
-            const content = fs.readFileSync(overridePath, 'utf8');
-
-            expect(content).toContain('services:');
-            expect(content).toContain('playwright:');
-            expect(content).toContain('/tmp/ext-a:/app/extensions/ext-1-a:ro');
-
-            plugin.ensureContainerComposeOverride('mcp-cont-headless', []);
-            expect(fs.existsSync(overridePath)).toBe(false);
-        } finally {
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('cli session integration should build docker attach config from cli host endpoint', () => {
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-cli-endpoint-'));
-        try {
-            const plugin = new PlaywrightPlugin({
-                globalConfig: {
-                    runDir: tempRunDir
-                }
-            });
-            fs.writeFileSync(plugin.sceneEndpointPath('cli-host-headless'), `${JSON.stringify({
-                port: 8935,
-                wsPath: '/manyoyo-test'
-            }, null, 4)}\n`, 'utf8');
-
-            const integration = plugin.buildCliSessionIntegration('docker');
-            expect(integration.envEntries).toContain('PLAYWRIGHT_MCP_CONFIG=/tmp/manyoyo-playwright/cli-host-headless.cli-attach.json');
-            expect(integration.extraArgs).toEqual(['--add-host', 'host.docker.internal:host-gateway']);
-            expect(integration.volumeEntries).toEqual([
-                '--volume',
-                `${plugin.sceneCliAttachConfigPath('cli-host-headless')}:/tmp/manyoyo-playwright/cli-host-headless.cli-attach.json:ro`
-            ]);
-            const attachConfig = JSON.parse(fs.readFileSync(plugin.sceneCliAttachConfigPath('cli-host-headless'), 'utf8'));
-            // isolated 必须为 true：launch-server（非 shared）不预创建 context，
-            // remoteEndpoint 存在时 playwright-cli 默认 isolated=false 会走 contexts()[0] 并报
-            // "unable to connect to a browser that does not have any contexts"。
-            expect(attachConfig).toEqual({
-                outputDir: '/tmp/.playwright-cli',
-                browser: {
-                    remoteEndpoint: 'ws://host.docker.internal:8935/manyoyo-test',
-                    isolated: true
-                }
-            });
-        } finally {
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('dev-host-headed cli session integration should read DevToolsActivePort for docker', () => {
-        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
-        try {
-            const activePortPath = path.join(tempHome, 'Library', 'Application Support', 'Google', 'Chrome', 'DevToolsActivePort');
-            fs.mkdirSync(path.dirname(activePortPath), { recursive: true });
-            fs.writeFileSync(activePortPath, '9222\n/devtools/browser/test-browser-id\n', 'utf8');
-
-            const plugin = new PlaywrightPlugin({
-                globalConfig: {
-                    homeDir: tempHome,
-                    runDir: tempRunDir,
-                    cliSessionScene: 'dev-host-headed'
-                }
-            });
-
-            const integration = plugin.buildCliSessionIntegration('docker');
-            expect(integration.envEntries).toEqual([
-                'PLAYWRIGHT_MCP_CONFIG=/tmp/manyoyo-playwright/dev-host-headed.cli-attach.json'
-            ]);
-            expect(integration.extraArgs).toEqual(['--add-host', 'host.docker.internal:host-gateway']);
-            expect(integration.volumeEntries).toEqual([
-                '--volume',
-                `${plugin.sceneCliAttachConfigPath('dev-host-headed')}:/tmp/manyoyo-playwright/dev-host-headed.cli-attach.json:ro`
-            ]);
-
-            const attachConfig = JSON.parse(fs.readFileSync(plugin.sceneCliAttachConfigPath('dev-host-headed'), 'utf8'));
-            expect(attachConfig).toEqual({
-                outputDir: '/tmp/.playwright-cli',
-                browser: {
-                    cdpEndpoint: 'ws://host.docker.internal:9222/devtools/browser/test-browser-id',
-                    cdpHeaders: {
-                        Host: '127.0.0.1:9222'
-                    },
-                    cdpTimeout: 60000
-                }
-            });
-        } finally {
-            fs.rmSync(tempHome, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('dev-host-headed cli session integration should use podman host alias', () => {
-        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
-        try {
-            const activePortPath = path.join(tempHome, 'Library', 'Application Support', 'Google', 'Chrome', 'DevToolsActivePort');
-            fs.mkdirSync(path.dirname(activePortPath), { recursive: true });
-            fs.writeFileSync(activePortPath, '9223\n/devtools/browser/podman-browser-id\n', 'utf8');
-
-            const plugin = new PlaywrightPlugin({
-                globalConfig: {
-                    homeDir: tempHome,
-                    runDir: tempRunDir,
-                    cliSessionScene: 'dev-host-headed'
-                }
-            });
-
-            const integration = plugin.buildCliSessionIntegration('podman');
-            const attachConfig = JSON.parse(fs.readFileSync(plugin.sceneCliAttachConfigPath('dev-host-headed'), 'utf8'));
-            expect(integration.extraArgs).toEqual([]);
-            expect(attachConfig.outputDir).toBe('/tmp/.playwright-cli');
-            expect(attachConfig.browser.cdpEndpoint).toBe('ws://host.containers.internal:9223/devtools/browser/podman-browser-id');
-            expect(attachConfig.browser.cdpHeaders).toEqual({ Host: '127.0.0.1:9223' });
-        } finally {
-            fs.rmSync(tempHome, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('dev-host-headed cli session integration should reject invalid DevToolsActivePort', () => {
-        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
-        try {
-            const activePortPath = path.join(tempHome, 'Library', 'Application Support', 'Google', 'Chrome', 'DevToolsActivePort');
-            fs.mkdirSync(path.dirname(activePortPath), { recursive: true });
-            fs.writeFileSync(activePortPath, '9222\n/devtools/page/not-browser\n', 'utf8');
-
-            const plugin = new PlaywrightPlugin({
-                globalConfig: {
-                    homeDir: tempHome,
-                    runDir: tempRunDir,
-                    cliSessionScene: 'dev-host-headed'
-                }
-            });
-
-            expect(() => plugin.buildCliSessionIntegration('docker')).toThrow(/DevToolsActivePort/);
-        } finally {
-            fs.rmSync(tempHome, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('cli scene should prefer playwright binary bundled with @playwright/mcp', () => {
-        const plugin = new PlaywrightPlugin();
-        expect(plugin.playwrightBinPath('cli-host-headless')).toContain(path.join('@playwright', 'mcp', 'node_modules', '.bin', 'playwright'));
+    test('容器内扩展目录映射为只读挂载', () => {
+        const a = makeExt('a');
+        const b = makeExt('b');
+        const mapped = extensions.buildContainerExtensionMounts([a, b]);
+        expect(mapped.containerPaths[0]).toBe('/app/extensions/ext-1-a');
+        expect(mapped.containerPaths[1]).toBe('/app/extensions/ext-2-b');
+        expect(mapped.volumes).toEqual([`${a}:/app/extensions/ext-1-a:ro`, `${b}:/app/extensions/ext-2-b:ro`]);
     });
 });
 
-describe('PlaywrightPlugin first-run bootstrap', () => {
-    test('container scene pulls base image when scene config is missing', async () => {
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'container',
-                containerRuntime: 'docker',
-                dockerTag: '1.2.3'
-            }
-        });
-
-        const commands = [];
-        plugin.ensureCommandAvailable = jest.fn(() => true);
-        plugin.runCmd = jest.fn((args) => {
-            commands.push(args);
-            return { returncode: 0, stdout: '', stderr: '' };
-        });
-        plugin.waitForPort = jest.fn(async () => true);
-
-        try {
-            const rc = await plugin.startContainer('mcp-cont-headless');
-            expect(rc).toBe(0);
-            expect(commands[0]).toEqual(['docker', 'pull', 'mcr.microsoft.com/playwright/mcp:1.2.3']);
-        } finally {
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
+describe('Chrome 中继', () => {
+    const TOKEN = 'a'.repeat(64);
+    let servers;
+    beforeEach(() => { servers = []; });
+    afterEach(async () => {
+        await Promise.all(servers.map(server => new Promise(resolve => {
+            if (server.clients) { server.clients.forEach(client => client.terminate()); }
+            server.close(() => resolve());
+        })));
     });
 
-    test('container scene config should use in-container initScript path and mount init script file', async () => {
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'container',
-                containerRuntime: 'docker',
-                dockerTag: '1.2.3'
-            }
+    function listen(server) {
+        servers.push(server);
+        return new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(server.address().port)));
+    }
+
+    // 模拟 Chrome：只接受 Host 为 127.0.0.1:<端口> 的 WebSocket，并回显
+    async function fakeChrome(label) {
+        const seenHosts = [];
+        const server = http.createServer();
+        const wss = new WebSocketServer({ server });
+        wss.on('connection', (socket, req) => {
+            seenHosts.push(req.headers.host);
+            socket.on('message', data => socket.send(`${label}:${data}`));
         });
+        const port = await listen(server);
+        servers.push({ close: cb => wss.close(cb), clients: wss.clients });
+        return { port, seenHosts };
+    }
 
-        plugin.ensureCommandAvailable = jest.fn(() => true);
-        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
-        plugin.waitForPort = jest.fn(async () => true);
+    function connect(port, urlPath) {
+        return new Promise(resolve => {
+            const socket = new WebSocket(`ws://127.0.0.1:${port}${urlPath}`);
+            socket.once('open', () => resolve({ socket }));
+            socket.once('error', error => resolve({ error }));
+            socket.once('unexpected-response', (req, res) => resolve({ status: res.statusCode }));
+        });
+    }
 
+    function roundTrip(socket, text) {
+        return new Promise(resolve => {
+            socket.once('message', data => resolve(String(data)));
+            socket.send(text);
+        });
+    }
+
+    test('只放行带 token 的 upgrade，其余 HTTP 与路径一律 404；Chrome 重启后新连接自动跟随', async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-relay-'));
         try {
-            const rc = await plugin.startContainer('mcp-cont-headless');
-            expect(rc).toBe(0);
+            const activePort = path.join(dir, 'DevToolsActivePort');
+            const first = await fakeChrome('first');
+            fs.writeFileSync(activePort, `${first.port}\n/devtools/browser/abc\n`);
+            const relayPort = await listen(createRelay({ token: TOKEN, candidates: [path.join(dir, 'missing'), activePort] }));
 
-            const cfg = JSON.parse(fs.readFileSync(plugin.sceneConfigPath('mcp-cont-headless'), 'utf8'));
-            expect(cfg.browser.initScript).toEqual(['/app/config/mcp-cont-headless.init.js']);
-
-            const overridePath = plugin.sceneComposeOverridePath('mcp-cont-headless');
-            const overrideContent = fs.readFileSync(overridePath, 'utf8');
-            expect(overrideContent).toContain('/app/config/mcp-cont-headless.init.js');
-        } finally {
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('container scene does not pull image when scene config exists', async () => {
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'container',
-                containerRuntime: 'docker',
-                dockerTag: '1.2.3'
-            }
-        });
-
-        const cfgPath = plugin.sceneConfigPath('mcp-cont-headless');
-        fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
-        fs.writeFileSync(cfgPath, '{"server":{}}\n', 'utf8');
-
-        const commands = [];
-        plugin.ensureCommandAvailable = jest.fn(() => true);
-        plugin.runCmd = jest.fn((args) => {
-            commands.push(args);
-            return { returncode: 0, stdout: '', stderr: '' };
-        });
-        plugin.waitForPort = jest.fn(async () => true);
-
-        try {
-            const rc = await plugin.startContainer('mcp-cont-headless');
-            expect(rc).toBe(0);
-            expect(commands.find(args => args[0] === 'docker' && args[1] === 'pull')).toBeUndefined();
-        } finally {
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('host scene installs default browser when scene config is missing', async () => {
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'host'
-            }
-        });
-
-        const commands = [];
-        plugin.ensureCommandAvailable = jest.fn(() => true);
-        plugin.runCmd = jest.fn((args) => {
-            commands.push(args);
-            return { returncode: 0, stdout: '', stderr: '' };
-        });
-        plugin.hostScenePids = jest.fn(() => []);
-        plugin.portReady = jest.fn(async () => false);
-        plugin.waitForPort = jest.fn(async () => true);
-        plugin.waitForHostPids = jest.fn(async () => [12345]);
-        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
-        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
-
-        try {
-            const rc = await plugin.startHost('mcp-host-headless');
-            expect(rc).toBe(0);
-            expect(commands[0]).toEqual(['/mock/bin/playwright', 'install', '--with-deps', 'chromium']);
-        } finally {
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('host scene does not install browser when scene config exists', async () => {
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'host'
-            }
-        });
-
-        const cfgPath = plugin.sceneConfigPath('mcp-host-headless');
-        fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
-        fs.writeFileSync(cfgPath, '{"server":{}}\n', 'utf8');
-
-        const commands = [];
-        plugin.ensureCommandAvailable = jest.fn(() => true);
-        plugin.runCmd = jest.fn((args) => {
-            commands.push(args);
-            return { returncode: 0, stdout: '', stderr: '' };
-        });
-        plugin.hostScenePids = jest.fn(() => []);
-        plugin.portReady = jest.fn(async () => false);
-        plugin.waitForPort = jest.fn(async () => true);
-        plugin.waitForHostPids = jest.fn(async () => [12345]);
-        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
-        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
-
-        try {
-            const rc = await plugin.startHost('mcp-host-headless');
-            expect(rc).toBe(0);
-            const installCmd = commands.find(args => args[0] === '/mock/bin/playwright' && args[1] === 'install');
-            expect(installCmd).toBeUndefined();
-        } finally {
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('cli host scene still installs browser when scene config exists', async () => {
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'host'
-            }
-        });
-
-        const cfgPath = plugin.sceneConfigPath('cli-host-headless');
-        fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
-        fs.writeFileSync(cfgPath, '{"host":"0.0.0.0"}\n', 'utf8');
-
-        const commands = [];
-        plugin.ensureCommandAvailable = jest.fn(() => true);
-        plugin.runCmd = jest.fn((args) => {
-            commands.push(args);
-            return { returncode: 0, stdout: '', stderr: '' };
-        });
-        plugin.hostScenePids = jest.fn(() => []);
-        plugin.portReady = jest.fn(async () => false);
-        plugin.waitForPort = jest.fn(async () => true);
-        plugin.waitForHostPids = jest.fn(async () => [12345]);
-        plugin.playwrightBinPath = jest.fn(() => '/mock/bin/playwright-cli-host');
-        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
-
-        try {
-            const rc = await plugin.startHost('cli-host-headless');
-            expect(rc).toBe(0);
-            expect(commands[0]).toEqual(['/mock/bin/playwright-cli-host', 'install', '--with-deps', 'chromium']);
-        } finally {
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('cli host scene should write endpoint metadata after start', async () => {
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'host'
-            }
-        });
-
-        const commands = [];
-        plugin.runCmd = jest.fn((args) => {
-            commands.push(args);
-            return { returncode: 0, stdout: '', stderr: '' };
-        });
-        plugin.hostScenePids = jest.fn(() => []);
-        plugin.portReady = jest.fn(async () => false);
-        plugin.waitForPort = jest.fn(async () => true);
-        plugin.waitForHostPids = jest.fn(async () => [12345]);
-        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
-        plugin.playwrightBinPath = jest.fn(() => '/mock/bin/playwright-cli-host');
-        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
-
-        try {
-            const rc = await plugin.startHost('cli-host-headless');
-            expect(rc).toBe(0);
-            expect(commands[0]).toEqual(['/mock/bin/playwright-cli-host', 'install', '--with-deps', 'chromium']);
-
-            const endpoint = JSON.parse(fs.readFileSync(plugin.sceneEndpointPath('cli-host-headless'), 'utf8'));
-            expect(endpoint.port).toBe(8935);
-            expect(endpoint.wsPath.startsWith('/')).toBe(true);
-        } finally {
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('cli-host-headed should create ms-playwright cache dir and remind cliSessionScene when config is not aligned', async () => {
-        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-home-'));
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const stdout = { write: jest.fn() };
-        const plugin = new PlaywrightPlugin({
-            stdout,
-            globalConfig: {
-                homeDir: tempHome,
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'host',
-                cliSessionScene: 'cli-host-headless'
-            }
-        });
-
-        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
-        plugin.hostScenePids = jest.fn(() => []);
-        plugin.portReady = jest.fn(async () => false);
-        plugin.waitForPort = jest.fn(async () => true);
-        plugin.waitForHostPids = jest.fn(async () => [12345]);
-        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
-        plugin.playwrightBinPath = jest.fn(() => '/mock/bin/playwright-cli-host');
-        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
-
-        try {
-            const rc = await plugin.startHost('cli-host-headed');
-            expect(rc).toBe(0);
-            expect(fs.existsSync(path.join(tempHome, '.manyoyo', '.cache', 'ms-playwright'))).toBe(true);
-            const output = stdout.write.mock.calls.map(args => args[0]).join('');
-            expect(output).toContain('[tip] 如果希望容器内 manyoyo run 自动附着到当前 CLI 宿主场景');
-            expect(output).toContain('"volumes": [');
-            expect(output).toContain('~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright');
-            expect(output).toContain('"cliSessionScene": "cli-host-headed"');
-        } finally {
-            fs.rmSync(tempHome, { recursive: true, force: true });
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('cli-host-headed should remind when cliSessionScene aligned but cache volume is missing', async () => {
-        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-home-'));
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const stdout = { write: jest.fn() };
-        const plugin = new PlaywrightPlugin({
-            stdout,
-            globalConfig: {
-                homeDir: tempHome,
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'host',
-                cliSessionScene: 'cli-host-headed'
-            }
-        });
-
-        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
-        plugin.hostScenePids = jest.fn(() => []);
-        plugin.portReady = jest.fn(async () => false);
-        plugin.waitForPort = jest.fn(async () => true);
-        plugin.waitForHostPids = jest.fn(async () => [12345]);
-        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
-        plugin.playwrightBinPath = jest.fn(() => '/mock/bin/playwright-cli-host');
-        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
-
-        try {
-            const rc = await plugin.startHost('cli-host-headed');
-            expect(rc).toBe(0);
-            const output = stdout.write.mock.calls.map(args => args[0]).join('');
-            expect(output).toContain('[tip] 如果希望容器内 manyoyo run 自动附着到当前 CLI 宿主场景');
-            expect(output).toContain('~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright');
-        } finally {
-            fs.rmSync(tempHome, { recursive: true, force: true });
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('cli-host-headed should not remind cliSessionScene when config already aligned', async () => {
-        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-home-'));
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const stdout = { write: jest.fn() };
-        const plugin = new PlaywrightPlugin({
-            stdout,
-            globalConfig: {
-                homeDir: tempHome,
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'host',
-                cliSessionScene: 'cli-host-headed'
-            },
-            rootGlobalConfig: {
-                volumes: [
-                    '~/.manyoyo/.cache/ms-playwright:/root/.cache/ms-playwright'
-                ]
-            }
-        });
-
-        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
-        plugin.hostScenePids = jest.fn(() => []);
-        plugin.portReady = jest.fn(async () => false);
-        plugin.waitForPort = jest.fn(async () => true);
-        plugin.waitForHostPids = jest.fn(async () => [12345]);
-        plugin.localBinPath = jest.fn((name) => `/mock/bin/${name}`);
-        plugin.playwrightBinPath = jest.fn(() => '/mock/bin/playwright-cli-host');
-        plugin.spawnHostProcess = jest.fn(() => ({ pid: 12345, unref() {}, exitCode: null, killed: false }));
-
-        try {
-            const rc = await plugin.startHost('cli-host-headed');
-            expect(rc).toBe(0);
-            const output = stdout.write.mock.calls.map(args => args[0]).join('');
-            expect(output).not.toContain('[tip] 如果希望容器内 manyoyo run 自动附着到当前 CLI 宿主场景');
-        } finally {
-            fs.rmSync(tempHome, { recursive: true, force: true });
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('dev-host-headed up should open Chrome debugging page and print setup tip', async () => {
-        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
-        const tempConfigDir = path.join(tempHome, '.manyoyo', 'plugin', 'playwright', 'config');
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
-        const stdout = { write: jest.fn() };
-        const plugin = new PlaywrightPlugin({
-            stdout,
-            globalConfig: {
-                homeDir: tempHome,
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'host'
-            }
-        });
-
-        const activePortPath = path.join(tempHome, 'Library', 'Application Support', 'Google', 'Chrome', 'DevToolsActivePort');
-        fs.mkdirSync(path.dirname(activePortPath), { recursive: true });
-        fs.writeFileSync(activePortPath, '9222\n/devtools/browser/up-browser-id\n', 'utf8');
-        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
-        plugin.portReady = jest.fn(async () => true);
-        plugin.spawnHostProcess = jest.fn();
-
-        try {
-            const rc = await plugin.runOnScene('up', 'dev-host-headed');
-            expect(rc).toBe(0);
-            expect(plugin.runCmd).toHaveBeenCalledWith(
-                expect.arrayContaining(['chrome://inspect/#remote-debugging']),
-                expect.objectContaining({ check: false, captureOutput: true })
-            );
-            expect(plugin.spawnHostProcess).not.toHaveBeenCalled();
-            const output = stdout.write.mock.calls.map(args => args[0]).join('');
-            expect(output.indexOf('[up] dev-host-headed ready via DevToolsActivePort')).toBeLessThan(output.indexOf('[tip] 已尝试打开 chrome://inspect/#remote-debugging'));
-            expect(output.indexOf('[tip] 已尝试打开 chrome://inspect/#remote-debugging')).toBeLessThan(output.indexOf('若用容器 Agent 操作宿主机浏览器，在宿主机执行:'));
-            expect(output.indexOf('若用容器 Agent 操作宿主机浏览器，在宿主机执行:')).toBeLessThan(output.indexOf('若用宿主机 Agent 操作宿主机浏览器，在宿主机执行:'));
-            expect(output).toContain('[tip] 已尝试打开 chrome://inspect/#remote-debugging');
-            expect(output).toContain('请确认 remote debugging 已启用');
-            expect(output).toContain('\n\n若用容器 Agent 操作宿主机浏览器，在宿主机执行:\n');
-            expect(output).toContain('my run -r claude');
-            expect(output).toContain('my run -r codex');
-            expect(output).toContain('my run -r gemini');
-            expect(output).toContain('\n\n若用宿主机 Agent 操作宿主机浏览器，在宿主机执行:\n');
-            expect(output).toContain('PLAYWRIGHT_MCP_CONFIG=~/.manyoyo/plugin/playwright/config/dev-host-headed.json claude');
-            expect(output).toContain('PLAYWRIGHT_MCP_CONFIG=~/.manyoyo/plugin/playwright/config/dev-host-headed.json codex');
-            expect(output).toContain('PLAYWRIGHT_MCP_CONFIG=~/.manyoyo/plugin/playwright/config/dev-host-headed.json gemini');
-            expect(output).not.toContain('"volumes": [');
-            expect(output).not.toContain('"cliSessionScene": "dev-host-headed"');
-            expect(output).toContain('[up] dev-host-headed ready via DevToolsActivePort');
-            const hostConfig = JSON.parse(fs.readFileSync(plugin.sceneConfigPath('dev-host-headed'), 'utf8'));
-            expect(hostConfig).toEqual({
-                outputDir: '/tmp/.playwright-cli',
-                browser: {
-                    cdpEndpoint: 'ws://127.0.0.1:9222/devtools/browser/up-browser-id',
-                    cdpHeaders: {
-                        Host: '127.0.0.1:9222'
-                    },
-                    cdpTimeout: 60000
-                }
+            const http404 = await new Promise(resolve => {
+                http.get({ host: '127.0.0.1', port: relayPort, path: `/${TOKEN}` }, res => resolve(res.statusCode));
             });
+            expect(http404).toBe(404);
+            expect((await connect(relayPort, '/wrong')).status).toBe(404);
+            expect((await connect(relayPort, '/')).status).toBe(404);
+
+            const one = await connect(relayPort, `/${TOKEN}`);
+            expect(await roundTrip(one.socket, 'hi')).toBe('first:hi');
+            expect(first.seenHosts[0]).toBe(`127.0.0.1:${first.port}`);
+            one.socket.close();
+
+            // “重启 Chrome”：端口变化
+            const second = await fakeChrome('second');
+            fs.writeFileSync(activePort, `${second.port}\n/devtools/browser/def\n`);
+            const two = await connect(relayPort, `/${TOKEN}`);
+            expect(await roundTrip(two.socket, 'again')).toBe('second:again');
+            two.socket.close();
+
+            fs.rmSync(activePort);
+            expect((await connect(relayPort, `/${TOKEN}`)).status).toBe(502);
         } finally {
-            fs.rmSync(tempHome, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('dev-host-headed up should fail when DevToolsActivePort port is not reachable', async () => {
-        const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-home-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-dev-host-run-'));
-        const stdout = { write: jest.fn() };
-        const stderr = { write: jest.fn() };
-        const plugin = new PlaywrightPlugin({
-            stdout,
-            stderr,
-            globalConfig: {
-                homeDir: tempHome,
-                runDir: tempRunDir,
-                runtime: 'host'
-            }
-        });
-
-        const activePortPath = path.join(tempHome, 'Library', 'Application Support', 'Google', 'Chrome', 'DevToolsActivePort');
-        fs.mkdirSync(path.dirname(activePortPath), { recursive: true });
-        fs.writeFileSync(activePortPath, '9222\n/devtools/browser/stale-browser-id\n', 'utf8');
-        plugin.runCmd = jest.fn(() => ({ returncode: 0, stdout: '', stderr: '' }));
-        plugin.portReady = jest.fn(async () => false);
-
-        try {
-            const rc = await plugin.runOnScene('up', 'dev-host-headed');
-            expect(rc).toBe(1);
-            const output = stderr.write.mock.calls.map(args => args[0]).join('');
-            expect(output).toContain('DevToolsActivePort 指向 127.0.0.1:9222，但该端口不可连接');
-        } finally {
-            fs.rmSync(tempHome, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('stopDevHost should remove generated host attach config', () => {
-        const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-config-'));
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                configDir: tempConfigDir,
-                runDir: tempRunDir,
-                runtime: 'host'
-            }
-        });
-
-        fs.writeFileSync(plugin.sceneConfigPath('dev-host-headed'), '{"browser":{"cdpEndpoint":"ws://127.0.0.1:9222/x"}}\n', 'utf8');
-        fs.writeFileSync(plugin.sceneCliAttachConfigPath('dev-host-headed'), '{"browser":{"cdpEndpoint":"ws://host.docker.internal:9222/x"}}\n', 'utf8');
-
-        try {
-            const rc = plugin.stopDevHost('dev-host-headed');
-            expect(rc).toBe(0);
-            expect(fs.existsSync(plugin.sceneConfigPath('dev-host-headed'))).toBe(false);
-            expect(fs.existsSync(plugin.sceneCliAttachConfigPath('dev-host-headed'))).toBe(false);
-        } finally {
-            fs.rmSync(tempConfigDir, { recursive: true, force: true });
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
-        }
-    });
-
-    test('stopHost should remove cli attach config artifact', async () => {
-        const tempRunDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-playwright-run-'));
-        const plugin = new PlaywrightPlugin({
-            globalConfig: {
-                runDir: tempRunDir,
-                runtime: 'host'
-            }
-        });
-
-        fs.writeFileSync(plugin.sceneEndpointPath('cli-host-headless'), '{"port":8935,"wsPath":"/x"}\n', 'utf8');
-        fs.writeFileSync(plugin.sceneCliAttachConfigPath('cli-host-headless'), '{"browser":{"remoteEndpoint":"ws://host.docker.internal:8935/x"}}\n', 'utf8');
-        plugin.hostScenePids = jest.fn(() => []);
-        plugin.portReady = jest.fn(async () => false);
-
-        try {
-            const rc = await plugin.stopHost('cli-host-headless');
-            expect(rc).toBe(0);
-            expect(fs.existsSync(plugin.sceneEndpointPath('cli-host-headless'))).toBe(false);
-            expect(fs.existsSync(plugin.sceneCliAttachConfigPath('cli-host-headless'))).toBe(false);
-        } finally {
-            fs.rmSync(tempRunDir, { recursive: true, force: true });
+            fs.rmSync(dir, { recursive: true, force: true });
         }
     });
 });

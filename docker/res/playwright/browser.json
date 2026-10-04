@@ -1,0 +1,28 @@
+{
+    "outputDir": "/tmp/.playwright-cli",
+    "browser": {
+        "chromiumSandbox": false,
+        "browserName": "chromium",
+        "initScript": [
+            "/run/manyoyo-playwright/stealth.init.js"
+        ],
+        "contextOptions": {
+            "locale": "en-US",
+            "timezoneId": "UTC",
+            "viewport": null,
+            "extraHTTPHeaders": {
+                "Accept-Language": "en-US,en;q=0.9"
+            }
+        },
+        "launchOptions": {
+            "channel": "chromium",
+            "headless": false,
+            "args": [
+                "--lang=en-US",
+                "--window-size=1920,1080",
+                "--disable-blink-features=AutomationControlled",
+                "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
+            ]
+        }
+    }
+}

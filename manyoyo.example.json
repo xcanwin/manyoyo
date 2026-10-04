@@ -68,38 +68,25 @@
     //     }
     // },
 
-    // 可选插件（manyoyo playwright）
+    // 可选插件（manyoyo playwright）：容器内浏览器默认就能用，这里只放少量可调项
     "plugins": {
         "playwright": {
-            // mixed: 支持容器+宿主机；container: 仅容器；host: 仅宿主机
-            "runtime": "mixed",
-            // 启用场景（可按需裁剪）
-            "enabledScenes": ["mcp-cont-headless", "mcp-cont-headed", "mcp-host-headless", "mcp-host-headed", "cli-host-headless", "cli-host-headed", "dev-host-headed"],
-            // my run 默认注入的 playwright-cli 宿主场景
-            "cliSessionScene": "cli-host-headless",
-            // mcp-add 默认 host（可改为 localhost / 127.0.0.1）
-            "mcpDefaultHost": "host.docker.internal",
-            // mcp-cont-headed 场景读取的密码环境变量名（默认 VNC_PASSWORD）
-            "vncPasswordEnvKey": "VNC_PASSWORD",
-            // playwright ext-download 的 CRX prodversion 参数
-            "extensionProdversion": "132.0.0.0",
-            // 注入 navigator.platform（默认与内置 UA 对齐为 MacIntel）
-            "navigatorPlatform": "MacIntel",
+            // headed / chrome / vnc 模式的浏览器服务端口（容器通过 token 路径连接）
+            "port": 8935,
+            // vnc 模式的原生 VNC 端口与 noVNC 网页端口（只发布到 127.0.0.1）
+            "vncPort": 5900,
+            "novncPort": 6080,
+            // 浏览器语言与时区，留空时跟随宿主机
+            "locale": "",
+            "timezoneId": "",
+            // 强制 navigator.platform；留空则使用浏览器真实值（推荐，与 UA、字体、WebGL 自洽）
+            "navigatorPlatform": "",
             // 是否禁用 WebRTC（默认 false）
             "disableWebRTC": false,
-            // dev-host-headed 读取的 Chrome DevToolsActivePort 文件；留空时自动探测常见路径
+            // chrome 模式读取的 DevToolsActivePort 文件；留空时自动探测常见路径
             "devtoolsActivePortPath": "",
-            // dev-host-headed 连接 Chrome CDP 的超时时间（毫秒）
-            "devtoolsCdpTimeout": 60000,
-            "ports": {
-                "mcpContHeadless": 8931,
-                "mcpContHeaded": 8932,
-                "mcpHostHeadless": 8933,
-                "mcpHostHeaded": 8934,
-                "cliHostHeadless": 8935,
-                "cliHostHeaded": 8936,
-                "mcpContHeadedNoVnc": 6080
-            }
+            // playwright ext-download 的 CRX prodversion 参数
+            "extensionProdversion": "132.0.0.0"
         }
     },
 
@@ -118,7 +105,8 @@
             "yolo": "c",
             "plugins": {
                 "playwright": {
-                    "runtime": "container"
+                    "locale": "zh-CN",
+                    "timezoneId": "Asia/Shanghai"
                 }
             }
         }

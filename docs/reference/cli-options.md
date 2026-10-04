@@ -40,7 +40,7 @@ manyoyo
 | `ps` | 列出容器 | `manyoyo ps` |
 | `images` | 列出镜像 | `manyoyo images` |
 | `rm <name>` | 删除指定容器 | `manyoyo rm my-0101-1200` |
-| `build` | 构建沙箱镜像 | `manyoyo build --iv 2.1.0-common` |
+| `build` | 构建沙箱镜像 | `manyoyo build --iv 2.1.1-common` |
 | `prune` | 清理悬空镜像 | `manyoyo prune` |
 | `podman <参数...>` | 用私有 Podman 执行命令（参数原样传入，仅离线完整包安装后可用） | `manyoyo podman ps -a` |
 
@@ -49,7 +49,7 @@ manyoyo
 | 命令 | 说明 | 示例 |
 | --- | --- | --- |
 | `serve [listen]` | 启动网页服务，默认 `127.0.0.1:3000` | `manyoyo serve 127.0.0.1:3000 -d` |
-| `playwright` | 管理 Playwright 插件服务 | `manyoyo playwright up mcp-host-headless` |
+| `playwright` | 管理 Playwright 插件服务 | `manyoyo playwright up headed` |
 
 ## 参数归属
 
@@ -65,7 +65,7 @@ manyoyo
 | `--cp, --cont-path <path>` | 容器工作目录 |
 | `-m, --cont-mode <mode>` | 容器模式：`common` / `dind` / `sock` |
 | `--in, --image-name <name>` | 镜像名称 |
-| `--iv, --image-ver <version>` | 镜像版本，格式必须为 `x.y.z-后缀`，如 `2.1.0-common` |
+| `--iv, --image-ver <version>` | 镜像版本，格式必须为 `x.y.z-后缀`，如 `2.1.1-common` |
 | `-e, --env <env>` | 追加环境变量，可多次传入 |
 | `--ef, --env-file <file>` | 追加环境文件，仅支持绝对路径 |
 | `-v, --volume <volume>` | 追加挂载卷，可多次传入 |
@@ -117,17 +117,15 @@ manyoyo
 
 | 命令 | 用途 |
 | --- | --- |
-| `manyoyo playwright ls` | 列出可用场景 |
-| `manyoyo playwright up [scene]` | 启动场景，默认 `mcp-host-headless` |
-| `manyoyo playwright down [scene]` | 停止场景 |
-| `manyoyo playwright status [scene]` | 查看状态 |
-| `manyoyo playwright health [scene]` | 健康检查 |
-| `manyoyo playwright logs [scene]` | 查看日志 |
-| `manyoyo playwright mcp-add` | 输出 MCP 接入命令，首行标注在容器中执行 |
-| `manyoyo playwright cli-add` | 输出宿主机安装 playwright-cli skill 的命令，首行标注在宿主机中执行 |
+| `manyoyo playwright` | 列出模式并显示当前模式与真实可用性（同 `status`） |
+| `manyoyo playwright up <headed\|chrome\|vnc>` | 切换浏览器模式；不带参数列出全部模式并以非 0 退出 |
+| `manyoyo playwright down` | 停止当前模式，回到默认模式 |
+| `manyoyo playwright status` | 当前模式 + 真实探测，不可用时退出码非 0 |
+| `manyoyo playwright logs` | 查看浏览器服务日志 |
+| `manyoyo playwright mcp-add` | 输出在容器内注册 MCP（stdio）的命令 |
 | `manyoyo playwright ext-download` | 下载内置扩展到本地目录 |
 
-`playwright up` 额外支持：
+`playwright up` 额外支持（仅 headed、vnc）：
 
 | 参数 | 说明 |
 | --- | --- |

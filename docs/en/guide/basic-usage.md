@@ -124,4 +124,4 @@ When listening on public interfaces, always set a strong password and restrict s
 
 ## Playwright plugin
 
-A plugin that lets agents drive a browser; see [Playwright Plugin](../advanced/playwright.md).
+Lets agents in the container drive a browser (works out of the box; switch to headed / chrome / vnc when needed); see [Playwright Plugin](../advanced/playwright.md).

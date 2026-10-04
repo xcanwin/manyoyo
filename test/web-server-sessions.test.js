@@ -53,6 +53,7 @@ function buildServerOptions(tempHost, port, overrides = {}) {
         authPassAuto: false,
         dockerCmd: 'docker',
         hostPath: tempHost,
+        homeDir: tempHost,
         containerPath: '/workspace',
         imageName: 'localhost/xcanwin/manyoyo',
         imageVersion: '1.0.0-common',

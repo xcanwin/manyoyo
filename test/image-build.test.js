@@ -531,32 +531,33 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(repackCall[1]).toContain('--no-xattrs');
     });
 
-    test('docker image should include built-in playwright cli headless config assets', () => {
+    test('docker image should include built-in playwright default config assets', () => {
         const rootDir = path.resolve(__dirname, '..');
         const dockerfile = fs.readFileSync(path.join(rootDir, 'docker', 'manyoyo.Dockerfile'), 'utf8');
-        const configPath = path.join(rootDir, 'docker', 'res', 'playwright', 'cli-cont-headless.json');
-        const initScriptPath = path.join(rootDir, 'docker', 'res', 'playwright', 'cli-cont-headless.init.js');
+        const resDir = path.join(rootDir, 'docker', 'res', 'playwright');
 
-        expect(dockerfile).toContain('COPY ./docker/res/playwright/cli-cont-headless.init.js /app/config/cli-cont-headless.init.js');
-        expect(dockerfile).toContain('COPY ./docker/res/playwright/cli-cont-headless.json /app/config/cli-cont-headless.json');
-        expect(dockerfile).not.toContain('playwright-cli-wrapper.sh');
-        expect(fs.existsSync(configPath)).toBe(true);
-        expect(fs.existsSync(initScriptPath)).toBe(true);
+        expect(dockerfile).toContain('COPY ./docker/res/playwright/browser.json /run/manyoyo-playwright/config.json');
+        expect(dockerfile).toContain('COPY ./docker/res/playwright/stealth.init.js /run/manyoyo-playwright/stealth.init.js');
+        expect(dockerfile).toContain('PLAYWRIGHT_MCP_CONFIG=/run/manyoyo-playwright/config.json');
+        expect(dockerfile).toContain('NO_UPDATE_NOTIFIER=1');
         expect(dockerfile).toContain('COPY ./package.json /tmp/manyoyo-package.json');
         expect(dockerfile).toContain('playwrightCliVersion');
         expect(dockerfile).toContain('npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"');
         expect(dockerfile).toContain('playwright-cli install --skills');
+        // 浏览器与系统依赖都用全局 @playwright/cli 自带的 playwright-core 安装
+        expect(dockerfile).toContain('$(npm root -g)/@playwright/cli/node_modules/playwright-core/cli.js');
+        expect(dockerfile).toContain('install-deps chromium');
+        expect(dockerfile).toContain('xvfb');
         expect(dockerfile).not.toContain('playwright install --with-deps chromium');
+        ['browser.json', 'stealth.init.js', 'playwright-cli.sh'].forEach(name => {
+            expect(fs.existsSync(path.join(resDir, name))).toBe(true);
+        });
 
-        const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const cfg = JSON.parse(fs.readFileSync(path.join(resDir, 'browser.json'), 'utf8'));
         expect(cfg.outputDir).toBe('/tmp/.playwright-cli');
-        expect(cfg.browser.initScript).toEqual(['/app/config/cli-cont-headless.init.js']);
-        expect(cfg.browser.contextOptions.timezoneId).toBe('Asia/Shanghai');
+        expect(cfg.browser.initScript).toEqual(['/run/manyoyo-playwright/stealth.init.js']);
         expect(cfg.browser.launchOptions.channel).toBe('chromium');
-
-        const initScript = fs.readFileSync(initScriptPath, 'utf8');
-        expect(initScript).toContain("Object.defineProperty(navProto, 'platform'");
-        expect(initScript).toContain('MacIntel');
+        expect(cfg.browser.launchOptions.headless).toBe(false);
     });
 
     test('docker image should clean known build caches and avoid tmp relay layers for language servers', () => {
