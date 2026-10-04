@@ -142,7 +142,7 @@ describe('device gate', () => {
         expect(hit(['scripts/offline/install.sh', 'lib/post-install.js'])).toEqual(['install']);
         expect(hit(['lib/runtime-heal.js'])).toEqual(['runtime']);
         expect(hit(['lib/web/server.js', 'frontend/src/app.tsx'])).toEqual(['web']);
-        expect(hit(['scripts/offline/build.js', 'scripts/offline/stage.js', 'scripts/offline/normalized-tar.js', '.github/workflows/build-packages.yml', 'docs/a.md', 'test/a.test.js'])).toEqual([]);
+        expect(hit(['scripts/offline/build.js', 'scripts/offline/stage.js', 'scripts/offline/normalized-tar.js', '.github/workflows/build-packages.yml', 'frontend/src/release/release-app.tsx', 'frontend/release.html', 'docs/a.md', 'test/a.test.js'])).toEqual([]);
     });
 
     test('no rule hit means the device gate is done; hits block until ticked for this tag', () => {

@@ -1,7 +1,7 @@
 'use strict';
 
 // 发布前真机检查：按“自上个 tag 以来改了哪些文件”匹配区域规则。规则是数据，便于测试与调整。
-// 只匹配会在用户机器上运行的文件；只在 CI 里运行的构建脚本与 workflow 不算（release-verify 在真实 macOS 上覆盖）。
+// 只匹配会在用户机器上运行的文件；只在 CI 里运行的构建脚本与 workflow、维护者的发布控制台页面不算（release-verify 在真实 macOS 上覆盖）。
 
 const CI_ONLY = new Set(['scripts/offline/build.js', 'scripts/offline/stage.js', 'scripts/offline/normalized-tar.js']);
 
@@ -24,7 +24,7 @@ const DEVICE_RULES = [
     {
         id: 'web',
         title: '网页服务与前端：浏览器向导 + 一次 Agent 对话 + 登出/登录',
-        match: file => file.startsWith('lib/web/') || file.startsWith('frontend/')
+        match: file => file.startsWith('lib/web/') || (file.startsWith('frontend/') && !file.startsWith('frontend/src/release/') && file !== 'frontend/release.html')
     }
 ];
 
