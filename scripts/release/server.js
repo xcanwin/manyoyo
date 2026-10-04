@@ -10,18 +10,20 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const { collectFacts } = require('./facts');
-const { STAGES, MANUAL_CHECKLIST, computeStages, nextStage } = require('./stages');
+const { STAGES, MANUAL_CHECKLIST, computeStages, nextStage, isPublished } = require('./stages');
 const { ACTIONS, describeCommands, ReleaseError } = require('./actions');
 const { JobRunner } = require('./jobs');
 const { createBaseContext, createJobContext } = require('./context');
 const { ruleCommitMessage, agentCommitMessage } = require('./commit-message');
 const { buildVersionSuggestions } = require('./versions');
+const { acquireJobLock } = require('./lock');
+const { buildNotesDraft } = require('./notes');
+const { checkKind, recordCheck } = require('./checks');
 
 const DEFAULT_PORT = 3900;
 const HOST = '127.0.0.1';
 const FACTS_TTL_MS = 20000;
 const CONSOLE_HTML = path.join(__dirname, 'console.html');
-const NOTES_TEMPLATE = path.join(__dirname, '..', 'release-notes-template.md');
 
 function sendJson(res, status, body) {
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -49,18 +51,6 @@ function readBody(req, limit = 256 * 1024) {
     });
 }
 
-/** Release 说明草稿：模板 + 自上个 tag 以来的提交标题 */
-function buildNotesDraft(facts, templateFile = NOTES_TEMPLATE) {
-    let template = '';
-    try {
-        template = fs.readFileSync(templateFile, 'utf-8');
-    } catch (error) {
-        template = '## 更新内容\n\n…\n';
-    }
-    const bullets = facts.git.commitsSinceTag.filter(subject => !/^合并 /.test(subject)).map(subject => `- ${subject}`).join('\n') || '- …';
-    return template.replace('…', () => bullets);
-}
-
 function createReleaseServer(options = {}) {
     const repoRoot = options.repoRoot || path.join(__dirname, '..', '..');
     const port = options.port === undefined ? DEFAULT_PORT : options.port;
@@ -80,6 +70,7 @@ function createReleaseServer(options = {}) {
         actions: options.actions || ACTIONS,
         describe: describeCommands,
         getState: () => base.state.load(),
+        acquireLock: options.acquireLock === undefined ? () => acquireJobLock(repoRoot, 'web') : options.acquireLock,
         dryRun: base.dryRun
     });
 
@@ -117,6 +108,7 @@ function createReleaseServer(options = {}) {
             suggestions: buildVersionSuggestions((facts.git.latestTag || `v${facts.pkg.version}`).replace(/^v/, '')),
             notesDraft: buildNotesDraft(facts),
             checklist: MANUAL_CHECKLIST.map(item => ({ ...item, done: Boolean(checklist[item.id]) })),
+            published: isPublished(facts),
             job: runner.snapshot(),
             gh: facts.gh.ok
         };
@@ -153,10 +145,9 @@ function createReleaseServer(options = {}) {
         }
         if (req.method === 'POST' && pathname === '/api/checklist') {
             const body = await readBody(req);
-            if (!MANUAL_CHECKLIST.some(item => item.id === body.id)) throw new ReleaseError('BAD_REQUEST', '未知的检查项');
-            const tag = (cache.facts || await collect()).tag;
-            const all = base.state.load().checklists || {};
-            base.state.save({ checklists: { ...all, [tag]: { ...(all[tag] || {}), [body.id]: body.done === true } } });
+            if (!checkKind(body.id)) throw new ReleaseError('BAD_REQUEST', '未知的检查项');
+            const known = cache.facts || await collect();
+            recordCheck(base.state, known.tag, body.id, body.done === true, '网页勾选', known.git.originMainSha);
             return sendJson(res, 200, { ok: true });
         }
         if (req.method === 'POST' && pathname === '/api/quit') {

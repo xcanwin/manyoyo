@@ -231,6 +231,25 @@ describe('normalized tar', () => {
         expect(listing.indexOf('app/a.txt')).toBeLessThan(listing.indexOf('app/b.txt'));
     });
 
+    test('gzip-fast uses compression level 1 (for payloads that are already compressed), is still reproducible and readable by tar -xzf', () => {
+        const gnu = buildNormalizedTarArgs({ output: 'o.tar.gz', cwd: '/c', entries: ['x'], flavor: 'gnu', compression: 'gzip-fast' }).args;
+        expect(gnu).toEqual(expect.arrayContaining(['--use-compress-program', 'gzip -n -1']));
+        const bsd = buildNormalizedTarArgs({ output: 'o.tar.gz', cwd: '/c', entries: ['x'], flavor: 'bsd', compression: 'gzip-fast' }).args;
+        expect(bsd).toEqual(expect.arrayContaining(['--gzip', '--options', 'gzip:compression-level=1']));
+
+        fs.mkdirSync(path.join(root, 'src/app'), { recursive: true });
+        fs.writeFileSync(path.join(root, 'src/app/a.txt'), 'a'.repeat(4096));
+        const one = path.join(root, 'fast-one.tar.gz');
+        const two = path.join(root, 'fast-two.tar.gz');
+        createNormalizedTar({ output: one, cwd: path.join(root, 'src'), entries: ['app'], compression: 'gzip-fast' });
+        createNormalizedTar({ output: two, cwd: path.join(root, 'src'), entries: ['app'], compression: 'gzip-fast' });
+        expect(fs.readFileSync(one).equals(fs.readFileSync(two))).toBe(true);
+        const dest = path.join(root, 'fast-out');
+        fs.mkdirSync(dest);
+        expect(spawnSync('tar', ['-xzf', one, '-C', dest]).status).toBe(0);
+        expect(fs.readFileSync(path.join(dest, 'app/a.txt'), 'utf8')).toBe('a'.repeat(4096));
+    });
+
     test('builds the expected flags for both tar flavors and validates input', () => {
         const gnu = buildNormalizedTarArgs({ output: 'o.tar', cwd: '/c', entries: ['x'], flavor: 'gnu' }).args;
         expect(gnu).toEqual(expect.arrayContaining(['--owner=0', '--group=0', '--numeric-owner', '--no-xattrs', '--sort=name', '--exclude=._*']));

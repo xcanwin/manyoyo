@@ -26,6 +26,10 @@ function compressionArgs(compression, flavor) {
         // gzip -n：不写入文件名和时间戳
         return flavor === 'gnu' ? ['--use-compress-program', 'gzip -n'] : ['--gzip'];
     }
+    if (compression === 'gzip-fast') {
+        // 内容大多已是压缩文件（镜像归档、VM 磁盘），默认级别白费 CPU：用 -1，解包端仍是普通 tar -xzf
+        return flavor === 'gnu' ? ['--use-compress-program', 'gzip -n -1'] : ['--gzip', '--options', 'gzip:compression-level=1'];
+    }
     if (compression === 'xz') return ['--xz'];
     throw new Error(`不支持的压缩方式: ${compression}`);
 }

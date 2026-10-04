@@ -37,6 +37,19 @@ describe('release-verify workflow', () => {
         expect(text).not.toMatch(/^\s*! ls /m); // set -e 对 `! cmd` 不生效，检查会变成空操作
     });
 
+    test('every download retries transient network errors', () => {
+        const curls = text.split('\n').filter(line => /\bcurl\b/.test(line) && !line.trim().startsWith('#'));
+        expect(curls.length).toBeGreaterThanOrEqual(4);
+        curls.forEach(line => expect(line).toContain('--retry 3 --retry-all-errors'));
+    });
+
+    test('checks the imported image in whichever runtime the installer picked (runners have both docker and podman)', () => {
+        const check = text.split('\n').find(line => line.includes("'^ghcr.io/xcanwin/manyoyo:'"));
+        expect(check).toBeDefined();
+        expect(text).toContain('podman images --format');
+        expect(text).toContain('docker images --format');
+    });
+
     test('exercises install, version, update (latest) and uninstall on every platform', () => {
         for (const needle of ['--install-only', '已是最新版本', 'uninstall --yes', 'MANYOYO_TEST_SKIP_MACHINE=1']) expect(text).toContain(needle);
     });

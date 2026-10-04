@@ -8,7 +8,10 @@ export type Stage = {
   state: StageState
   detail: string
   url?: string
+  items?: DeviceItem[]
 }
+
+export type DeviceItem = { id: string; title: string; files: string[]; done: boolean; by: string }
 
 export type DirtyFile = { code: string; path: string }
 export type Suggestion = { key: string; label: string; version: string; recommended: boolean }
@@ -38,6 +41,7 @@ export type Status = {
   suggestions: Suggestion[]
   notesDraft: string
   checklist: ChecklistItem[]
+  published: boolean
   job: JobSnapshot
 }
 

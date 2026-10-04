@@ -1,7 +1,9 @@
-# 构建并发布预构建镜像 ghcr.io/xcanwin/manyoyo:<imageVersion>（linux/amd64 + linux/arm64），
-# 同时按架构产出镜像归档 artifact，供离线包组装使用。
+# 构建并发布预构建镜像 ghcr.io/xcanwin/manyoyo:<imageVersion>（linux/amd64 + linux/arm64）。
+# 两个架构各在原生 runner 上并行构建（不用 qemu 跨架构），按 digest 推送，最后用 imagetools create 合成多架构 tag。
 # 镜像源：GitHub runner 在海外，访问国内镜像仅约 120 kB/s，所以这里改用官方源（APT_MIRROR 置空即不改写 apt 源）。
 # 只能手动触发；不会被推送分支或 tag 触发。构建参数不含任何凭据。
+# 同一个 tag 只能发布一次：tag 已存在时直接失败（没有强制覆盖开关），改了镜像内容就先升 imageVersion。
+# dryRun：只构建、不登录、不推送、不合成 manifest；在非 main 的 ref 上强制 dryRun。
 
 name: Publish Image
 
@@ -12,31 +14,32 @@ on:
         description: '镜像版本，格式 x.y.z-后缀（留空则读取 package.json 的 imageVersion）'
         required: false
         default: ''
+      dryRun:
+        description: '只构建、不推送（非 main 的 ref 上强制开启）'
+        type: boolean
+        required: false
+        default: false
 
 env:
   IMAGE_NAME: ghcr.io/xcanwin/manyoyo
 
 jobs:
-  publish:
+  prepare:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      packages: write
     outputs:
-      digest: ${{ steps.push.outputs.digest }}
       imageVersion: ${{ steps.version.outputs.imageVersion }}
+      tool: ${{ steps.version.outputs.tool }}
+      dryRun: ${{ steps.version.outputs.dryRun }}
     steps:
       - uses: actions/checkout@v7
 
-      # Dockerfile 第一阶段 COPY docker/cache/（缓存可为空，但目录必须存在；
-      # 该目录被 .gitignore 忽略，全新 checkout 里没有，空目录让构建在容器内自行下载）
-      - name: Prepare empty build cache directory
-        run: mkdir -p docker/cache
-
-      - name: Resolve image version
+      - name: Resolve image version and dry-run mode
         id: version
         env:
           INPUT_VERSION: ${{ inputs.imageVersion }}
+          INPUT_DRY_RUN: ${{ inputs.dryRun }}
         run: |
           VERSION="${INPUT_VERSION}"
           if [ -z "$VERSION" ]; then
@@ -46,15 +49,117 @@ jobs:
             echo "imageVersion 格式错误，必须为 x.y.z-后缀: $VERSION"
             exit 1
           fi
-          echo "imageVersion=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tool=${VERSION#*-}" >> "$GITHUB_OUTPUT"
+          DRY_RUN="$INPUT_DRY_RUN"
+          if [ "${{ github.ref != 'refs/heads/main' }}" = "true" ]; then
+            echo "当前 ref 不是 main（${GITHUB_REF}），强制 dryRun：只构建、不推送"
+            DRY_RUN=true
+          fi
+          [ "$DRY_RUN" = "true" ] || DRY_RUN=false
+          {
+            echo "imageVersion=$VERSION"
+            echo "tool=${VERSION#*-}"
+            echo "dryRun=$DRY_RUN"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Free disk space
+      # 真正推送前确认 tag 还不存在：只认明确的 “not found”，其他失败（网络等）也停下，不冒险覆盖
+      - name: Fail if the tag already exists
+        if: steps.version.outputs.dryRun != 'true'
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          df -h /
+          REF="${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}"
+          if docker buildx imagetools inspect "$REF" >/dev/null 2>inspect.err; then
+            echo "镜像 $REF 已存在，不允许覆盖：镜像内容变了请先升 imageVersion"
+            exit 1
+          fi
+          if ! grep -qi 'not found' inspect.err; then
+            echo "无法确认 $REF 是否已存在，停止以免覆盖："
+            cat inspect.err
+            exit 1
+          fi
+          echo "$REF 尚未发布，可以继续"
 
-      - uses: docker/setup-qemu-action@v4
+  build:
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      # Dockerfile 第一阶段 COPY docker/cache/（缓存可为空，但目录必须存在；
+      # 该目录被 .gitignore 忽略，全新 checkout 里没有，空目录让构建在容器内自行下载）
+      - name: Prepare empty build cache directory
+        run: mkdir -p docker/cache
+
+      # 原生 runner 是否还需要清理磁盘：看这里的 df 输出再决定（qemu 时代需要 131 秒腾出空间）
+      - name: Disk space
+        run: df -h /
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        if: needs.prepare.outputs.dryRun != 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build ${{ matrix.arch }}
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/manyoyo.Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            TOOL=${{ needs.prepare.outputs.tool }}
+            APT_MIRROR=
+            NODEJS_MIRROR=https://nodejs.org/dist
+            NPM_REGISTRY=https://registry.npmjs.org/
+            PIP_INDEX_URL=https://pypi.org/simple
+          outputs: ${{ needs.prepare.outputs.dryRun == 'true' && 'type=cacheonly' || format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME) }}
+          provenance: false
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.arch }},mode=max
+
+      - name: Export digest
+        if: needs.prepare.outputs.dryRun != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "$RUNNER_TEMP/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        if: needs.prepare.outputs.dryRun != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          retention-days: 1
+          if-no-files-found: error
+
+  merge:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.dryRun != 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/digests
+
       - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v4
@@ -63,74 +168,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push multi-arch image
-        id: push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/manyoyo.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          build-args: |
-            TOOL=${{ steps.version.outputs.tool }}
-            APT_MIRROR=
-            NODEJS_MIRROR=https://nodejs.org/dist
-            NPM_REGISTRY=https://registry.npmjs.org/
-            PIP_INDEX_URL=https://pypi.org/simple
-          tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.imageVersion }}
-          push: true
-          provenance: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Prepare archive output directory
-        run: mkdir -p out
-
-      - name: Build amd64 archive
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/manyoyo.Dockerfile
-          platforms: linux/amd64
-          build-args: |
-            TOOL=${{ steps.version.outputs.tool }}
-            APT_MIRROR=
-            NODEJS_MIRROR=https://nodejs.org/dist
-            NPM_REGISTRY=https://registry.npmjs.org/
-            PIP_INDEX_URL=https://pypi.org/simple
-          tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.imageVersion }}
-          outputs: type=docker,dest=out/manyoyo-${{ steps.version.outputs.imageVersion }}-amd64.tar
-          provenance: false
-          cache-from: type=gha
-
-      - name: Build arm64 archive
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/manyoyo.Dockerfile
-          platforms: linux/arm64
-          build-args: |
-            TOOL=${{ steps.version.outputs.tool }}
-            APT_MIRROR=
-            NODEJS_MIRROR=https://nodejs.org/dist
-            NPM_REGISTRY=https://registry.npmjs.org/
-            PIP_INDEX_URL=https://pypi.org/simple
-          tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.imageVersion }}
-          outputs: type=docker,dest=out/manyoyo-${{ steps.version.outputs.imageVersion }}-arm64.tar
-          provenance: false
-          cache-from: type=gha
-
-      - name: Upload image archives
-        uses: actions/upload-artifact@v7
-        with:
-          name: manyoyo-image-${{ steps.version.outputs.imageVersion }}
-          path: out/*.tar
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Summary
+      # 两个架构都已按 digest 推送后，合成一个多架构 tag
+      - name: Create the multi-arch tag
+        working-directory: ${{ runner.temp }}/digests
         run: |
+          test "$(find . -type f | wc -l)" = "2" || { echo "应有 amd64 与 arm64 两个 digest，实际: $(echo *)"; exit 1; }
+          # shellcheck disable=SC2046
+          docker buildx imagetools create -t "${IMAGE_NAME}:${{ needs.prepare.outputs.imageVersion }}" \
+            $(printf "${IMAGE_NAME}@sha256:%s " *)
+
+      - name: Inspect and summarize
+        run: |
+          docker buildx imagetools inspect "${IMAGE_NAME}:${{ needs.prepare.outputs.imageVersion }}"
           {
             echo "### 镜像已发布"
-            echo "- 镜像: \`${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}\`"
-            echo "- digest: \`${{ steps.push.outputs.digest }}\`"
+            echo "- 镜像: \`${IMAGE_NAME}:${{ needs.prepare.outputs.imageVersion }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

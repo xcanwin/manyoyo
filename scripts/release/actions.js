@@ -11,7 +11,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { parseReleaseVersion, compareReleaseVersions, normalizeCommitMessage } = require('./versions');
-const { WORKFLOWS, NPM_PACKAGE, expectedAssetNames, treeFingerprint } = require('./facts');
+const { WORKFLOWS, NPM_PACKAGE, checkAssets, parseSums, treeFingerprint } = require('./facts');
+const { deviceItems } = require('./stages');
 
 const POLL_MS = 15000;
 const RUN_APPEAR_TIMEOUT_MS = 120000;
@@ -148,6 +149,11 @@ function validateVersion(version, facts) {
 // ---------------------------------------------------------------------------
 // 阶段执行
 // ---------------------------------------------------------------------------
+// main 当前提交上成功的安装包构建：Release 草稿钉在它的提交上，release-offline 用它的 runId
+function packagesRunFor(facts) {
+    return ((facts.runs || {}).packages || []).find(run => run.status === 'completed' && run.conclusion === 'success' && run.headSha === facts.git.originMainSha) || null;
+}
+
 const ACTIONS = {
     async preflight(ctx, params, facts) {
         const steps = [['npm', ['run', 'build:web']], ['npm', ['test']], ['npm', ['run', 'docs:check']]];
@@ -158,7 +164,7 @@ const ACTIONS = {
             for (const [cmd, args] of steps) await runOk(ctx, cmd, args, { safe: true });
             ok = true;
         } finally {
-            ctx.state.save({ preflight: { ok, fingerprint: treeFingerprint(ctx.read), at: new Date(ctx.now()).toISOString() } });
+            ctx.state.save({ preflight: { ok, fingerprint: treeFingerprint(ctx.read, ctx.repoRoot), at: new Date(ctx.now()).toISOString() } });
         }
         ctx.log(`预检通过（${facts.pkg.version}）`);
     },
@@ -212,45 +218,84 @@ const ACTIONS = {
     },
 
     async packages(ctx) {
-        const since = ctx.now();
-        await runOk(ctx, 'gh', ['workflow', 'run', WORKFLOWS.macos, '--ref', 'main'], { external: true });
-        await runOk(ctx, 'gh', ['workflow', 'run', WORKFLOWS.linux, '--ref', 'main'], { external: true });
-        const macos = await waitForNewRun(ctx, WORKFLOWS.macos, since, ['-b', 'main']);
-        const linux = await waitForNewRun(ctx, WORKFLOWS.linux, since, ['-b', 'main']);
-        ctx.log(`安装包构建已开始：macOS #${macos.databaseId}，Linux #${linux.databaseId}`);
-        const stop = { stopped: false };
-        const guard = promise => promise.catch(error => { stop.stopped = true; throw error; });
-        const results = await Promise.allSettled([guard(waitForCompletion(ctx, macos.databaseId, 'macOS 构建', stop)), guard(waitForCompletion(ctx, linux.databaseId, 'Linux 构建', stop))]);
-        const failed = results.find(item => item.status === 'rejected' && item.reason.code !== 'CANCELLED') || results.find(item => item.status === 'rejected');
-        if (failed) throw failed.reason;
+        await triggerAndWait(ctx, WORKFLOWS.packages, {}, '安装包构建', ['-b', 'main']);
+    },
+
+    // 真机检查只能由人确认：这里只列出清单和下载命令，没确认完的状态由任务执行器报“未完成”
+    async device(ctx, params, facts) {
+        const items = deviceItems(facts);
+        if (items.length === 0) return ctx.log('本次改动不涉及真机敏感区域');
+        const run = packagesRunFor(facts);
+        for (const item of items) ctx.log(`- [${item.id}] ${item.title}（命中：${item.files.slice(0, 3).join('、')}${item.files.length > 3 ? ' 等' : ''}）`);
+        if (run) ctx.log(`下载 CI 产物：gh run download ${run.databaseId} -n manyoyo-${facts.pkg.version}-macos-<arm64|x64>`);
+        ctx.log('检查完成后在网页上勾选，或在终端运行 npm run release -- --check <id>（需要有终端）');
     },
 
     async release(ctx, params, facts) {
         const notes = String(params.notes || '').trim();
         if (!notes) throw new ReleaseError('NO_NOTES', 'Release 说明不能为空');
+        const run = packagesRunFor(facts);
+        if (!run) throw new ReleaseError('NO_BUILD', 'main 当前提交上没有成功的安装包构建');
         const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-release-')), 'notes.md');
         fs.writeFileSync(file, `${notes}\n`);
         try {
-            await runOk(ctx, 'gh', ['release', 'create', facts.tag, '--target', 'main', '--title', facts.tag, '--notes-file', file], { external: true });
+            // 草稿不创建 tag、不会成为 latest；target 钉在安装包构建的提交上，tag（也就是 npm 包）与离线包同源
+            await runOk(ctx, 'gh', ['release', 'create', facts.tag, '--draft', '--target', run.headSha, '--title', facts.tag, '--notes-file', file], { external: true });
         } finally {
             fs.rmSync(path.dirname(file), { recursive: true, force: true });
         }
     },
 
+    async assets(ctx, params, facts) {
+        const run = packagesRunFor(facts);
+        if (!run) throw new ReleaseError('NO_BUILD', 'main 当前提交上没有成功的安装包构建');
+        await triggerAndWait(ctx, WORKFLOWS.assets, { tag: facts.tag, runId: run.databaseId }, '挂载安装包', ['-b', 'main']);
+        if (!ctx.dryRun) {
+            const release = parseJson(String((await slow(ctx)('gh', ['release', 'view', facts.tag, '--json', 'assets'])).stdout || ''), { assets: [] });
+            const assetNames = release.assets.map(item => item.name).sort();
+            const sums = await slow(ctx)('gh', ['release', 'download', facts.tag, '-p', 'SHA256SUMS', '-O', '-']);
+            const result = checkAssets(facts.pkg.version, assetNames, sums.status === 0 ? parseSums(sums.stdout) : null);
+            if (!result.ok) throw new ReleaseError('ASSETS_MISMATCH', `Release 资产不齐或与 SHA256SUMS 不一致：缺 ${result.missing.join('、') || '无'}；多 ${result.extra.join('、') || '无'}`);
+            ctx.log(`资产齐全（${assetNames.length} 个，与 SHA256SUMS 一致）`);
+        }
+    },
+
+    async publish(ctx, params, facts) {
+        await runOk(ctx, 'gh', ['release', 'edit', facts.tag, '--draft=false'], { external: true });
+    },
+
     async npm(ctx, params, facts) {
         const V = facts.pkg.version;
         if (!ctx.dryRun) {
-            // tag 推出后 npm-publish 会自动开始
-            const deadline = ctx.now() + RUN_APPEAR_TIMEOUT_MS;
+            // 公开 Release 后 npm-publish 由 release: published 自动触发
+            const findRun = async () => {
+                const list = parseJson(String((await slow(ctx)('gh', ['run', 'list', '--workflow', WORKFLOWS.npm, '-b', facts.tag, '-L', '5', '--json', 'databaseId'])).stdout || ''), []);
+                return list.sort((a, b) => b.databaseId - a.databaseId)[0];
+            };
             let run = null;
+            const deadline = ctx.now() + RUN_APPEAR_TIMEOUT_MS;
             while (!run) {
                 assertNotAborted(ctx);
-                const list = parseJson(String((await slow(ctx)('gh', ['run', 'list', '--workflow', WORKFLOWS.npm, '-b', facts.tag, '-L', '5', '--json', 'databaseId'])).stdout || ''), []);
-                run = list.sort((a, b) => b.databaseId - a.databaseId)[0];
+                run = await findRun();
                 if (!run) {
-                    if (ctx.now() > deadline) throw new ReleaseError('RUN_NOT_FOUND', `没有找到 ${facts.tag} 的 npm-publish 运行`);
+                    if (ctx.now() > deadline) break;
                     await ctx.sleep(3000);
                 }
+            }
+            // 显式要求重新触发（--npm-dispatch）时，上一次已经失败的运行不算数：失败的发布需要重跑
+            if (run && params.dispatch === true) {
+                const state = parseJson(String((await slow(ctx)('gh', ['run', 'view', String(run.databaseId), '--json', 'status,conclusion'])).stdout || ''), null);
+                if (state && state.status === 'completed' && state.conclusion !== 'success') {
+                    ctx.log(`上一次 npm-publish #${run.databaseId} 结束为 ${state.conclusion}，重新触发`);
+                    run = null;
+                }
+            }
+            if (!run) {
+                const manual = `gh workflow run ${WORKFLOWS.npm} --ref ${facts.tag} -f tag=${facts.tag}`;
+                if (params.dispatch !== true) throw new ReleaseError('RUN_NOT_FOUND', `没有找到 ${facts.tag} 的 npm-publish 运行（release: published 没有触发）。手动触发：${manual}，或加 --npm-dispatch 重跑本阶段`);
+                const since = ctx.now();
+                await runOk(ctx, 'gh', ['workflow', 'run', WORKFLOWS.npm, '--ref', facts.tag, '-f', `tag=${facts.tag}`], { external: true });
+                run = await waitForNewRun(ctx, WORKFLOWS.npm, since, ['-b', facts.tag]);
             }
             await waitForCompletion(ctx, run.databaseId, 'npm 发布');
             const until = ctx.now() + NPM_VISIBLE_TIMEOUT_MS;
@@ -270,27 +315,16 @@ const ACTIONS = {
         ctx.log(`npm 上已是 ${V}`);
     },
 
-    async assets(ctx, params, facts) {
-        const pick = key => (facts.runs[key] || []).find(run => run.status === 'completed' && run.conclusion === 'success' && run.headSha === facts.git.originMainSha);
-        const macos = pick('macos');
-        const linux = pick('linux');
-        if (!macos || !linux) throw new ReleaseError('NO_BUILD', 'main 当前提交上没有两个平台都成功的安装包构建');
-        await triggerAndWait(ctx, WORKFLOWS.assets, { tag: facts.tag, macosRunId: macos.databaseId, linuxRunId: linux.databaseId }, '挂载安装包', ['-b', 'main']);
-        if (!ctx.dryRun) {
-            const release = parseJson(String((await slow(ctx)('gh', ['release', 'view', facts.tag, '--json', 'assets'])).stdout || ''), { assets: [] });
-            const names = release.assets.map(item => item.name).sort();
-            if (JSON.stringify(names) !== JSON.stringify(expectedAssetNames(facts.pkg.version))) {
-                throw new ReleaseError('ASSETS_MISMATCH', `Release 资产应正好 9 个，现为 ${names.length} 个：${names.join(', ')}`);
-            }
-        }
-        ctx.log('Release 里正好 9 个资产');
-    },
-
     async verify(ctx, params, facts) {
         const run = await triggerAndWait(ctx, WORKFLOWS.verify, { tag: facts.tag }, '发版后验证', ['-b', 'main']);
         ctx.state.save({ verify: { tag: facts.tag, id: run.databaseId } });
     }
 };
+
+function packagesSha(facts) {
+    const run = packagesRunFor(facts);
+    return run ? run.headSha : '<安装包构建的提交>';
+}
 
 /** 确认弹窗里展示的“将要执行的命令”，与实际执行保持一致（便于人工核对） */
 function describeCommands(id, facts, params = {}) {
@@ -302,10 +336,12 @@ function describeCommands(id, facts, params = {}) {
             ? ['git push origin main']
             : ['git switch main', 'git pull --ff-only origin main', `git merge --no-ff ${branch}`, 'git push origin main'],
         image: [gh(`workflow run ${WORKFLOWS.image} --ref main`)],
-        packages: [gh(`workflow run ${WORKFLOWS.macos} --ref main`), gh(`workflow run ${WORKFLOWS.linux} --ref main`)],
-        release: [gh(`release create ${facts.tag} --target main --title ${facts.tag} --notes-file <说明>`), '（tag 随 Release 产生，npm-publish 自动开始）'],
-        assets: [gh(`workflow run ${WORKFLOWS.assets} --ref main -f tag=${facts.tag} -f macosRunId=<main 上成功的 macOS 构建> -f linuxRunId=<main 上成功的 Linux 构建>`)],
+        packages: [gh(`workflow run ${WORKFLOWS.packages} --ref main`)],
+        release: [gh(`release create ${facts.tag} --draft --target ${packagesSha(facts)} --title ${facts.tag} --notes-file <说明>`), '（草稿：不创建 tag，也不会成为 latest）'],
+        assets: [gh(`workflow run ${WORKFLOWS.assets} --ref main -f tag=${facts.tag} -f runId=<main 上成功的安装包构建>`), gh(`release download ${facts.tag} -p SHA256SUMS -O -（核对资产与清单一致）`)],
+        publish: [gh(`release edit ${facts.tag} --draft=false`)],
         verify: [gh(`workflow run ${WORKFLOWS.verify} --ref main -f tag=${facts.tag}`)],
+        npm: ['等待 npm-publish（release: published 触发）', `（没触发时加 --npm-dispatch：gh workflow run ${WORKFLOWS.npm} --ref ${facts.tag} -f tag=${facts.tag}）`],
         version: [`npm version ${params.version || V} --no-git-tag-version`],
         commit: [`git add -- ${(params.files || []).join(' ') || '<所选文件>'}`, 'git commit -F -'],
         preflight: ['npm run build:web', 'npm test', 'npm run docs:check', 'npm run lint:sh（有 shellcheck 时）']

@@ -5,6 +5,13 @@ const path = require('path');
 
 const text = fs.readFileSync(path.join(__dirname, '../.github/workflows/image-publish.yml'), 'utf8');
 
+function jobBlock(name) {
+    const start = text.indexOf(`\n  ${name}:\n`);
+    expect(start).toBeGreaterThan(-1);
+    const next = text.slice(start + 1).search(/\n  [a-z-]+:\n/);
+    return next < 0 ? text.slice(start) : text.slice(start, start + 1 + next);
+}
+
 describe('image-publish workflow', () => {
     test('is manually triggered only, so pushing a branch or tag never publishes', () => {
         const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\nenv:'));
@@ -12,10 +19,65 @@ describe('image-publish workflow', () => {
         expect(onBlock).not.toMatch(/^\s*(push|pull_request|schedule|release):/m);
     });
 
-    test('pushes both architectures to ghcr with the default image name and minimal permissions', () => {
-        expect(text).toContain('platforms: linux/amd64,linux/arm64');
+    test('has a dryRun input, forced on for any ref other than main', () => {
+        const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\nenv:'));
+        expect(onBlock).toMatch(/dryRun:\s*\n(?:\s+.*\n)*?\s+type: boolean/);
+        expect(text).toContain("github.ref != 'refs/heads/main'");
+        expect(text).toContain('DRY_RUN=true');
+    });
+
+    test('never overwrites an existing tag: fails when the tag already exists, and has no force switch', () => {
+        const prepare = jobBlock('prepare');
+        expect(prepare).toContain('docker buildx imagetools inspect');
+        expect(prepare).toContain('已存在');
+        expect(prepare).toContain('exit 1');
+        expect(text).not.toMatch(/force|overwrite/i);
+    });
+
+    test('builds each architecture on a native runner (no qemu) and pushes by digest', () => {
+        expect(text).not.toContain('setup-qemu-action');
+        const build = jobBlock('build');
+        const runners = [...build.matchAll(/runner:\s*(\S+)/g)].map(m => m[1]).sort();
+        expect(runners).toEqual(['ubuntu-24.04', 'ubuntu-24.04-arm']);
+        expect(build).toContain('platforms: linux/${{ matrix.arch }}');
+        expect(build).toContain('push-by-digest=true');
+        expect(build).toContain('name-canonical=true');
+        expect(build).not.toContain('linux/amd64,linux/arm64');
+    });
+
+    test('the dry run builds only: cacheonly output, no registry login, no digest upload, no manifest merge', () => {
+        const build = jobBlock('build');
+        expect(build).toContain('type=cacheonly');
+        expect(build).toMatch(/docker\/login-action@v4\n\s+if: needs\.prepare\.outputs\.dryRun != 'true'/);
+        expect(build).toMatch(/Upload digest[\s\S]*if: needs\.prepare\.outputs\.dryRun != 'true'/);
+        expect(jobBlock('merge')).toMatch(/\n    if: needs\.prepare\.outputs\.dryRun != 'true'/);
+    });
+
+    test('the two architectures are merged into the multi-arch tag with imagetools create, after both are pushed', () => {
+        const merge = jobBlock('merge');
+        expect(merge).toContain('needs: [prepare, build]');
+        expect(merge).toContain('docker buildx imagetools create');
+        expect(merge).toContain('${IMAGE_NAME}:${{ needs.prepare.outputs.imageVersion }}');
+        expect(merge).toContain('docker buildx imagetools inspect');
+    });
+
+    test('GHA build cache is scoped per architecture', () => {
+        expect(text).toContain('cache-from: type=gha,scope=${{ matrix.arch }}');
+        expect(text).toContain('cache-to: type=gha,scope=${{ matrix.arch }},mode=max');
+    });
+
+    test('no longer builds or uploads image archives (nothing consumed them)', () => {
+        expect(text).not.toContain('actions/upload-artifact@v7\n        with:\n          name: manyoyo-image-');
+        expect(text).not.toMatch(/dest=out\//);
+        expect(text).not.toContain('Build amd64 archive');
+        expect(text).not.toContain('Build arm64 archive');
+    });
+
+    test('only the push path has packages: write; the IMAGE_NAME default stays', () => {
         expect(text).toContain('IMAGE_NAME: ghcr.io/xcanwin/manyoyo');
-        expect(text).toMatch(/permissions:\s*\n\s+contents: read\s*\n\s+packages: write/);
+        expect(jobBlock('build')).toMatch(/permissions:\s*\n\s+contents: read\s*\n\s+packages: write/);
+        expect(jobBlock('merge')).toMatch(/permissions:\s*\n\s+contents: read\s*\n\s+packages: write/);
+        expect(jobBlock('prepare')).not.toContain('packages: write');
         expect(text).toContain('secrets.GITHUB_TOKEN');
     });
 
@@ -29,17 +91,11 @@ describe('image-publish workflow', () => {
         });
     });
 
-    test('produces one archive artifact per architecture', () => {
-        expect(text).toMatch(/dest=out\/manyoyo-.*-amd64\.tar/);
-        expect(text).toMatch(/dest=out\/manyoyo-.*-arm64\.tar/);
-        expect(text).toContain('actions/upload-artifact@v7');
-    });
-
     test('validates the image version format before building', () => {
         expect(text).toContain("^[0-9]+\\.[0-9]+\\.[0-9]+-[A-Za-z0-9][A-Za-z0-9_.-]*$");
     });
 
-    test('creates the (gitignored) docker/cache directory that the Dockerfile COPYs, before any build step', () => {
+    test('creates the (gitignored) docker/cache directory that the Dockerfile COPYs, before the build step', () => {
         const mkdir = text.indexOf('mkdir -p docker/cache');
         expect(mkdir).toBeGreaterThan(-1);
         expect(mkdir).toBeLessThan(text.indexOf('docker/build-push-action'));
@@ -49,7 +105,7 @@ describe('image-publish workflow', () => {
 
     test('builds with official mirrors (the runner is overseas; China mirrors crawl at ~120 kB/s) and the Dockerfile honors an empty APT_MIRROR', () => {
         const blocks = text.match(/build-args: \|\n(?: {12}\S.*\n)+/g) || [];
-        expect(blocks).toHaveLength(3);
+        expect(blocks).toHaveLength(1);
         blocks.forEach(block => {
             expect(block).toMatch(/^\s+APT_MIRROR=$/m);
             expect(block).toContain('NODEJS_MIRROR=https://nodejs.org/dist');

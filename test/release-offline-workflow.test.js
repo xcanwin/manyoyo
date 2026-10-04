@@ -4,25 +4,34 @@ const fs = require('fs');
 const path = require('path');
 
 const text = fs.readFileSync(path.join(__dirname, '../.github/workflows/release-offline.yml'), 'utf8');
-const npmText = fs.readFileSync(path.join(__dirname, '../.github/workflows/npm-publish.yml'), 'utf8');
 
 describe('release-offline workflow', () => {
-    test('is manual only and can neither build, publish to npm nor create a Release/tag', () => {
+    test('is manual only and can neither build, publish to npm nor create/publish a Release or tag', () => {
         const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\njobs:'));
         expect(onBlock).toContain('workflow_dispatch:');
         expect(onBlock).not.toMatch(/^\s*(push|pull_request|schedule|release):/m);
-        expect(text).not.toMatch(/gh release create|npm publish|git push|git tag|docker push|docker build/);
+        expect(text).not.toMatch(/gh release create|gh release edit|--draft=false|npm publish|git push|git tag|docker push|docker build/);
         expect(text).toContain('gh release upload');
     });
 
-    test('validates the tag and run id, and only takes a successful Build Offline Packages run', () => {
+    test('validates the tag and the single run id, and only takes a successful Build Packages run', () => {
         expect(text).toContain("'^v[0-9]+\\.[0-9]+\\.[0-9]+$'");
         expect(text).toContain("'^[0-9]+$'");
-        expect(text).not.toContain('"$WORKFLOW_NAME"');
-        expect(text).toContain('Build Offline Packages');
-        expect(text).toContain('Build Linux Offline Packages');
-        expect(text).toContain('grep -qx "$3"');
+        expect(text).toContain("grep -qx 'Build Packages'");
         expect(text).toContain("grep -qx 'success'");
+        expect(text).not.toContain('Build Offline Packages');
+        expect(text).not.toContain('Build Linux Offline Packages');
+    });
+
+    test('takes one runId (no per-platform run ids) and records its commit', () => {
+        expect(text).toMatch(/^ {6}runId:\s*$/m);
+        expect(text).not.toMatch(/macosRunId|linuxRunId|MACOS_RUN_ID|LINUX_RUN_ID/);
+        expect(text).toContain('headSha');
+    });
+
+    test('accepts a draft Release (the console publishes it only after the assets are attached)', () => {
+        expect(text).toContain('草稿');
+        expect(text).toContain('gh release view "$TAG"');
     });
 
     test('verifies checksums and version before uploading, with an explicit file list', () => {
@@ -36,14 +45,10 @@ describe('release-offline workflow', () => {
         expect(text).not.toMatch(/gh release upload "\$TAG" (assets\/)?\*/);
     });
 
-    test('one run takes both platforms (macosRunId + linuxRunId), merges the per-platform sums into the single SHA256SUMS and uploads exactly 9 assets', () => {
-        expect(text).toContain('macosRunId:');
-        expect(text).toContain('linuxRunId:');
-        expect(text).not.toMatch(/^\s+os:\s*$/m);
+    test('one run feeds both platforms, merges the per-platform sums into the single SHA256SUMS and uploads the expected assets', () => {
         expect(text).toContain('pattern: manyoyo-*-macos-*');
         expect(text).toContain('pattern: manyoyo-*-linux-*');
-        expect(text).toContain('check macos "$MACOS_RUN_ID" "Build Offline Packages"');
-        expect(text).toContain('check linux "$LINUX_RUN_ID" "Build Linux Offline Packages"');
+        expect(text.match(/run-id: \$\{\{ inputs\.runId \}\}/g) || []).toHaveLength(2);
         expect(text).toContain('cat SHA256SUMS-macos-arm64 SHA256SUMS-macos-x64 SHA256SUMS-linux-arm64 SHA256SUMS-linux-x64 > SHA256SUMS');
         // 上传清单：SHA256SUMS + 每个平台/架构的 .run（分卷仅超限兜底）与 -app.tar.gz；分平台清单与 lite 都不上传
         expect(text).toContain('FILES="SHA256SUMS"');
@@ -51,19 +56,19 @@ describe('release-offline workflow', () => {
         expect(text).toContain('"manyoyo-${VERSION}-${os}-${arch}-app.tar.gz"');
         expect(text).not.toMatch(/FILES="\$FILES SHA256SUMS-/);
         expect(text).toContain('不应再有精简包');
-        expect(text).toContain('两次运行的提交不同');
         expect(text).toContain('缺少 ${os}-${arch} 的升级包');
-        expect((text.match(/gh release upload/g) || []).length).toBe(1);
+        expect(text.match(/gh release upload/g) || []).toHaveLength(1);
+    });
+
+    test('SHA256SUMS must list exactly the files that will be uploaded (the console derives the asset set from it)', () => {
+        const check = text.indexOf('SHA256SUMS 与待上传文件不一致');
+        expect(check).toBeGreaterThan(-1);
+        expect(check).toBeLessThan(text.indexOf('gh release upload'));
     });
 
     test('uses least privilege and no secrets other than the built-in token', () => {
         expect(text).toMatch(/permissions:\s*\n\s+contents: write\s*\n\s+actions: read/);
         expect(new Set(text.match(/secrets\.[A-Za-z_]+/g) || [])).toEqual(new Set());
         expect(text).toContain('github.token');
-    });
-
-    test('npm-publish does not fail or duplicate when the Release already exists', () => {
-        expect(npmText).toContain('gh release view ${{ github.ref_name }}');
-        expect(npmText).toContain('gh release create');
     });
 });
