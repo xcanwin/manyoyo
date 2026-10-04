@@ -54,7 +54,7 @@ npm run docs:check               # 构建后再检查跳转页、canonical、des
 
 ## 发布概要
 
-发布由维护者执行：`npm run release` 打开发布控制台（本机 `127.0.0.1:3900`），页面按“预检 → 版本 → 提交 → 合并 main → 镜像 → 安装包 → Release → npm → 挂载安装包 → 验证 → 真机检查”给出下一步，可逐阶段执行，也可一键执行整段；对外动作每次都会列出命令并要求确认。`npm run release -- --status` 只在终端看状态，`--dry-run` 只打印命令。安装包、镜像和 Release 只在 CI 中构建并经隐私扫描。完整顺序见 [`AGENTS.md`](https://github.com/xcanwin/manyoyo/blob/main/AGENTS.md) 的「发版顺序」。
+发布由维护者执行，唯一入口是发布控制台：`npm run release` 打开网页（本机 `127.0.0.1:3900`），按“预检 → 版本 → 提交 → 合并 main → 镜像 → 安装包 → 发布前真机 → Release 草稿 → 挂载安装包 → 公开发布 → 验证 ∥ npm → 发布后真机”给出下一步，可逐阶段执行，也可一键执行整段（发布前会展示并允许修改 Release 说明）；对外动作每次都会列出命令并要求确认。agent 用命令行：`npm run release -- --status [--json]` 看状态，`--run <阶段> --yes` 执行，`--help` 有完整用法；`--dry-run` 只打印命令。Release 先建草稿、挂好安装包再公开，所以 `releases/latest` 不会出现空版本。安装包、镜像和 Release 只在 CI 中构建并经隐私扫描。完整说明见 [`AGENTS.md`](https://github.com/xcanwin/manyoyo/blob/main/AGENTS.md) 的「发版（维护者）」。
 
 ## 下一步
 
