@@ -9,9 +9,6 @@
 name: Build Packages
 
 on:
-  push: # TEMP-BRANCH-TRIGGER（实测 CI 耗时用，交付前删除）
-    branches: [feat/release-lifecycle]
-    paths: ['.github/workflows/build-packages.yml']
   workflow_dispatch:
     inputs:
       imageVersion:
@@ -266,4 +263,3 @@ jobs:
           retention-days: 7
           compression-level: 0
           if-no-files-found: error
-# hot-run
