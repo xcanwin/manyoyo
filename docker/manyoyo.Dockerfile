@@ -95,7 +95,9 @@ ARG PY_TEXT_EXTRA_PIP_PACKAGES=""
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     PIP_ROOT_USER_ACTION=ignore \
-    PLAYWRIGHT_MCP_CONFIG=/app/config/cli-cont-headless.json
+    NO_UPDATE_NOTIFIER=1 \
+    DISPLAY=:99 \
+    PLAYWRIGHT_MCP_CONFIG=/run/manyoyo-playwright/config.json
 
 # 合并系统依赖与 Python 安装为单层，减少镜像体积
 RUN <<EOX
@@ -152,8 +154,6 @@ EOX
 # 从 cache-stage 复制 Node.js（缓存或下载）
 COPY --from=cache-stage /opt/node /usr/local
 COPY ./package.json /tmp/manyoyo-package.json
-COPY ./docker/res/playwright/cli-cont-headless.init.js /app/config/cli-cont-headless.init.js
-COPY ./docker/res/playwright/cli-cont-headless.json /app/config/cli-cont-headless.json
 COPY ./docker/res/ /tmp/docker-res/
 ARG GIT_SSL_NO_VERIFY=false
 
@@ -230,12 +230,18 @@ RUN <<EOX
         cp /tmp/docker-res/opencode/opencode.json ~/.config/opencode/opencode.json
     ;; esac
 
-    # 安装 Playwright CLI skills（不在镜像构建阶段下载浏览器）
+    # 安装 Playwright CLI skills 与 chromium 浏览器
     PLAYWRIGHT_CLI_INSTALL_DIR=/tmp/playwright-cli-install
     mkdir -p "$PLAYWRIGHT_CLI_INSTALL_DIR/.playwright"
     cd "$PLAYWRIGHT_CLI_INSTALL_DIR"
     PLAYWRIGHT_CLI_VERSION=$(node -p "const pkg = require('/tmp/manyoyo-package.json'); const value = String(pkg.playwrightCliVersion || '').trim(); if (!value) { throw new Error('package.json.playwrightCliVersion is required'); } value")
     npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"
+    # 浏览器与系统依赖都用 @playwright/cli 自带的 playwright-core 安装；
+    # 默认在 Xvfb 虚拟屏（配轻量窗口管理器）里跑有头浏览器，所以装 xvfb、fluxbox 与常见字体；x11vnc / noVNC 供 playwright vnc 模式使用
+    PLAYWRIGHT_CORE_CLI="$(npm root -g)/@playwright/cli/node_modules/playwright-core/cli.js"
+    node "$PLAYWRIGHT_CORE_CLI" install-deps chromium
+    apt-get install -y --no-install-recommends xvfb fluxbox x11vnc novnc websockify fonts-noto-cjk fonts-noto-color-emoji fonts-liberation
+    node "$PLAYWRIGHT_CORE_CLI" install --no-shell chromium
     playwright-cli install --skills
     PLAYWRIGHT_CLI_SKILL_SOURCE="$PLAYWRIGHT_CLI_INSTALL_DIR/.claude/skills/playwright-cli"
     for target in ~/.claude/skills/playwright-cli ~/.codex/skills/playwright-cli ~/.gemini/skills/playwright-cli; do
@@ -251,6 +257,12 @@ RUN <<EOX
     rm -rf /tmp/* /var/tmp/* /var/log/apt /var/log/*.log /var/lib/apt/lists/* ~/.npm ~/.cache/node-gyp ~/.claude/plugins/cache ~/go/pkg/mod/cache
     rm -f /var/log/dpkg.log /var/log/bootstrap.log /var/lib/dpkg/status-old /var/cache/debconf/templates.dat-old
 EOX
+
+# Playwright 默认配置（挂载宿主机目录时会被覆盖，路径固定）与按需启动 Xvfb 的 playwright-cli 包装
+COPY ./docker/res/playwright/browser.json /run/manyoyo-playwright/config.json
+COPY ./docker/res/playwright/stealth.init.js /run/manyoyo-playwright/stealth.init.js
+COPY --chmod=755 ./docker/res/playwright/playwright-cli.sh /usr/local/sbin/playwright-cli
+RUN ln -s playwright-cli /usr/local/sbin/playwright-mcp
 
 # 从 cache-stage 复制 JDT LSP 到最终位置，避免中转层残留
 COPY --from=cache-stage /opt/jdtls /root/.local/share/jdtls

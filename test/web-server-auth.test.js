@@ -104,6 +104,7 @@ function buildServerOptions(tempHost, port, overrides = {}) {
         authPassAuto: false,
         dockerCmd: 'docker',
         hostPath: tempHost,
+        homeDir: tempHost,
         containerPath: '/workspace',
         imageName: 'localhost/xcanwin/manyoyo',
         imageVersion: '1.0.0-common',
@@ -2436,7 +2437,7 @@ if (args[0] === 'exec') {
   process.stdout.write('OpenAI Codex v0.115.0 (research preview)\\n');
   process.stdout.write('{"type":"item.completed","item":{"type":"agent_message","text":"当前这个会话里，我是基于 gpt-5.4 的 Codex。"}}\\n');
   process.stdout.write('tokens used\\n9,215\\n');
-  process.stderr.write('mcp: playwright-mcp-host-headless failed\\n');
+  process.stderr.write('mcp: playwright failed\\n');
   process.exit(0);
   return;
 }
@@ -2484,7 +2485,7 @@ process.exit(0);
             }));
             expect(String(runRes.json.output || '')).not.toContain('OpenAI Codex v0.115.0');
             expect(String(runRes.json.output || '')).not.toContain('tokens used');
-            expect(String(runRes.json.output || '')).not.toContain('playwright-mcp-host-headless');
+            expect(String(runRes.json.output || '')).not.toContain('playwright');
 
             const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
             const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant');
@@ -6495,5 +6496,45 @@ describe('Web Server doctor API', () => {
             expect(res.json.ok).toBe(true);
             expect(startRuntime).toHaveBeenCalledTimes(1);
         });
+    });
+});
+
+describe('Web Server Playwright integration', () => {
+    test('建会话容器带上与 CLI run 相同的 Playwright 目录挂载与 env，一次性 setup 测试容器不带', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-pw-'));
+        const port = await getFreePort();
+        const runArgs = [];
+        let handle = null;
+
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                dockerCmd: 'podman',
+                containerEnvs: ['--env', 'NO_PROXY=corp.example.com'],
+                dockerExecArgs: args => { runArgs.push(args); return ''; }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const created = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'pw-demo' })
+            });
+            expect(created.response.status).toBe(200);
+
+            const runCall = runArgs.find(args => args[0] === 'run');
+            expect(runCall).toBeTruthy();
+            const current = path.join(tempHost, '.manyoyo', 'plugin', 'playwright', 'current');
+            const joined = runCall.join('\u0000');
+            expect(joined).toContain(['--volume', `${current}:/run/manyoyo-playwright:ro`].join('\u0000'));
+            expect(runCall).toContain('PLAYWRIGHT_MCP_CONFIG=/run/manyoyo-playwright/config.json');
+            expect(runCall).toContain('NO_PROXY=corp.example.com,host.docker.internal,host.containers.internal');
+            expect(runCall).not.toContain('--add-host');
+            expect(fs.existsSync(path.join(current, 'config.json'))).toBe(true);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
     });
 });

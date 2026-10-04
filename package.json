@@ -1,7 +1,7 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "8.3.0",
-    "imageVersion": "2.1.0-common",
+    "version": "8.3.1",
+    "imageVersion": "2.1.1-common",
     "playwrightCliVersion": "0.1.21",
     "description": "MANYOYO – open-source AI agent sandbox: run AI coding agents (Claude Code / Codex / Gemini) safely in Docker/Podman",
     "keywords": [
@@ -40,7 +40,7 @@
         "prepack": "npm run build:web",
         "test": "jest --coverage && npm run test:web",
         "test:unit": "jest test/ --testPathIgnorePatterns '<rootDir>/temp/' '<rootDir>/test/integration/' && npm run test:web",
-        "test:integration": "jest test/integration/",
+        "test:integration": "jest test/integration/ --runInBand",
         "test:installer": "jest test/installer.test.js",
         "lint:sh": "command -v shellcheck >/dev/null 2>&1 || { echo '未安装 shellcheck：macOS 用 brew install shellcheck，Debian/Ubuntu 用 sudo apt install shellcheck，或用 docker run --rm -v \"$PWD:/mnt\" -w /mnt koalaman/shellcheck:stable scripts/install.sh scripts/offline/*.sh' >&2; exit 1; } && shellcheck -s sh -x -e SC1091 scripts/install.sh scripts/offline/*.sh",
         "docs:dev": "vitepress dev docs --host 127.0.0.1 --port 5173",
@@ -65,10 +65,9 @@
         "manyoyo.example.json"
     ],
     "dependencies": {
-        "@playwright/mcp": "0.0.82",
+        "@playwright/cli": "0.1.21",
         "commander": "^15.0.0",
         "json5": "^2.2.3",
-        "playwright": "1.63.0",
         "ws": "^8.21.3"
     },
     "devDependencies": {

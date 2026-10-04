@@ -34,7 +34,7 @@ const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent
 const { resolveYoloCommand } = require('../lib/agent-adapters');
 const { runDoctorChecks, applyDoctorFixes } = require('../lib/doctor');
 const { resolveContainerMode } = require('../lib/container-modes');
-const { runPluginCommand, createPlugin } = require('../lib/plugin');
+const { runPlaywrightCommand, buildContainerIntegration, mergeIntegration } = require('../lib/plugin');
 const { buildManyoyoLogPath } = require('../lib/log-path');
 const { resolveRuntimeConfig } = require('../lib/runtime-resolver');
 const { resolveWorktreeSupport } = require('../lib/worktrees');
@@ -123,6 +123,7 @@ const IMAGE_VERSION_TAG_PATTERN = /^(\d+\.\d+\.\d+)-([A-Za-z0-9][A-Za-z0-9_.-]*)
 
 // Docker command (will be set by ensure_docker)
 let DOCKER_CMD = 'docker';
+let PLAYWRIGHT_PLUGIN_CONFIG = { globalConfig: {}, runConfig: {} };
 // 仅运行时子进程使用的完整 env（私有 Podman 才有值），不要写回 process.env
 let DOCKER_ENV;
 let CONTAINER_RUNTIME = null;
@@ -603,61 +604,21 @@ function addEnvFile(envFile) {
     return addEnvFileTo(CONTAINER_ENVS, envFile);
 }
 
-function hasEnvKey(targetEnvs, key) {
-    for (let i = 0; i < targetEnvs.length; i += 2) {
-        if (targetEnvs[i] !== '--env') {
-            continue;
-        }
-        const text = String(targetEnvs[i + 1] || '');
-        const idx = text.indexOf('=');
-        if (idx > 0 && text.slice(0, idx) === key) {
-            return true;
-        }
+// Playwright 浏览器模式的容器参数；在容器创建时（运行时已确定）才计算，失败只警告，不影响 run
+async function applyPlaywrightIntegration(runtime) {
+    const integration = await buildContainerIntegration({
+        ...PLAYWRIGHT_PLUGIN_CONFIG,
+        dryRun: runtime.showCommand,
+        runtimeCommand: DOCKER_CMD,
+        envEntries: runtime.containerEnvs.filter((_, i) => i % 2 === 1)
+    });
+    if (integration.warning) {
+        console.warn(`${YELLOW}⚠️  ${integration.warning}${NC}`);
     }
-    return false;
-}
-
-function appendUniqueArgs(targetArgs, extraArgs) {
-    const joinedExisting = new Set();
-    for (let i = 0; i < targetArgs.length; i += 2) {
-        const head = String(targetArgs[i] || '');
-        const value = String(targetArgs[i + 1] || '');
-        if (head.startsWith('--')) {
-            joinedExisting.add(`${head}\u0000${value}`);
-        }
-    }
-
-    for (let i = 0; i < extraArgs.length; i += 2) {
-        const head = String(extraArgs[i] || '');
-        const value = String(extraArgs[i + 1] || '');
-        const signature = `${head}\u0000${value}`;
-        if (!joinedExisting.has(signature)) {
-            joinedExisting.add(signature);
-            targetArgs.push(head, value);
-        }
-    }
-}
-
-function applyPlaywrightCliSessionIntegration(config, runConfig) {
-    try {
-        const plugin = createPlugin('playwright', {
-            globalConfig: config,
-            runConfig,
-            projectRoot: path.join(__dirname, '..')
-        });
-        const integration = plugin.buildCliSessionIntegration(DOCKER_CMD);
-        for (const entry of integration.envEntries) {
-            const parsed = parseEnvEntry(entry);
-            if (!hasEnvKey(CONTAINER_ENVS, parsed.key)) {
-                addEnv(`${parsed.key}=${parsed.value}`);
-            }
-        }
-        appendUniqueArgs(CONTAINER_EXTRA_ARGS, integration.extraArgs);
-        appendUniqueArgs(CONTAINER_VOLUMES, integration.volumeEntries || []);
-    } catch (error) {
-        console.error(`${RED}⚠️  错误: Playwright CLI 会话注入失败: ${error.message || String(error)}${NC}`);
-        process.exit(1);
-    }
+    const merged = mergeIntegration(runtime, integration);
+    runtime.containerEnvs = merged.containerEnvs;
+    runtime.containerVolumes = merged.containerVolumes;
+    runtime.containerExtraArgs = merged.containerExtraArgs;
 }
 
 function addVolume(volume) {
@@ -1201,79 +1162,6 @@ async function setupCommander() {
         selectedAction = action;
         selectedOptions = options;
     };
-    const selectPluginAction = (params = {}, options = {}) => {
-        selectAction('plugin', {
-            ...options,
-            pluginAction: params.action || 'ls',
-            pluginName: params.pluginName || 'playwright',
-            pluginScene: params.scene || 'mcp-host-headless',
-            pluginHost: params.host || '',
-            pluginExtensionPaths: Array.isArray(params.extensionPaths) ? params.extensionPaths : [],
-            pluginExtensionNames: Array.isArray(params.extensionNames) ? params.extensionNames : [],
-            pluginProdversion: params.prodversion || ''
-        });
-    };
-
-    const registerPlaywrightAliasCommands = (command) => {
-        command.command('ls')
-            .description('列出 playwright 启用场景')
-            .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-            .action(options => selectPluginAction({
-                action: 'ls',
-                pluginName: 'playwright',
-                scene: 'all'
-            }, options));
-
-        const actions = ['up', 'down', 'status', 'health', 'logs'];
-        actions.forEach(action => {
-            const sceneCommand = command.command(`${action} [scene]`)
-                .description(`执行 playwright ${action} 场景（scene 默认 mcp-host-headless）`)
-                .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)');
-
-            if (action === 'up') {
-                appendArrayOption(sceneCommand, '--ext-path <path>', '追加浏览器扩展目录（可多次传入；目录需包含 manifest.json）');
-                appendArrayOption(sceneCommand, '--ext-name <name>', '追加 ~/.manyoyo/plugin/playwright/extensions/ 下的扩展目录名（可多次传入）');
-            }
-
-            sceneCommand.action((scene, options) => selectPluginAction({
-                action,
-                pluginName: 'playwright',
-                scene: scene || 'mcp-host-headless',
-                extensionPaths: action === 'up' ? (options.extPath || []) : [],
-                extensionNames: action === 'up' ? (options.extName || []) : []
-            }, options));
-        });
-
-        command.command('mcp-add')
-            .description('输出 playwright 的 MCP 接入命令')
-            .option('--host <host>', 'MCP URL 使用的主机名或IP (默认 host.docker.internal)')
-            .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-            .action(options => selectPluginAction({
-                action: 'mcp-add',
-                pluginName: 'playwright',
-                scene: 'all',
-                host: options.host || ''
-            }, options));
-
-        command.command('cli-add')
-            .description('输出 playwright-cli skill 安装命令')
-            .action(() => selectPluginAction({
-                action: 'cli-add',
-                pluginName: 'playwright',
-                scene: 'all'
-            }));
-
-        command.command('ext-download')
-            .description('下载并解压 Playwright 扩展到 ~/.manyoyo/plugin/playwright/extensions/')
-            .option('--prodversion <ver>', 'CRX 下载使用的 Chrome 版本号 (默认 132.0.0.0)')
-            .action(options => selectPluginAction({
-                action: 'ext-download',
-                pluginName: 'playwright',
-                scene: 'all',
-                prodversion: options.prodversion || ''
-            }, options));
-    };
-
     program
         .name(MANYOYO_NAME)
         .optionsGroup('选项:')
@@ -1454,25 +1342,45 @@ https://github.com/xcanwin/manyoyo
         });
     });
 
-    const playwrightCommand = program.command('playwright').helpGroup('网页服务与插件:').description('管理 Playwright 插件服务');
-    playwrightCommand.addHelpText('after', `
-示例:
-  ${MANYOYO_NAME} playwright up mcp-host-headless     启动 MCP 宿主场景（默认/推荐）
-  ${MANYOYO_NAME} playwright up cli-host-headless     启动 CLI 宿主场景（供容器内 playwright-cli 附着）
-`);
-    registerPlaywrightAliasCommands(playwrightCommand);
-
-    const pluginCommand = program.command('plugin', { hidden: true }).description('管理 manyoyo 插件');
-    pluginCommand.command('ls')
-        .description('列出可用插件与启用场景')
+    const selectPlaywright = (action, params = {}, options = {}) => {
+        selectAction('playwright', { ...options, playwrightRequest: { action, ...params } });
+    };
+    const playwrightCommand = program.command('playwright').helpGroup('网页服务与插件:')
+        .description('管理容器内浏览器的模式（默认无需任何命令）')
         .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
-        .action(options => selectPluginAction({
-            action: 'ls',
-            pluginName: 'playwright',
-            scene: 'all'
+        .action(options => selectPlaywright('overview', {}, options));
+    playwrightCommand.addHelpText('after', `
+模式（同一时间只有一个）:
+  (默认)   容器内虚拟屏里的有头浏览器，什么都不用做
+  headed   宿主机上有窗口的浏览器：${MANYOYO_NAME} playwright up headed
+  chrome   你正在用的 Chrome（沿用登录状态，有风险）：${MANYOYO_NAME} playwright up chrome
+  vnc      独立容器里的浏览器，用 noVNC 网页观看：${MANYOYO_NAME} playwright up vnc
+`);
+    playwrightCommand.command('up [mode]')
+        .description('切换到 headed / chrome / vnc 模式（不带参数列出全部模式）')
+        .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+        .option('--ext-path <path>', '追加浏览器扩展目录（可多次传入；目录需包含 manifest.json；仅 headed、vnc）', (value, previous = []) => [...previous, value])
+        .option('--ext-name <name>', '追加 ~/.manyoyo/plugin/playwright/extensions/ 下的扩展目录名（可多次传入；仅 headed、vnc）', (value, previous = []) => [...previous, value])
+        .action((mode, options) => selectPlaywright('up', {
+            mode: mode || '',
+            extensionPaths: options.extPath || [],
+            extensionNames: options.extName || []
         }, options));
-    const pluginPlaywrightCommand = pluginCommand.command('playwright').description('管理 playwright 插件服务');
-    registerPlaywrightAliasCommands(pluginPlaywrightCommand);
+    [
+        ['down', '停止当前模式，回到默认模式'],
+        ['status', '查看当前模式并真实探测浏览器是否可用（不可用时退出码非 0）'],
+        ['logs', '查看当前模式的浏览器服务日志'],
+        ['mcp-add', '输出在容器内注册 Playwright MCP（stdio，随当前模式自动切换）的命令']
+    ].forEach(([action, description]) => {
+        playwrightCommand.command(action)
+            .description(description)
+            .option('-r, --run <name>', '加载运行配置 (从 ~/.manyoyo/manyoyo.json 的 runs.<name> 读取)')
+            .action(options => selectPlaywright(action, {}, options));
+    });
+    playwrightCommand.command('ext-download')
+        .description('下载并解压 Playwright 扩展到 ~/.manyoyo/plugin/playwright/extensions/')
+        .option('--prodversion <ver>', 'CRX 下载使用的 Chrome 版本号 (默认 132.0.0.0)')
+        .action(options => selectPlaywright('ext-download', { prodversion: options.prodversion || '' }, options));
 
     // 安装包装完后调用的隐藏入口（不在帮助里）：按有头 / 无头决定下一步
     if (process.argv[2] === '--post-install') {
@@ -1525,7 +1433,7 @@ https://github.com/xcanwin/manyoyo
 
     UPDATE_CHECK_ENABLED = config.updateCheck !== false;
     MIRRORS = normalizeMirrors(config.mirrors);
-    const noDockerActions = new Set(['init', 'update', 'config-show', 'plugin', 'doctor', 'uninstall', 'podman', 'setup']);
+    const noDockerActions = new Set(['init', 'update', 'config-show', 'playwright', 'doctor', 'uninstall', 'podman', 'setup']);
     if (isServerStopMode || isServerListMode) {
         noDockerActions.add('serve');
     }
@@ -1579,21 +1487,13 @@ https://github.com/xcanwin/manyoyo
         process.exit(0);
     }
 
-    if (selectedAction === 'plugin') {
+    if (selectedAction === 'playwright') {
         const runConfig = options.run ? loadRunConfig(options.run, config) : {};
         return {
-            isPluginMode: true,
-            pluginRequest: {
-                action: options.pluginAction,
-                pluginName: options.pluginName,
-                scene: options.pluginScene || 'mcp-host-headless',
-                host: options.pluginHost || '',
-                extensionPaths: Array.isArray(options.pluginExtensionPaths) ? options.pluginExtensionPaths : [],
-                extensionNames: Array.isArray(options.pluginExtensionNames) ? options.pluginExtensionNames : [],
-                prodversion: options.pluginProdversion || ''
-            },
-            pluginGlobalConfig: config,
-            pluginRunConfig: runConfig
+            isPlaywrightMode: true,
+            playwrightRequest: options.playwrightRequest,
+            playwrightGlobalConfig: config,
+            playwrightRunConfig: runConfig
         };
     }
 
@@ -1662,7 +1562,7 @@ https://github.com/xcanwin/manyoyo
     const firstEnvMap = resolvedRuntime.first.env;
     Object.entries(firstEnvMap).forEach(([key, value]) => addEnvTo(FIRST_CONTAINER_ENVS, `${key}=${value}`));
 
-    applyPlaywrightCliSessionIntegration(config, runConfig);
+    PLAYWRIGHT_PLUGIN_CONFIG = { globalConfig: config, runConfig };
 
     const volumeList = resolvedRuntime.volumes;
     volumeList.forEach(v => addVolume(v));
@@ -1832,7 +1732,7 @@ https://github.com/xcanwin/manyoyo
         isServerDetach: Boolean(selectedAction === 'serve' && options.detach),
         isServerListenSpecified: Boolean(isServerMode && options.server !== true),
         updateAgents: Boolean(options.updateAgents),
-        isPluginMode: false
+        isPlaywrightMode: false
     };
 }
 
@@ -2183,6 +2083,8 @@ async function createNewContainer(runtime) {
     );
     const defaultCommand = runtime.execCommand;
 
+    await applyPlaywrightIntegration(runtime);
+
     if (runtime.showCommand) {
         console.log(buildDockerRunCmd(runtime));
         process.exit(0);
@@ -2473,6 +2375,11 @@ async function runWebServerMode(runtime) {
         fetchLatest: () => appUpdate.fetchLatestRelease()
     });
 
+    // 启动时检查 Playwright 当前模式是否还活着，失效就回退到默认模式（只警告，不阻塞启动）
+    buildContainerIntegration({ ...PLAYWRIGHT_PLUGIN_CONFIG, runtimeCommand: DOCKER_CMD })
+        .then(integration => { if (integration.warning) console.warn(`${YELLOW}⚠️  ${integration.warning}${NC}`); })
+        .catch(() => {});
+
     const needRuntimeHeal = !isRuntimeProven();
     if (needRuntimeHeal) {
         RUNTIME_STATE.status = 'starting';
@@ -2586,11 +2493,10 @@ async function main() {
         // 1. Setup commander and parse arguments
         const modeState = await setupCommander();
 
-        if (modeState.isPluginMode) {
-            const exitCode = await runPluginCommand(modeState.pluginRequest, {
-                globalConfig: modeState.pluginGlobalConfig,
-                runConfig: modeState.pluginRunConfig,
-                projectRoot: path.join(__dirname, '..'),
+        if (modeState.isPlaywrightMode) {
+            const exitCode = await runPlaywrightCommand(modeState.playwrightRequest, {
+                globalConfig: modeState.playwrightGlobalConfig,
+                runConfig: modeState.playwrightRunConfig,
                 stdout: process.stdout,
                 stderr: process.stderr
             });
