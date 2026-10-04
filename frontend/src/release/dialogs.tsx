@@ -61,23 +61,30 @@ export function ConfirmDialog({
 /** 一键发布：选择确认方式；一次确认需要输入 publish */
 export function RunAllDialog({
   stages,
+  notesDraft,
   onStart,
   onCancel,
 }: {
   stages: string[]
-  onStart: (mode: "step" | "auto") => void
+  notesDraft: string
+  onStart: (mode: "step" | "auto", notes: string) => void
   onCancel: () => void
 }) {
   const [mode, setMode] = React.useState<"step" | "auto">("step")
   const [phrase, setPhrase] = React.useState("")
-  const ready = mode === "step" || phrase.trim() === "publish"
+  const [notes, setNotes] = React.useState(notesDraft)
+  const ready = notes.trim() !== "" && (mode === "step" || phrase.trim() === "publish")
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>一键发布</DialogTitle>
           <DialogDescription>将依次执行：{stages.join(" → ")}。已完成的阶段会自动跳过，出错立即停止。</DialogDescription>
         </DialogHeader>
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Release 说明（发布前请看一遍，可直接改）</p>
+          <Textarea rows={8} value={notes} onChange={(event) => setNotes(event.target.value)} className="font-mono text-xs" />
+        </div>
         <Tabs value={mode} onValueChange={(value) => setMode(value as "step" | "auto")}>
           <TabsList>
             <TabsTrigger value="step">逐步确认</TabsTrigger>
@@ -89,7 +96,7 @@ export function RunAllDialog({
         ) : (
           <div className="space-y-2">
             <Alert>
-              <AlertDescription>一次确认后不再询问，会连续推送、触发构建、创建 Release 并发布 npm。输入 publish 以确认。</AlertDescription>
+              <AlertDescription>一次确认后不再询问，会连续推送、触发构建、创建 Release 草稿并公开、发布 npm。输入 publish 以确认。</AlertDescription>
             </Alert>
             <Input value={phrase} onChange={(event) => setPhrase(event.target.value)} placeholder="publish" />
           </div>
@@ -98,7 +105,7 @@ export function RunAllDialog({
           <Button variant="outline" onClick={onCancel}>
             取消
           </Button>
-          <Button disabled={!ready} onClick={() => onStart(mode)}>
+          <Button disabled={!ready} onClick={() => onStart(mode, notes)}>
             开始
           </Button>
         </DialogFooter>
@@ -291,8 +298,8 @@ export function ReleaseDialog({
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>创建 Release</DialogTitle>
-          <DialogDescription>说明以模板开头，「更新内容」已按提交标题生成，可直接改。创建后会产生 tag 并触发 npm 发布。</DialogDescription>
+          <DialogTitle>创建 Release 草稿</DialogTitle>
+          <DialogDescription>说明以模板开头，「更新内容」已按提交标题生成，可直接改。先创建草稿（不产生 tag、不会成为 latest），挂好安装包后再公开。</DialogDescription>
         </DialogHeader>
         <Textarea rows={14} value={notes} onChange={(event) => setNotes(event.target.value)} className="font-mono text-xs" />
         <Commands commands={commands} />
@@ -301,7 +308,7 @@ export function ReleaseDialog({
             取消
           </Button>
           <Button disabled={!notes.trim()} onClick={() => onSubmit(notes)}>
-            确认并创建
+            确认并创建草稿
           </Button>
         </DialogFooter>
       </DialogContent>

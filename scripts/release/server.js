@@ -10,7 +10,7 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const { collectFacts } = require('./facts');
-const { STAGES, MANUAL_CHECKLIST, computeStages, nextStage } = require('./stages');
+const { STAGES, MANUAL_CHECKLIST, computeStages, nextStage, isPublished } = require('./stages');
 const { ACTIONS, describeCommands, ReleaseError } = require('./actions');
 const { JobRunner } = require('./jobs');
 const { createBaseContext, createJobContext } = require('./context');
@@ -95,7 +95,6 @@ function createReleaseServer(options = {}) {
         const stages = computeStages(facts, state);
         const next = nextStage(stages);
         const checklist = (state.checklists || {})[facts.tag] || {};
-        const deviceStage = stages.find(stage => stage.id === 'device');
         return {
             version: facts.pkg.version,
             imageVersion: facts.pkg.imageVersion,
@@ -109,7 +108,7 @@ function createReleaseServer(options = {}) {
             suggestions: buildVersionSuggestions((facts.git.latestTag || `v${facts.pkg.version}`).replace(/^v/, '')),
             notesDraft: buildNotesDraft(facts),
             checklist: MANUAL_CHECKLIST.map(item => ({ ...item, done: Boolean(checklist[item.id]) })),
-            deviceChecklist: (deviceStage && deviceStage.items) || [],
+            published: isPublished(facts),
             job: runner.snapshot(),
             gh: facts.gh.ok
         };

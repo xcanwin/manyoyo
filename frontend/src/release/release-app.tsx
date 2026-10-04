@@ -18,7 +18,7 @@ type Dialog =
   | { kind: "runAll" }
   | null
 
-const PUBLISH_STAGES = ["merge", "image", "packages", "release", "npm", "assets", "verify"]
+const PUBLISH_STAGES = ["merge", "image", "packages", "device", "release", "assets", "publish", "verify", "npm"]
 const STATE_LABEL: Record<string, string> = { done: "已完成", todo: "待办", blocked: "被阻塞", warn: "需确认" }
 const STATE_STYLE: Record<string, string> = {
   done: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
@@ -154,11 +154,11 @@ export function ReleaseApp() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{next ? `下一步：${next.title}` : "全部完成"}</CardTitle>
-          <CardDescription>{next ? next.detail : "所有阶段都已完成。"}</CardDescription>
+          <CardTitle>{next ? `下一步：${next.title}` : status.published ? `v${status.version} 已发布 ✓` : "全部完成"}</CardTitle>
+          <CardDescription>{next ? next.detail : status.published ? "下一次发布需要先升版本号（「版本」阶段）。" : "所有阶段都已完成。"}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          {next && next.id !== "manual" && (
+          {next && next.id !== "manual" && next.id !== "device" && (
             <Button disabled={running} onClick={() => openStage(next)}>
               执行「{next.title}」
             </Button>
@@ -185,7 +185,7 @@ export function ReleaseApp() {
                   <span className={`rounded px-2 py-0.5 text-xs ${STATE_STYLE[stage.state]}`}>{STATE_LABEL[stage.state]}</span>
                   {stage.external && <Badge variant="outline">对外动作</Badge>}
                   {status.job?.currentStage === stage.id && running && <Spinner />}
-                  {stage.id !== "manual" && (
+                  {stage.id !== "manual" && stage.id !== "device" && (
                     <Button
                       className="ml-auto"
                       size="sm"
@@ -202,6 +202,24 @@ export function ReleaseApp() {
                   <a className="text-sm underline" href={stage.url} target="_blank" rel="noreferrer">
                     {stage.url}
                   </a>
+                )}
+                {stage.id === "device" && stage.items && stage.items.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">用 CI 产物在真实 Mac 上安装检查：gh run download &lt;安装包构建 runId&gt; -n manyoyo-{status.version}-macos-&lt;arm64|x64&gt;。检查完才勾选，勾选代表你亲自确认过。</p>
+                    {stage.items.map((item) => (
+                      <label key={item.id} className="flex items-start gap-2 text-sm">
+                        <input type="checkbox" className="mt-1" checked={item.done} onChange={(event) => void toggleCheck(item.id, event.target.checked)} />
+                        <span>
+                          {item.title}
+                          <span className="block text-xs text-muted-foreground">
+                            命中：{item.files.slice(0, 3).join("、")}
+                            {item.files.length > 3 ? " 等" : ""}
+                            {item.done && item.by ? ` · ${item.by}` : ""}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
                 )}
                 {stage.id === "manual" && (
                   <div className="space-y-2">
@@ -284,11 +302,11 @@ export function ReleaseApp() {
       {dialog?.kind === "runAll" && (
         <RunAllDialog
           stages={stages.filter((stage) => PUBLISH_STAGES.includes(stage.id) && stage.state !== "done").map((stage) => stage.title)}
+          notesDraft={status.notesDraft}
           onCancel={() => setDialog(null)}
-          onStart={(mode) => {
+          onStart={(mode, notes) => {
             setDialog(null)
-            // 一键发布里的 Release 说明用草稿；需要改说明请改用单步执行
-            void start(PUBLISH_STAGES, mode, { release: { notes: status.notesDraft } }, mode === "auto")
+            void start(PUBLISH_STAGES, mode, { release: { notes } }, mode === "auto")
           }}
         />
       )}

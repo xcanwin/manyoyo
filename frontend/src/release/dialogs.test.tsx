@@ -34,7 +34,7 @@ describe("RunAllDialog", () => {
   test("step mode starts directly; one-time confirmation needs the word publish", async () => {
     const onStart = vi.fn()
     await act(async () => {
-      root.render(<RunAllDialog stages={["合并到 main", "Release"]} onStart={onStart} onCancel={() => {}} />)
+      root.render(<RunAllDialog stages={["合并到 main", "Release"]} notesDraft="## 更新内容" onStart={onStart} onCancel={() => {}} />)
     })
     expect(document.body.textContent).toContain("合并到 main → Release")
     expect(buttonByText("开始")!.disabled).toBe(false)
@@ -51,7 +51,24 @@ describe("RunAllDialog", () => {
     await act(async () => {
       buttonByText("开始")!.click()
     })
-    expect(onStart).toHaveBeenCalledWith("auto")
+    expect(onStart).toHaveBeenCalledWith("auto", "## 更新内容")
+  })
+})
+
+describe("RunAllDialog notes", () => {
+  test("shows the full release notes before starting and will not start without them", async () => {
+    const onStart = vi.fn()
+    await act(async () => {
+      root.render(<RunAllDialog stages={["Release"]} notesDraft="## 更新内容\n- fix: 修 403" onStart={onStart} onCancel={() => {}} />)
+    })
+    const area = document.body.querySelector("textarea") as HTMLTextAreaElement
+    expect(area.value).toContain("fix: 修 403")
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!
+    await act(async () => {
+      setter.call(area, "  ")
+      area.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    expect(buttonByText("开始")!.disabled).toBe(true)
   })
 })
 
