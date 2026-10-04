@@ -125,6 +125,7 @@ describe('published version (B7)', () => {
             release: { exists: true, draft: false, assets: names('8.2.0', true), createdAt: '2026-10-02T10:00:00Z' },
             runs: { packages: [run(1, 'mmm')], verify: [{ ...run(9, 'mmm'), createdAt: '2026-10-02T11:00:00Z' }] }
         }), { checklists: { 'v8.2.0': Object.fromEntries(MANUAL_CHECKLIST.map(item => [item.id, true])) } }));
+        expect(computeStages(facts({ release: { exists: true, draft: false, assets: names('8.2.0') } })).map(stage => stage.id)).toEqual(STAGES.map(stage => stage.id));
         for (const id of ['preflight', 'version', 'commit', 'merge', 'image', 'packages', 'device', 'release', 'assets', 'publish', 'verify', 'npm', 'manual']) {
             expect(s[id].state).toBe('done');
         }

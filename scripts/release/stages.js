@@ -77,7 +77,7 @@ function computeStages(facts, state = {}) {
         add('verify', verifyOk ? 'done' : 'todo', verifyOk ? `验证通过（run #${verifyRun.databaseId}）` : verifyRun ? `上次验证 ${verifyRun.conclusion || verifyRun.status}` : '尚未验证');
         add('npm', npm.version === V ? 'done' : 'todo', npm.version === V ? `npm 上已是 ${V}` : `npm 上是 ${npm.version || '未知'}，等待 ${V}（发布后可能延迟几分钟）`);
         add('manual', manualLeft === 0 ? 'done' : 'todo', manualLeft === 0 ? '真机检查全部完成' : `还有 ${manualLeft} 项待勾选`);
-        return result;
+        return result.sort((a, b) => STAGES.findIndex(item => item.id === a.id) - STAGES.findIndex(item => item.id === b.id));
     }
 
     const ghBlock = !facts.gh.ok ? 'gh 未登录或授权失效：先运行 gh auth login（或设置有效的 GITHUB_TOKEN）' : '';
