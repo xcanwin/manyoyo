@@ -6115,6 +6115,26 @@ describe('Web Server Setup API', () => {
         });
     });
 
+    describe('container path default', () => {
+        test('creating a session without containerPath mounts the host path at the same path, not at the serve start directory', async () => {
+            const runArgs = [];
+            await withSetupServer(() => ({
+                containerPath: '/serve/start/dir',
+                dockerExecArgs: args => {
+                    if (args[0] === 'run') runArgs.push(args);
+                    return '';
+                }
+            }), async ({ call, tempHost }) => {
+                const res = await call('POST', '/api/sessions', { createOptions: { hostPath: tempHost } });
+                expect(res.response.status).toBe(200);
+                expect(res.json.applied.containerPath).toBe(tempHost);
+                const flat = runArgs.flat().join(' ');
+                expect(flat).toContain(`${tempHost}:${tempHost}`);
+                expect(flat).not.toContain('/serve/start/dir');
+            });
+        });
+    });
+
     describe('image auto pull', () => {
         // pullOutcome: ok | notfound；fake docker 的 pull 会先吐一行进度再结束，并在成功时创建 marker
         async function withPullServer(pullOutcome, run) {
