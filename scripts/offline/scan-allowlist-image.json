@@ -11,8 +11,8 @@
     },
     {
         "rule": "private-key",
-        "pathPattern": "^[^!]*(?:![^!]*\\.tar|!/blobs/sha256/[0-9a-f]{64})?!/(?:usr/local/lib/node_modules/(?:npm/(?:docs/content/using-npm/config\\.md|docs/output/using-npm/config\\.html|man/man7/config\\.7|node_modules/@npmcli/config/lib/definitions/definitions\\.js)|@anthropic-ai/claude-code/bin/claude\\.exe|@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-(?:arm64|x64)/claude|@openai/codex/node_modules/@openai/codex-linux-(?:arm64|x64)/vendor/[^/]+/codex-resources/voice/lib/libgio-2\\.0\\.so\\.0)|usr/bin/(?:ssh|ssh-add|ssh-keygen)|usr/sbin/sshd|usr/lib/openssh/ssh-keysign|usr/lib/[a-z0-9_]+-linux-gnu/(?:libgnutls\\.so\\.[0-9.]+|libssh\\.so\\.[0-9.]+)|usr/lib/file/magic\\.mgc)$",
-        "reason": "第三方二进制/文档里的 PEM 头字符串（npm 文档、claude/codex 二进制、ssh 工具、libgnutls、libssh、file 的 magic 库），不是真实私钥。按具体文件放行：其它位置（含 /etc、/opt、/root/.local、/usr/local 下自带代码）出现私钥都会被扫出来"
+        "pathPattern": "^[^!]*(?:![^!]*\\.tar|!/blobs/sha256/[0-9a-f]{64})?!/(?:usr/local/lib/node_modules/(?:npm/(?:docs/content/using-npm/config\\.md|docs/output/using-npm/config\\.html|man/man7/config\\.7|node_modules/@npmcli/config/lib/definitions/definitions\\.js)|@anthropic-ai/claude-code/bin/claude\\.exe|@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-(?:arm64|x64)/claude|@openai/codex/node_modules/@openai/codex-linux-(?:arm64|x64)/vendor/[^/]+/codex-resources/voice/lib/libgio-2\\.0\\.so\\.0)|usr/bin/(?:ssh|ssh-add|ssh-keygen)|usr/sbin/sshd|usr/lib/openssh/ssh-keysign|usr/lib/[a-z0-9_]+-linux-gnu/(?:libgnutls\\.so\\.[0-9.]+|libssh\\.so\\.[0-9.]+)|usr/lib/file/magic\\.mgc|usr/lib/[a-z0-9_]+-linux-gnu/libgio-2\\.0\\.so\\.[0-9.]+|usr/lib/python3/dist-packages/cryptography/hazmat/primitives/serialization/(?:__pycache__/ssh\\.cpython-[0-9]+\\.pyc|ssh\\.py)|usr/share/mime/(?:magic|mime\\.cache|packages/freedesktop\\.org\\.xml))$",
+        "reason": "第三方二进制/文档里的 PEM 头字符串（npm 文档、claude/codex 二进制、ssh 工具、libgnutls、libssh、file 的 magic 库），不是真实私钥。按具体文件放行：其它位置（含 /etc、/opt、/root/.local、/usr/local 下自带代码）出现私钥都会被扫出来；另含系统包里的同类字符串：glib 的 libgio、python3-cryptography 的 ssh 序列化模块（解析 OpenSSH 密钥格式的头字符串）、shared-mime-info 的 MIME 数据库（用于识别密钥文件类型）。均为 playwright 浏览器依赖与 noVNC 带进来的第三方包，按具体文件放行"
     },
     {
         "rule": "token",
@@ -41,7 +41,7 @@
     },
     {
         "rule": "sensitive-filename",
-        "pathPattern": "^[^!]*(?:![^!]*\\.tar|!/blobs/sha256/[0-9a-f]{64})?!/(usr/lib/ssl/cert\\.pem|usr/lib/python3/dist-packages/pip/_vendor/certifi/cacert\\.pem)$",
+        "pathPattern": "^[^!]*(?:![^!]*\\.tar|!/blobs/sha256/[0-9a-f]{64})?!/(usr/lib/ssl/cert\\.pem|usr/lib/python3/dist-packages/(?:pip/_vendor/)?certifi/cacert\\.pem)$",
         "reason": "公共 CA 证书包（公开数据）"
     },
     {
