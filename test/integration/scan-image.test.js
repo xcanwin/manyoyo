@@ -11,8 +11,9 @@ const path = require('path');
 
 const SCRIPT = path.join(__dirname, '../../scripts/scan-image.js');
 
+// 与被测脚本选同一个运行时（docker 优先）：两个都装了的机器（如 CI 的 ubuntu）上，镜像必须导入脚本会去 save 的那个
 function usableRuntime() {
-    for (const candidate of ['podman', 'docker']) {
+    for (const candidate of ['docker', 'podman']) {
         const probe = spawnSync(candidate, ['info'], { stdio: 'ignore', timeout: 15000 });
         if (probe.status === 0) return candidate;
     }
