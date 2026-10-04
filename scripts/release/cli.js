@@ -112,11 +112,19 @@ async function runStages(engine, args, io) {
     process.once('SIGINT', onSigint);
     const result = await done;
     process.removeListener('SIGINT', onSigint);
+    // 单步模式不检查“执行完是否真的 done”；这里补上，免得 device 这类只能由人完成的阶段以退出码 0 结束
+    let unfinished = '';
+    if (result.status === 'succeeded' && !engine.base.dryRun) {
+        const after = await engine.collect();
+        const left = computeStages(after, engine.base.state.load()).filter(stage => stages.includes(stage.id) && stage.id !== 'manual' && stage.state !== 'done');
+        unfinished = left.map(stage => `「${stage.title}」${stage.state}：${stage.detail}`).join('；');
+    }
     if (args.json) {
         const after = await engine.collect();
-        io.out(JSON.stringify({ status: result.status, error: result.error || '', ...summarize(after, computeStages(after, engine.base.state.load())) }, null, 2));
+        io.out(JSON.stringify({ status: result.status, error: result.error || (unfinished ? `未完成：${unfinished}` : ''), ...summarize(after, computeStages(after, engine.base.state.load())) }, null, 2));
     } else if (result.status !== 'succeeded') io.err(`\n失败：${result.error || result.status}`);
-    return result.status === 'succeeded' ? EXIT.OK : EXIT.FAILED;
+    else if (unfinished) io.err(`\n未完成：${unfinished}`);
+    return result.status === 'succeeded' && !unfinished ? EXIT.OK : EXIT.FAILED;
 }
 
 async function printNotesDraft(engine, io) {

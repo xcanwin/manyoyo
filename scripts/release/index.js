@@ -47,34 +47,38 @@ function helpText() {
   preflight  预检（本地 build:web / test / docs:check / lint:sh；CI 在同一提交上通过也算）
   version    升版本（--version <x.y.z> [--image-version <x.y.z-后缀>]）
   commit     提交（--files a,b --message "说明"）
-  merge*     合并到 main 并推送（需要预检或 CI 通过）
+  merge*     把当前分支 --no-ff 合并进本地 main 并直接推送 origin/main（没有 PR；需要预检通过，或 CI 在当前提交上通过）
   image*     发布镜像（docker/ 或 imageVersion 有变化才需要；已有 tag 不会被覆盖）
   packages*  构建四个平台的安装包并等待
-  device     发布前真机检查（按改动区域匹配；只能由人确认）
+  device     发布前真机检查（按改动区域匹配；只能由人确认；未全部确认时退出码 1，输出会列出本次命中的 id 和 CI 产物下载命令）
   release*   创建 Release 草稿，钉在安装包构建的提交上（--notes-file <路径> 必填）
   assets*    把安装包挂到草稿，核对资产与 SHA256SUMS 一致
   publish*   草稿改为公开（这时才创建 tag、成为 latest、触发 npm 发布）
   verify*    发版后在干净 runner 上验证（与 npm 并行）
   npm*       等待 npm 发布并确认可见（--npm-dispatch：没被触发时手动触发）
-  manual     发布后真机检查（升级 / 回滚）
-  * 带星号的是对外动作：命令行必须加 --yes，否则只打印将执行的命令并以退出码 2 结束。
+  manual     发布后真机检查（升级 / 回滚）：没有 --run 动作，只能 --check mac-upgrade 或网页勾选
+  * 带星号的是对外动作：命令行必须加 --yes，否则只打印将执行的命令并以退出码 2 结束。--yes 授权的是这一条命令里列出的全部对外阶段，
+    授权范围多大就把阶段切成几条命令；preflight、version、commit、device 不是对外动作，不需要 --yes。
 
 用法:
   npm run release                                 启动网页控制台（127.0.0.1:${DEFAULT_PORT}）并打开浏览器
   npm run release -- --status [--json]            各阶段状态（--json 给 agent 解析）
   npm run release -- --notes-draft > notes.md     生成 Release 说明草稿，编辑后传给 --notes-file
   npm run release -- --run <阶段,阶段…> [--yes]   依次执行阶段，已完成的自动跳过；状态不符合预期就停下
-  npm run release -- --check <id>                 确认一项真机检查（必须有终端；id: plugin / install / runtime / web / mac-upgrade）
+  npm run release -- --check <id>                 确认一项真机检查（必须有终端；id: plugin / install / runtime / web 是发布前，mac-upgrade 是发布后）
   npm run release -- --dry-run [--run …]          对外动作只打印命令、不执行（先彩排一遍）
   npm run release -- --no-open | --port <n>       网页控制台：不打开浏览器 / 换端口
 
-典型流程（只改代码、镜像不变）:
+典型流程（只改代码、镜像不变；已完成的阶段会自动跳过，重跑不会出错）:
   npm run release -- --run version --version 8.3.2
-  npm run release -- --run commit --files package.json,package-lock.json --message "发布 8.3.2"
-  npm run release -- --run preflight,merge,packages --yes
-  npm run release -- --run device                 # 命中真机区域时会停在这里，按提示检查后 --check <id>
-  npm run release -- --notes-draft > notes.md     # 编辑 notes.md
+  npm run release -- --run commit --files package.json,package-lock.json --message "升级版本到 8.3.2"
+  git push -u origin <分支>                       # 需要授权；推送后 ci.yml 在该提交上通过，就等价于本地预检
+  npm run release -- --run preflight              # 不推分支时改用本地预检（约 5 分钟，真跑测试；--dry-run 下也会真跑）
+  npm run release -- --run merge,packages --yes   # 镜像有变化时在前面加 image
+  npm run release -- --run device                 # 命中真机区域时退出码 1 并停在这里；检查完在网页勾选，或 --check <id>
+  npm run release -- --notes-draft > notes.md     # 编辑 notes.md（模板里的英文部分也要写）
   npm run release -- --run release,assets,publish,verify,npm --yes --notes-file notes.md
+  npm run release -- --run npm --npm-dispatch --yes   # 仅当 release: published 没触发 npm-publish 时
 
 退出码: 0 成功；1 失败；2 需要 --yes（未执行任何动作）。同一时间只允许一个发布任务（网页与命令行共用锁）。
 `;

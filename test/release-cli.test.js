@@ -163,3 +163,15 @@ describe('single stage runs even when already done', () => {
         expect(actions.version).toHaveBeenCalledWith(expect.anything(), { version: '8.2.1', imageVersion: undefined }, expect.anything());
     });
 });
+
+describe('an unfinished human-only stage is not a success', () => {
+    test('--run device exits 1 while checks are pending and 0 once ticked', async () => {
+        const hit = worldFacts({ git: { ...worldFacts().git, changedFiles: ['lib/plugin/a.js'] } });
+        const engine = fakeEngine({ device: async () => {} }, hit);
+        const output = io();
+        expect(await runStages(engine, { run: 'device' }, output)).toBe(EXIT.FAILED);
+        expect(output.lines.err.join('\n')).toContain('未完成');
+        await checkItem(engine, 'plugin', io(), { isTTY: true, ask: async () => 'yes' });
+        expect(await runStages(engine, { run: 'device' }, io())).toBe(EXIT.OK);
+    });
+});

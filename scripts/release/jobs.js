@@ -118,7 +118,7 @@ class JobRunner extends EventEmitter {
         for (let attempt = 0; ; attempt += 1) {
             const fresh = await this.deps.collect();
             stage = computeStages(fresh, this.deps.getState()).find(item => item.id === id);
-            if (stage.state === 'done' || attempt >= this.recheckTimes || job.controller.signal.aborted || this.deps.dryRun || id === 'manual') break;
+            if (stage.state === 'done' || attempt >= this.recheckTimes || job.controller.signal.aborted || this.deps.dryRun || id === 'manual' || id === 'device') break;
             this.emitEvent({ type: 'log', stage: id, line: `状态还没更新（${stage.state}），${this.recheckDelayMs / 1000} 秒后再确认（${attempt + 1}/${this.recheckTimes}）…` });
             await (this.deps.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms))))(this.recheckDelayMs);
         }
