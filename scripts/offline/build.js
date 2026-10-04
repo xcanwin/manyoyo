@@ -95,7 +95,7 @@ async function buildOfflinePackages(options, injected = {}) {
         });
 
         deps.log('[2/5] 获取 VM 磁盘（未启动过的官方 machine-os）');
-        vm = await deps.fetchVmDisk({ podmanDir: path.join(components, 'runtime', 'podman'), run: deps.run, tmpRoot });
+        vm = await deps.fetchVmDisk({ podmanDir: path.join(components, 'runtime', 'podman'), run: deps.run, tmpRoot, cacheDir: process.env.MANYOYO_VM_DISK_CACHE_DIR || '' });
         vmSha = await sha256File(vm.path);
         fs.mkdirSync(path.join(components, 'vm'), { recursive: true });
         fs.copyFileSync(vm.path, path.join(components, 'vm', vm.fileName));

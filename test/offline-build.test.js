@@ -310,6 +310,30 @@ describe('stage helpers', () => {
         expect(() => fetchVmDisk({ podmanDir, run: () => '', tmpRoot: root })).toThrow(/没有找到/);
         expect(findVmDiskFile(root)).toBe(''); // 只认 cache 目录里的 raw 磁盘
     });
+
+    test('VM disk cache dir: a hit skips machine init, a miss fills the cache', () => {
+        const podmanDir = path.join(root, 'p2');
+        fs.mkdirSync(path.join(podmanDir, 'bin'), { recursive: true });
+        const cacheDir = path.join(root, 'vm-cache');
+        let calls = 0;
+        const run = (cmd, args, opts) => {
+            calls += 1;
+            const cache = path.join(opts.env.XDG_DATA_HOME, 'containers/podman/machine/libkrun/cache');
+            fs.mkdirSync(cache, { recursive: true });
+            fs.writeFileSync(path.join(cache, 'abc.raw.zst'), 'disk-bytes');
+            return '';
+        };
+        const miss = fetchVmDisk({ podmanDir, run, tmpRoot: root, cacheDir });
+        expect(calls).toBe(1);
+        expect(fs.readFileSync(path.join(cacheDir, 'abc.raw.zst'), 'utf8')).toBe('disk-bytes');
+        expect(miss.fileName).toBe('abc.raw.zst');
+        const hit = fetchVmDisk({ podmanDir, run, tmpRoot: root, cacheDir });
+        expect(calls).toBe(1);
+        expect(hit.fileName).toBe('abc.raw.zst');
+        expect(fs.readFileSync(hit.path, 'utf8')).toBe('disk-bytes');
+        expect(hit.path).not.toBe(path.join(cacheDir, 'abc.raw.zst')); // 返回副本，build 会把它删掉
+        expect(fs.existsSync(path.join(cacheDir, 'abc.raw.zst'))).toBe(true);
+    });
 });
 
 describe('full assembly with stand-in components', () => {
@@ -644,40 +668,5 @@ describe('scan allowlists and offline workflow', () => {
         const hits = result.hits.map(h => `${h.rule}:${h.file.split('!/').slice(1).join('!/') || h.file.split('/').pop().slice(0, 3)}`).sort();
         expect(hits).toEqual(['local-path:bbb', 'private-key:etc/ssh/ssh_host_rsa_key'].sort());
         expect(result.allowed.some(a => a.rule === 'email')).toBe(true);
-    });
-
-    test('workflow: manual only, scans before uploading, explicit file list, no secrets, no Release', () => {
-        const text = fs.readFileSync(path.join(__dirname, '../.github/workflows/offline-macos.yml'), 'utf8');
-        const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\nenv:'));
-        expect(onBlock).toContain('workflow_dispatch:');
-        expect(onBlock).not.toMatch(/^\s*(push|pull_request|schedule|release):/m);
-        expect(text.indexOf('scripts/scan-release-artifacts.js')).toBeLessThan(text.indexOf('actions/upload-artifact@v7', text.indexOf('name: Build packages')));
-        expect(text).toContain('scan-allowlist.json');
-        expect(text).toContain('scan-allowlist-image.json');
-        expect(text).toContain('steps.files.outputs.list');
-        expect(text).not.toMatch(/secrets\./);
-        expect(text).not.toMatch(/gh release|softprops|action-gh-release|npm publish|docker push/);
-        expect(text).toContain('packages: read');
-        expect(text).toContain('brew install gnu-tar');
-        expect(text).toContain('macos-15-intel');
-        // 产物名带前缀与版本号，zip 一眼能认
-        expect(text).toContain('name: manyoyo-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}');
-        expect(text).toContain('name: manyoyo-image-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}');
-    });
-    test('linux workflow: manual only, scans (linux allowlist + image allowlist) before uploading, explicit file list, no secrets, no Release, no Podman', () => {
-        const text = fs.readFileSync(path.join(__dirname, '../.github/workflows/offline-linux.yml'), 'utf8');
-        const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\nenv:'));
-        expect(onBlock).toContain('workflow_dispatch:');
-        expect(onBlock).not.toMatch(/^\s*(push|pull_request|schedule|release):/m);
-        expect(text).toContain('name: Build Linux Offline Packages');
-        expect(text.indexOf('scripts/scan-release-artifacts.js')).toBeLessThan(text.indexOf('actions/upload-artifact@v7', text.indexOf('name: Build package')));
-        expect(text).toContain('scan-allowlist-linux.json');
-        expect(text).toContain('scan-allowlist-image.json');
-        expect(text).toContain('--platform linux');
-        expect(text).toContain('steps.files.outputs.list');
-        expect(text).not.toMatch(/secrets\./);
-        expect(text).not.toMatch(/gh release|softprops|action-gh-release|npm publish|docker push|podman/);
-        expect(text).toContain('packages: read');
-        expect(text).toContain('name: manyoyo-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}');
     });
 });

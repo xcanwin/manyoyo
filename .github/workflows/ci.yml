@@ -1,0 +1,38 @@
+# 分支 / PR 阶段的持续集成：和本地预检同一组检查（合并 main 之前就知道测试是否通过，不必等 tag 之后的 npm-publish）。
+# main 不在这里跑（合并前已经在分支上跑过）；前端 lint 有既存报错，不作为门禁，只跑 typecheck。
+# 只读权限、不用任何密钥。
+
+name: CI
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --include=optional
+      # build:web 会顺带安装 frontend 依赖，并生成 npm test 里 Web 页面用例需要的 lib/web/index.html
+      - run: npm run build:web
+      - run: npm test
+      - run: npm run docs:check
+      - run: npm run lint:sh
+      - name: Frontend typecheck
+        run: npm run typecheck
+        working-directory: frontend
