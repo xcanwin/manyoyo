@@ -21,7 +21,13 @@ nohup.out
 libpod/
 .playwright-cli/
 lib/web/index.html
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/plan-handoff/
+.agents/skills/*
+!.agents/skills/agents-power/
+!.agents/skills/commit-diff/
 dist-offline/
 .release/
 scripts/release/console.html
