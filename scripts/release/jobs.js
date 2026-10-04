@@ -55,6 +55,15 @@ class JobRunner extends EventEmitter {
         const needsConfirm = defs.some(def => def.external);
         // step 模式的确认在每个阶段开始前逐个进行；single / auto 必须在请求里明确确认
         if (needsConfirm && mode !== 'step' && confirmed !== true) throw new ReleaseError('CONFIRM_REQUIRED', '对外动作需要明确确认');
+        // 跨进程单实例（网页与命令行各是一个进程）：拿不到锁就是 BUSY
+        let releaseLock = null;
+        if (this.deps.acquireLock) {
+            try {
+                releaseLock = this.deps.acquireLock();
+            } catch (error) {
+                throw new ReleaseError('BUSY', error.message);
+            }
+        }
         const controller = new AbortController();
         const job = { id: `${Date.now()}`, mode, stages, params, status: 'running', currentStage: null, controller, error: '' };
         this.current = job;
@@ -63,42 +72,76 @@ class JobRunner extends EventEmitter {
         this.execute(job).catch(error => {
             job.status = error.code === 'CANCELLED' ? 'cancelled' : 'failed';
             job.error = error.message;
+            if (releaseLock) releaseLock();
             this.emitEvent({ type: 'done', status: job.status, error: job.error });
-        });
+        }).then(() => { if (releaseLock) releaseLock(); });
         return this.snapshot();
     }
 
-    async execute(job) {
-        for (const id of job.stages) {
-            if (job.controller.signal.aborted) throw new ReleaseError('CANCELLED', '已取消');
-            job.currentStage = id;
+    // 相邻且 group 相同的阶段并行执行（如 verify 与 npm）；其余逐个执行
+    batches(stages) {
+        const batches = [];
+        for (const id of stages) {
             const def = STAGES.find(stage => stage.id === id);
-            let facts = await this.deps.collect();
-            let stage = computeStages(facts, this.deps.getState()).find(item => item.id === id);
-            if (job.mode !== 'single' && stage.state === 'done') {
-                this.emitEvent({ type: 'stage', stage: id, state: 'skipped', detail: stage.detail });
-                continue;
-            }
-            // 服务端强制前置条件：不能只靠页面把按钮置灰（对外动作被阻塞时一律拒绝，不论模式）
-            if (!this.deps.dryRun && stage.state === 'blocked' && (job.mode !== 'single' || def.external)) throw new ReleaseError('BLOCKED', `「${def.title}」被阻塞：${stage.detail}`);
-            // 自动模式遇到“无法确认”的阶段（如镜像是否存在查不到）不擅自执行，停下来让人确认
-            if (!this.deps.dryRun && job.mode === 'auto' && stage.state === 'warn') throw new ReleaseError('NEEDS_REVIEW', `「${def.title}」需要人工确认：${stage.detail}`);
-            if (def.external && job.mode === 'step') await this.askConfirm(job, def, facts);
-            this.emitEvent({ type: 'stage', stage: id, state: 'running' });
-            const ctx = this.deps.makeCtx(line => this.emitEvent({ type: 'log', stage: id, line }), job.controller.signal);
-            await this.deps.actions[id](ctx, job.params[id] || {}, facts);
+            const last = batches[batches.length - 1];
+            if (last && def.group && STAGES.find(stage => stage.id === last[0]).group === def.group) last.push(id);
+            else batches.push([id]);
+        }
+        return batches;
+    }
+
+    // 开始前的检查与确认；返回 null 表示跳过
+    async prepare(job, id) {
+        const def = STAGES.find(stage => stage.id === id);
+        const facts = await this.deps.collect();
+        const stage = computeStages(facts, this.deps.getState()).find(item => item.id === id);
+        if (job.mode !== 'single' && stage.state === 'done') {
+            this.emitEvent({ type: 'stage', stage: id, state: 'skipped', detail: stage.detail });
+            return null;
+        }
+        // 服务端强制前置条件：不能只靠页面把按钮置灰（对外动作被阻塞时一律拒绝，不论模式）
+        if (!this.deps.dryRun && stage.state === 'blocked' && (job.mode !== 'single' || def.external)) throw new ReleaseError('BLOCKED', `「${def.title}」被阻塞：${stage.detail}`);
+        // 自动模式遇到“无法确认”的阶段（如镜像是否存在查不到）不擅自执行，停下来让人确认
+        if (!this.deps.dryRun && job.mode === 'auto' && stage.state === 'warn') throw new ReleaseError('NEEDS_REVIEW', `「${def.title}」需要人工确认：${stage.detail}`);
+        if (def.external && job.mode === 'step') await this.askConfirm(job, def, facts);
+        return facts;
+    }
+
+    async perform(job, id, facts) {
+        const def = STAGES.find(stage => stage.id === id);
+        this.emitEvent({ type: 'stage', stage: id, state: 'running' });
+        const ctx = this.deps.makeCtx(line => this.emitEvent({ type: 'log', stage: id, line }), job.controller.signal);
+        await this.deps.actions[id](ctx, job.params[id] || {}, facts);
+        if (job.controller.signal.aborted) throw new ReleaseError('CANCELLED', '已取消');
+        // 外部状态（GitHub 的运行列表、npm 的 CDN）有传播延迟：刚做完立刻读可能还是旧的，多读几次再下结论
+        let stage;
+        for (let attempt = 0; ; attempt += 1) {
+            const fresh = await this.deps.collect();
+            stage = computeStages(fresh, this.deps.getState()).find(item => item.id === id);
+            if (stage.state === 'done' || attempt >= this.recheckTimes || job.controller.signal.aborted || this.deps.dryRun || id === 'manual') break;
+            this.emitEvent({ type: 'log', stage: id, line: `状态还没更新（${stage.state}），${this.recheckDelayMs / 1000} 秒后再确认（${attempt + 1}/${this.recheckTimes}）…` });
+            await (this.deps.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms))))(this.recheckDelayMs);
+        }
+        this.emitEvent({ type: 'stage', stage: id, state: 'finished', result: stage.state, detail: stage.detail });
+        if (!this.deps.dryRun && job.mode !== 'single' && stage.state !== 'done' && id !== 'manual') {
+            throw new ReleaseError('NOT_DONE', `「${def.title}」执行完但状态仍是 ${stage.state}：${stage.detail}`);
+        }
+    }
+
+    async execute(job) {
+        for (const batch of this.batches(job.stages)) {
             if (job.controller.signal.aborted) throw new ReleaseError('CANCELLED', '已取消');
-            // 外部状态（GitHub 的运行列表、npm 的 CDN）有传播延迟：刚做完立刻读可能还是旧的，多读几次再下结论
-            for (let attempt = 0; ; attempt += 1) {
-                facts = await this.deps.collect();
-                stage = computeStages(facts, this.deps.getState()).find(item => item.id === id);
-                if (stage.state === 'done' || attempt >= this.recheckTimes || job.controller.signal.aborted || this.deps.dryRun || id === 'manual') break;
-                this.emitEvent({ type: 'log', stage: id, line: `状态还没更新（${stage.state}），${this.recheckDelayMs / 1000} 秒后再确认（${attempt + 1}/${this.recheckTimes}）…` });
-                await (this.deps.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms))))(this.recheckDelayMs);
+            job.currentStage = batch[0];
+            const ready = [];
+            for (const id of batch) {
+                const facts = await this.prepare(job, id);
+                if (facts) ready.push([id, facts]);
             }
-            this.emitEvent({ type: 'stage', stage: id, state: 'finished', result: stage.state, detail: stage.detail });
-            if (!this.deps.dryRun && job.mode !== 'single' && stage.state !== 'done' && id !== 'manual') {
-                throw new ReleaseError('NOT_DONE', `「${def.title}」执行完但状态仍是 ${stage.state}：${stage.detail}`);
+            if (ready.length === 1) await this.perform(job, ready[0][0], ready[0][1]);
+            else if (ready.length > 1) {
+                const results = await Promise.allSettled(ready.map(([id, facts]) => this.perform(job, id, facts)));
+                const failed = results.find(item => item.status === 'rejected' && item.reason.code !== 'CANCELLED') || results.find(item => item.status === 'rejected');
+                if (failed) throw failed.reason;
             }
         }
         job.status = 'succeeded';

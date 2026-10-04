@@ -8,14 +8,14 @@ function makeWorld() {
     const collect = async () => ({
         pkg: { version: '8.2.0', imageVersion: '2.1.0-common' },
         tag: 'v8.2.0',
-        git: { branch: 'feat/x', headSha: 'a', dirty: [], fingerprint: 'f', hasOrigin: true, originMainSha: 'm', mergedIntoOriginMain: world.merged, ahead: 0, latestTag: 'v8.1.0', imageChangedSinceTag: false, commitsSinceTag: [] },
+        git: { branch: 'feat/x', headSha: 'a', dirty: [], fingerprint: 'f', hasOrigin: true, originMainSha: 'm', mergedIntoOriginMain: world.merged, ahead: 0, latestTag: 'v8.1.0', imageChangedSinceTag: false, dockerChangedSinceTag: false, changedFiles: [], commitsSinceTag: [] },
         gh: { ok: true },
-        release: { exists: world.released, assets: [], createdAt: '', url: '' },
+        release: { exists: world.released, draft: true, assets: [], sums: null, createdAt: '', url: '' },
         npm: { version: '8.1.0' },
         image: { exists: true },
         runs: world.built
-            ? { macos: [{ databaseId: 1, status: 'completed', conclusion: 'success', headSha: 'm' }], linux: [{ databaseId: 2, status: 'completed', conclusion: 'success', headSha: 'm' }], image: [], npm: [], assets: [], verify: [] }
-            : { macos: [], linux: [], image: [], npm: [], assets: [], verify: [] }
+            ? { ci: [], packages: [{ databaseId: 1, status: 'completed', conclusion: 'success', headSha: 'm' }], image: [], npm: [], assets: [], verify: [] }
+            : { ci: [], packages: [], image: [], npm: [], assets: [], verify: [] }
     });
     const actions = {
         merge: jest.fn(async () => { world.merged = true; }),
@@ -28,7 +28,7 @@ function makeWorld() {
         makeCtx: (log) => ({ log }),
         actions,
         describe: id => [`do ${id}`],
-        getState: () => ({}),
+        getState: () => ({ preflight: { ok: true, fingerprint: 'f' } }),
         recheckTimes: 0
     });
     return { world, actions, runner };
@@ -151,7 +151,7 @@ describe('JobRunner', () => {
         actions.packages.mockImplementation(async () => { world.built = true; });
         runner.deps.collect = async () => {
             const facts = await original();
-            if (world.built && lag > 0) { lag -= 1; return { ...facts, runs: { macos: [], linux: [], image: [], npm: [], assets: [], verify: [] } }; }
+            if (world.built && lag > 0) { lag -= 1; return { ...facts, runs: { ci: [], packages: [], image: [], npm: [], assets: [], verify: [] } }; }
             return facts;
         };
         const done = finished(runner);

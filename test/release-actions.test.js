@@ -4,7 +4,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { ACTIONS, describeCommands, syncDocImageVersion } = require('../scripts/release/actions');
-const { expectedAssetNames } = require('../scripts/release/facts');
 
 let root;
 beforeEach(() => {
@@ -110,23 +109,6 @@ describe('merge action', () => {
 });
 
 describe('release / assets / npm', () => {
-    test('a failing build stops the other poller and the first failure is reported', async () => {
-        const polls = { 11: 0, 22: 0 };
-        const ctx = makeCtx({
-            read: (cmd, args) => {
-                if (args[1] === 'list') return { status: 0, stdout: JSON.stringify([{ databaseId: args.includes('offline-macos.yml') ? 11 : 22, createdAt: new Date(2000).toISOString() }]) };
-                const id = Number(args[2]);
-                polls[id] += 1;
-                if (id === 11) return { status: 0, stdout: JSON.stringify({ status: 'completed', conclusion: 'failure', url: 'u' }) };
-                return { status: 0, stdout: JSON.stringify({ status: 'in_progress' }) };
-            }
-        });
-        await expect(ACTIONS.packages(ctx, {}, facts())).rejects.toMatchObject({ code: 'RUN_FAILED' });
-        const after = polls[22];
-        await new Promise(resolve => setTimeout(resolve, 20));
-        expect(polls[22]).toBe(after);
-    });
-
     test('an aborted command is reported as cancelled, not as a failed command', async () => {
         const controller = new AbortController();
         const ctx = makeCtx({ status: 143 });
@@ -136,39 +118,14 @@ describe('release / assets / npm', () => {
     });
 
     test('release needs notes and passes them through a temp file that is removed afterwards', async () => {
-        await expect(ACTIONS.release(makeCtx(), { notes: ' ' }, facts())).rejects.toMatchObject({ code: 'NO_NOTES' });
+        const f = { ...facts(), runs: { packages: [{ databaseId: 1, status: 'completed', conclusion: 'success', headSha: 'm' }] } };
+        await expect(ACTIONS.release(makeCtx(), { notes: ' ' }, f)).rejects.toMatchObject({ code: 'NO_NOTES' });
+        await expect(ACTIONS.release(makeCtx(), { notes: 'x' }, facts())).rejects.toMatchObject({ code: 'NO_BUILD' });
         const ctx = makeCtx();
         let notesFile = '';
         ctx.run = jest.fn(async (cmd, args) => { notesFile = args[args.indexOf('--notes-file') + 1]; expect(fs.readFileSync(notesFile, 'utf-8')).toBe('hello\n'); return { status: 0 }; });
-        await ACTIONS.release(ctx, { notes: 'hello' }, facts());
+        await ACTIONS.release(ctx, { notes: 'hello' }, f);
         expect(fs.existsSync(notesFile)).toBe(false);
-    });
-
-    test('assets passes the successful main builds to release-offline and verifies exactly 9 assets', async () => {
-        const good = (id) => [{ databaseId: id, status: 'completed', conclusion: 'success', headSha: 'm' }];
-        const f = facts({ runs: { macos: good(11), linux: good(22) } });
-        const reads = [];
-        const ctx = makeCtx({
-            read: (cmd, args) => {
-                reads.push(args.join(' '));
-                if (args[0] === 'run' && args[1] === 'list') return { status: 0, stdout: JSON.stringify([{ databaseId: 77, createdAt: new Date(2000).toISOString() }]) };
-                if (args[0] === 'run' && args[1] === 'view') return { status: 0, stdout: JSON.stringify({ status: 'completed', conclusion: 'success', url: 'u' }) };
-                if (args[0] === 'release') return { status: 0, stdout: JSON.stringify({ assets: expectedAssetNames('8.1.0').map(name => ({ name })) }) };
-                return { status: 0, stdout: '' };
-            }
-        });
-        await ACTIONS.assets(ctx, {}, f);
-        expect(ctx.calls[0].args).toEqual(['workflow', 'run', 'release-offline.yml', '--ref', 'main', '-f', 'tag=v8.1.0', '-f', 'macosRunId=11', '-f', 'linuxRunId=22']);
-
-        const bad = makeCtx({
-            read: (cmd, args) => {
-                if (args[0] === 'run' && args[1] === 'list') return { status: 0, stdout: JSON.stringify([{ databaseId: 77, createdAt: new Date(2000).toISOString() }]) };
-                if (args[0] === 'run' && args[1] === 'view') return { status: 0, stdout: JSON.stringify({ status: 'completed', conclusion: 'success' }) };
-                return { status: 0, stdout: JSON.stringify({ assets: [{ name: 'SHA256SUMS' }] }) };
-            }
-        });
-        await expect(ACTIONS.assets(bad, {}, f)).rejects.toMatchObject({ code: 'ASSETS_MISMATCH' });
-        await expect(ACTIONS.assets(makeCtx(), {}, facts())).rejects.toMatchObject({ code: 'NO_BUILD' });
     });
 
     test('a failed workflow run is reported with its result', async () => {
@@ -243,5 +200,5 @@ describe('preflight action', () => {
 test('describeCommands shows the real commands for the confirmation dialog', () => {
     expect(describeCommands('merge', facts(), {})).toEqual(['git switch main', 'git pull --ff-only origin main', 'git merge --no-ff feat/x', 'git push origin main']);
     expect(describeCommands('merge', facts({ git: { branch: 'main' } }), {})).toEqual(['git push origin main']);
-    expect(describeCommands('release', facts(), {})[0]).toContain('gh release create v8.1.0');
+    expect(describeCommands('release', facts(), {})[0]).toContain('gh release create v8.1.0 --draft');
 });

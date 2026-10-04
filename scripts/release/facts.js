@@ -9,8 +9,8 @@ const crypto = require('crypto');
 const { parseReleaseVersion, compareReleaseVersions } = require('./versions');
 
 const WORKFLOWS = {
-    macos: 'offline-macos.yml',
-    linux: 'offline-linux.yml',
+    ci: 'ci.yml',
+    packages: 'build-packages.yml',
     image: 'image-publish.yml',
     npm: 'npm-publish.yml',
     assets: 'release-offline.yml',
@@ -46,15 +46,44 @@ function parsePorcelain(text) {
     });
 }
 
-function expectedAssetNames(version) {
-    const names = [];
-    for (const os of ['macos', 'linux']) {
-        for (const arch of ['arm64', 'x64']) {
-            names.push(`manyoyo-${version}-${os}-${arch}.run`, `manyoyo-${version}-${os}-${arch}-app.tar.gz`);
+const PLATFORMS = [['macos', 'arm64'], ['macos', 'x64'], ['linux', 'arm64'], ['linux', 'x64']];
+
+/**
+ * 资产是否齐全：SHA256SUMS + 4 个 -app.tar.gz + 每个平台“单个 .run 或从 001 连续的 .run.NNN 分卷”。
+ * 给了 SHA256SUMS 的内容（文件名列表）时，还要求清单与实际资产完全一致。
+ * @returns {{ok:boolean, missing:string[], extra:string[]}}
+ */
+function checkAssets(version, assetNames, sums = null) {
+    const have = new Set(assetNames);
+    const known = new Set(['SHA256SUMS']);
+    const missing = [];
+    if (!have.has('SHA256SUMS')) missing.push('SHA256SUMS');
+    for (const [os, arch] of PLATFORMS) {
+        const prefix = `manyoyo-${version}-${os}-${arch}`;
+        const app = `${prefix}-app.tar.gz`;
+        known.add(app);
+        if (!have.has(app)) missing.push(app);
+        if (have.has(`${prefix}.run`)) {
+            known.add(`${prefix}.run`);
+            continue;
         }
+        const volumes = assetNames.filter(name => name.startsWith(`${prefix}.run.`)).sort();
+        volumes.forEach(name => known.add(name));
+        const contiguous = volumes.length > 0 && volumes.every((name, index) => name === `${prefix}.run.${String(index + 1).padStart(3, '0')}`);
+        if (!contiguous) missing.push(volumes.length > 0 ? `${prefix}.run.001…（分卷不连续）` : `${prefix}.run`);
     }
-    names.push('SHA256SUMS');
-    return names.sort();
+    const extra = assetNames.filter(name => !known.has(name));
+    if (sums) {
+        const listed = new Set(sums);
+        for (const name of assetNames) if (name !== 'SHA256SUMS' && !listed.has(name)) extra.push(`${name}（不在 SHA256SUMS 里）`);
+        for (const name of listed) if (!have.has(name)) missing.push(`${name}（SHA256SUMS 里有但 Release 没有）`);
+    }
+    return { ok: missing.length === 0 && extra.length === 0, missing, extra };
+}
+
+/** SHA256SUMS 文本 → 文件名列表（sha256sum 格式：<哈希>  <文件名>，二进制模式带 *） */
+function parseSums(text) {
+    return String(text || '').split('\n').map(line => line.trim()).filter(Boolean).map(line => line.replace(/^[0-9a-fA-F]+\s+\*?/, ''));
 }
 
 async function latestRun(ctx, workflow, extra = []) {
@@ -79,12 +108,22 @@ async function imageExists(ctx, imageVersion) {
     }
 }
 
-// 当前代码树的指纹（HEAD + 未提交改动），预检结果只对同一份代码有效
-function treeFingerprint(read) {
+// 当前代码树的指纹（HEAD + 未提交改动 + 未跟踪文件的内容），预检结果只对同一份代码有效
+function treeFingerprint(read, repoRoot) {
     const headSha = out(read('git', ['rev-parse', 'HEAD']));
     const status = String(read('git', ['status', '--porcelain']).stdout || '');
     const diffText = String(read('git', ['diff', 'HEAD']).stdout || '');
-    return crypto.createHash('sha1').update(`${headSha}\n${status}\n${diffText}`).digest('hex');
+    const hash = crypto.createHash('sha1').update(`${headSha}\n${status}\n${diffText}`);
+    const untracked = String(read('git', ['ls-files', '-o', '--exclude-standard']).stdout || '').split('\n').filter(Boolean).sort();
+    for (const file of untracked) {
+        hash.update(`\n${file}\n`);
+        try {
+            hash.update(fs.readFileSync(path.join(repoRoot, file)));
+        } catch (error) {
+            hash.update('(unreadable)');
+        }
+    }
+    return hash.digest('hex');
 }
 
 /**
@@ -100,7 +139,7 @@ async function collectFacts(ctx) {
     const headSha = out(read('git', ['rev-parse', 'HEAD']));
     // 不能 trim：porcelain 每行以两位状态码开头，第一行的前导空格是有意义的
     const dirty = parsePorcelain(String(read('git', ['status', '--porcelain']).stdout || ''));
-    const fingerprint = treeFingerprint(read);
+    const fingerprint = treeFingerprint(read, repoRoot);
 
     const hasOrigin = out(read('git', ['remote'])).split('\n').includes('origin');
     const originMainSha = hasOrigin ? out(read('git', ['rev-parse', '--verify', '-q', 'origin/main'])) : '';
@@ -113,11 +152,16 @@ async function collectFacts(ctx) {
 
     // 最近一次发布以来改了什么（决定是否需要新镜像）
     let imageChangedSinceTag = false;
+    let dockerChangedSinceTag = false;
+    let imageVersionChanged = false;
+    let changedFiles = [];
     let commitsSinceTag = [];
     if (latestTag) {
-        const names = out(read('git', ['diff', '--name-only', `${latestTag}..HEAD`, '--', 'docker/'])).split('\n').filter(Boolean);
+        changedFiles = out(read('git', ['diff', '--name-only', `${latestTag}..HEAD`])).split('\n').filter(Boolean);
+        dockerChangedSinceTag = changedFiles.some(file => file.startsWith('docker/'));
         const oldPkg = parseJson(out(read('git', ['show', `${latestTag}:package.json`])), {});
-        imageChangedSinceTag = names.length > 0 || (oldPkg.imageVersion && oldPkg.imageVersion !== pkg.imageVersion);
+        imageVersionChanged = Boolean(oldPkg.imageVersion) && oldPkg.imageVersion !== pkg.imageVersion;
+        imageChangedSinceTag = dockerChangedSinceTag || imageVersionChanged;
         commitsSinceTag = out(read('git', ['log', '--format=%s', `${latestTag}..HEAD`])).split('\n').filter(Boolean);
     }
 
@@ -126,21 +170,21 @@ async function collectFacts(ctx) {
     const facts = {
         pkg: { version, imageVersion: pkg.imageVersion },
         tag,
-        git: { branch, headSha, dirty, fingerprint, hasOrigin, originMainSha, mergedIntoOriginMain, ahead, latestTag, imageChangedSinceTag, commitsSinceTag },
+        git: { branch, headSha, dirty, fingerprint, hasOrigin, originMainSha, mergedIntoOriginMain, ahead, latestTag, imageChangedSinceTag, dockerChangedSinceTag, imageVersionChanged, changedFiles, commitsSinceTag },
         gh: { ok: ghOk },
-        release: { exists: false, assets: [], createdAt: '', url: '' },
+        release: { exists: false, draft: false, assets: [], sums: null, createdAt: '', url: '' },
         npm: { version: null },
         image: { exists: null },
         runs: {}
     };
     if (!ghOk) return facts;
 
-    const [releaseRaw, npmRaw, imageOk, macos, linux, image, npmRuns, assets, verify] = await Promise.all([
-        slow('gh', ['release', 'view', tag, '--json', 'assets,createdAt,url']),
+    const [releaseRaw, npmRaw, imageOk, ci, packages, image, npmRuns, assets, verify] = await Promise.all([
+        slow('gh', ['release', 'view', tag, '--json', 'assets,createdAt,url,isDraft']),
         slow('npm', ['view', NPM_PACKAGE, 'version', '--prefer-online']),
         imageExists(ctx, pkg.imageVersion),
-        latestRun(ctx, WORKFLOWS.macos, ['-b', 'main']),
-        latestRun(ctx, WORKFLOWS.linux, ['-b', 'main']),
+        latestRun(ctx, WORKFLOWS.ci, ['-b', branch]),
+        latestRun(ctx, WORKFLOWS.packages, ['-b', 'main']),
         latestRun(ctx, WORKFLOWS.image, ['-b', 'main']),
         latestRun(ctx, WORKFLOWS.npm),
         latestRun(ctx, WORKFLOWS.assets, ['-b', 'main']),
@@ -148,12 +192,17 @@ async function collectFacts(ctx) {
     ]);
     const release = parseJson(out(releaseRaw), null);
     if (release) {
-        facts.release = { exists: true, assets: (release.assets || []).map(item => item.name).sort(), createdAt: release.createdAt || '', url: release.url || '' };
+        facts.release = { exists: true, draft: release.isDraft === true, assets: (release.assets || []).map(item => item.name).sort(), sums: null, createdAt: release.createdAt || '', url: release.url || '' };
+        // 结构齐全时再读 SHA256SUMS，核对清单与资产完全一致（草稿也能下载）
+        if (facts.release.assets.includes('SHA256SUMS') && checkAssets(version, facts.release.assets).ok) {
+            const sums = await slow('gh', ['release', 'download', tag, '-p', 'SHA256SUMS', '-O', '-']);
+            if (sums.status === 0) facts.release.sums = parseSums(sums.stdout);
+        }
     }
     facts.npm.version = out(npmRaw) || null;
     facts.image.exists = imageOk;
-    facts.runs = { macos, linux, image, npm: npmRuns, assets, verify };
+    facts.runs = { ci, packages, image, npm: npmRuns, assets, verify };
     return facts;
 }
 
-module.exports = { collectFacts, treeFingerprint, parsePorcelain, expectedAssetNames, WORKFLOWS, NPM_PACKAGE };
+module.exports = { collectFacts, treeFingerprint, parsePorcelain, checkAssets, parseSums, WORKFLOWS, NPM_PACKAGE };

@@ -10,9 +10,9 @@ const { parseArgs } = require('../scripts/release/index');
 function fakeFacts(over = {}) {
     return {
         pkg: { version: '8.2.0', imageVersion: '2.1.0-common' }, tag: 'v8.2.0',
-        git: { branch: 'feat/x', headSha: 'a', dirty: [{ code: 'M', path: 'lib/a.js' }], fingerprint: 'f', hasOrigin: true, originMainSha: 'm', mergedIntoOriginMain: false, ahead: 0, latestTag: 'v8.1.0', imageChangedSinceTag: false, commitsSinceTag: ['feat: 新增 A', '合并 feat/y：8.1.0', 'fix: 修 B'], ...(over.git || {}) },
-        gh: { ok: true }, release: { exists: false, assets: [], createdAt: '', url: '' }, npm: { version: '8.1.0' }, image: { exists: true },
-        runs: { macos: [], linux: [], image: [], npm: [], assets: [], verify: [] }
+        git: { branch: 'feat/x', headSha: 'a', dirty: [{ code: 'M', path: 'lib/a.js' }], fingerprint: 'f', hasOrigin: true, originMainSha: 'm', mergedIntoOriginMain: false, ahead: 0, latestTag: 'v8.1.0', imageChangedSinceTag: false, dockerChangedSinceTag: false, changedFiles: [], commitsSinceTag: ['feat: 新增 A', '合并 feat/y：8.1.0', 'fix: 修 B'], ...(over.git || {}) },
+        gh: { ok: true }, release: { exists: false, draft: false, assets: [], sums: null, createdAt: '', url: '' }, npm: { version: '8.1.0' }, image: { exists: true },
+        runs: { ci: [{ databaseId: 3, status: 'completed', conclusion: 'success', headSha: 'a' }], packages: [], image: [], npm: [], assets: [], verify: [] }
     };
 }
 
@@ -85,7 +85,7 @@ describe('release server security', () => {
 describe('release server API', () => {
     test('status lists the stages, next step, dirty files, rule message, version suggestions and a notes draft', async () => {
         const status = await (await call('GET', '/api/status')).json();
-        expect(status.stages.map(stage => stage.id)).toEqual(['preflight', 'version', 'commit', 'merge', 'image', 'packages', 'release', 'npm', 'assets', 'verify', 'manual']);
+        expect(status.stages.map(stage => stage.id)).toEqual(['preflight', 'version', 'commit', 'merge', 'image', 'packages', 'device', 'release', 'assets', 'publish', 'verify', 'npm', 'manual']);
         expect(status.nextStage).toBe('preflight');
         expect(status.dirty).toEqual([{ code: 'M', path: 'lib/a.js' }]);
         expect(status.ruleMessage).toBe('feat: 调整 lib');
@@ -132,10 +132,10 @@ describe('release server API', () => {
         expect((await (await call('POST', '/api/commit-message', { body: { mode: 'rule', files: [] } })).json()).reason).toContain('没有选择文件');
         expect((await (await call('POST', '/api/commit-message', { body: { mode: 'agent' } })).json()).message).toBe('feat: from agent');
         expect((await call('POST', '/api/checklist', { body: { id: 'nope', done: true } })).status).toBe(400);
-        await call('POST', '/api/checklist', { body: { id: 'mac-new-user', done: true } });
+        await call('POST', '/api/checklist', { body: { id: 'mac-upgrade', done: true } });
         const status = await (await call('GET', '/api/status')).json();
-        expect(status.checklist.find(item => item.id === 'mac-new-user').done).toBe(true);
-        expect(JSON.parse(fs.readFileSync(path.join(root, '.release', 'state.json'), 'utf-8')).checklists['v8.2.0']['mac-new-user']).toBe(true);
+        expect(status.checklist.find(item => item.id === 'mac-upgrade').done).toBe(true);
+        expect(JSON.parse(fs.readFileSync(path.join(root, '.release', 'state.json'), 'utf-8')).checklists['v8.2.0']['mac-upgrade']).toBe(true);
     });
 });
 
