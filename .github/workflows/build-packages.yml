@@ -122,10 +122,12 @@ jobs:
           if [ -z "$IMAGE_VERSION" ]; then
             IMAGE_VERSION="$(node -p "require('./package.json').imageVersion")"
           fi
-          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-          echo "imageVersion=$IMAGE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "podman=$(node -p "require('./scripts/offline/lock.js').resolveLock('${{ matrix.arch }}', 'macos').podman.version")" >> "$GITHUB_OUTPUT"
-          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$(node -p "require('./package.json').version")"
+            echo "imageVersion=$IMAGE_VERSION"
+            echo "podman=$(node -p "require('./scripts/offline/lock.js').resolveLock('${{ matrix.arch }}', 'macos').podman.version")"
+            echo "week=$(date -u +%G-W%V)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Install GNU tar (reproducible, normalized archives)
         run: |
