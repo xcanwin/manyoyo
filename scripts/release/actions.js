@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { parseReleaseVersion, compareReleaseVersions, normalizeCommitMessage } = require('./versions');
-const { WORKFLOWS, NPM_PACKAGE, checkAssets, parseSums, treeFingerprint } = require('./facts');
+const { WORKFLOWS, NPM_PACKAGE, NPM_VIEW_ARGS, checkAssets, parseSums, treeFingerprint } = require('./facts');
 const { deviceItems } = require('./stages');
 
 const POLL_MS = 15000;
@@ -303,7 +303,7 @@ const ACTIONS = {
             let consecutive = 0;
             for (;;) {
                 assertNotAborted(ctx);
-                const seen = String((await slow(ctx)('npm', ['view', NPM_PACKAGE, 'version', '--prefer-online'])).stdout || '').trim();
+                const seen = String((await slow(ctx)('npm', NPM_VIEW_ARGS)).stdout || '').trim();
                 consecutive = seen === V ? consecutive + 1 : 0;
                 if (consecutive >= NPM_CONSECUTIVE_OK) break;
                 if (seen === V) ctx.log(`npm 上已出现 ${V}（${consecutive}/${NPM_CONSECUTIVE_OK}），再确认一下…`);

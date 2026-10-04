@@ -17,6 +17,8 @@ const WORKFLOWS = {
     verify: 'release-verify.yml'
 };
 const NPM_PACKAGE = '@xcanwin/manyoyo';
+// 必须明确查官方源：维护者本机常配了国内镜像（如 mirrors.tencent.com），同步滞后几十分钟，会让“发布后可见”一直判不过
+const NPM_VIEW_ARGS = ['view', NPM_PACKAGE, 'version', '--prefer-online', '--registry', 'https://registry.npmjs.org/'];
 const IMAGE_REPO = 'xcanwin/manyoyo';
 
 // 网络类探测（gh / npm / ghcr）并行且不阻塞事件循环；没有注入 readAsync 时退回同步 read
@@ -185,7 +187,7 @@ async function collectFacts(ctx) {
 
     const [releaseRaw, npmRaw, imageOk, ci, packages, image, npmRuns, assets, verify] = await Promise.all([
         slow('gh', ['release', 'view', tag, '--json', 'assets,createdAt,url,isDraft']),
-        slow('npm', ['view', NPM_PACKAGE, 'version', '--prefer-online']),
+        slow('npm', NPM_VIEW_ARGS),
         imageExists(ctx, pkg.imageVersion),
         latestRun(ctx, WORKFLOWS.ci, ['-b', branch]),
         latestRun(ctx, WORKFLOWS.packages, ['-b', 'main']),
@@ -209,4 +211,4 @@ async function collectFacts(ctx) {
     return facts;
 }
 
-module.exports = { collectFacts, treeFingerprint, parsePorcelain, checkAssets, parseSums, WORKFLOWS, NPM_PACKAGE };
+module.exports = { NPM_VIEW_ARGS, collectFacts, treeFingerprint, parsePorcelain, checkAssets, parseSums, WORKFLOWS, NPM_PACKAGE };

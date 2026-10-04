@@ -206,6 +206,17 @@ describe('npm visibility is remembered (CDN flap)', () => {
     });
 });
 
+describe('npm visibility is read from the official registry', () => {
+    test('npm view always names registry.npmjs.org (a local mirror lags and would never show the new version)', async () => {
+        const { NPM_VIEW_ARGS } = require('../scripts/release/facts');
+        expect(NPM_VIEW_ARGS).toEqual(expect.arrayContaining(['--registry', 'https://registry.npmjs.org/']));
+        const seen = [];
+        const ctx = { repoRoot: os.tmpdir(), dryRun: false, read: (cmd, args) => { seen.push([cmd, args]); return cmd === 'gh' && args[1] === 'list' ? { status: 0, stdout: JSON.stringify([{ databaseId: 9 }]) } : cmd === 'gh' ? { status: 0, stdout: JSON.stringify({ status: 'completed', conclusion: 'success' }) } : { status: 0, stdout: '8.2.0' }; }, run: async () => ({ status: 0 }), log: () => {}, sleep: async () => {}, now: () => 1, state: { save: () => {}, load: () => ({}) } };
+        await ACTIONS.npm(ctx, {}, facts({ ...merged, ...built }));
+        expect(seen.filter(([cmd]) => cmd === 'npm').every(([, args]) => args.includes('https://registry.npmjs.org/'))).toBe(true);
+    });
+});
+
 describe('actions', () => {
     function ctxFor(options = {}) {
         const calls = [];
