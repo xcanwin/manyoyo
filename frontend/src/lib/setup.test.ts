@@ -1,4 +1,6 @@
-import { describe, expect, test } from "vitest"
+import { beforeEach, describe, expect, test, vi } from "vitest"
+
+vi.mock("@/lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/api")>()), apiPost: vi.fn() }))
 
 import {
   buildEnvBody,
@@ -13,6 +15,8 @@ import {
   type SetupForm,
   type SetupStatus,
 } from "@/lib/setup"
+import { apiPost } from "@/lib/api"
+import { formatTimestampCompact } from "@/lib/format"
 
 const claude: SetupAgent = {
   id: "claude",
@@ -174,5 +178,27 @@ describe("validatePassword / passwordStrength", () => {
     expect(passwordStrength("aaaaaaaa").level).toBe("weak")
     expect(passwordStrength("abc12345").level).toBe("medium")
     expect(passwordStrength("Abc123!xyz789").level).toBe("strong")
+  })
+})
+
+describe("createAgentSession", () => {
+  beforeEach(() => vi.mocked(apiPost).mockReset())
+
+  test("creates the first container in its own <work>/<timestamp> dir, host and container path identical (same as quick chat)", async () => {
+    vi.mocked(apiPost).mockImplementation(async (path: string, body?: unknown) => {
+      if (path === "/api/fs/directories/mkdir") return { path: (body as { path: string }).path }
+      return { name: "my-claude-x" }
+    })
+    const { createAgentSession } = await import("@/lib/setup")
+    expect(await createAgentSession("claude", "/Users/me/.manyoyo/work/")).toBe("my-claude-x")
+    const calls = vi.mocked(apiPost).mock.calls
+    const dir = (calls[0][1] as { path: string }).path
+    expect(dir).toMatch(/^\/Users\/me\/\.manyoyo\/work\/\d{8}-\d{6}$/)
+    expect(calls[1][0]).toBe("/api/sessions")
+    expect(calls[1][1]).toEqual({ run: "claude", createOptions: { hostPath: dir, containerPath: dir } })
+  })
+
+  test("formatTimestampCompact is yyyymmdd-hhmmss", () => {
+    expect(formatTimestampCompact(new Date(2026, 9, 5, 1, 2, 3))).toBe("20261005-010203")
   })
 })

@@ -39,3 +39,9 @@ export function formatBytes(
   } while (value >= 1024 && unitIndex < units.length - 1)
   return `${value.toFixed(1)} ${units[unitIndex]}`
 }
+
+/** 年月日-时分秒（20261005-010203）：快捷对话与向导首个容器的目录名，短时间内连建也不会撞车 */
+export function formatTimestampCompact(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+}

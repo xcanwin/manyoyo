@@ -215,7 +215,7 @@ export function SetupWizard({
         setStatus((prev) => (prev ? { ...prev, passwordSet: true } : prev))
       }
       await saveAgent(agent.id, buildEnvBody(agent, effectiveForm), effectiveForm.hostPath)
-      onFinished(await createAgentSession(agent.id))
+      onFinished(await createAgentSession(agent.id, effectiveForm.hostPath))
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败")
       setSaving(false)

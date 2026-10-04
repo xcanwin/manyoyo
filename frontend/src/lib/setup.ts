@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from "@/lib/api"
+import { formatTimestampCompact } from "@/lib/format"
 
 export type SetupEnvEntry = { name: string; description: string; secret: boolean }
 export type SetupAgent = {
@@ -156,7 +157,14 @@ export const testConnection = async (agent: string, env: Record<string, string>)
   (await apiPost("/api/setup/test-connection", { agent, env })) as unknown as ConnectionResult
 export const saveAgent = (agent: string, env: Record<string, string>, hostPath: string) =>
   apiPost("/api/setup/agent", { agent, env, hostPath })
-export const createAgentSession = async (run: string) => String((await apiPost("/api/sessions", { run })).name)
+// 与快捷对话一致：在工作目录下建一个带时间戳的子目录，宿主机路径和容器内路径相同。
+// 不传 containerPath 时服务端会退回它自己的启动目录（安装时通常是用户主目录），首个容器就会挂到 $HOME。
+export async function createAgentSession(run: string, workPath: string): Promise<string> {
+  const requestedDir = `${workPath.replace(/\/+$/, "")}/${formatTimestampCompact(new Date())}`
+  const made = await apiPost("/api/fs/directories/mkdir", { path: requestedDir })
+  const dir = typeof made.path === "string" && made.path ? made.path : requestedDir
+  return String((await apiPost("/api/sessions", { run, createOptions: { hostPath: dir, containerPath: dir } })).name)
+}
 
 export const PASSWORD_MIN_LENGTH = 8
 export const PASSWORD_MAX_LENGTH = 128

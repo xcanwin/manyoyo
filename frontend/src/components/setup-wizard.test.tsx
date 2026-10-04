@@ -247,7 +247,7 @@ describe("SetupWizard", () => {
       { ANTHROPIC_AUTH_TOKEN: "sk-secret", ANTHROPIC_MODEL: "claude-x" },
       "/Users/me/.manyoyo/work"
     )
-    expect(api.createAgentSession).toHaveBeenCalledWith("claude")
+    expect(api.createAgentSession).toHaveBeenCalledWith("claude", expect.any(String))
     expect(onFinished).toHaveBeenCalledWith("my-claude-0101-0000")
   })
 
