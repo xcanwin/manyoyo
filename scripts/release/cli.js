@@ -106,7 +106,8 @@ async function runStages(engine, args, io) {
         };
         engine.runner.on('event', onEvent);
     });
-    engine.runner.start({ stages, mode: 'auto', params, confirmed: true });
+    // 只指定一个阶段时按“单步”执行：即使状态已是 done 也照做（例如已发布后用 version 升下一个版本）；多个阶段按顺序执行并跳过已完成的
+    engine.runner.start({ stages, mode: stages.length === 1 ? 'single' : 'auto', params, confirmed: true });
     const onSigint = () => engine.runner.cancel();
     process.once('SIGINT', onSigint);
     const result = await done;

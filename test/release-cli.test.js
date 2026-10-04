@@ -153,3 +153,13 @@ describe('verify and npm run in parallel', () => {
         expect(order.slice(0, 2)).toEqual(['verify:start', 'npm:start']);
     });
 });
+
+describe('single stage runs even when already done', () => {
+    test('--run version after a release was published still bumps (single mode)', async () => {
+        const actions = { version: jest.fn(async () => {}) };
+        const engine = fakeEngine(actions, worldFacts({ release: { exists: true, draft: false, assets: ['SHA256SUMS', ...['macos', 'linux'].flatMap(o => ['arm64', 'x64'].flatMap(a => [`manyoyo-8.2.0-${o}-${a}.run`, `manyoyo-8.2.0-${o}-${a}-app.tar.gz`]))].sort(), sums: null, createdAt: '', url: '' } }));
+        const code = await runStages(engine, { run: 'version', version: '8.2.1' }, io());
+        expect(code).toBe(EXIT.OK);
+        expect(actions.version).toHaveBeenCalledWith(expect.anything(), { version: '8.2.1', imageVersion: undefined }, expect.anything());
+    });
+});
