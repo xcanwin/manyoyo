@@ -175,3 +175,26 @@ describe('an unfinished human-only stage is not a success', () => {
         expect(await runStages(engine, { run: 'device' }, io())).toBe(EXIT.OK);
     });
 });
+
+describe('human-only stages are not offered as --run', () => {
+    const published = () => worldFacts({ release: { exists: true, draft: false, assets: ['SHA256SUMS', ...['macos', 'linux'].flatMap(o => ['arm64', 'x64'].flatMap(a => [`manyoyo-8.2.0-${o}-${a}.run`, `manyoyo-8.2.0-${o}-${a}-app.tar.gz`]))].sort(), sums: null, createdAt: '2026-10-04T00:00:00Z', url: '' }, npm: { version: '8.2.0' }, runs: { ci: [], packages: [], image: [], npm: [], assets: [], verify: [{ databaseId: 9, status: 'completed', conclusion: 'success', headSha: 'm', createdAt: '2026-10-04T01:00:00Z' }] } });
+
+    test('--status with manual as the next step suggests --check, never --run manual', async () => {
+        const engine = fakeEngine({}, published());
+        const output = io();
+        await require('../scripts/release/cli').printStatus(engine, output, false);
+        const text = output.lines.out.join('\n');
+        expect(text).toContain('--check mac-upgrade');
+        expect(text).not.toContain('--run manual');
+    });
+
+    test('--run manual is refused before any job starts: exit 2, Chinese explanation, no internal error', async () => {
+        const engine = fakeEngine(require('../scripts/release/actions').ACTIONS, published());
+        const output = io();
+        expect(await runStages(engine, { run: 'manual' }, output)).toBe(EXIT.NEEDS_YES);
+        const text = output.lines.err.join('\n');
+        expect(text).toContain('没有可执行的动作');
+        expect(text).not.toContain('is not a function');
+        expect(engine.runner.current).toBeNull();
+    });
+});

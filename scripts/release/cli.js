@@ -8,7 +8,7 @@
 
 const fs = require('fs');
 const { collectFacts } = require('./facts');
-const { STAGES, computeStages, nextStage, isPublished } = require('./stages');
+const { STAGES, MANUAL_CHECKLIST, computeStages, nextStage, isPublished } = require('./stages');
 const { ACTIONS, describeCommands } = require('./actions');
 const { JobRunner } = require('./jobs');
 const { createBaseContext, createJobContext } = require('./context');
@@ -65,8 +65,20 @@ async function printStatus(engine, io, json) {
     for (const stage of stages) io.out(`${ICON[stage.state] || '?'} ${stage.title}（${stage.id}）：${stage.detail}`);
     const next = nextStage(stages);
     if (summary.published && !next) io.out(`\n${facts.tag} 已发布 ✓；下一次发布需要先升版本（--run version --version <x.y.z>）`);
-    else io.out(next ? `\n下一步：${next.title}（npm run release -- --run ${next.id}${next.external ? ' --yes' : ''}）` : '\n全部完成');
+    else if (!next) io.out('\n全部完成');
+    else if (next.id === 'manual' || next.id === 'device') {
+        // 只能由人确认的阶段：提示还没勾的检查项，而不是一条没有动作（manual）或只会列清单（device）的 --run
+        const left = pendingCheckIds(next, facts, engine.base.state.load());
+        io.out(`\n下一步：${next.title}（人工确认：npm run release -- --check ${left.join(' 或 ') || '<id>'}，需要终端；或在网页勾选）`);
+    } else io.out(`\n下一步：${next.title}（npm run release -- --run ${next.id}${next.external ? ' --yes' : ''}）`);
     return undefined;
+}
+
+// 还没确认的真机检查项 id
+function pendingCheckIds(stage, facts, state) {
+    if (stage.id === 'device') return (stage.items || []).filter(item => !item.done).map(item => item.id);
+    const checks = (state.checklists || {})[facts.tag] || {};
+    return MANUAL_CHECKLIST.filter(item => !checks[item.id]).map(item => item.id);
 }
 
 function buildParams(args) {
@@ -81,6 +93,12 @@ function buildParams(args) {
 /** @returns {Promise<number>} 退出码 */
 async function runStages(engine, args, io) {
     const stages = stageList(args.run);
+    // 没有动作的阶段（manual）在启动任务前就拒绝，不要等 JobRunner 抛内部错误
+    const noAction = stages.filter(id => typeof ACTIONS[id] !== 'function');
+    if (noAction.length > 0) {
+        io.err(`${noAction.join('、')} 没有可执行的动作：这类检查只能由人确认，在网页勾选，或在有终端的命令行运行 npm run release -- --check <id>`);
+        return EXIT.NEEDS_YES;
+    }
     if (stages.includes('release') && !args.notesFile) throw new Error('--run release 需要 --notes-file <路径>（先 --notes-draft > notes.md 生成并编辑）');
     const params = buildParams(args);
     await engine.base.readAsync('git', ['fetch', '--quiet', 'origin', '--tags']);
