@@ -39,7 +39,7 @@ manyoyo playwright logs     # browser service logs
 
 **headed**: starts a windowed browser service on the host and the agent in the container connects to it. The first run downloads the browser; missing system libraries are only printed as an install command (never a silent sudo). If the system forbids unprivileged user namespaces (e.g. Ubuntu 23.10+) it says so and starts without the sandbox. It needs a graphical session on the host (`DISPLAY`); on Linux without one use `vnc` instead.
 
-**chrome**: drives the Chrome you are using. Open `chrome://inspect/#remote-debugging` in Chrome and enable it; Chrome may show an "Allow remote debugging" prompt, click allow. No container rebuild is needed when Chrome restarts. ⚠️ The agent can act on every site you are logged in to; use only in trusted environments. Extensions are not supported.
+**chrome**: drives the Chrome you are using. Open `chrome://inspect/#remote-debugging` in Chrome and enable it; Chrome shows "Allow remote debugging?" on every new connection (each `playwright-cli open`, each `status`); click Allow, otherwise it times out (`up` waits up to 60 seconds). No container rebuild is needed when Chrome restarts. ⚠️ The agent can act on every site you are logged in to; use only in trusted environments. Extensions are not supported.
 
 **vnc**: builds a small image on top of the manyoyo image the first time and starts the container `my-playwright-vnc`; `up` prints a noVNC URL with the password (`http://127.0.0.1:6080/...`), and `status` shows it again. The noVNC and VNC ports are published on `127.0.0.1` only.
 

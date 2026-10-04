@@ -39,7 +39,7 @@ manyoyo playwright logs     # 浏览器服务日志
 
 **headed**：宿主机起一个有窗口的浏览器服务，容器里的 Agent 连上它。首次会下载浏览器；缺系统库时只打印安装命令（不会偷偷 sudo）。系统禁止非特权用户命名空间时（如 Ubuntu 23.10+）会提示并改为无沙箱启动。需要宿主机有图形界面（`DISPLAY`）；Linux 没有请改用 `vnc`。
 
-**chrome**：控制你正在用的 Chrome。先在 Chrome 打开 `chrome://inspect/#remote-debugging` 并开启；Chrome 可能弹出“允许远程调试”确认框，请点允许。Chrome 重启后无需重建容器。⚠️ 容器内 Agent 能操作你已登录的所有网站，只在可信环境使用；不支持扩展。
+**chrome**：控制你正在用的 Chrome。先在 Chrome 打开 `chrome://inspect/#remote-debugging` 并开启；Chrome 每次新连接（每次 `playwright-cli open`、每次 `status`）都会弹出“要允许远程调试吗？”，请点“允许”，不点会超时（`up` 最多等 60 秒）。Chrome 重启后无需重建容器。⚠️ 容器内 Agent 能操作你已登录的所有网站，只在可信环境使用；不支持扩展。
 
 **vnc**：首次构建一个基于 manyoyo 镜像的小镜像，起容器 `my-playwright-vnc`；`up` 输出带密码的 noVNC 地址（`http://127.0.0.1:6080/...`），密码可用 `status` 再次查看。noVNC 与 VNC 端口只发布到 `127.0.0.1`。
 
