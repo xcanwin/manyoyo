@@ -358,6 +358,22 @@ describe('命令行', () => {
         expect(plugin.readState().mode).toBe('default');
     });
 
+    test('up chrome：没开 Chrome / 只剩旧的调试端口记录时给出清晰的下一步，且不起中继', () => {
+        const none = cli(home, ['playwright', 'up', 'chrome']);
+        expect(none.status).toBe(1);
+        expect(none.stderr).toContain('没有找到开启了远程调试的 Chrome');
+        expect(none.stderr).toContain('chrome://inspect/#remote-debugging');
+
+        const stale = path.join(home, 'DevToolsActivePort');
+        fs.writeFileSync(stale, '9\n/devtools/browser/x\n');
+        fs.writeFileSync(path.join(home, '.manyoyo', 'manyoyo.json'), JSON.stringify({ plugins: { playwright: { devtoolsActivePortPath: stale } } }));
+        const old = cli(home, ['playwright', 'up', 'chrome']);
+        expect(old.status).toBe(1);
+        expect(old.stderr).toContain('Chrome 没有在运行');
+        expect(old.stderr).not.toContain('ready');
+        expect(fs.existsSync(path.join(home, '.manyoyo', 'plugin', 'playwright', 'run', 'relay.json'))).toBe(false);
+    });
+
     test('chrome 模式不支持扩展参数', () => {
         const result = cli(home, ['playwright', 'up', 'chrome', '--ext-path', os.tmpdir()]);
         expect(result.status).not.toBe(0);
