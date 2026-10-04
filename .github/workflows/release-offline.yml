@@ -1,9 +1,9 @@
-# 把 "Build Offline Packages"（macOS）与 "Build Linux Offline Packages" 各一次成功运行的产物，一次性挂到已有的 GitHub Release 上。
+# 把 "Build Packages" 一次成功运行的产物（macOS + Linux 共四个平台）一次性挂到已有的 GitHub Release 上。
 # 为什么单独成一个手动工作流：发布出去的离线包只能来自 CI 里构建并扫描过的产物，
-# 这里只做“下载两次运行的产物 → 核对校验和 → 合并出唯一的 SHA256SUMS → 上传”，不重新构建，也不创建 Release、不推送 tag
-# （创建 Release 会顺带创建 tag，而 v* tag 会触发 npm 发布）。
-# 前提：目标 tag 的 Release 已经存在（草稿或已发布均可，由 npm-publish.yml 或你手动创建）。
-# 上传后 Release 里正好 9 个资产：4 个 .run（安装包）、4 个 -app.tar.gz（manyoyo update 自动下载，不需要手动下）、1 个 SHA256SUMS（唯一校验清单）。
+# 这里只做“下载这次运行的产物 → 核对校验和 → 合并出唯一的 SHA256SUMS → 上传”，不重新构建，也不创建 / 公开 Release、不推送 tag
+# （创建或公开 Release 会产生 tag，而 v* tag / release published 会触发 npm 发布）。
+# 前提：目标 tag 的 Release 已经存在，通常是发布控制台建好的草稿（草稿不创建 tag、不会成为 latest）；资产齐全后再由控制台公开。
+# 上传后 Release 里的资产：4 个 .run（安装包；Intel 完整包超过 2 GiB 时分卷为 .run.001/.002…）、4 个 -app.tar.gz（manyoyo update 自动下载，不需要手动下）、1 个 SHA256SUMS（唯一校验清单，资产集合以它为准）。
 # manyoyo update 依赖这里上传的 -app.tar.gz 与 SHA256SUMS，两个名字不能改。
 
 name: Release Offline Packages
@@ -14,11 +14,8 @@ on:
       tag:
         description: 'Release 的 tag，如 v8.1.0（必须与离线包文件名里的版本一致）'
         required: true
-      macosRunId:
-        description: 'Build Offline Packages（macOS）那次成功运行的 ID'
-        required: true
-      linuxRunId:
-        description: 'Build Linux Offline Packages 那次成功运行的 ID'
+      runId:
+        description: 'Build Packages 那次成功运行的 ID'
         required: true
 
 jobs:
@@ -30,38 +27,36 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ inputs.tag }}
-      MACOS_RUN_ID: ${{ inputs.macosRunId }}
-      LINUX_RUN_ID: ${{ inputs.linuxRunId }}
+      RUN_ID: ${{ inputs.runId }}
     steps:
       - name: Validate inputs
         run: |
           printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "tag 格式错误，应为 vX.Y.Z: $TAG"; exit 1; }
-          printf '%s' "$MACOS_RUN_ID" | grep -Eq '^[0-9]+$' || { echo "macosRunId 必须是数字: $MACOS_RUN_ID"; exit 1; }
-          printf '%s' "$LINUX_RUN_ID" | grep -Eq '^[0-9]+$' || { echo "linuxRunId 必须是数字: $LINUX_RUN_ID"; exit 1; }
+          printf '%s' "$RUN_ID" | grep -Eq '^[0-9]+$' || { echo "runId 必须是数字: $RUN_ID"; exit 1; }
           echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
 
-      - name: Check both source runs are successful offline package builds of the right platform
+      - name: Check the source run is a successful Build Packages run
         run: |
-          check() {
-            gh run view "$2" --repo "$GITHUB_REPOSITORY" --json workflowName,conclusion,headSha \
-              --jq '[.workflowName, .conclusion, .headSha] | @tsv' | tee "run-$1.tsv"
-            cut -f1 "run-$1.tsv" | grep -qx "$3" || { echo "运行 $2 不是 $3（与 $1 不符）"; exit 1; }
-            cut -f2 "run-$1.tsv" | grep -qx 'success' || { echo "运行 $2 没有成功（含扫描），不能发布"; exit 1; }
-          }
-          check macos "$MACOS_RUN_ID" "Build Offline Packages"
-          check linux "$LINUX_RUN_ID" "Build Linux Offline Packages"
-          # 两个平台必须来自同一次提交，避免一个 Release 里混着不同代码构建的包
-          [ "$(cut -f3 run-macos.tsv)" = "$(cut -f3 run-linux.tsv)" ] || { echo "两次运行的提交不同（macOS: $(cut -f3 run-macos.tsv)，Linux: $(cut -f3 run-linux.tsv)），请用同一提交的构建"; exit 1; }
+          gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json workflowName,conclusion,headSha \
+            --jq '[.workflowName, .conclusion, .headSha] | @tsv' | tee run.tsv
+          cut -f1 run.tsv | grep -qx 'Build Packages' || { echo "运行 $RUN_ID 不是 Build Packages"; exit 1; }
+          cut -f2 run.tsv | grep -qx 'success' || { echo "运行 $RUN_ID 没有成功（含扫描），不能发布"; exit 1; }
+          echo "RUN_SHA=$(cut -f3 run.tsv)" >> "$GITHUB_ENV"
 
-      - name: Check the Release exists (this workflow never creates one)
+      - name: Check the Release exists and was pinned to the commit the packages were built from (this workflow never creates one)
         run: |
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-            || { echo "Release $TAG 不存在。请先创建（或等 npm-publish 创建），再运行本工作流。"; exit 1; }
+          # gh release view 能看到草稿（本工作流的 token 有 contents: write）；草稿阶段 targetCommitish 就是创建时钉的提交
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish \
+            --jq '[.isDraft, .targetCommitish] | @tsv' > release.tsv \
+            || { echo "Release $TAG 不存在。请先创建（草稿即可），再运行本工作流。"; exit 1; }
+          cat release.tsv
+          target="$(cut -f2 release.tsv)"
+          [ "$target" = "$RUN_SHA" ] || { echo "Release $TAG 钉的提交（$target）与安装包构建的提交（$RUN_SHA）不同，tag、npm 包与安装包会来自不同代码"; exit 1; }
 
       - name: Download the macOS offline package artifacts
         uses: actions/download-artifact@v8
         with:
-          run-id: ${{ inputs.macosRunId }}
+          run-id: ${{ inputs.runId }}
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           pattern: manyoyo-*-macos-*
@@ -71,7 +66,7 @@ jobs:
       - name: Download the Linux offline package artifacts
         uses: actions/download-artifact@v8
         with:
-          run-id: ${{ inputs.linuxRunId }}
+          run-id: ${{ inputs.runId }}
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           pattern: manyoyo-*-linux-*
@@ -97,6 +92,19 @@ jobs:
           ls manyoyo-*-lite.run >/dev/null 2>&1 && { echo "不应再有精简包 -lite.run"; exit 1; }
           # Release 里唯一的校验清单：把四份分平台清单合并（分平台清单只在 artifact 里，不上传）
           cat SHA256SUMS-macos-arm64 SHA256SUMS-macos-x64 SHA256SUMS-linux-arm64 SHA256SUMS-linux-x64 > SHA256SUMS
+
+      - name: SHA256SUMS must list exactly the files to upload
+        run: |
+          cd assets
+          expected="$(
+            for os in macos linux; do
+              for arch in arm64 x64; do
+                ls "manyoyo-${VERSION}-${os}-${arch}.run" "manyoyo-${VERSION}-${os}-${arch}".run.[0-9][0-9][0-9] "manyoyo-${VERSION}-${os}-${arch}-app.tar.gz" 2>/dev/null
+              done
+            done | sort
+          )"
+          listed="$(awk '{print $2}' SHA256SUMS | sed 's/^\*//' | sort)"
+          [ "$expected" = "$listed" ] || { echo "SHA256SUMS 与待上传文件不一致"; printf '待上传:\n%s\n清单:\n%s\n' "$expected" "$listed"; exit 1; }
 
       - name: Upload to the Release (explicit file list, no wildcards)
         run: |
