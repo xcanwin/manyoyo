@@ -53,7 +53,7 @@ manyoyo init all   # import the agent configs already on this machine
 manyoyo run -y c   # start Claude Code in YOLO mode inside the sandbox
 ```
 
-The default image `ghcr.io/xcanwin/manyoyo` is pulled automatically on first use; run `manyoyo build --iv 2.1.0-common` only if you need a custom image. More commands: [CLI reference](https://xcanwin.github.io/manyoyo/en/reference/cli-options).
+The default image `ghcr.io/xcanwin/manyoyo` is pulled automatically on first use; run `manyoyo build --iv 2.1.1-common` only if you need a custom image. More commands: [CLI reference](https://xcanwin.github.io/manyoyo/en/reference/cli-options).
 
 ## What it does
 

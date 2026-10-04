@@ -109,7 +109,7 @@ export OPENAI_BASE_URL="https://api.openai.com/v1"
 - **Agent says not logged in or authentication failed**: run `manyoyo config show -r <name>` to confirm `envFile` took effect, then `manyoyo run -r <name> -x 'env | grep -E "ANTHROPIC|OPENAI|GEMINI"'` to see whether the variables reached the container. After editing an env file, recreate the container with `manyoyo rm <container>`.
 - **Resume shows nothing**: sessions live in the container and cannot be resumed after `manyoyo rm`; also check you used the resume argument for that agent from the table above.
 - **Want another agent in the same container**: `manyoyo run -n <container> -x /bin/bash`, then run the full command from the table; simpler is one container per agent (for example `-n proj-claude`, `-n proj-codex`).
-- **Command not found**: `manyoyo run -x which claude` (or gemini / codex / opencode) to confirm the image has the agent; switch to `2.1.0-full` if needed.
+- **Command not found**: `manyoyo run -x which claude` (or gemini / codex / opencode) to confirm the image has the agent; switch to `2.1.1-full` if needed.
 
 ## Next Steps
 

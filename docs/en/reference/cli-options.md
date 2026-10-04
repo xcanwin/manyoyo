@@ -40,7 +40,7 @@ manyoyo
 | `ps` | List containers | `manyoyo ps` |
 | `images` | List images | `manyoyo images` |
 | `rm <name>` | Remove a container | `manyoyo rm my-0101-1200` |
-| `build` | Build the sandbox image | `manyoyo build --iv 2.1.0-common` |
+| `build` | Build the sandbox image | `manyoyo build --iv 2.1.1-common` |
 | `prune` | Remove dangling images | `manyoyo prune` |
 | `podman <args...>` | Run a command with the private Podman (args pass through verbatim; only after a full offline-package install) | `manyoyo podman ps -a` |
 
@@ -49,7 +49,7 @@ manyoyo
 | Command | Description | Example |
 | --- | --- | --- |
 | `serve [listen]` | Start the web service, default `127.0.0.1:3000` | `manyoyo serve 127.0.0.1:3000 -d` |
-| `playwright` | Manage the Playwright plugin service | `manyoyo playwright up mcp-host-headless` |
+| `playwright` | Manage the Playwright plugin service | `manyoyo playwright up headed` |
 
 ## Option ownership
 
@@ -65,7 +65,7 @@ These commands share the same core runtime options:
 | `--cp, --cont-path <path>` | Container working directory |
 | `-m, --cont-mode <mode>` | Container mode: `common`, `dind`, `sock` |
 | `--in, --image-name <name>` | Image name |
-| `--iv, --image-ver <version>` | Image version; must be `x.y.z-suffix`, for example `2.1.0-common` |
+| `--iv, --image-ver <version>` | Image version; must be `x.y.z-suffix`, for example `2.1.1-common` |
 | `-e, --env <env>` | Append environment variables, repeatable |
 | `--ef, --env-file <file>` | Append env files, absolute paths only |
 | `-v, --volume <volume>` | Append bind mounts, repeatable |
@@ -117,17 +117,15 @@ These commands share the same core runtime options:
 
 | Command | Purpose |
 | --- | --- |
-| `manyoyo playwright ls` | List available scenes |
-| `manyoyo playwright up [scene]` | Start a scene, default `mcp-host-headless` |
-| `manyoyo playwright down [scene]` | Stop a scene |
-| `manyoyo playwright status [scene]` | Show status |
-| `manyoyo playwright health [scene]` | Run health check |
-| `manyoyo playwright logs [scene]` | Show logs |
-| `manyoyo playwright mcp-add` | Print MCP integration commands; the first line marks them as container-side commands |
-| `manyoyo playwright cli-add` | Print host commands that install the playwright-cli skill; the first line marks them as host-side commands |
+| `manyoyo playwright` | List modes and show the current mode with a real probe (same as `status`) |
+| `manyoyo playwright up <headed\|chrome\|vnc>` | Switch browser mode; without arguments lists all modes and exits non-zero |
+| `manyoyo playwright down` | Stop the current mode and return to the default |
+| `manyoyo playwright status` | Current mode + real probe; non-zero exit when unusable |
+| `manyoyo playwright logs` | Show browser service logs |
+| `manyoyo playwright mcp-add` | Print the in-container MCP (stdio) registration commands |
 | `manyoyo playwright ext-download` | Download built-in extensions locally |
 
-Extra options for `playwright up`:
+Extra options for `playwright up` (headed and vnc only):
 
 | Option | Description |
 | --- | --- |

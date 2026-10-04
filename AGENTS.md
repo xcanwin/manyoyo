@@ -38,7 +38,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `lib/core/`：会话控制事件的创建/校验/投影与 `FileEventStore`（JSONL 追加日志 + 快照）；`app-error.js` 暂未接入 `sendJson`。
 - `lib/doctor.js`、`capacity.js`、`codex-output.js`、`agent-resume.js`：环境诊断、容量估算、Codex JSONL 解析、会话恢复参数推断。
 - `scripts/release/`：发布控制台（维护者工具，不进 npm 包）。`npm run release` 在 `127.0.0.1:3900` 启动网页（令牌 + Host/Origin 校验，只能选择固定阶段、不能提交任意命令）：状态完全由 git / GitHub / npm 的真实状态推出（`facts.js` → `stages.js`），可随时中断续跑；阶段执行在 `actions.js`，任务执行器 `jobs.js`（single / 逐步确认 step / 一次确认 auto），对外动作每次都要确认。页面源码在 `frontend/release.html` + `frontend/src/release/`，`npm run build:release` 构建成 `scripts/release/console.html`（已忽略，首次运行自动构建）。`--status` 只在终端看状态，`--dry-run` 对外动作只打印命令。
-- `lib/plugin/`：插件路由与 Playwright 插件（场景管理、MCP 集成、compose/Dockerfile 模板）。
+- `lib/plugin/`：Playwright 插件，容器内浏览器只有四种模式（默认容器内 Xvfb 有头 / `headed` / `chrome` / `vnc`），同一时间一个。宿主机 `~/.manyoyo/plugin/playwright/current/` 以**目录**只读挂进容器 `/run/manyoyo-playwright/`，`config.json` 一律原子替换，切模式后已运行容器自动跟随（不要改回单文件挂载）；`fingerprint.js` 是指纹唯一数据源，`docker/res/playwright/{browser.json,stealth.init.js}` 由 `scripts/gen-playwright-res.js` 生成并有单测校验；`playwright-relay.js`（chrome 中继，只放行带 token 的 upgrade）、`playwright-server.js`（宿主机/vnc 容器里的浏览器服务）、`playwright-probe.js`（真实探测）、`playwright-assets/`（vnc 镜像）；`buildContainerIntegration` 是 CLI run 与 Web 建会话共用的唯一入口，永远不能因 playwright 让 run 退出。
 - `lib/web/`：`serve` 网页服务；`server.js` 单文件 6000+ 行，靠 `Grep "^function <名>"` 定位，不要整文件读。
 - `frontend/`：默认 Web 前端（`/` 路由，登录页 `/auth/login`；React + shadcn/ui），独立 Vite + React + TS 项目，约 70 个源文件；组件地图见该目录 `AGENTS.md`。
 - `docker/`：多阶段 `manyoyo.Dockerfile`、构建缓存 `cache/`（Node.js、JDT LSP、gopls，2 天有效）、各 Agent 默认配置与 supervisor 模板 `res/`。

@@ -53,7 +53,7 @@ manyoyo init all   # 把本机已有的 Agent 配置搬进来
 manyoyo run -y c   # 在沙箱里以 YOLO 模式启动 Claude Code
 ```
 
-默认镜像 `ghcr.io/xcanwin/manyoyo` 首次使用时自动拉取；需要自定义镜像时再执行 `manyoyo build --iv 2.1.0-common`。更多命令见[命令速查](https://xcanwin.github.io/manyoyo/reference/cli-options)。
+默认镜像 `ghcr.io/xcanwin/manyoyo` 首次使用时自动拉取；需要自定义镜像时再执行 `manyoyo build --iv 2.1.1-common`。更多命令见[命令速查](https://xcanwin.github.io/manyoyo/reference/cli-options)。
 
 ## 它能做什么
 
