@@ -146,8 +146,8 @@ function createReleaseServer(options = {}) {
         if (req.method === 'POST' && pathname === '/api/checklist') {
             const body = await readBody(req);
             if (!checkKind(body.id)) throw new ReleaseError('BAD_REQUEST', '未知的检查项');
-            const tag = (cache.facts || await collect()).tag;
-            recordCheck(base.state, tag, body.id, body.done === true, '网页勾选');
+            const known = cache.facts || await collect();
+            recordCheck(base.state, known.tag, body.id, body.done === true, '网页勾选', known.git.originMainSha);
             return sendJson(res, 200, { ok: true });
         }
         if (req.method === 'POST' && pathname === '/api/quit') {

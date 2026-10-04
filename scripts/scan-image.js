@@ -31,8 +31,13 @@ function defaultSave(command, args, env) {
     return spawnSync(command, args, { stdio: 'inherit', env }).status;
 }
 
+// 子进程被信号杀掉（如 OOM）时 status 是 null，必须按失败处理，不能让 process.exit(null) 变成 0
+function exitCodeOf(status) {
+    return status === null || status === undefined ? 1 : status;
+}
+
 function defaultScan(args) {
-    return spawnSync(process.execPath, [SCANNER, ...args], { stdio: 'inherit' }).status;
+    return exitCodeOf(spawnSync(process.execPath, [SCANNER, ...args], { stdio: 'inherit' }).status);
 }
 
 /** @returns {Promise<number>} 扫描器退出码（0 通过，1 命中或有未扫描内容） */
@@ -60,7 +65,7 @@ async function main(argv) {
     }
 }
 
-module.exports = { parseArgs, scanImage, DEFAULT_ALLOWLIST };
+module.exports = { parseArgs, scanImage, exitCodeOf, DEFAULT_ALLOWLIST };
 
 if (require.main === module) {
     main(process.argv.slice(2)).then(code => process.exit(code));

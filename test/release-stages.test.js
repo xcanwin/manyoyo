@@ -42,7 +42,8 @@ describe('release stages', () => {
     test('version: an already released version asks for a bump; an unreleased bump is done', () => {
         expect(byId(computeStages(facts())).version.state).toBe('done');
         expect(byId(computeStages(facts({ pkg: { version: '8.1.0', imageVersion: 'x' } }))).version.state).toBe('todo');
-        expect(byId(computeStages(facts({ release: { exists: true, draft: true } }))).version.state).toBe('todo');
+        // 草稿存在时版本已定，不能再把“升版本”当成下一步
+        expect(byId(computeStages(facts({ release: { exists: true, draft: true } }))).version.state).toBe('done');
     });
 
     test('verify falls back to the latest successful run after the release was created when nothing was recorded', () => {

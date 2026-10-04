@@ -282,6 +282,14 @@ const ACTIONS = {
                     await ctx.sleep(3000);
                 }
             }
+            // 显式要求重新触发（--npm-dispatch）时，上一次已经失败的运行不算数：失败的发布需要重跑
+            if (run && params.dispatch === true) {
+                const state = parseJson(String((await slow(ctx)('gh', ['run', 'view', String(run.databaseId), '--json', 'status,conclusion'])).stdout || ''), null);
+                if (state && state.status === 'completed' && state.conclusion !== 'success') {
+                    ctx.log(`上一次 npm-publish #${run.databaseId} 结束为 ${state.conclusion}，重新触发`);
+                    run = null;
+                }
+            }
             if (!run) {
                 const manual = `gh workflow run ${WORKFLOWS.npm} --ref ${facts.tag} -f tag=${facts.tag}`;
                 if (params.dispatch !== true) throw new ReleaseError('RUN_NOT_FOUND', `没有找到 ${facts.tag} 的 npm-publish 运行（release: published 没有触发）。手动触发：${manual}，或加 --npm-dispatch 重跑本阶段`);
@@ -313,12 +321,12 @@ const ACTIONS = {
     }
 };
 
-/** 确认弹窗里展示的“将要执行的命令”，与实际执行保持一致（便于人工核对） */
 function packagesSha(facts) {
     const run = packagesRunFor(facts);
     return run ? run.headSha : '<安装包构建的提交>';
 }
 
+/** 确认弹窗里展示的“将要执行的命令”，与实际执行保持一致（便于人工核对） */
 function describeCommands(id, facts, params = {}) {
     const V = facts.pkg.version;
     const branch = facts.git.branch;

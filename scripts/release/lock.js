@@ -48,7 +48,11 @@ function acquireJobLock(repoRoot, label = 'release') {
                 busy.code = 'BUSY';
                 throw busy;
             }
-            try { fs.unlinkSync(file); } catch (unlinkError) { /* 竞争清理 */ }
+            // 清理陈旧锁前再读一次：别的进程可能刚接管并写入了新锁，不能误删
+            try {
+                const again = JSON.parse(fs.readFileSync(file, 'utf-8'));
+                if (again.pid === holder.pid) fs.unlinkSync(file);
+            } catch (unlinkError) { /* 竞争清理 */ }
         }
     }
     const busy = new Error('无法获得发布任务锁');

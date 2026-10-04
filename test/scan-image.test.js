@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { parseArgs, scanImage, DEFAULT_ALLOWLIST } = require('../scripts/scan-image');
+const { parseArgs, scanImage, exitCodeOf, DEFAULT_ALLOWLIST } = require('../scripts/scan-image');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
 
@@ -47,5 +47,11 @@ describe('scan-image (local pre-scan of a release image)', () => {
         await expect(scanImage({ ...base, save: (command, args) => { archive = args[args.indexOf('-o') + 1]; fs.writeFileSync(archive, 'partial'); return 125; }, scan: () => 0 }))
             .rejects.toThrow(/保存镜像失败/);
         expect(fs.existsSync(path.dirname(archive))).toBe(false);
+    });
+
+    test('a scanner killed by a signal (status null) counts as a failure, never as a pass', () => {
+        expect(exitCodeOf(null)).toBe(1);
+        expect(exitCodeOf(0)).toBe(0);
+        expect(exitCodeOf(1)).toBe(1);
     });
 });

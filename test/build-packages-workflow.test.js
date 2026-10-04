@@ -36,6 +36,8 @@ describe('build-packages workflow (macOS + Linux in one run)', () => {
 
     test('only image-archive pulls the image; the four platform jobs download the artifact instead', () => {
         expect(text.match(/docker pull/g) || []).toHaveLength(1);
+        // 归档管道必须 pipefail：保存失败时 gzip 仍会成功，会上传被截断的镜像归档
+        expect(text).toContain('set -o pipefail');
         expect(text.match(/docker save/g) || []).toHaveLength(1);
         for (const name of ['build-macos', 'build-linux']) {
             const job = jobBlock(name);

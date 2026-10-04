@@ -142,7 +142,7 @@ describe('device gate', () => {
         expect(hit(['scripts/offline/install.sh', 'lib/post-install.js'])).toEqual(['install']);
         expect(hit(['lib/runtime-heal.js'])).toEqual(['runtime']);
         expect(hit(['lib/web/server.js', 'frontend/src/app.tsx'])).toEqual(['web']);
-        expect(hit(['scripts/offline/build.js', 'scripts/offline/stage.js', 'scripts/offline/normalized-tar.js', '.github/workflows/build-packages.yml', 'frontend/src/release/release-app.tsx', 'frontend/release.html', 'docs/a.md', 'test/a.test.js'])).toEqual([]);
+        expect(hit(['scripts/offline/build.js', 'scripts/offline/stage.js', 'scripts/normalized-tar.js', '.github/workflows/build-packages.yml', 'frontend/src/release/release-app.tsx', 'frontend/release.html', 'docs/a.md', 'test/a.test.js'])).toEqual([]);
     });
 
     test('no rule hit means the device gate is done; hits block until ticked for this tag', () => {
@@ -152,14 +152,48 @@ describe('device gate', () => {
         s = byId(computeStages(hitFacts, pre));
         expect(s.device.state).toBe('todo');
         expect(s.release.state).toBe('blocked');
-        s = byId(computeStages(hitFacts, { ...pre, devices: { 'v8.2.0': { plugin: { done: true, by: 'u' } } } }));
+        s = byId(computeStages(hitFacts, { ...pre, devices: { 'v8.2.0': { plugin: { done: true, by: 'u', sha: 'mmm' } } } }));
         expect(s.device.state).toBe('todo');
-        s = byId(computeStages(hitFacts, { ...pre, devices: { 'v8.2.0': { plugin: { done: true }, web: { done: true } } } }));
+        s = byId(computeStages(hitFacts, { ...pre, devices: { 'v8.2.0': { plugin: { done: true, sha: 'mmm' }, web: { done: true, sha: 'mmm' } } } }));
         expect(s.device.state).toBe('done');
         expect(s.release.state).toBe('todo');
         // 别的版本勾选过的不算
-        s = byId(computeStages(hitFacts, { ...pre, devices: { 'v8.1.0': { plugin: { done: true }, web: { done: true } } } }));
+        s = byId(computeStages(hitFacts, { ...pre, devices: { 'v8.1.0': { plugin: { done: true, sha: 'mmm' }, web: { done: true, sha: 'mmm' } } } }));
         expect(s.device.state).toBe('todo');
+    });
+});
+
+describe('review findings', () => {
+    test('a draft in progress never makes "bump the version" the next step; after merge, preflight stays done', () => {
+        const drafting = computeStages(facts({ ...merged, ...built, release: { exists: true, draft: true, assets: [] } }), {});
+        expect(byId(drafting).version.state).toBe('done');
+        expect(byId(drafting).preflight.state).toBe('done');
+        expect(drafting.find(stage => stage.state === 'todo').id).toBe('assets');
+    });
+
+    test('a real-device tick is only valid for the main commit it was made on', () => {
+        const hitFacts = facts({ ...merged, ...built, git: { ...merged.git, changedFiles: ['lib/plugin/a.js'] } });
+        const ticked = { ...pre, devices: { 'v8.2.0': { plugin: { done: true, sha: 'mmm' } } } };
+        expect(byId(computeStages(hitFacts, ticked)).device.state).toBe('done');
+        const moved = facts({ ...merged, ...built, git: { ...merged.git, originMainSha: 'newer', changedFiles: ['lib/plugin/a.js'] } });
+        const stage = byId(computeStages(moved, ticked)).device;
+        expect(stage.state).toBe('todo');
+        expect(stage.detail).toContain('重新确认');
+        // 没有记录提交的旧格式勾选同样不算
+        expect(byId(computeStages(hitFacts, { ...pre, devices: { 'v8.2.0': { plugin: { done: true } } } })).device.state).toBe('todo');
+    });
+
+    test('--npm-dispatch re-runs a failed npm-publish instead of waiting on the dead run', async () => {
+        const reads = (cmd, args) => {
+            if (cmd === 'gh' && args[1] === 'list') return { status: 0, stdout: JSON.stringify([{ databaseId: 9, createdAt: new Date(0).toISOString() }]) };
+            if (cmd === 'gh' && args[1] === 'view') return { status: 0, stdout: JSON.stringify({ status: 'completed', conclusion: 'failure' }) };
+            return { status: 0, stdout: '' };
+        };
+        const calls = [];
+        let clock = 100000;
+        const ctx = { repoRoot: os.tmpdir(), dryRun: false, read: reads, run: async (cmd, args) => { calls.push(args); return { status: 0 }; }, log: () => {}, sleep: async ms => { clock += ms; }, now: () => clock, state: { save: () => {}, load: () => ({}) } };
+        await expect(ACTIONS.npm(ctx, { dispatch: true }, { ...facts({ ...merged, ...built }) })).rejects.toMatchObject({ code: 'RUN_NOT_FOUND' });
+        expect(calls[0]).toEqual(['workflow', 'run', 'npm-publish.yml', '--ref', 'v8.2.0', '-f', 'tag=v8.2.0']);
     });
 });
 

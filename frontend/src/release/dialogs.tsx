@@ -62,18 +62,20 @@ export function ConfirmDialog({
 export function RunAllDialog({
   stages,
   notesDraft,
+  needsNotes = true,
   onStart,
   onCancel,
 }: {
   stages: string[]
   notesDraft: string
+  needsNotes?: boolean
   onStart: (mode: "step" | "auto", notes: string) => void
   onCancel: () => void
 }) {
   const [mode, setMode] = React.useState<"step" | "auto">("step")
   const [phrase, setPhrase] = React.useState("")
   const [notes, setNotes] = React.useState(notesDraft)
-  const ready = notes.trim() !== "" && (mode === "step" || phrase.trim() === "publish")
+  const ready = (!needsNotes || notes.trim() !== "") && (mode === "step" || phrase.trim() === "publish")
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -81,10 +83,12 @@ export function RunAllDialog({
           <DialogTitle>一键发布</DialogTitle>
           <DialogDescription>将依次执行：{stages.join(" → ")}。已完成的阶段会自动跳过，出错立即停止。</DialogDescription>
         </DialogHeader>
-        <div className="space-y-1">
-          <p className="text-sm font-medium">Release 说明（发布前请看一遍，可直接改）</p>
-          <Textarea rows={8} value={notes} onChange={(event) => setNotes(event.target.value)} className="font-mono text-xs" />
-        </div>
+        {needsNotes && (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Release 说明（发布前请看一遍，可直接改）</p>
+            <Textarea rows={8} value={notes} onChange={(event) => setNotes(event.target.value)} className="font-mono text-xs" />
+          </div>
+        )}
         <Tabs value={mode} onValueChange={(value) => setMode(value as "step" | "auto")}>
           <TabsList>
             <TabsTrigger value="step">逐步确认</TabsTrigger>

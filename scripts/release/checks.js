@@ -15,14 +15,14 @@ function allCheckIds() {
     return [...DEVICE_RULES.map(rule => rule.id), ...MANUAL_CHECKLIST.map(item => item.id)];
 }
 
-/** 写入勾选；device 类记录谁在什么时候确认的（by），manual 类沿用布尔值 */
-function recordCheck(state, tag, id, done, by) {
+/** 写入勾选；device 类记录谁、在哪个 main 提交（sha）上确认的，manual 类沿用布尔值 */
+function recordCheck(state, tag, id, done, by, sha) {
     const kind = checkKind(id);
     if (!kind) throw new Error(`未知的检查项: ${id}`);
     const current = state.load();
     if (kind === 'device') {
         const all = current.devices || {};
-        const entry = done ? { done: true, by: by || '', at: new Date().toISOString() } : { done: false };
+        const entry = done ? { done: true, by: by || '', sha: sha || '', at: new Date().toISOString() } : { done: false };
         state.save({ devices: { ...all, [tag]: { ...(all[tag] || {}), [id]: entry } } });
     } else {
         const all = current.checklists || {};

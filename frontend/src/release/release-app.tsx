@@ -303,6 +303,7 @@ export function ReleaseApp() {
         <RunAllDialog
           stages={stages.filter((stage) => PUBLISH_STAGES.includes(stage.id) && stage.state !== "done").map((stage) => stage.title)}
           notesDraft={status.notesDraft}
+          needsNotes={stages.find((stage) => stage.id === "release")?.state !== "done"}
           onCancel={() => setDialog(null)}
           onStart={(mode, notes) => {
             setDialog(null)

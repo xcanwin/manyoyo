@@ -138,7 +138,7 @@ async function checkItem(engine, id, io, { isTTY, ask }) {
     const facts = await engine.collect();
     const answer = await ask(`确认你已在真机上完成「${id}」这一项检查？输入 yes 确认: `);
     if (String(answer).trim().toLowerCase() !== 'yes') throw new Error('未确认，没有勾选');
-    recordCheck(engine.base.state, facts.tag, id, true, '终端确认');
+    recordCheck(engine.base.state, facts.tag, id, true, '终端确认', facts.git.originMainSha);
     io.out(`已记录 ${facts.tag} 的 ${id}`);
 }
 

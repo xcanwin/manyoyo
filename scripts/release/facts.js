@@ -118,7 +118,11 @@ function treeFingerprint(read, repoRoot) {
     for (const file of untracked) {
         hash.update(`\n${file}\n`);
         try {
-            hash.update(fs.readFileSync(path.join(repoRoot, file)));
+            const full = path.join(repoRoot, file);
+            const stat = fs.statSync(full);
+            // 大文件（下载的产物、虚拟机磁盘等）只看大小与修改时间，别在每次刷新状态时整个读进内存
+            if (stat.size > 5 * 1024 * 1024) hash.update(`${stat.size}:${stat.mtimeMs}`);
+            else hash.update(fs.readFileSync(full));
         } catch (error) {
             hash.update('(unreadable)');
         }

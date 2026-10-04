@@ -54,6 +54,7 @@ jobs:
       - name: Pull and save the image for ${{ matrix.platform }}
         id: image
         run: |
+          set -o pipefail # 管道里前一个命令失败时 gzip 仍会成功，没有 pipefail 就会上传被截断的归档
           mkdir -p image
           docker pull --platform "${{ matrix.platform }}" "${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}"
           echo "id=$(docker image inspect -f '{{.Id}}' "${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}" | sed 's/^sha256://')" >> "$GITHUB_OUTPUT"

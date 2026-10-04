@@ -90,10 +90,12 @@ function computeStages(facts, state = {}) {
     const pre = state.preflight;
     const preflightOk = Boolean(pre && pre.ok && pre.fingerprint === git.fingerprint);
     const ciRun = git.dirty.length === 0 ? successfulRunFor(runs.ci, git.headSha) : null;
-    add('preflight', preflightOk ? 'done' : ciRun ? 'done' : 'todo',
-        preflightOk ? '当前代码已通过预检' : ciRun ? `CI 在当前提交上已通过（run #${ciRun.databaseId}）` : pre && pre.fingerprint === git.fingerprint ? (pre.ok ? '当前代码已通过预检' : '上次预检失败，修复后重跑') : '尚未对当前代码做预检（代码有变化会失效）');
+    // 已合并进 main 的提交在合并前就过了预检 / CI；合并提交本身（main 上不跑 ci.yml）不应把它翻回未完成
+    add('preflight', preflightOk || merged ? 'done' : ciRun ? 'done' : 'todo',
+        merged && !preflightOk && !ciRun ? '已合并进 main（合并前已通过预检 / CI）' : preflightOk ? '当前代码已通过预检' : ciRun ? `CI 在当前提交上已通过（run #${ciRun.databaseId}）` : pre && pre.fingerprint === git.fingerprint ? (pre.ok ? '当前代码已通过预检' : '上次预检失败，修复后重跑') : '尚未对当前代码做预检（代码有变化会失效）');
 
-    if (release.exists) add('version', 'todo', `v${V} 的 Release ${release.draft ? '草稿已创建' : '已公开但资产不全'}；发新版本需要先升版本号`);
+    // 草稿（或资产不全的公开 Release）存在时，版本就是这次要发的版本：不能再把“升版本”当成下一步，中途升版本会让 tag 与草稿对不上
+    if (release.exists) add('version', 'done', `v${V} 的 Release ${release.draft ? '草稿已创建' : '已公开但资产不全'}，版本已定`);
     else if (bumpPending(facts)) add('version', 'done', `v${V} 待发布（最近发布 ${git.latestTag || '无'}）`);
     else add('version', 'todo', `版本号 ${V} 未高于最近发布 ${git.latestTag}，需要升版本`);
 
@@ -121,10 +123,12 @@ function computeStages(facts, state = {}) {
 
     const items = deviceItems(facts);
     const devices = (state.devices || {})[facts.tag] || {};
-    const deviceLeft = items.filter(item => !(devices[item.id] && devices[item.id].done));
+    // 勾选只对确认时的 main 提交有效：之后又有新提交、安装包重建，就必须重新在真机上确认
+    const approved = item => Boolean(devices[item.id] && devices[item.id].done && devices[item.id].sha === git.originMainSha);
+    const deviceLeft = items.filter(item => !approved(item));
     if (items.length === 0) add('device', 'done', '本次改动不涉及真机敏感区域');
     else if (deviceLeft.length === 0) add('device', 'done', `${items.length} 项真机检查已全部确认`);
-    else add('device', 'todo', `还有 ${deviceLeft.length} 项真机检查待确认`, { items: items.map(item => ({ ...item, done: Boolean(devices[item.id] && devices[item.id].done), by: (devices[item.id] || {}).by || '' })) });
+    else add('device', 'todo', `还有 ${deviceLeft.length} 项真机检查待确认${deviceLeft.some(item => devices[item.id] && devices[item.id].done) ? '（有的确认过，但之后 main 的提交变了，需要对新构建重新确认）' : ''}`, { items: items.map(item => ({ ...item, done: approved(item), by: (devices[item.id] || {}).by || '' })) });
     if (items.length > 0 && result[result.length - 1].state === 'done') result[result.length - 1].items = items.map(item => ({ ...item, done: true, by: (devices[item.id] || {}).by || '' }));
 
     const deviceOk = deviceLeft.length === 0;
