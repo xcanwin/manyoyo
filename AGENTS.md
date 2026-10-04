@@ -38,7 +38,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `lib/core/`：会话控制事件的创建/校验/投影与 `FileEventStore`（JSONL 追加日志 + 快照）；`app-error.js` 暂未接入 `sendJson`。
 - `lib/doctor.js`、`capacity.js`、`codex-output.js`、`agent-resume.js`：环境诊断、容量估算、Codex JSONL 解析、会话恢复参数推断。
 - `scripts/release/`：发布控制台（维护者工具，不进 npm 包）。`npm run release` 在 `127.0.0.1:3900` 启动网页（令牌 + Host/Origin 校验，只能选择固定阶段、不能提交任意命令）：状态完全由 git / GitHub / npm 的真实状态推出（`facts.js` → `stages.js`），可随时中断续跑；阶段执行在 `actions.js`，任务执行器 `jobs.js`（single / 逐步确认 step / 一次确认 auto），对外动作每次都要确认。页面源码在 `frontend/release.html` + `frontend/src/release/`，`npm run build:release` 构建成 `scripts/release/console.html`（已忽略，首次运行自动构建）。`--status` 只在终端看状态，`--dry-run` 对外动作只打印命令。
-- `lib/plugin/`：Playwright 插件，容器内浏览器只有四种模式（默认容器内 Xvfb 有头 / `headed` / `chrome` / `vnc`），同一时间一个。宿主机 `~/.manyoyo/plugin/playwright/current/` 以**目录**只读挂进容器 `/run/manyoyo-playwright/`，`config.json` 一律原子替换，切模式后已运行容器自动跟随（不要改回单文件挂载）；`fingerprint.js` 是指纹唯一数据源，`docker/res/playwright/{browser.json,stealth.init.js}` 由 `scripts/gen-playwright-res.js` 生成并有单测校验；`playwright-relay.js`（chrome 中继，只放行带 token 的 upgrade）、`playwright-server.js`（宿主机/vnc 容器里的浏览器服务）、`playwright-probe.js`（真实探测）、`playwright-assets/`（vnc 镜像）；`buildContainerIntegration` 是 CLI run 与 Web 建会话共用的唯一入口，永远不能因 playwright 让 run 退出。
+- `lib/plugin/`：Playwright 插件，容器内浏览器只有四种模式（默认容器内 Xvfb 有头 / `headed` / `chrome` / `vnc`），同一时间一个。宿主机 `~/.manyoyo/plugin/playwright/current/` 以**目录**只读挂进容器 `/run/manyoyo-playwright/`，`config.json` 一律原子替换，切模式后已运行容器自动跟随（不要改回单文件挂载）；`fingerprint.js` 是指纹唯一数据源，`docker/res/playwright/{browser.json,stealth.init.js}` 由 `scripts/gen-playwright-res.js` 生成并有单测校验；`playwright-relay.js`（chrome 中继，只放行带 token 的 upgrade）、`playwright-server.js`（宿主机/vnc 容器里的浏览器服务）、`playwright-probe.js`（真实探测）、`playwright-assets/`（vnc 镜像）；`buildContainerIntegration` 是 CLI run 与 Web 建会话共用的唯一入口，永远不能因 playwright 让 run 退出。Playwright 1.64 起浏览器服务只绑 loopback 时会校验 Host（非 localhost/127.0.0.1 一律 403），所以 headed 在所有平台监听 0.0.0.0 + token；rootless 运行时的发布端口在容器没起来时 TCP 也能连上，就绪/存活判断不能只看端口。
 - `lib/web/`：`serve` 网页服务；`server.js` 单文件 6000+ 行，靠 `Grep "^function <名>"` 定位，不要整文件读。
 - `frontend/`：默认 Web 前端（`/` 路由，登录页 `/auth/login`；React + shadcn/ui），独立 Vite + React + TS 项目，约 70 个源文件；组件地图见该目录 `AGENTS.md`。
 - `docker/`：多阶段 `manyoyo.Dockerfile`、构建缓存 `cache/`（Node.js、JDT LSP、gopls，2 天有效）、各 Agent 默认配置与 supervisor 模板 `res/`。
@@ -178,6 +178,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 清理镜像不要用 `rmi --force`：Podman 会连带删除正在使用该镜像的容器。安装器遇到已存在的私有 machine 不 `rm` 也不 `init`；`update` / `build` / 安装 / 卸载（`--yes`）都不得删除用户的旧容器。
 - 发布产物（npm 包、离线包、镜像）只在 CI 构建并经 `scripts/scan-release-artifacts.js` 扫描：解不开/解包不完整的文件按“未扫描”失败，`--exclude` 必须 `^` 锚定，允许列表按具体文件放行（镜像里曾扫出 SSH 主机私钥）。
 - 含凭据的配置写入统一走 `lib/secure-file.js`（0600、临时文件 + rename）；`manyoyo.json` 的任何新写入点都不要直接 `writeFileSync`。
+- 镜像内容变化（新增系统包等）后，先检查 `scan-allowlist-image.json` 是否需要放行新的误报，再看产物体积：macOS Intel 完整包超过 2 GiB 会被分卷成 `.run.001/.002`，Release 资产数随之变化。
 - 改了代码就要重新触发 `offline-macos.yml` / `offline-linux.yml` 并在干净用户下重测；镜像（`ghcr.io/xcanwin/manyoyo:<imageVersion>`）只有 Dockerfile 或 `docker/` 变化才需要重发，且要先于离线包。
 - 发版顺序（维护者）：本机装好 shellcheck 跑 `npm test`（CI 的 ubuntu 自带，本地没有会静默跳过）→ 合并 main → （Dockerfile/`docker/` 有变先 `image-publish.yml`）触发 `offline-macos.yml` 与 `offline-linux.yml` → `gh release create <tag> --target main --notes-file …`（说明以 `scripts/release-notes-template.md` 开头；会触发 npm 发布，发布前测试失败要先删 Release 与 tag 再来）→ `release-offline.yml`（`macosRunId` + `linuxRunId`，一次上传两个平台）→ `release-verify.yml`（`tag=<tag>`，游客身份在 Linux x64/arm64 与 macOS arm64/Intel 的 runner 上验证安装、`update`、卸载；macOS 不启动虚拟机）。macOS 真实虚拟机启动、浏览器向导、Agent 对话只能在真机偶尔抽查。
 
@@ -186,6 +187,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 全新检出先 `npm run build:web`（生成 `lib/web/index.html`）再 `npm test`，否则 Web 页面用例失败；CI 的 `npm-publish.yml` 已先构建。
 - 用脚本/工具整文件重写 `.sh` 会丢可执行位：提交前看 `git diff --cached --summary`，不应出现 `mode change`。
 - 文档：frontmatter 的 `description` 含英文冒号加空格必须加引号，正文里裸 `<name>` 会被当 Vue 标签，须放进反引号；否则 `docs:build` 报错。移动页面先登记 `redirects.json`，再跑 `npm run docs:check`。
+- 测试隔离：Jest 里改 `process.env.HOME` 不影响 `os.homedir()`；会写 `~/.manyoyo` 的代码路径（含插件状态、`web-server-*.test.js`）必须显式注入临时 `homeDir`，否则会污染开发者真实目录。`manyoyo build` 会把 `imageVersion` 写回真实 `~/.manyoyo/manyoyo.json`，本地验证后记得还原。
 - 测试里起本进程的 HTTP 替身时，被测子进程必须异步 `spawn`；`spawnSync` 会卡住替身，表现为无输出超时。兼容性回归用仓库内 fixture（`test/fixtures/`），不要依赖 git tag（CI 浅克隆拿不到）。
 - 改 workflow 后先用 `python3 -c "import yaml; yaml.safe_load(open('<文件>'))"` 校验语法；`set -e` 下 `! cmd` 不会失败，检查“不存在”要写 `if cmd; then exit 1; fi`。
 - 开发容器若 PID 1 是 `tail -f /dev/null`，孤儿进程不会被回收，僵尸耗尽 cgroup 的 pids 上限后测试随机报“无法创建线程”/`spawn EAGAIN`；这时用 `docker run --rm -v "$PWD:$PWD" -w "$PWD" node:22-bookworm bash -lc '<命令>'` 在干净容器里验证，并让维护者重启容器。不要用 `pkill -f` / `pgrep -f` 匹配带自己命令行的模式，会杀掉自己的 shell。
