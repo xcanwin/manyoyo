@@ -8,7 +8,7 @@ const { WebSocket, WebSocketServer } = require('ws');
 const fingerprint = require('../lib/plugin/fingerprint');
 const extensions = require('../lib/plugin/playwright-extensions');
 const { createRelay } = require('../lib/plugin/playwright-relay');
-const { PlaywrightPlugin, appendNoProxy } = require('../lib/plugin/playwright');
+const { PlaywrightPlugin, appendNoProxy, headedListenHost } = require('../lib/plugin/playwright');
 const { buildContainerIntegration, mergeIntegration } = require('../lib/plugin');
 const { renderDefaultFiles } = require('../scripts/gen-playwright-res');
 const pkg = require('../package.json');
@@ -108,6 +108,16 @@ describe('指纹单一数据源', () => {
         } finally {
             fs.rmSync(home, { recursive: true, force: true });
         }
+    });
+});
+
+describe('headed 监听地址', () => {
+    test('不论平台都监听 0.0.0.0：playwright 只绑 loopback 时会因 Host 头不是 localhost 回 403（macOS 容器连不上）', () => {
+        expect(headedListenHost()).toBe('0.0.0.0');
+        const source = fs.readFileSync(path.join(ROOT, 'lib', 'plugin', 'playwright.js'), 'utf8');
+        const headed = source.slice(source.indexOf('async startHeaded'), source.indexOf('async startChrome'));
+        expect(headed).toContain('host: headedListenHost()');
+        expect(headed).not.toContain('defaultListenHost()');
     });
 });
 

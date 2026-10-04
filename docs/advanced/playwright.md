@@ -70,6 +70,6 @@ manyoyo playwright logs     # 浏览器服务日志
 | `devtoolsActivePortPath` | 自动探测 | chrome 模式的 `DevToolsActivePort` 文件 |
 | `extensionProdversion` | `132.0.0.0` | `ext-download` 的 Chrome 版本号 |
 
-Linux 上 headed / chrome 的服务监听 `0.0.0.0`（容器才连得到），仅靠 32 字节随机 token 保护，建议用防火墙限制来源；macOS 只监听 `127.0.0.1`。
+Linux 上 headed / chrome 的服务监听 `0.0.0.0`（容器才连得到），仅靠 32 字节随机 token 保护，建议用防火墙限制来源；macOS 上 chrome 与 vnc 只监听 `127.0.0.1`，headed 同样监听 `0.0.0.0`（playwright 只绑 loopback 时会拒绝容器的 Host 头）。
 
 命令速查见 [命令速查](../reference/cli-options.md)，配置见[配置系统](../configuration/README.md)。

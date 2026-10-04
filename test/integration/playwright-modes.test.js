@@ -213,6 +213,19 @@ maybeHeaded('Playwright headed 模式', () => {
         }
     });
 
+    test('容器用 host.containers.internal 作 Host 头也能握手（playwright 只绑 loopback 时会 403）', async () => {
+        expect((await env.cli(home, ['playwright', 'up', 'headed'], { timeout: 300000 })).status).toBe(0);
+        const token = fs.readFileSync(path.join(home, '.manyoyo', 'plugin', 'playwright', 'run', 'token'), 'utf8').trim();
+        const { WebSocket } = require('ws');
+        const status = await new Promise(resolve => {
+            const socket = new WebSocket(`ws://127.0.0.1:${port}/${token}`, { headers: { Host: `${env.hostAlias(runtime)}:${port}` } });
+            socket.once('open', () => { socket.close(); resolve(101); });
+            socket.once('unexpected-response', (req, res) => resolve(res.statusCode));
+            socket.once('error', () => resolve(0));
+        });
+        expect(status).toBe(101);
+    });
+
     test('服务被 kill -9：新建容器正常，提示已回退，容器用本地浏览器', async () => {
         expect((await env.cli(home, ['playwright', 'up', 'headed'], { timeout: 300000 })).status).toBe(0);
         const state = readState(home);

@@ -70,6 +70,6 @@ manyoyo playwright logs     # browser service logs
 | `devtoolsActivePortPath` | auto-detect | `DevToolsActivePort` file for chrome mode |
 | `extensionProdversion` | `132.0.0.0` | Chrome version used by `ext-download` |
 
-On Linux, headed / chrome listen on `0.0.0.0` (the only way containers can reach them), protected only by a 32-byte random token; restrict the source with a firewall. On macOS they listen on `127.0.0.1` only.
+On Linux, headed / chrome listen on `0.0.0.0` (the only way containers can reach them), protected only by a 32-byte random token; restrict the source with a firewall. On macOS chrome and vnc listen on `127.0.0.1` only; headed also listens on `0.0.0.0` (Playwright rejects the container Host header when bound to loopback only).
 
 See [CLI Options](../reference/cli-options.md) and the [configuration system](../configuration/README.md).
