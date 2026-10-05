@@ -7,7 +7,7 @@ const fs = require('fs');
 const http = require('http');
 const net = require('net');
 const path = require('path');
-const { chromium } = require('playwright-core');
+const { chromium } = require('patchright-core');
 const { startFixture } = require('./helpers/fingerprint-fixture');
 const env = require('./helpers/playwright-env');
 const { PlaywrightPlugin } = require('../../lib/plugin/playwright');
@@ -243,10 +243,10 @@ maybeHeaded('Playwright headed 模式', () => {
         expect((await env.openAndSnapshot(runtime, name, hostUrl())).text).toContain(fixture.secret);
     });
 
-    test('chrome（模拟）：中继转发到本机 chromium；它重启（端口变化）后容器不重建也能继续用；无 token 被拒', async () => {
+    test('chrome（模拟）：中继转发到本机浏览器；它重启（端口变化）后容器不重建也能继续用；无 token 被拒', async () => {
         const userDataDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'manyoyo-chrome-'));
         const launch = () => chromium.launchPersistentContext(userDataDir, {
-            channel: 'chromium',
+            ...env.simulatedUserChromeOptions(),
             headless: false,
             chromiumSandbox: false,
             args: ['--remote-debugging-port=0']

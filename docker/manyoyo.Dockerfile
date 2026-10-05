@@ -230,18 +230,47 @@ RUN <<EOX
         cp /tmp/docker-res/opencode/opencode.json ~/.config/opencode/opencode.json
     ;; esac
 
-    # 安装 Playwright CLI skills 与 chromium 浏览器
+    # 安装 Playwright CLI skills、patchright-core 与 Google Chrome
     PLAYWRIGHT_CLI_INSTALL_DIR=/tmp/playwright-cli-install
     mkdir -p "$PLAYWRIGHT_CLI_INSTALL_DIR/.playwright"
     cd "$PLAYWRIGHT_CLI_INSTALL_DIR"
-    PLAYWRIGHT_CLI_VERSION=$(node -p "const pkg = require('/tmp/manyoyo-package.json'); const value = String(pkg.playwrightCliVersion || '').trim(); if (!value) { throw new Error('package.json.playwrightCliVersion is required'); } value")
+    pkg_field() { node -p "const pkg = require('/tmp/manyoyo-package.json'); const value = String(pkg.$1 || '').trim(); if (!value) { throw new Error('package.json.$1 is required'); } value"; }
+    PLAYWRIGHT_CLI_VERSION=$(pkg_field playwrightCliVersion)
+    PATCHRIGHT_CORE_VERSION=$(pkg_field patchrightCoreVersion)
+    PATCHRIGHT_CORE_INTEGRITY=$(pkg_field patchrightCoreIntegrity)
     npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"
-    # 浏览器与系统依赖都用 @playwright/cli 自带的 playwright-core 安装；
+    # 把 @playwright/cli 自带的 playwright-core 换成 patchright-core（开源补丁版，可从源码逐字节复现）：
+    # 官方版会在页面与 Worker 里启用 CDP Runtime 域，被检测站点识别；patchright 去掉了这一痕迹。
+    # 两者必须同 minor（容器内 client 与宿主机 launchServer 要求 minor 完全一致），并以 package.json 里的 integrity 校验，不一致就中止构建
+    CLI_DIR="$(npm root -g)/@playwright/cli"
+    CLI_CORE_VERSION=$(node -p "require('$CLI_DIR/node_modules/playwright-core/package.json').version")
+    [ "${CLI_CORE_VERSION%.*}" = "${PATCHRIGHT_CORE_VERSION%.*}" ] || { echo "playwright-core ${CLI_CORE_VERSION} 与 patchright-core ${PATCHRIGHT_CORE_VERSION} minor 不一致" >&2; exit 1; }
+    npm pack "patchright-core@${PATCHRIGHT_CORE_VERSION}" --silent >/dev/null
+    PATCHRIGHT_TARBALL="patchright-core-${PATCHRIGHT_CORE_VERSION}.tgz"
+    [ "sha512-$(openssl dgst -sha512 -binary "$PATCHRIGHT_TARBALL" | openssl base64 -A)" = "$PATCHRIGHT_CORE_INTEGRITY" ] || { echo "patchright-core 完整性校验失败" >&2; exit 1; }
+    for core in $(find "$CLI_DIR" -type d -name playwright-core -path '*/node_modules/playwright-core'); do
+        rm -rf "$core"
+        mkdir -p "$core"
+        tar -xzf "$PATCHRIGHT_TARBALL" -C "$core" --strip-components=1
+        # patchright 的客户端默认在隔离世界执行 evaluate（页面读不到 Agent 的变量，Agent 也读不到页面自己定义的全局变量），
+        # 对 Agent 毫无用处；把客户端 evaluate / $eval 等 12 处默认值改回主世界（与官方 Playwright 行为一致）。
+        # 在 integrity 校验之后做，次数对不上就中止（升级 patchright 时必须人工复核）；实测不影响 dabi / rebrowser 等检测
+        ISOLATED_DEFAULTS=12
+        [ "$(grep -o 'isolatedContext = true' "$core/lib/coreBundle.js" | wc -l)" = "$ISOLATED_DEFAULTS" ] || { echo "patchright-core 里 isolatedContext 默认值数量不是 ${ISOLATED_DEFAULTS}，请人工复核" >&2; exit 1; }
+        sed -i 's/isolatedContext = true/isolatedContext = false/g' "$core/lib/coreBundle.js"
+    done
     # 默认在 Xvfb 虚拟屏（配轻量窗口管理器）里跑有头浏览器，所以装 xvfb、fluxbox 与常见字体；x11vnc / noVNC 供 playwright vnc 模式使用
-    PLAYWRIGHT_CORE_CLI="$(npm root -g)/@playwright/cli/node_modules/playwright-core/cli.js"
-    node "$PLAYWRIGHT_CORE_CLI" install-deps chromium
-    apt-get install -y --no-install-recommends xvfb fluxbox x11vnc novnc websockify fonts-noto-cjk fonts-noto-color-emoji fonts-liberation
-    node "$PLAYWRIGHT_CORE_CLI" install --no-shell chromium
+    apt-get update
+    apt-get install -y --no-install-recommends xvfb fluxbox x11vnc novnc websockify fonts-noto-cjk fonts-noto-color-emoji fonts-liberation gpg
+    # Google Chrome stable：官方 apt 源（amd64 / arm64 都有），固定签名密钥指纹，apt 再校验 Release 签名
+    curl -fsSL https://dl.google.com/linux/linux_signing_key.pub -o /tmp/google-linux-signing-key.pub
+    [ "$(gpg --show-keys --with-colons /tmp/google-linux-signing-key.pub | awk -F: '/^fpr/{print $10; exit}')" = "EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796" ] || { echo "Google 签名密钥指纹不符" >&2; exit 1; }
+    gpg --dearmor < /tmp/google-linux-signing-key.pub > /usr/share/keyrings/google-chrome.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+    apt-get update
+    apt-get install -y --no-install-recommends google-chrome-stable
+    rm -f /etc/apt/sources.list.d/google-chrome.list /etc/cron.daily/google-chrome
+    google-chrome --version
     playwright-cli install --skills
     PLAYWRIGHT_CLI_SKILL_SOURCE="$PLAYWRIGHT_CLI_INSTALL_DIR/.claude/skills/playwright-cli"
     for target in ~/.claude/skills/playwright-cli ~/.codex/skills/playwright-cli ~/.gemini/skills/playwright-cli; do
@@ -261,8 +290,12 @@ EOX
 # Playwright 默认配置（挂载宿主机目录时会被覆盖，路径固定）与按需启动 Xvfb 的 playwright-cli 包装
 COPY ./docker/res/playwright/browser.json /run/manyoyo-playwright/config.json
 COPY ./docker/res/playwright/stealth.init.js /run/manyoyo-playwright/stealth.init.js
+COPY ./docker/res/playwright/env /run/manyoyo-playwright/env
 COPY --chmod=755 ./docker/res/playwright/playwright-cli.sh /usr/local/sbin/playwright-cli
 RUN ln -s playwright-cli /usr/local/sbin/playwright-mcp
+# Chrome 154 起，不安全页面（http://host.containers.internal 这类宿主机别名）不能向 local 地址空间发请求（含同源 fetch），
+# 会让 Agent 测试宿主机上的本地网页时 fetch 失败（旧的 Chromium 没有这个限制）；这条企业策略关闭该检查，只在容器内的 Chrome 生效
+COPY ./docker/res/playwright/chrome-policy.json /etc/opt/chrome/policies/managed/local-network.json
 
 # 从 cache-stage 复制 JDT LSP 到最终位置，避免中转层残留
 COPY --from=cache-stage /opt/jdtls /root/.local/share/jdtls

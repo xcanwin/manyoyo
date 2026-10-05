@@ -81,8 +81,8 @@
             "timezoneId": "",
             // 强制 navigator.platform；留空则使用浏览器真实值（推荐，与 UA、字体、WebGL 自洽）
             "navigatorPlatform": "",
-            // 是否禁用 WebRTC（默认 false）
-            "disableWebRTC": false,
+            // 是否禁用 WebRTC（默认 true：否则 STUN 会暴露本机公网 IP；需要视频会议类网站时设为 false）
+            "disableWebRTC": true,
             // chrome 模式读取的 DevToolsActivePort 文件；留空时自动探测常见路径
             "devtoolsActivePortPath": "",
             // playwright ext-download 的 CRX prodversion 参数

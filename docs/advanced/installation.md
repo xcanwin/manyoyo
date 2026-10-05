@@ -195,7 +195,7 @@ manyoyo run -r claude                           # 使用初始化后的运行配
 
 ## 升级与卸载
 
-升级镜像：自定义镜像构建新标签后，把 `~/.manyoyo/manyoyo.json` 的 `imageVersion` 改为 `"2.1.1-common"`，再用 `manyoyo prune` 清理悬空镜像。
+升级镜像：自定义镜像构建新标签后，把 `~/.manyoyo/manyoyo.json` 的 `imageVersion` 改为 `"2.2.0-common"`，再用 `manyoyo prune` 清理悬空镜像。
 
 卸载 npm 安装的 MANYOYO：
 

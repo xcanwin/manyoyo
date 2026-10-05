@@ -40,7 +40,7 @@ manyoyo
 | `ps` | 列出容器 | `manyoyo ps` |
 | `images` | 列出镜像 | `manyoyo images` |
 | `rm <name>` | 删除指定容器 | `manyoyo rm my-0101-1200` |
-| `build` | 构建沙箱镜像 | `manyoyo build --iv 2.1.1-common` |
+| `build` | 构建沙箱镜像 | `manyoyo build --iv 2.2.0-common` |
 | `prune` | 清理悬空镜像 | `manyoyo prune` |
 | `podman <参数...>` | 用私有 Podman 执行命令（参数原样传入，仅离线完整包安装后可用） | `manyoyo podman ps -a` |
 
@@ -65,7 +65,7 @@ manyoyo
 | `--cp, --cont-path <path>` | 容器工作目录 |
 | `-m, --cont-mode <mode>` | 容器模式：`common` / `dind` / `sock` |
 | `--in, --image-name <name>` | 镜像名称 |
-| `--iv, --image-ver <version>` | 镜像版本，格式必须为 `x.y.z-后缀`，如 `2.1.1-common` |
+| `--iv, --image-ver <version>` | 镜像版本，格式必须为 `x.y.z-后缀`，如 `2.2.0-common` |
 | `-e, --env <env>` | 追加环境变量，可多次传入 |
 | `--ef, --env-file <file>` | 追加环境文件，仅支持绝对路径 |
 | `-v, --volume <volume>` | 追加挂载卷，可多次传入 |

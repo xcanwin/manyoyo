@@ -29,7 +29,7 @@ manyoyo rm <conflicting-container>
 **Image version mismatch**: list local images with `manyoyo images` and run a specific version.
 
 ```bash
-manyoyo run --iv 2.1.1-common
+manyoyo run --iv 2.2.0-common
 ```
 
 A missing image is pulled automatically from `ghcr.io/xcanwin/manyoyo`; you do not need to build it. For build problems see [Build Errors](../advanced/build-errors.md).

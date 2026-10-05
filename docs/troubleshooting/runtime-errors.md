@@ -29,7 +29,7 @@ manyoyo rm <冲突容器名>
 **镜像版本不匹配**：用 `manyoyo images` 查看本地镜像，指定版本运行。
 
 ```bash
-manyoyo run --iv 2.1.1-common
+manyoyo run --iv 2.2.0-common
 ```
 
 镜像缺失时会自动从 `ghcr.io/xcanwin/manyoyo` 拉取，无需自行构建；构建问题见 [构建错误](../advanced/build-errors.md)。

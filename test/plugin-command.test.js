@@ -8,7 +8,7 @@ const { WebSocket, WebSocketServer } = require('ws');
 const fingerprint = require('../lib/plugin/fingerprint');
 const extensions = require('../lib/plugin/playwright-extensions');
 const { createRelay } = require('../lib/plugin/playwright-relay');
-const { PlaywrightPlugin, appendNoProxy, headedListenHost } = require('../lib/plugin/playwright');
+const { PlaywrightPlugin, appendNoProxy, googleChromeCandidates, headedListenHost } = require('../lib/plugin/playwright');
 const { buildContainerIntegration, mergeIntegration } = require('../lib/plugin');
 const { renderDefaultFiles } = require('../scripts/gen-playwright-res');
 const pkg = require('../package.json');
@@ -57,15 +57,15 @@ describe('指纹单一数据源', () => {
         for (const kind of ['default', 'ws']) {
             const cfg = fingerprint.buildContainerConfig(kind, { ...profile, endpoint: 'ws://h:1/t' });
             expect(cfg.browser.initScript).toEqual([fingerprint.CONTAINER_INIT_SCRIPT_PATH]);
-            expect(cfg.browser.contextOptions).toEqual({
-                locale: 'de-DE',
-                timezoneId: 'Europe/Berlin',
-                viewport: null,
-                extraHTTPHeaders: { 'Accept-Language': 'de-DE,de;q=0.9' }
-            });
-            expect(cfg.browser.contextOptions.userAgent).toBeUndefined();
+            // 语言与时区不用 contextOptions 模拟（只作用于页面，Worker 里还是系统值），改由浏览器进程原生环境提供
+            expect(cfg.browser.contextOptions).toEqual({ viewport: null });
         }
-        const local = fingerprint.buildContainerConfig('default', profile).browser.launchOptions;
+        const localConfig = fingerprint.buildContainerConfig('default', profile);
+        const local = localConfig.browser.launchOptions;
+        // 用镜像里的 Google Chrome；容器内是 root，沙箱必须写在 launchOptions 里才生效
+        expect(local.channel).toBe('chrome');
+        expect(local.chromiumSandbox).toBe(false);
+        expect(localConfig.browser.chromiumSandbox).toBeUndefined();
         expect(local.headless).toBe(false);
         expect(local.args).toEqual(expect.arrayContaining([
             '--lang=de-DE',
@@ -86,10 +86,63 @@ describe('指纹单一数据源', () => {
         expect(cdp.browser).toEqual({ cdpEndpoint: 'ws://h:1/t', cdpTimeout: 60000 });
     });
 
-    test('initScript 默认不伪造 platform，配置了才注入', () => {
-        expect(fingerprint.buildInitScript()).not.toContain('platform');
-        expect(fingerprint.buildInitScript({ navigatorPlatform: 'MacIntel' })).toContain('"MacIntel"');
-        expect(fingerprint.buildInitScript({ disableWebRTC: true })).toContain('RTCPeerConnection');
+    test('语言与时区经进程环境变量原生传入，格式非法时拒绝（会被写进 shell 与 env 文件）', () => {
+        expect(fingerprint.buildProcessEnv({ locale: 'zh-CN', timezoneId: 'Asia/Shanghai' })).toEqual({
+            TZ: 'Asia/Shanghai', LANG: 'zh_CN.UTF-8', LANGUAGE: 'zh_CN:zh'
+        });
+        expect(fingerprint.buildProcessEnv({ locale: 'en', timezoneId: 'UTC' })).toEqual({
+            TZ: 'UTC', LANG: 'en.UTF-8', LANGUAGE: 'en'
+        });
+        expect(fingerprint.buildContainerEnvFile({ locale: 'de-DE', timezoneId: 'Europe/Berlin' })).toBe(
+            "export TZ='Europe/Berlin'\nexport LANG='de_DE.UTF-8'\nexport LANGUAGE='de_DE:de'\n"
+        );
+        // POSIX 写法与带扩展的 locale 也能用
+        expect(fingerprint.buildProcessEnv({ locale: 'en_US', timezoneId: 'UTC' }).LANG).toBe('en_US.UTF-8');
+        expect(fingerprint.buildProcessEnv({ locale: 'zh-CN-u-nu-hanidec', timezoneId: 'UTC' }).LANGUAGE).toBe('zh_CN:zh');
+        expect(fingerprint.buildProcessEnv({ locale: 'zh-Hans-CN', timezoneId: 'UTC' }).LANG).toBe('zh_CN.UTF-8');
+        expect(() => fingerprint.buildProcessEnv({ locale: "en-US'; rm -rf /", timezoneId: 'UTC' })).toThrow();
+        expect(() => fingerprint.buildProcessEnv({ locale: 'en-US', timezoneId: 'UTC $(id)' })).toThrow();
+    });
+
+    test('宿主机服务配置：有 Google Chrome 用 chrome 渠道，没有则退回 Chromium（不写 channel）', () => {
+        const withChrome = fingerprint.buildServerConfig({ host: 'h', port: 1, wsPath: '/t', useChrome: true });
+        expect(withChrome.channel).toBe('chrome');
+        const without = fingerprint.buildServerConfig({ host: 'h', port: 1, wsPath: '/t', useChrome: false });
+        expect(without.channel).toBeUndefined();
+        expect(fingerprint.buildServerConfig({ host: 'h', port: 1, wsPath: '/t' }).channel).toBe('chrome');
+    });
+
+    test('WebRTC 默认禁用；initScript 只在 disableWebRTC / navigatorPlatform 生效时才有内容与加载（不再补 outerWidth/outerHeight：Google Chrome 首屏本来就不是 0）', () => {
+        expect(fingerprint.DEFAULT_PROFILE.disableWebRTC).toBe(true);
+        expect(fingerprint.resolveProfile({}).disableWebRTC).toBe(true);
+        expect(fingerprint.resolveProfile({ disableWebRTC: false }).disableWebRTC).toBe(false);
+        expect(fingerprint.buildLaunchArgs({})).toContain('--disable-webrtc');
+        expect(fingerprint.buildLaunchArgs({ disableWebRTC: false })).not.toContain('--disable-webrtc');
+        // 关闭 WebRTC 禁用且没设 platform：什么都不改，配置不加载 initScript
+        expect(fingerprint.buildInitScript({ disableWebRTC: false })).toBe("'use strict';\n");
+        expect(fingerprint.buildInitScript({ disableWebRTC: false })).not.toContain('outerWidth');
+        for (const kind of ['default', 'ws']) {
+            expect(fingerprint.buildContainerConfig(kind, { endpoint: 'ws://h:1/t', disableWebRTC: false }).browser.initScript).toBeUndefined();
+            expect(fingerprint.buildContainerConfig(kind, { endpoint: 'ws://h:1/t' }).browser.initScript)
+                .toEqual([fingerprint.CONTAINER_INIT_SCRIPT_PATH]);
+            expect(fingerprint.buildContainerConfig(kind, { endpoint: 'ws://h:1/t', disableWebRTC: false, navigatorPlatform: 'Win32' }).browser.initScript)
+                .toEqual([fingerprint.CONTAINER_INIT_SCRIPT_PATH]);
+        }
+        expect(fingerprint.buildInitScript({ disableWebRTC: false })).not.toContain('platform');
+        expect(fingerprint.buildInitScript({ disableWebRTC: false, navigatorPlatform: 'MacIntel' })).toContain('"MacIntel"');
+        expect(fingerprint.buildInitScript()).toContain('RTCPeerConnection');
+    });
+
+    test('插件配置：disableWebRTC 默认 true，可显式关闭（含字符串 false）', () => {
+        const home = makeHome();
+        try {
+            expect(newPlugin(home).plugin.profile().disableWebRTC).toBe(true);
+            expect(newPlugin(home, { disableWebRTC: false }).plugin.profile().disableWebRTC).toBe(false);
+            expect(newPlugin(home, { disableWebRTC: 'false' }).plugin.profile().disableWebRTC).toBe(false);
+            expect(newPlugin(home, { disableWebRTC: 'true' }).plugin.profile().disableWebRTC).toBe(true);
+        } finally {
+            fs.rmSync(home, { recursive: true, force: true });
+        }
     });
 
     test('docker/res/playwright 下的默认文件与指纹模块生成结果逐字节一致', () => {
@@ -121,19 +174,69 @@ describe('headed 监听地址', () => {
     });
 });
 
+describe('宿主机 Google Chrome', () => {
+    test('各平台的标准安装位置', () => {
+        expect(googleChromeCandidates('linux')).toEqual(['/opt/google/chrome/chrome']);
+        expect(googleChromeCandidates('darwin')).toEqual(['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']);
+        expect(googleChromeCandidates('win32', { PROGRAMFILES: 'C:\\PF' })).toEqual([path.join('C:\\PF', 'Google', 'Chrome', 'Application', 'chrome.exe')]);
+    });
+
+    test('有 Google Chrome 时直接使用，不下载 Chromium', () => {
+        const { plugin, sink } = newPlugin(makeHome());
+        plugin.hasGoogleChrome = () => true;
+        plugin.installChromium = jest.fn();
+        expect(plugin.ensureBrowserInstalled()).toBe(true);
+        expect(plugin.installChromium).not.toHaveBeenCalled();
+        expect(sink.out).toBe('');
+    });
+
+    test('没有时退回 Chromium 并提示（不静默安装 Chrome）', () => {
+        const { plugin, sink } = newPlugin(makeHome());
+        plugin.hasGoogleChrome = () => false;
+        plugin.installChromium = jest.fn();
+        expect(plugin.ensureBrowserInstalled()).toBe(false);
+        expect(plugin.installChromium).toHaveBeenCalledTimes(1);
+        expect(sink.out).toContain('未检测到 Google Chrome');
+    });
+});
+
 describe('版本单一来源', () => {
-    test('@playwright/cli 依赖版本等于 playwrightCliVersion，旧依赖已删除', () => {
-        expect(pkg.dependencies['@playwright/cli']).toBe(pkg.playwrightCliVersion);
+    // 每个 @playwright/cli 版本自带的 playwright-core minor（npm view @playwright/cli@<版本> dependencies）
+    const CLI_CORE_MINOR = { '0.1.19': '1.63', '0.1.20': '1.64', '0.1.21': '1.64', '0.1.22': '1.64' };
+
+    test('patchright-core 精确钉版本，旧的官方 core / cli 依赖已删除', () => {
+        expect(pkg.dependencies['patchright-core']).toBe(pkg.patchrightCoreVersion);
+        expect(pkg.dependencies['@playwright/cli']).toBeUndefined();
+        expect(pkg.dependencies['playwright-core']).toBeUndefined();
         expect(pkg.dependencies.playwright).toBeUndefined();
         expect(pkg.dependencies['@playwright/mcp']).toBeUndefined();
     });
 
-    test('宿主机用的 playwright-core 来自 @playwright/cli', () => {
+    test('patchright-core 与容器内 @playwright/cli 同 minor（否则 launchServer 连接被 428 拒绝）', () => {
+        expect(CLI_CORE_MINOR[pkg.playwrightCliVersion]).toBeDefined();
+        expect(pkg.patchrightCoreVersion.split('.').slice(0, 2).join('.')).toBe(CLI_CORE_MINOR[pkg.playwrightCliVersion]);
+    });
+
+    test('integrity 与 package-lock 一致，镜像构建时据此校验', () => {
+        const lock = require('../package-lock.json');
+        const entry = lock.packages['node_modules/patchright-core'];
+        expect(entry.version).toBe(pkg.patchrightCoreVersion);
+        expect(entry.integrity).toBe(pkg.patchrightCoreIntegrity);
+        expect(pkg.patchrightCoreIntegrity).toMatch(/^sha512-[A-Za-z0-9+/=]{86,}$/);
+    });
+
+    test('镜像构建时把客户端 isolatedContext 默认值改成主世界：次数与 patchright-core 实际出现次数一致，升级时强制复核', () => {
+        const dockerfile = fs.readFileSync(path.join(ROOT, 'docker', 'manyoyo.Dockerfile'), 'utf8');
+        const expected = Number(/ISOLATED_DEFAULTS=(\d+)/.exec(dockerfile)[1]);
+        const bundle = fs.readFileSync(path.join(require('path').dirname(require.resolve('patchright-core/package.json')), 'lib', 'coreBundle.js'), 'utf8');
+        expect(bundle.split('isolatedContext = true').length - 1).toBe(expected);
+        expect(dockerfile).toContain("sed -i 's/isolatedContext = true/isolatedContext = false/g'");
+    });
+
+    test('宿主机用的是 patchright-core', () => {
         const { plugin } = newPlugin(makeHome());
-        expect(plugin.corePath()).toContain(path.join('node_modules'));
-        const corePkg = require(path.join(plugin.corePath(), 'package.json'));
-        const cliPkg = require('@playwright/cli/package.json');
-        expect(corePkg.version).toBe(cliPkg.dependencies['playwright-core']);
+        expect(plugin.corePath()).toContain(path.join('node_modules', 'patchright-core'));
+        expect(require(path.join(plugin.corePath(), 'package.json')).version).toBe(pkg.patchrightCoreVersion);
     });
 });
 
@@ -155,6 +258,9 @@ describe('容器集成参数', () => {
         expect(result.extraArgs).toEqual(['--add-host', 'host.docker.internal:host-gateway']);
         expect(fs.existsSync(path.join(current, 'config.json'))).toBe(true);
         expect(fs.existsSync(path.join(current, 'stealth.init.js'))).toBe(true);
+        // 语言与时区经 env 文件交给 playwright-cli 包装脚本，进入浏览器进程环境
+        const host = fingerprint.detectHostProfile();
+        expect(fs.readFileSync(path.join(current, 'env'), 'utf8')).toBe(fingerprint.buildContainerEnvFile(host));
     });
 
     test('podman（含绝对路径）不加 add-host', async () => {

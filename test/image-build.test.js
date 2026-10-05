@@ -286,6 +286,8 @@ describe('image-build with unified build and buildkit fallback', () => {
         expect(script).toContain('command -v "$agent"');
         expect(script).toContain('skipped (command not found)');
         expect(script).toContain('npm install -g npm@latest "${update_packages[@]}"');
+        // @playwright/cli 与 patchright-core 必须一起钉版本，更新 Agent 时不能把 cli 升到 latest（会换回官方 core）
+        expect(script).not.toContain('@playwright/cli@latest');
         expect(script).toContain('npm cache clean --force --loglevel=error');
         expect(script).toContain('/tmp/.[!.]*');
         expect(script).toContain('/var/tmp/.[!.]*');
@@ -538,25 +540,40 @@ describe('image-build with unified build and buildkit fallback', () => {
 
         expect(dockerfile).toContain('COPY ./docker/res/playwright/browser.json /run/manyoyo-playwright/config.json');
         expect(dockerfile).toContain('COPY ./docker/res/playwright/stealth.init.js /run/manyoyo-playwright/stealth.init.js');
+        expect(dockerfile).toContain('COPY ./docker/res/playwright/env /run/manyoyo-playwright/env');
+        expect(dockerfile).toContain('COPY ./docker/res/playwright/chrome-policy.json /etc/opt/chrome/policies/managed/local-network.json');
+        expect(JSON.parse(fs.readFileSync(path.join(resDir, 'chrome-policy.json'), 'utf8'))).toEqual({ LocalNetworkAccessRestrictionsTemporaryOptOut: true });
         expect(dockerfile).toContain('PLAYWRIGHT_MCP_CONFIG=/run/manyoyo-playwright/config.json');
         expect(dockerfile).toContain('NO_UPDATE_NOTIFIER=1');
         expect(dockerfile).toContain('COPY ./package.json /tmp/manyoyo-package.json');
         expect(dockerfile).toContain('playwrightCliVersion');
         expect(dockerfile).toContain('npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"');
         expect(dockerfile).toContain('playwright-cli install --skills');
-        // 浏览器与系统依赖都用全局 @playwright/cli 自带的 playwright-core 安装
-        expect(dockerfile).toContain('$(npm root -g)/@playwright/cli/node_modules/playwright-core/cli.js');
-        expect(dockerfile).toContain('install-deps chromium');
+        // @playwright/cli 自带的 playwright-core 换成 patchright-core：钉版本、校验 integrity、同 minor
+        expect(dockerfile).toContain('patchrightCoreVersion');
+        expect(dockerfile).toContain('patchrightCoreIntegrity');
+        expect(dockerfile).toContain('npm pack "patchright-core@${PATCHRIGHT_CORE_VERSION}"');
+        expect(dockerfile).toContain('openssl dgst -sha512 -binary');
+        expect(dockerfile).toContain('minor 不一致');
+        expect(dockerfile).not.toContain('patchright-core@latest');
+        // 浏览器是 Google Chrome stable（官方 apt 源 + 固定签名密钥指纹），不再装 Playwright 的 Chromium
+        expect(dockerfile).toContain('google-chrome-stable');
+        expect(dockerfile).toContain('EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796');
+        expect(dockerfile).toContain('signed-by=/usr/share/keyrings/google-chrome.gpg');
+        expect(dockerfile).not.toMatch(/(install|install-deps)(\s+--no-shell)?\s+chromium/);
+        // 前面的层清掉了 apt 列表，原来由 install-deps 顺带 update，现在必须显式 update
+        expect(dockerfile.indexOf('apt-get update\n    apt-get install -y --no-install-recommends xvfb')).toBeGreaterThan(-1);
         expect(dockerfile).toContain('xvfb');
         expect(dockerfile).not.toContain('playwright install --with-deps chromium');
-        ['browser.json', 'stealth.init.js', 'playwright-cli.sh'].forEach(name => {
+        ['browser.json', 'stealth.init.js', 'env', 'playwright-cli.sh'].forEach(name => {
             expect(fs.existsSync(path.join(resDir, name))).toBe(true);
         });
 
         const cfg = JSON.parse(fs.readFileSync(path.join(resDir, 'browser.json'), 'utf8'));
         expect(cfg.outputDir).toBe('/tmp/.playwright-cli');
-        expect(cfg.browser.initScript).toEqual(['/run/manyoyo-playwright/stealth.init.js']);
-        expect(cfg.browser.launchOptions.channel).toBe('chromium');
+        expect(cfg.browser.initScript).toEqual(['/run/manyoyo-playwright/stealth.init.js']); // 默认禁用 WebRTC，需要 initScript
+        expect(cfg.browser.launchOptions.channel).toBe('chrome');
+        expect(cfg.browser.launchOptions.chromiumSandbox).toBe(false);
         expect(cfg.browser.launchOptions.headless).toBe(false);
     });
 

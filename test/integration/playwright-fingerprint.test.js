@@ -3,10 +3,11 @@
 // L3 指纹一致性：夹具页面采集浏览器暴露的信号，断言各项自洽、各模式之间一致，chrome 模式不注入。
 // 公开检测站点（bot.sannysoft.com 等）依赖外网，只在 temp/ 下手动截图对比，不作为断言。
 const { spawnSync } = require('child_process');
+const http = require('http');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { chromium } = require('playwright-core');
+const { chromium } = require('patchright-core');
 const { startFixture } = require('./helpers/fingerprint-fixture');
 const env = require('./helpers/playwright-env');
 const fingerprint = require('../../lib/plugin/fingerprint');
@@ -33,11 +34,21 @@ function expectSelfConsistent(data, { checkClientHints = true } = {}) {
     expect(report.languages[0]).toBe(profile.locale);
     expect(report.timezone).toBe(profile.timezoneId);
     expect(String(headers['accept-language']).split(',')[0]).toBe(profile.locale);
+    // Worker 与页面一致（contextOptions 模拟只作用于页面，Worker 里会是系统值）
+    expect(report.worker.languages).toEqual(report.languages);
+    expect(report.worker.timezone).toBe(report.timezone);
+    expect(report.worker.userAgent).toBe(report.userAgent);
+    expect(report.worker.hardwareConcurrency).toBe(report.hardwareConcurrency);
+    // 没有 CDP Runtime 痕迹（页面与 Worker）
+    expect(report.cdp).toBe(false);
+    expect(report.worker.cdp).toBe(false);
     // 窗口像真实窗口：外框不为 0，屏幕尺寸不被伪造成 viewport
     expect(report.window.outerWidth).toBeGreaterThan(0);
     expect(report.window.outerHeight).toBeGreaterThanOrEqual(report.window.innerHeight);
     if (checkClientHints) {
         expect(report.userAgentData.platform).toBe('Linux');
+        // 浏览器是 Google Chrome，品牌里要有 Google Chrome（Chromium 的品牌里没有）
+        expect(report.userAgentData.brands.map(brand => brand.brand)).toContain('Google Chrome');
         const chromiumVersion = report.userAgentData.brands.find(brand => brand.brand === 'Chromium').version;
         expect(report.userAgent).toContain(`Chrome/${chromiumVersion}.`);
         expect(headers['sec-ch-ua-platform']).toBe('"Linux"');
@@ -68,6 +79,55 @@ maybe('指纹一致性：default（容器内 Xvfb 有头浏览器）', () => {
             expect(data.report.window.dpr).toBe(1);
         } finally {
             env.removeContainer(runtime, name);
+            fs.rmSync(home, { recursive: true, force: true });
+        }
+    });
+});
+
+maybe('default：Agent 读得到页面主世界的 JS 全局变量', () => {
+    test('playwright-cli eval 与 run-code 里的 page.evaluate 都能读到页面自己定义的全局变量和函数', async () => {
+        const home = env.makeHome();
+        const name = env.randomName('pw-fp');
+        const fixture = await startFixture();
+        try {
+            await env.createContainer(runtime, home, name);
+            // 夹具在宿主机，容器里的浏览器经 host 别名访问
+            await env.exec(runtime, name, `playwright-cli open http://${env.hostAlias(runtime)}:${fixture.port}/global`, { timeout: 90000 });
+            const global = await env.exec(runtime, name, 'playwright-cli eval "window.manyoyoGlobal"', { timeout: 60000 });
+            const fn = await env.exec(runtime, name, 'playwright-cli eval "window.manyoyoFn()"', { timeout: 60000 });
+            const code = await env.exec(runtime, name, 'playwright-cli run-code "async page => page.evaluate(() => window.manyoyoGlobal)"', { timeout: 60000 });
+            await env.exec(runtime, name, 'playwright-cli close');
+            expect(global.stdout).toContain(`g-${fixture.secret}`);
+            expect(fn.stdout).toContain(`f-${fixture.secret}`);
+            expect(code.stdout).toContain(`g-${fixture.secret}`);
+        } finally {
+            env.removeContainer(runtime, name);
+            await fixture.close();
+            fs.rmSync(home, { recursive: true, force: true });
+        }
+    });
+});
+
+maybe('default：语言时区用原生环境变量，代理等环境变量不丢', () => {
+    test('容器带 HTTP_PROXY 时浏览器仍走该代理，同时页面语言时区取自 env 文件', async () => {
+        const home = env.makeHome();
+        const name = env.randomName('pw-fp');
+        const requests = [];
+        const proxy = http.createServer((req, res) => {
+            requests.push(req.url);
+            res.writeHead(200, { 'Content-Type': 'text/html' }).end('<title>via-proxy</title>');
+        });
+        await new Promise(resolve => proxy.listen(0, '0.0.0.0', resolve));
+        try {
+            const proxyUrl = `http://${env.hostAlias(runtime)}:${proxy.address().port}`;
+            await env.createContainer(runtime, home, name, { env: [`HTTP_PROXY=${proxyUrl}`, `http_proxy=${proxyUrl}`] });
+            const opened = await env.exec(runtime, name, 'playwright-cli open http://proxy-probe.invalid/', { timeout: 90000 });
+            await env.exec(runtime, name, 'playwright-cli close');
+            expect(opened.stdout + opened.stderr).toContain('via-proxy');
+            expect(requests.some(url => url.includes('proxy-probe.invalid'))).toBe(true);
+        } finally {
+            env.removeContainer(runtime, name);
+            proxy.close();
             fs.rmSync(home, { recursive: true, force: true });
         }
     });
@@ -123,7 +183,7 @@ maybeHeaded('指纹一致性：headed / chrome 与跨模式一致', () => {
     test('chrome：不注入任何指纹（语言保持浏览器自己的值）', async () => {
         const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-chrome-fp-'));
         const context = await chromium.launchPersistentContext(userDataDir, {
-            channel: 'chromium',
+            ...env.simulatedUserChromeOptions(),
             headless: false,
             chromiumSandbox: false,
             locale: 'en-US',

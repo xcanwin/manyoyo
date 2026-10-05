@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 'use strict';
 
-// 由 lib/plugin/fingerprint.js 生成镜像内的默认 Playwright 配置：docker/res/playwright/{browser.json,stealth.init.js}
+// 由 lib/plugin/fingerprint.js 生成镜像内的默认 Playwright 配置：docker/res/playwright/{browser.json,stealth.init.js,env}
 const fs = require('fs');
 const path = require('path');
-const { buildContainerConfig, buildInitScript } = require('../lib/plugin/fingerprint');
+const { buildContainerConfig, buildContainerEnvFile, buildInitScript } = require('../lib/plugin/fingerprint');
 
 function renderDefaultFiles() {
     return {
         'browser.json': `${JSON.stringify(buildContainerConfig('default'), null, 4)}\n`,
-        'stealth.init.js': buildInitScript()
+        'stealth.init.js': buildInitScript(),
+        env: buildContainerEnvFile()
     };
 }
 

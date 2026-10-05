@@ -10,6 +10,7 @@ const os = require('os');
 const path = require('path');
 const { imageVersion } = require('../../../package.json');
 const { buildContainerIntegration, mergeIntegration } = require('../../../lib/plugin');
+const { googleChromeCandidates } = require('../../../lib/plugin/playwright');
 
 const BIN_PATH = path.join(__dirname, '../../../bin/manyoyo.js');
 const IMAGE = `ghcr.io/xcanwin/manyoyo:${imageVersion}`;
@@ -26,6 +27,11 @@ function usableRuntime() {
 
 function imageAvailable(runtime) {
     return spawnSync(runtime, ['image', 'inspect', IMAGE], { stdio: 'ignore' }).status === 0;
+}
+
+// 测试里“模拟用户自己的 Chrome”：宿主机有 Google Chrome 就用它，否则用 patchright 的 Chromium（与 headed 模式的退回规则一致）
+function simulatedUserChromeOptions() {
+    return googleChromeCandidates().some(file => fs.existsSync(file)) ? { channel: 'chrome' } : {};
 }
 
 function hasDisplay() {
@@ -134,6 +140,7 @@ module.exports = {
     exec,
     freePort,
     hasDisplay,
+    simulatedUserChromeOptions,
     hostAlias,
     imageAvailable,
     makeHome,
