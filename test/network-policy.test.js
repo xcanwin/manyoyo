@@ -75,7 +75,7 @@ describe('buildNftRuleset', () => {
         expect(idx('ip daddr 172.16.99.1 tcp dport 10808 accept')).toBeLessThan(idx('ip daddr { 0.0.0.0/8'));
         expect(idx('ip daddr 172.16.99.129 tcp dport { 8935, 18601 } accept')).toBeLessThan(idx('ip daddr { 0.0.0.0/8'));
         expect(text).toContain('169.254.0.0/16');
-        expect(text).toContain('ip6 daddr { fc00::/7 } reject');
+        expect(text).toContain('ip6 daddr { fc00::/7, 64:ff9b::/96 } reject');
         expect(text).toContain('ip saddr 10.89.0.2 tcp dport 7000 accept');
         expect(text).toContain('ip saddr 10.89.0.0/24 ip saddr != 10.89.0.1 ct state new reject');
         expect(text).not.toMatch(/^\s+reject$/m);

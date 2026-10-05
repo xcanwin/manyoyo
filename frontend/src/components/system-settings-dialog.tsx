@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { OrphanStatesPanel } from "@/components/orphan-states-panel"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -64,6 +65,7 @@ const CATEGORIES: ConfigCategory[] = [
   { id: "capacity", label: "容量预估", keys: [] },
   { id: "mirrors", label: "软件源", keys: [] },
   { id: "doctor", label: "环境检查", keys: [] },
+  { id: "orphans", label: "容器状态", keys: [] },
 ]
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -462,6 +464,8 @@ export function SystemSettingsDialog({
                       <MirrorPanel />
                     ) : category.id === "doctor" ? (
                       <DoctorPanel />
+                    ) : category.id === "orphans" ? (
+                      <OrphanStatesPanel />
                     ) : category.id === "quick-chat" ? (
                       <QuickChatSettingsView />
                     ) : (

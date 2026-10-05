@@ -332,6 +332,21 @@ maybe('container-network（真实容器）', () => {
         }
     }, 120000);
 
+    test('别的 manyoyo 实例（另一个 HOME）的容器：不碰它的网络', async () => {
+        const { name } = await create();
+        const otherHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-net-other-'));
+        try {
+            const foreign = createNetworkManager({ command: runtime.command, env: runtime.env, homeDir: otherHome, imageRef: () => IMAGE });
+            expect(await foreign.apply(name)).toEqual(expect.objectContaining({ status: 'foreign' }));
+            expect(await foreign.ensureReady(name)).toEqual({ status: 'foreign' });
+            // 没有被下发过规则：宿主机端口依然可达
+            const ip = await hostIp(name);
+            expect(await code(name, `http://${ip}:${serverPort}/`)).toBe('200');
+        } finally {
+            fs.rmSync(otherHome, { recursive: true, force: true });
+        }
+    }, 60000);
+
     test('越界被拒：容器内改不了自己的规则、写不了 sys；看不到别的容器的状态目录', async () => {
         const { name } = await create();
         await manager.apply(name);

@@ -122,21 +122,39 @@ export function isLoopbackBind(bind: string): boolean {
   return bind === "127.0.0.1" || bind === "::1"
 }
 
+const PUBLIC_SUFFIX_WILDCARD_RE = /^\*\.(co|com|net|org|gov|edu|ac|or|ne|go)\.[a-z]{2}$/
+
+function isWideRule(cidr: string): boolean {
+  const match = /\/(\d+)$/.exec(cidr)
+  const prefix = match ? Number(match[1]) : 32
+  return cidr.includes(":") ? prefix <= 16 : prefix <= 8
+}
+
+function wideKeys(policy: NetworkPolicy): string[] {
+  return [
+    ...policy.egress.rules.filter((rule) => isWideRule(rule.cidr)).map((rule) => `rule:${rule.cidr}|${rule.ports}|${rule.proto}`),
+    ...policy.egress.domains.filter((domain) => PUBLIC_SUFFIX_WILDCARD_RE.test(domain)).map((domain) => `domain:${domain}`),
+  ]
+}
+
 // 与服务端 pendingRisks 一致：这些改动要先二次确认
-export function policyRisks(before: NetworkPolicy, after: NetworkPolicy): Array<"open" | "publicBind"> {
-  const risks: Array<"open" | "publicBind"> = []
+export function policyRisks(before: NetworkPolicy, after: NetworkPolicy): Array<"open" | "publicBind" | "wide"> {
+  const risks: Array<"open" | "publicBind" | "wide"> = []
   if (after.preset === "open" && before.preset !== "open") risks.push("open")
+  const hadWide = new Set(wideKeys(before))
+  if (after.preset !== "open" && wideKeys(after).some((key) => !hadWide.has(key))) risks.push("wide")
   const had = new Set(before.expose.filter((e) => !isLoopbackBind(e.bind)).map((e) => `${e.bind}:${e.hostPort}`))
   if (after.expose.some((e) => !isLoopbackBind(e.bind) && !had.has(`${e.bind}:${e.hostPort}`))) risks.push("publicBind")
   return risks
 }
 
-export type NetStatus = { status: "applied" | "error"; message?: string; at?: string } | null
+export type NetStatus = { status: "applied" | "error" | "unsupported"; message?: string; warning?: string; at?: string } | null
 
 export function describeNetStatus(status: NetStatus, running: boolean): { label: string; tone: "ok" | "danger" | "warn" } {
   if (!running) return { label: "容器未运行，下次启动时下发", tone: "warn" }
   if (!status) return { label: "尚未下发", tone: "warn" }
   if (status.status === "applied") return { label: "已生效", tone: "ok" }
+  if (status.status === "unsupported") return { label: status.message || "此网络模式不支持", tone: "warn" }
   return { label: status.message || "下发失败", tone: "danger" }
 }
 

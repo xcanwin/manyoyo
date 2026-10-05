@@ -11,6 +11,8 @@ Set environment variables, an autostart script and the network when you create a
 Containers created before this feature do not have it; the Container tab says "created by an older version, recreate to use". Their behavior is unchanged and they are not migrated.
 :::
 
+The entry is **Container** in the top bar's "…" (More tabs) menu. The page shows, from top to bottom: environment variables, autostart, network (including port exposure). Environment, autostart and network each have their **own Save button**; port exposure takes effect when you click "Add".
+
 ## When changes take effect
 
 | Change | Takes effect |
@@ -25,11 +27,14 @@ Containers created before this feature do not have it; the Container tab says "c
 - The table view masks values whose names contain `KEY` / `TOKEN` / `SECRET` / `PASSWORD` / `AUTH` / `CREDENTIAL` until you click the eye; the text view is the raw `KEY=VALUE`, one per line.
 - Variables live in `~/.manyoyo/containers/<id>/box/env` on your machine and are **not written into the container config** (`podman inspect` / `docker inspect` do not show the values).
 - Inside the container you can edit `/run/manyoyo/env` directly (same format); it takes effect for the next command. The page shows "modified inside the container", and invalid lines (e.g. `1BAD=x`) are highlighted and skipped.
+- Terminals that are already open must be closed and reopened to see new variables (existing shell processes do not update their environment).
 - If the container changed the file just before you save, the page reports a conflict and asks you to reload instead of overwriting silently.
 
 ## Autostart
 
 Write a bash script under "Autostart". Every time the container starts (creation, restart, start after a `podman machine` restart) the in-container init runs it once and appends output to `/run/manyoyo/autostart.log` ("View log"). With "start this container when serve starts" on, `manyoyo serve` also starts the container.
+
+The script runs as root in the container's default directory; write paths as **in-container** paths (the container path of your mounted host directory is the containerPath on the "Config" tab). The output of "Run now" is not shown automatically: click "View log"; script failures are written to that log too, so check it first when debugging.
 
 The container's PID 1 is manyoyo's own init: it reaps zombies and reacts to stop signals (`stop` no longer waits 10 seconds). The autostart script and the agent do not run until the network rules have been applied.
 
@@ -44,7 +49,7 @@ Under "Network" you can:
 
 | I want to… | Do this |
 | --- | --- |
-| Let the container reach a service on the host (e.g. local Ollama) | Add the port under "Host ports it may reach", e.g. `11434`. The service must listen on `0.0.0.0`; services bound to `127.0.0.1` are unreachable |
+| Let the container reach a service on the host (e.g. local Ollama) | Add the port under "Host ports it may reach", e.g. `11434`. The service must listen on `0.0.0.0`; services bound to `127.0.0.1` are unreachable. Verify in the container terminal: `curl --noproxy '*' http://host.containers.internal:11434/` (containers often carry proxy variables, so add `--noproxy`) |
 | Reach a service on the LAN | Add `192.168.1.50 8000` under "Extra IP rules" |
 | Let container A reach port 7000 of container B | On **B**, add A and the port under "Allow other containers to reach me" |
 | Allow only a few domains such as github.com | Switch outbound to "Allowlist only" and list domains (`*.example.com` supported) |

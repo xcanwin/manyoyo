@@ -144,6 +144,8 @@ describe('egress-proxy', () => {
         const chained = createEgressProxy({
             getToken: id => TOKENS[id] || null,
             getPolicy: id => policies[id] || null,
+            // 宿主机解析不了 ok.example.com（交给上游）；meta / lan 能解析出私有地址
+            lookup: async host => { if (!['meta.example.com', 'lan.example.com'].includes(host)) throw new Error('nx'); return lookups[host]; },
             upstream: `http://user:pw@127.0.0.1:${upstreamPort}`
         });
         const port = await chained.start({ host: '127.0.0.1', port: 0 });
@@ -152,6 +154,9 @@ describe('egress-proxy', () => {
             expect(seen).toEqual([{ url: 'ok.example.com:443', auth: `Basic ${Buffer.from('user:pw').toString('base64')}` }]);
             expect((await connect(port, 'evil.example.org:443', basic(A, 'token-a'))).status).toBe(403);
             expect((await connect(port, '127.0.0.1:80', basic(B, 'token-b'))).status).toBe(403);
+            // 本地能解析出来且全是私有 / 元数据地址：即使经上游也拒绝；本地解析失败（宿主机解析不了）才交给上游
+            expect((await connect(port, 'meta.example.com:443', basic(A, 'token-a'))).status).toBe(403);
+            expect((await connect(port, 'lan.example.com:443', basic(A, 'token-a'))).status).toBe(403);
             expect(seen.length).toBe(1);
         } finally {
             await chained.stop();

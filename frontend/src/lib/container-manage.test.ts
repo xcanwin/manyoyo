@@ -70,6 +70,16 @@ describe("风险与状态", () => {
     expect(policyRisks(wide, wide)).toEqual([])
   })
 
+  test("极宽的出站规则需要确认（/8 以上网段、公共后缀通配），窄规则不需要", () => {
+    const base = defaultPolicy()
+    const rule = (cidr: string) => ({ ...base, egress: { domains: [], rules: [{ cidr, ports: "", proto: "tcp" as const }] } })
+    expect(policyRisks(base, rule("0.0.0.0/0"))).toEqual(["wide"])
+    expect(policyRisks(base, rule("10.0.0.0/8"))).toEqual(["wide"])
+    expect(policyRisks(base, rule("192.168.1.50"))).toEqual([])
+    expect(policyRisks(base, { ...base, preset: "allowlist", egress: { domains: ["*.co.uk"], rules: [] } })).toEqual(["wide"])
+    expect(policyRisks(base, { ...base, preset: "allowlist", egress: { domains: ["*.example.com"], rules: [] } })).toEqual([])
+  })
+
   test("下发状态文案", () => {
     expect(describeNetStatus(null, false).tone).toBe("warn")
     expect(describeNetStatus({ status: "applied" }, true)).toEqual({ label: "已生效", tone: "ok" })

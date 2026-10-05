@@ -189,8 +189,19 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
     setNetSaving(true)
     setNetMessage(null)
     try {
-      const needsConfirm = policyRisks(net.policy, policy).length > 0
-      const data = await putNetwork(policy, needsConfirm)
+      const risks = policyRisks(net.policy, policy)
+      if (risks.includes("wide")) {
+        const ok = await confirm({
+          title: "放开范围很大的出站规则？",
+          message: "这条规则覆盖的地址范围很大（整个 /8 以上的网段，或类似 *.co.uk 的公共后缀通配），效果接近完全放开出站限制。",
+          confirmLabel: "确认放开",
+        })
+        if (!ok) {
+          setNetSaving(false)
+          return
+        }
+      }
+      const data = await putNetwork(policy, risks.length > 0)
       applyNetwork(data as unknown as NetworkState)
       setNetMessage({ tone: "ok", text: "已保存并生效（不需要重启容器）。" })
     } catch (error) {
@@ -373,6 +384,11 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <NetworkEditor key={revision} idPrefix="manage" policy={policy} onChange={setPolicy} peers={net.peers} />
+              {net.status?.warning ? (
+                <Alert>
+                  <AlertDescription>{net.status.warning}</AlertDescription>
+                </Alert>
+              ) : null}
               {netMessage ? (
                 <Alert variant={netMessage.tone === "ok" ? "default" : "destructive"}>
                   <AlertDescription>{netMessage.text}</AlertDescription>

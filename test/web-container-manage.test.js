@@ -153,11 +153,13 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(ok.response.status).toBe(200);
             expect(fs.readFileSync(boxA.env, 'utf-8')).toBe('A=2\nC=3\n');
 
-            const bad = await request(`${baseUrl}/api/containers/boxa/env`, json(cookie, 'PUT', { text: 'X=a;b' }));
+            const bad = await request(`${baseUrl}/api/containers/boxa/env`, json(cookie, 'PUT', { text: 'X=a;b' }, { 'If-Match': ok.json.etag }));
             expect(bad.response.status).toBe(400);
-            const badKey = await request(`${baseUrl}/api/containers/boxa/env`, json(cookie, 'PUT', { text: '1BAD=x' }));
+            const badKey = await request(`${baseUrl}/api/containers/boxa/env`, json(cookie, 'PUT', { text: '1BAD=x' }, { 'If-Match': ok.json.etag }));
             expect(badKey.response.status).toBe(400);
-            const notText = await request(`${baseUrl}/api/containers/boxa/env`, json(cookie, 'PUT', { text: 5 }));
+            const noMatch = await request(`${baseUrl}/api/containers/boxa/env`, json(cookie, 'PUT', { text: 'A=9' }));
+            expect(noMatch.response.status).toBe(428);
+            const notText = await request(`${baseUrl}/api/containers/boxa/env`, json(cookie, 'PUT', { text: 5 }, { 'If-Match': ok.json.etag }));
             expect(notText.response.status).toBe(400);
         });
 
@@ -265,6 +267,10 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
     describe('孤儿状态目录', () => {
         test('列出没有对应容器的状态目录，只能删孤儿', async () => {
             const orphan = state.createState({ homeDir: tempHost, meta: { name: 'gone' } });
+            // 刚创建的状态目录（容器可能正在创建）不算孤儿
+            expect((await request(`${baseUrl}/api/containers/orphans`, { headers: { Cookie: cookie } })).json.orphans).toEqual([]);
+            expect((await request(`${baseUrl}/api/containers/orphans/${orphan.id}`, json(cookie, 'DELETE'))).response.status).toBe(409);
+            state.writeMeta(tempHost, orphan.id, { id: orphan.id, name: 'gone', createdAt: new Date(Date.now() - 3600 * 1000).toISOString() });
             const list = await request(`${baseUrl}/api/containers/orphans`, { headers: { Cookie: cookie } });
             expect(list.json.orphans).toEqual([expect.objectContaining({ id: orphan.id, name: 'gone' })]);
 
@@ -299,5 +305,18 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             const confirmed = await create({ containerName: 'newbox3', network: { preset: 'open' }, confirmRisk: true });
             expect(confirmed.response.status).toBe(200);
         });
+    });
+});
+
+describe('容器管理接口：不可信的 box/ 文件与风险判定', () => {
+    const { pendingRisks } = require('../lib/web/container-manage');
+    test('pendingRisks：open、非本机绑定、极宽出站规则需要确认；窄规则不需要', () => {
+        const base = normalizePolicy({});
+        expect(pendingRisks(base, normalizePolicy({ preset: 'allowlist', egress: { rules: [{ cidr: '0.0.0.0/0' }] } }))).toEqual(['wide']);
+        expect(pendingRisks(base, normalizePolicy({ egress: { rules: [{ cidr: '10.0.0.0/8', ports: '80' }] } }))).toEqual(['wide']);
+        expect(pendingRisks(base, normalizePolicy({ preset: 'allowlist', egress: { domains: ['*.co.uk'] } }))).toEqual(['wide']);
+        expect(pendingRisks(base, normalizePolicy({ egress: { rules: [{ cidr: '192.168.1.50', ports: '8000' }], domains: ['*.example.com'] } }))).toEqual([]);
+        const wide = normalizePolicy({ egress: { rules: [{ cidr: '10.0.0.0/8' }] } });
+        expect(pendingRisks(wide, wide)).toEqual([]);
     });
 });

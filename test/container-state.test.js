@@ -88,3 +88,61 @@ describe('buildContainerRunArgs 状态目录参数', () => {
         expect(() => buildContainerRunArgs({ ...base, state: undefined })).toThrow(/状态目录/);
     });
 });
+
+describe('box/ 里的不可信文件', () => {
+    const { execFileSync } = require('child_process');
+    let home;
+    beforeEach(() => { home = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-box-')); });
+    afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
+
+    test('FIFO / 符号链接 / 目录 / 超大文件：读取不阻塞、不跟随、返回空并标记 unsafe', () => {
+        const st = state.createState({ homeDir: home, envLines: ['A=1'] });
+        fs.rmSync(st.env);
+        execFileSync('mkfifo', [st.env]);
+        const fifo = state.readEnv(home, st.id);
+        expect(fifo.text).toBe('');
+        expect(fifo.unsafe).toMatch(/不是普通文件/);
+
+        fs.rmSync(st.env);
+        const secret = path.join(home, 'host-secret');
+        fs.writeFileSync(secret, 'LEAK=1\n');
+        fs.symlinkSync(secret, st.env);
+        const link = state.readEnv(home, st.id);
+        expect(link.text).toBe('');
+        expect(link.unsafe).toMatch(/符号链接/);
+        expect(state.readAutostartLogTail(home, st.id)).toBe('');
+
+        fs.rmSync(st.env);
+        fs.writeFileSync(st.env, 'x'.repeat(state.MAX_ENV_BYTES + 1));
+        expect(state.readEnv(home, st.id).unsafe).toMatch(/过大/);
+    });
+
+    test('写入不跟随符号链接：PUT 用新文件替换链接，宿主机上被指向的文件不被改动', () => {
+        const st = state.createState({ homeDir: home, envLines: ['A=1'] });
+        const target = path.join(home, 'bashrc');
+        fs.writeFileSync(target, 'ORIGINAL\n');
+        fs.rmSync(st.env);
+        fs.symlinkSync(target, st.env);
+        state.writeEnv(home, st.id, 'B=2\n', { parseEnvEntry });
+        expect(fs.readFileSync(target, 'utf-8')).toBe('ORIGINAL\n');
+        expect(fs.lstatSync(st.env).isSymbolicLink()).toBe(false);
+        expect(fs.readFileSync(st.env, 'utf-8')).toBe('B=2\n');
+
+        fs.rmSync(st.autostart);
+        fs.symlinkSync(target, st.autostart);
+        state.writeAutostart(home, st.id, 'echo hi');
+        expect(fs.readFileSync(target, 'utf-8')).toBe('ORIGINAL\n');
+    });
+
+    test('exec 组 env 时读到被替换成符号链接的 box/env 不会把宿主机文件注入进去', () => {
+        const { buildExecArgs } = require('../lib/container-exec');
+        const st = state.createState({ homeDir: home, envLines: ['A=1'] });
+        const secret = path.join(home, 'host-secret');
+        fs.writeFileSync(secret, 'LEAK=1\n');
+        fs.rmSync(st.env);
+        fs.symlinkSync(secret, st.env);
+        const built = buildExecArgs({ homeDir: home, dockerExecArgs: () => st.id }, 'c', { command: ['env'] });
+        expect(built.args).not.toContain('--env-file');
+        built.cleanup();
+    });
+});
