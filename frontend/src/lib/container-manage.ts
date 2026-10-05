@@ -68,46 +68,6 @@ export function defaultPolicy(): NetworkPolicy {
   }
 }
 
-function lines(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-}
-
-function asProto(value: string | undefined): Proto {
-  return value === "udp" ? "udp" : "tcp"
-}
-
-export const parseDomainLines = (text: string): string[] => lines(text).map((line) => line.toLowerCase())
-export const formatDomainLines = (domains: string[]): string => domains.join("\n")
-
-// 每行 `端口[/协议]`，例如 `18601`、`5353/udp`、`80,443`
-export function parseHostLines(text: string): HostRule[] {
-  return lines(text).map((line) => {
-    const [ports, proto] = line.split("/")
-    return { ports: ports.trim(), proto: asProto(proto?.trim()) }
-  })
-}
-
-export const formatHostLines = (host: HostRule[]): string =>
-  host.map((rule) => (rule.proto === "udp" ? `${rule.ports}/udp` : rule.ports)).join("\n")
-
-// 每行 `CIDR [端口] [协议]`，例如 `140.82.112.0/20 22,443 tcp`；端口省略表示不限端口
-export function parseRuleLines(text: string): EgressRule[] {
-  return lines(text).map((line) => {
-    const parts = line.split(/\s+/)
-    const last = parts[parts.length - 1]
-    const hasProto = parts.length > 1 && (last === "tcp" || last === "udp")
-    const proto = hasProto ? asProto(last) : "tcp"
-    const rest = hasProto ? parts.slice(1, -1) : parts.slice(1)
-    return { cidr: parts[0], ports: rest.join(""), proto }
-  })
-}
-
-export const formatRuleLines = (rules: EgressRule[]): string =>
-  rules.map((rule) => [rule.cidr, rule.ports, rule.proto === "udp" ? "udp" : ""].filter(Boolean).join(" ")).join("\n")
-
 // 新建容器时要发给服务端的 network：与默认（收紧、无规则）相同就不发，交给 runs / 全局配置与服务端默认
 // autostartOnServe 单独走自己的字段，不在 network 里
 export function networkForCreate(policy: NetworkPolicy): Omit<NetworkPolicy, "autostartOnServe"> | undefined {
@@ -176,6 +136,7 @@ export type ContainerEnvState = {
   legacy?: boolean
   message?: string
   id?: string
+  warning?: string
   text: string
   entries: EnvEntry[]
   invalid: EnvInvalid[]

@@ -89,6 +89,13 @@ export function EnvEditor({
         />
       ) : (
         <div className="flex flex-col gap-2">
+          {entries.length ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="w-2/5 px-1">变量名</span>
+              <span className="min-w-0 flex-1 px-1">变量值</span>
+              <span className="w-[4.5rem] shrink-0 text-center">操作</span>
+            </div>
+          ) : null}
           {entries.map((entry, index) => {
             const sensitive = isSensitiveKey(entry.key)
             const hidden = sensitive && !revealed.has(index)
@@ -113,12 +120,15 @@ export function EnvEditor({
                     type="button"
                     variant="ghost"
                     size="icon-sm"
+                    className="shrink-0"
                     aria-label={hidden ? "显示值" : "隐藏值"}
                     onClick={() => toggleReveal(index)}
                   >
                     {hidden ? <EyeIcon /> : <EyeOffIcon />}
                   </Button>
-                ) : null}
+                ) : (
+                  <span className="size-8 shrink-0" aria-hidden />
+                )}
                 <Button
                   type="button"
                   variant="ghost"

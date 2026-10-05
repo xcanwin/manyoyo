@@ -304,6 +304,12 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
 
             const confirmed = await create({ containerName: 'newbox3', network: { preset: 'open' }, confirmRisk: true });
             expect(confirmed.response.status).toBe(200);
+
+            // 创建时填的端口暴露：容器就绪、规则下发后立即监听
+            const hostPort = await getFreePort();
+            const withExpose = await create({ containerName: 'newbox4', network: { expose: [{ bind: '127.0.0.1', hostPort, port: 8080 }] }, confirmRisk: true });
+            expect(withExpose.response.status).toBe(200);
+            await new Promise((resolve, reject) => { const c = net.connect(hostPort, '127.0.0.1', () => { c.destroy(); resolve(); }); c.on('error', reject); });
         });
     });
 });
@@ -318,5 +324,56 @@ describe('容器管理接口：不可信的 box/ 文件与风险判定', () => {
         expect(pendingRisks(base, normalizePolicy({ egress: { rules: [{ cidr: '192.168.1.50', ports: '8000' }], domains: ['*.example.com'] } }))).toEqual([]);
         const wide = normalizePolicy({ egress: { rules: [{ cidr: '10.0.0.0/8' }] } });
         expect(pendingRisks(wide, wide)).toEqual([]);
+    });
+});
+
+describe('网络策略里的端口暴露随「保存网络规则」一起生效', () => {
+    test('PUT network 带 expose：立即监听；端口被占时 409 + 原因；非本机绑定要 confirmRisk', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-expose-'));
+        const st = state.createState({ homeDir: tempHost, network: normalizePolicy({}), netRequired: true, meta: { name: 'boxa' } });
+        const port = await getFreePort();
+        const hostPort = await getFreePort();
+        const handle = await startWebServer({
+            serverHost: '127.0.0.1', serverPort: port, authUser: 'webadmin', authPass: 'topsecret', authPassAuto: false,
+            dockerCmd: 'docker', hostPath: tempHost, homeDir: tempHost, containerPath: '/workspace',
+            imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.0.0-common',
+            execCommandPrefix: '', execCommand: '', execCommandSuffix: '', contModeArgs: [], containerEnvs: [], containerVolumes: [],
+            validateHostPath: () => {}, formatDate: () => '0101-0000',
+            isValidContainerName: value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value),
+            containerExists: name => name === 'boxa', getContainerStatus: () => 'running', waitForContainerReady: async () => {},
+            dockerExecArgs: args => (args[0] === 'inspect' && String(args[2]).includes('manyoyo.id') ? st.id : ''),
+            networkManager: { ensureBridgeNetwork: async () => {}, apply: async () => ({ status: 'applied' }), ensureReady: async () => ({}), relatedContainers: async () => [], listManaged: async () => [{ id: st.id, name: 'boxa', running: true }] },
+            showImagePullHint: () => {}, removeContainer: () => {},
+            webHistoryDir: path.join(tempHost, 'web-history'), webConfigPath: path.join(tempHost, 'manyoyo.json'),
+            colors: { GREEN: '', CYAN: '', YELLOW: '', NC: '' }
+        });
+        try {
+            const base = `http://127.0.0.1:${handle.port || port}`;
+            const login = await request(`${base}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'webadmin', password: 'topsecret' }) });
+            const cookie = login.response.headers.get('set-cookie').split(';')[0];
+            const put = body => request(`${base}/api/containers/boxa/network`, json(cookie, 'PUT', body));
+
+            const ok = await put({ policy: { expose: [{ bind: '127.0.0.1', hostPort, port: 8080 }] } });
+            expect(ok.response.status).toBe(200);
+            expect(ok.json.forwards).toEqual([{ bind: '127.0.0.1', hostPort, port: 8080 }]);
+            await new Promise((resolve, reject) => { const s = net.connect(hostPort, '127.0.0.1', () => { s.destroy(); resolve(); }); s.on('error', reject); });
+
+            const wide = await put({ policy: { expose: [{ bind: '0.0.0.0', hostPort: await getFreePort(), port: 8081 }] } });
+            expect(wide.response.status).toBe(400);
+            expect(wide.json.risks).toEqual(['publicBind']);
+
+            const blocker = net.createServer();
+            const busyPort = await new Promise(resolve => blocker.listen(0, '127.0.0.1', () => resolve(blocker.address().port)));
+            const busy = await put({ policy: { expose: [{ bind: '127.0.0.1', hostPort, port: 8080 }, { bind: '127.0.0.1', hostPort: busyPort, port: 9000 }] } });
+            await new Promise(resolve => blocker.close(resolve));
+            expect(busy.response.status).toBe(409);
+            expect(busy.json.error).toContain('已被占用');
+
+            const cleared = await put({ policy: { expose: [] } });
+            expect(cleared.json.forwards).toEqual([]);
+        } finally {
+            await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
     });
 });

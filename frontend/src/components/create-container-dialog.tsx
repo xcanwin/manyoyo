@@ -28,8 +28,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { AutostartEditor } from "@/components/container-manage/autostart-editor"
 import { EnvEditor } from "@/components/container-manage/env-editor"
 import { NetworkEditor } from "@/components/container-manage/network-editor"
-import { defaultPolicy, networkForCreate, type NetworkPolicy } from "@/lib/container-manage"
+import { defaultPolicy, networkForCreate, policyRisks, type NetworkPolicy } from "@/lib/container-manage"
 import { ChevronDownIcon } from "lucide-react"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 
 type CreateContainerForm = {
   run: string
@@ -148,6 +149,7 @@ export function CreateContainerDialog({
   const [submitting, setSubmitting] = React.useState(false)
   const [runs, setRuns] = React.useState<Record<string, RunPreset>>({})
   const [pickerOpen, setPickerOpen] = React.useState(false)
+  const { confirm, dialog: confirmDialog } = useConfirmDialog()
 
   const loadDefaults = React.useCallback(async () => {
     try {
@@ -232,6 +234,18 @@ export function CreateContainerDialog({
       setError("hostPath 不能为空")
       return
     }
+    // 放开类的改动（open 已在编辑器里确认过）：范围很大的出站规则、绑定 0.0.0.0 的端口暴露在这里确认
+    const risks = policyRisks(defaultPolicy(), form.network)
+    if (risks.includes("wide") && !(await confirm({
+      title: "放开范围很大的出站规则？",
+      message: "这条规则覆盖的地址范围很大（整个 /8 以上的网段，或类似 *.co.uk 的公共后缀通配），效果接近完全放开出站限制。",
+      confirmLabel: "确认放开",
+    }))) return
+    if (risks.includes("publicBind") && !(await confirm({
+      title: "让局域网 / 公网可见？",
+      message: "端口暴露绑定了 0.0.0.0：能访问到这台机器的任何设备（局域网，服务器在公网时是整个互联网）都可以访问这个宿主机端口，并直达容器里的服务。请确认防火墙已按需限制来源。",
+      confirmLabel: "确认暴露",
+    }))) return
     setSubmitting(true)
     setError("")
     try {
@@ -447,7 +461,7 @@ export function CreateContainerDialog({
               </div>
 
               <Field>
-                <FieldLabel>环境变量</FieldLabel>
+                <FieldLabel className="text-base font-semibold">环境变量</FieldLabel>
                 <EnvEditor
                   idPrefix="create"
                   value={form.env}
@@ -483,7 +497,25 @@ export function CreateContainerDialog({
 
               <Collapsible className="rounded-lg border">
                 <CollapsibleTrigger
-                  render={<Button type="button" variant="ghost" className="w-full justify-between" />}
+                  render={<Button type="button" variant="ghost" className="w-full justify-between text-base font-semibold" />}
+                >
+                  网络（默认收紧，含端口暴露）
+                  <ChevronDownIcon data-icon="inline-end" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-3 pt-1 pb-3">
+                  <NetworkEditor
+                    policy={form.network}
+                    onChange={(value) => setField("network", value)}
+                    peers={[]}
+                    showPeers={false}
+                    showAccess={false}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger
+                  render={<Button type="button" variant="ghost" className="w-full justify-between text-base font-semibold" />}
                 >
                   自启动命令
                   <ChevronDownIcon data-icon="inline-end" />
@@ -495,24 +527,6 @@ export function CreateContainerDialog({
                     onScriptChange={(value) => setField("autostart", value)}
                     onServe={form.autostartOnServe}
                     onServeChange={(value) => setField("autostartOnServe", value)}
-                  />
-                </CollapsibleContent>
-              </Collapsible>
-
-              <Collapsible className="rounded-lg border">
-                <CollapsibleTrigger
-                  render={<Button type="button" variant="ghost" className="w-full justify-between" />}
-                >
-                  网络（默认收紧）
-                  <ChevronDownIcon data-icon="inline-end" />
-                </CollapsibleTrigger>
-                <CollapsibleContent className="px-3 pt-1 pb-3">
-                  <NetworkEditor
-                    idPrefix="create"
-                    policy={form.network}
-                    onChange={(value) => setField("network", value)}
-                    peers={[]}
-                    showPeers={false}
                   />
                 </CollapsibleContent>
               </Collapsible>
@@ -541,6 +555,7 @@ export function CreateContainerDialog({
         </form>
       </DialogContent>
 
+      {confirmDialog}
       <DirectoryPickerDialog
         open={pickerOpen}
         onOpenChange={setPickerOpen}

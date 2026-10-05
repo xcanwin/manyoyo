@@ -3,13 +3,9 @@ import { describe, expect, test } from "vitest"
 import {
   defaultPolicy,
   describeNetStatus,
-  formatHostLines,
-  formatRuleLines,
   isSensitiveKey,
   networkForCreate,
   parseEnvText,
-  parseHostLines,
-  parseRuleLines,
   policyRisks,
   serializeEnv,
 } from "./container-manage"
@@ -33,28 +29,6 @@ describe("env 文本", () => {
   test("敏感 key 判断", () => {
     expect(["OPENAI_API_KEY", "gh_token", "DB_PASSWORD", "MY_SECRET", "AUTH_HEADER"].every(isSensitiveKey)).toBe(true)
     expect(["PATH", "LANG", "HTTP_PROXY"].some(isSensitiveKey)).toBe(false)
-  })
-})
-
-describe("网络规则文本", () => {
-  test("宿主机端口行往返", () => {
-    const host = parseHostLines("18601\n5353/udp\n 80,443 \n")
-    expect(host).toEqual([
-      { ports: "18601", proto: "tcp" },
-      { ports: "5353", proto: "udp" },
-      { ports: "80,443", proto: "tcp" },
-    ])
-    expect(formatHostLines(host)).toBe("18601\n5353/udp\n80,443")
-  })
-
-  test("出站规则行：CIDR [端口] [协议]", () => {
-    const rules = parseRuleLines("140.82.112.0/20 22,443 tcp\n10.0.0.5\n8.8.8.0/24 53 udp")
-    expect(rules).toEqual([
-      { cidr: "140.82.112.0/20", ports: "22,443", proto: "tcp" },
-      { cidr: "10.0.0.5", ports: "", proto: "tcp" },
-      { cidr: "8.8.8.0/24", ports: "53", proto: "udp" },
-    ])
-    expect(formatRuleLines(rules)).toBe("140.82.112.0/20 22,443\n10.0.0.5\n8.8.8.0/24 53 udp")
   })
 })
 
