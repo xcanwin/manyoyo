@@ -11,7 +11,8 @@ MANYOYO reduces risk but is not "absolutely safe". Know the points below before 
 
 - The main isolation is a **container, not a virtual machine**; container-escape vulnerabilities are outside what MANYOYO protects against.
 - The agent can reach the **directories you mount** and the **environment variables you pass** (API keys included). Mount only what is needed; never mount your whole home directory.
-- Containers can reach the network by default, so the agent can reach any address you allow.
+- A new container's network is **restricted by default**: the public internet is allowed; other host ports, the LAN and private ranges, cloud metadata and other containers are blocked. The rules are applied by a firewall outside the container, which the agent inside cannot change. The agent can reach as much as you open on the web "Container" tab, see [Manage env, autostart and network](./container-manage.md). Switching to "Open" or binding an exposed port to `0.0.0.0` asks for confirmation.
+- The domain allowlist is enforced by a filtering proxy inside `serve`: it listens on `0.0.0.0:8936` and relies on a random per-container credential to keep other LAN devices out, so set a strong password whenever serve listens publicly.
 - Session history, logs and config live in `~/.manyoyo/` on your machine, and your keys exist only there.
 
 ## YOLO / SOLO mode

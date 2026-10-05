@@ -71,6 +71,9 @@ For mount and `sock` mode risks, see [Security](../guide/security.md).
 | `shell` | string | Main command, e.g. `claude` |
 | `shellSuffix` | string | Appended after `shell`, e.g. `resume --last`; overridable by `--ss` or `-- ...` (the latter wins) |
 | `first` | object | Runs once **after a new container is created**, not when reusing one; has `shellPrefix` / `shell` / `shellSuffix` (override), `env` (merge by key), `envFile` (append) |
+| `autostart` | string | bash script run by the in-container init on every container start; written when a container is created, then edited on the web "Container" tab, see [Manage containers](../guide/container-manage.md) |
+| `autostartOnServe` | boolean | Start this container when `serve` starts |
+| `network` | object | Network policy written at creation: `preset` (`restricted` default / `allowlist` / `open`), `host` (host ports it may reach `[{ "ports": "11434" }]`), `egress` (`domains` allowlist, `rules` direct IP rules `[{ "cidr": "192.168.1.50", "ports": "8000" }]`), `peers`; omitted = restricted by default |
 | `agentPromptCommand` | string | Prompt command template for web AGENT mode, must contain `{prompt}`; inferred from `shell` / `yolo` when empty |
 | `quiet` | string array | Suppress output: `tip` / `cmd` / `full` |
 
