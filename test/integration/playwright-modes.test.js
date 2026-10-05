@@ -7,7 +7,7 @@ const fs = require('fs');
 const http = require('http');
 const net = require('net');
 const path = require('path');
-const { chromium } = require('playwright-core');
+const { chromium } = require('patchright-core');
 const { startFixture } = require('./helpers/fingerprint-fixture');
 const env = require('./helpers/playwright-env');
 const { PlaywrightPlugin } = require('../../lib/plugin/playwright');
@@ -187,6 +187,30 @@ maybeHeaded('Playwright headed 模式', () => {
         return name;
     }
 
+    test('扩展：up headed --ext-path 真的加载了扩展（官方 Chrome 忽略 --load-extension，要靠 CDP 加载）', async () => {
+        const extDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'manyoyo-ext-'));
+        try {
+            fs.writeFileSync(path.join(extDir, 'manifest.json'), JSON.stringify({
+                manifest_version: 3, name: 'manyoyo-it-ext', version: '1.0', background: { service_worker: 'manyoyo-it-sw.js' }
+            }));
+            fs.writeFileSync(path.join(extDir, 'manyoyo-it-sw.js'), '// noop\n');
+            const up = await env.cli(home, ['playwright', 'up', 'headed', '--ext-path', extDir], { timeout: 300000 });
+            expect(up.status).toBe(0);
+            const token = fs.readFileSync(path.join(home, '.manyoyo', 'plugin', 'playwright', 'run', 'token'), 'utf8').trim();
+            const browser = await chromium.connect(`ws://127.0.0.1:${port}/${token}`);
+            try {
+                const cdp = await browser.newBrowserCDPSession();
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                const { targetInfos } = await cdp.send('Target.getTargets');
+                expect(targetInfos.some(item => item.type === 'service_worker' && item.url.endsWith('/manyoyo-it-sw.js'))).toBe(true);
+            } finally {
+                await browser.close();
+            }
+        } finally {
+            fs.rmSync(extDir, { recursive: true, force: true });
+        }
+    });
+
     test('多容器共用一个宿主机浏览器服务；down 回退、再 up 后无需重建容器', async () => {
         const up = await env.cli(home, ['playwright', 'up', 'headed'], { timeout: 300000 });
         expect(up.status).toBe(0);
@@ -243,10 +267,10 @@ maybeHeaded('Playwright headed 模式', () => {
         expect((await env.openAndSnapshot(runtime, name, hostUrl())).text).toContain(fixture.secret);
     });
 
-    test('chrome（模拟）：中继转发到本机 chromium；它重启（端口变化）后容器不重建也能继续用；无 token 被拒', async () => {
+    test('chrome（模拟）：中继转发到本机浏览器；它重启（端口变化）后容器不重建也能继续用；无 token 被拒', async () => {
         const userDataDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'manyoyo-chrome-'));
         const launch = () => chromium.launchPersistentContext(userDataDir, {
-            channel: 'chromium',
+            ...env.simulatedUserChromeOptions(),
             headless: false,
             chromiumSandbox: false,
             args: ['--remote-debugging-port=0']

@@ -3,6 +3,11 @@
 # 以 playwright-cli 名字调用时交给 @playwright/cli；以 playwright-mcp 名字调用时启动 stdio MCP（读同一份 $PLAYWRIGHT_MCP_CONFIG）。
 export DISPLAY=:99
 CONFIG="${PLAYWRIGHT_MCP_CONFIG:-/run/manyoyo-playwright/config.json}"
+# 语言与时区用进程环境变量（TZ / LANG / LANGUAGE）原生提供，页面与 Worker 才一致；由宿主机生成，与 config.json 同目录
+ENV_FILE="$(dirname "$CONFIG")/env"
+if [ -r "$ENV_FILE" ]; then
+    . "$ENV_FILE"
+fi
 # 浏览器在容器外（headed / chrome / vnc）时不需要虚拟屏
 if ! grep -qE '"(remoteEndpoint|cdpEndpoint)"' "$CONFIG" 2>/dev/null; then
     # 以锁文件里的进程是否活着为准；容器被 kill 后遗留的 socket 与锁文件要清掉

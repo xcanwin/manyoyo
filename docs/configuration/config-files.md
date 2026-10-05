@@ -21,7 +21,7 @@ description: "~/.manyoyo/manyoyo.json 的全部字段、合并规则与最小示
 ```json5
 {
     "imageName": "ghcr.io/xcanwin/manyoyo",
-    "imageVersion": "2.1.1-full",
+    "imageVersion": "2.2.0-full",
     "runs": {
         "claude": {
             "envFile": ["/abs/path/anthropic_claudecode.env"],
@@ -39,7 +39,7 @@ description: "~/.manyoyo/manyoyo.json 的全部字段、合并规则与最小示
 | `hostPath` | 字符串 | 当前目录 | 挂载到容器的宿主机工作目录 |
 | `containerPath` | 字符串 | 同 `hostPath` | 容器内工作目录 |
 | `imageName` | 字符串 | `ghcr.io/xcanwin/manyoyo` | 镜像名（不含版本） |
-| `imageVersion` | 字符串 | 无 | 格式 `x.y.z-后缀`，如 `2.1.1-common`、`2.1.1-full` |
+| `imageVersion` | 字符串 | 无 | 格式 `x.y.z-后缀`，如 `2.2.0-common`、`2.2.0-full` |
 | `containerMode` | 字符串 | `common` | `common` / `dind` / `sock`，见 [容器模式](../reference/container-modes.md) |
 | `imageBuildArgs` | 字符串数组 | 无 | 构建参数 `KEY=VALUE`，追加合并，如 `TOOL=common` |
 

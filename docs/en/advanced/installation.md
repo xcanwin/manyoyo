@@ -195,7 +195,7 @@ The default image is pulled automatically on first use; you only need to build f
 
 ## Upgrade and Uninstall
 
-Upgrade the image: after building a new tag for a custom image, set `imageVersion` in `~/.manyoyo/manyoyo.json` to `"2.1.1-common"`, then run `manyoyo prune` to remove dangling images.
+Upgrade the image: after building a new tag for a custom image, set `imageVersion` in `~/.manyoyo/manyoyo.json` to `"2.2.0-common"`, then run `manyoyo prune` to remove dangling images.
 
 Uninstall an npm-installed MANYOYO:
 

@@ -5,22 +5,22 @@ description: "Troubleshoot failed MANYOYO custom image builds by error message, 
 
 # Build Issue Troubleshooting
 
-Find the cause and the shortest fix by error message. The default image `ghcr.io/xcanwin/manyoyo` is pulled automatically; you only need to build for a [custom image](./custom-image.md). Examples use `2.1.1-common`; replace with your actual tag.
+Find the cause and the shortest fix by error message. The default image `ghcr.io/xcanwin/manyoyo` is pulled automatically; you only need to build for a [custom image](./custom-image.md). Examples use `2.2.0-common`; replace with your actual tag.
 
 ## General Build Failure Checklist
 
 Save the log first, then match the symptoms below:
 
 ```bash
-manyoyo build --iv 2.1.1-common 2>&1 | tee build.log
+manyoyo build --iv 2.2.0-common 2>&1 | tee build.log
 grep -i "error\|failed\|fatal" build.log
 ```
 
 If the cause is still unclear, build the slim variant to verify the basics, then build the full one:
 
 ```bash
-manyoyo build --iv 2.1.1-common --iba TOOL=common
-manyoyo build --iv 2.1.1-full --iba TOOL=full
+manyoyo build --iv 2.2.0-common --iba TOOL=common
+manyoyo build --iv 2.2.0-full --iba TOOL=full
 ```
 
 ## Image Pull Failures
@@ -39,10 +39,10 @@ docker images | grep manyoyo  # or podman images
 manyoyo run --iv <x.y.z-suffix> -y c
 
 # Or build locally
-manyoyo build --iv 2.1.1-common
+manyoyo build --iv 2.2.0-common
 ```
 
-To pin a tag permanently, set `"imageVersion": "2.1.1-common"` in `~/.manyoyo/manyoyo.json`.
+To pin a tag permanently, set `"imageVersion": "2.2.0-common"` in `~/.manyoyo/manyoyo.json`.
 
 ## Network Issues
 
@@ -68,7 +68,7 @@ nslookup mirrors.tencent.com
 - **Outside China**: the default mirrors are Chinese sites; blank them to use official sources:
 
 ```bash
-manyoyo build --iv 2.1.1-common --iba NODEJS_MIRROR= --iba NPM_REGISTRY= --iba PIP_INDEX_URL=
+manyoyo build --iv 2.2.0-common --iba NODEJS_MIRROR= --iba NPM_REGISTRY= --iba PIP_INDEX_URL=
 ```
 
 - **Git SSL verification failure** (development only): `--iba GIT_SSL_NO_VERIFY=true`.

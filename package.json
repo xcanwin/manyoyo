@@ -1,8 +1,10 @@
 {
     "name": "@xcanwin/manyoyo",
     "version": "8.3.3",
-    "imageVersion": "2.1.1-common",
-    "playwrightCliVersion": "0.1.21",
+    "imageVersion": "2.2.0-common",
+    "playwrightCliVersion": "0.1.19",
+    "patchrightCoreVersion": "1.63.0",
+    "patchrightCoreIntegrity": "sha512-nuRJVTMVKoOFzY8vmwFqJZR3F0trUCKiPzDSgCOPq/yHHTefm9czILV23dXJsi5mvS7sCy7U1CqG7edA/21DtQ==",
     "description": "MANYOYO – open-source AI agent sandbox: run AI coding agents (Claude Code / Codex / Gemini) safely in Docker/Podman",
     "keywords": [
         "manyoyo",
@@ -66,9 +68,9 @@
         "manyoyo.example.json"
     ],
     "dependencies": {
-        "@playwright/cli": "0.1.21",
         "commander": "^15.0.0",
         "json5": "^2.2.3",
+        "patchright-core": "1.63.0",
         "ws": "^8.21.3"
     },
     "devDependencies": {

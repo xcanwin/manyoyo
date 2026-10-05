@@ -5,22 +5,22 @@ description: "按错误信息排查 MANYOYO 自定义镜像构建失败：网络
 
 # 构建问题排查
 
-按错误信息查原因和最短解决办法。默认镜像 `ghcr.io/xcanwin/manyoyo` 会自动拉取，只有[自定义镜像](./custom-image.md)才需要构建。示例使用 `2.1.1-common`，请替换为实际标签。
+按错误信息查原因和最短解决办法。默认镜像 `ghcr.io/xcanwin/manyoyo` 会自动拉取，只有[自定义镜像](./custom-image.md)才需要构建。示例使用 `2.2.0-common`，请替换为实际标签。
 
 ## 构建失败的通用排查
 
 先保存日志，再按下面的症状对号入座：
 
 ```bash
-manyoyo build --iv 2.1.1-common 2>&1 | tee build.log
+manyoyo build --iv 2.2.0-common 2>&1 | tee build.log
 grep -i "error\|failed\|fatal" build.log
 ```
 
 仍找不到原因时，先构建精简版验证基础链路，成功后再构建完整版：
 
 ```bash
-manyoyo build --iv 2.1.1-common --iba TOOL=common
-manyoyo build --iv 2.1.1-full --iba TOOL=full
+manyoyo build --iv 2.2.0-common --iba TOOL=common
+manyoyo build --iv 2.2.0-full --iba TOOL=full
 ```
 
 ## 镜像拉取失败
@@ -39,10 +39,10 @@ docker images | grep manyoyo  # 或 podman images
 manyoyo run --iv <x.y.z-后缀> -y c
 
 # 或在本地构建
-manyoyo build --iv 2.1.1-common
+manyoyo build --iv 2.2.0-common
 ```
 
-想长期使用某个标签，在 `~/.manyoyo/manyoyo.json` 里设置 `"imageVersion": "2.1.1-common"`。
+想长期使用某个标签，在 `~/.manyoyo/manyoyo.json` 里设置 `"imageVersion": "2.2.0-common"`。
 
 ## 网络问题
 
@@ -68,7 +68,7 @@ nslookup mirrors.tencent.com
 - **国外网络**：默认镜像源是国内站点，可置空后用官方源：
 
 ```bash
-manyoyo build --iv 2.1.1-common --iba NODEJS_MIRROR= --iba NPM_REGISTRY= --iba PIP_INDEX_URL=
+manyoyo build --iv 2.2.0-common --iba NODEJS_MIRROR= --iba NPM_REGISTRY= --iba PIP_INDEX_URL=
 ```
 
 - **Git SSL 证书校验失败**（仅限开发环境）：`--iba GIT_SSL_NO_VERIFY=true`。

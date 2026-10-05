@@ -11,7 +11,7 @@ description: 构建自定义 MANYOYO 沙箱镜像：manyoyo build、TOOL 工具�
 
 ```bash
 # 构建推荐版本（common）
-manyoyo build --iv 2.1.1-common
+manyoyo build --iv 2.2.0-common
 
 # 构建后验证
 docker images | grep manyoyo  # 或 podman images
@@ -30,9 +30,9 @@ docker images | grep manyoyo  # 或 podman images
 包含所有支持的 AI CLI 工具和开发环境：
 
 ```bash
-manyoyo build --iv 2.1.1-full
+manyoyo build --iv 2.2.0-full
 # 或显式指定构建参数
-manyoyo build --iv 2.1.1-full --iba TOOL=full
+manyoyo build --iv 2.2.0-full --iba TOOL=full
 ```
 
 **包含工具**：
@@ -89,12 +89,12 @@ manyoyo build --iba TOOL=go,codex,java,gemini
 
 ```bash
 # 自定义镜像名和版本
-manyoyo build --in myimage --iv 2.1.1-common
-# 生成镜像：myimage:2.1.1-common
+manyoyo build --in myimage --iv 2.2.0-common
+# 生成镜像：myimage:2.2.0-common
 
 # 指定完整的镜像名
-manyoyo build --in localhost/myuser/sandbox --iv 2.1.1-common
-# 生成镜像：localhost/myuser/sandbox:2.1.1-common
+manyoyo build --in localhost/myuser/sandbox --iv 2.2.0-common
+# 生成镜像：localhost/myuser/sandbox:2.2.0-common
 ```
 
 ### 特殊构建参数

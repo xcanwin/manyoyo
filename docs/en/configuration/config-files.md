@@ -21,7 +21,7 @@ Priority: command line > `runs.<name>` > global config > defaults.
 ```json5
 {
     "imageName": "ghcr.io/xcanwin/manyoyo",
-    "imageVersion": "2.1.1-full",
+    "imageVersion": "2.2.0-full",
     "runs": {
         "claude": {
             "envFile": ["/abs/path/anthropic_claudecode.env"],
@@ -39,7 +39,7 @@ Priority: command line > `runs.<name>` > global config > defaults.
 | `hostPath` | string | current directory | Host working directory mounted into the container |
 | `containerPath` | string | same as `hostPath` | Working directory inside the container |
 | `imageName` | string | `ghcr.io/xcanwin/manyoyo` | Image name (without version) |
-| `imageVersion` | string | none | Format `x.y.z-suffix`, e.g. `2.1.1-common`, `2.1.1-full` |
+| `imageVersion` | string | none | Format `x.y.z-suffix`, e.g. `2.2.0-common`, `2.2.0-full` |
 | `containerMode` | string | `common` | `common` / `dind` / `sock`, see [Container Modes](../reference/container-modes.md) |
 | `imageBuildArgs` | string array | none | Build args `KEY=VALUE`, appended, e.g. `TOOL=common` |
 

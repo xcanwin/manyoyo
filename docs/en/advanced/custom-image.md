@@ -11,7 +11,7 @@ The default image `ghcr.io/xcanwin/manyoyo` is pulled automatically on first use
 
 ```bash
 # Build recommended version (common)
-manyoyo build --iv 2.1.1-common
+manyoyo build --iv 2.2.0-common
 
 # Verify after build
 docker images | grep manyoyo  # or podman images
@@ -30,9 +30,9 @@ docker images | grep manyoyo  # or podman images
 Includes all supported AI CLI tools and development environments:
 
 ```bash
-manyoyo build --iv 2.1.1-full
+manyoyo build --iv 2.2.0-full
 # Or explicitly specify build args
-manyoyo build --iv 2.1.1-full --iba TOOL=full
+manyoyo build --iv 2.2.0-full --iba TOOL=full
 ```
 
 **Included Tools**:
@@ -89,12 +89,12 @@ manyoyo build --iba TOOL=go,codex,java,gemini
 
 ```bash
 # Custom image name and version
-manyoyo build --in myimage --iv 2.1.1-common
-# Generates image: myimage:2.1.1-common
+manyoyo build --in myimage --iv 2.2.0-common
+# Generates image: myimage:2.2.0-common
 
 # Specify full image name
-manyoyo build --in localhost/myuser/sandbox --iv 2.1.1-common
-# Generates image: localhost/myuser/sandbox:2.1.1-common
+manyoyo build --in localhost/myuser/sandbox --iv 2.2.0-common
+# Generates image: localhost/myuser/sandbox:2.2.0-common
 ```
 
 ### Special Build Parameters

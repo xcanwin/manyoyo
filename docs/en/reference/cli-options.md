@@ -40,7 +40,7 @@ manyoyo
 | `ps` | List containers | `manyoyo ps` |
 | `images` | List images | `manyoyo images` |
 | `rm <name>` | Remove a container | `manyoyo rm my-0101-1200` |
-| `build` | Build the sandbox image | `manyoyo build --iv 2.1.1-common` |
+| `build` | Build the sandbox image | `manyoyo build --iv 2.2.0-common` |
 | `prune` | Remove dangling images | `manyoyo prune` |
 | `podman <args...>` | Run a command with the private Podman (args pass through verbatim; only after a full offline-package install) | `manyoyo podman ps -a` |
 
@@ -65,7 +65,7 @@ These commands share the same core runtime options:
 | `--cp, --cont-path <path>` | Container working directory |
 | `-m, --cont-mode <mode>` | Container mode: `common`, `dind`, `sock` |
 | `--in, --image-name <name>` | Image name |
-| `--iv, --image-ver <version>` | Image version; must be `x.y.z-suffix`, for example `2.1.1-common` |
+| `--iv, --image-ver <version>` | Image version; must be `x.y.z-suffix`, for example `2.2.0-common` |
 | `-e, --env <env>` | Append environment variables, repeatable |
 | `--ef, --env-file <file>` | Append env files, absolute paths only |
 | `-v, --volume <volume>` | Append bind mounts, repeatable |

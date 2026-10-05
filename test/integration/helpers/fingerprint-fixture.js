@@ -4,9 +4,36 @@
 const http = require('http');
 const crypto = require('crypto');
 
+// 复刻 deviceandbrowserinfo 的 CDP 检测（其 device_info.min.js 的做法）：装一个 Error.prepareStackTrace 探针再 console.log 一个 Error。
+// CDP 客户端打开了 Runtime 域时，V8 会序列化 console 实参、读取 Error.stack，从而触发探针（官方 Playwright 会，patchright 不会）。页面与 Worker 各测一次
+const CDP_PROBE = `
+const cdpProbe = () => {
+    let hit = false;
+    const previous = Error.prepareStackTrace;
+    Error.prepareStackTrace = function () { hit = true; return previous; };
+    console.log(new Error(''));
+    Error.prepareStackTrace = previous;
+    return hit;
+};`;
+const WORKER_SOURCE = `${CDP_PROBE}
+postMessage({
+    languages: Array.from(navigator.languages),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    userAgent: navigator.userAgent,
+    hardwareConcurrency: navigator.hardwareConcurrency,
+    cdp: cdpProbe()
+});`;
+
 const COLLECT_SCRIPT = `
+${CDP_PROBE}
 (async () => {
     const out = {};
+    out.cdp = cdpProbe();
+    out.worker = await new Promise(resolve => {
+        const worker = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(WORKER_SOURCE)}])));
+        worker.onmessage = event => resolve(event.data);
+        worker.onerror = event => resolve('error:' + event.message);
+    });
     const safe = (fn) => { try { return fn(); } catch (e) { return 'error:' + e.message; } };
     out.webdriver = navigator.webdriver;
     out.userAgent = navigator.userAgent;
@@ -53,6 +80,12 @@ function startFixture({ host = '0.0.0.0', port = 0 } = {}) {
         if (req.url === '/state') {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ headers: state.headers, report: state.report, secret }));
+            return;
+        }
+        if (req.url === '/global') {
+            // 主世界全局变量：playwright-cli eval / run-code 必须读得到（patchright 默认在隔离世界执行，读不到）
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(`<!doctype html><meta charset="utf-8"><title>g</title><script>window.manyoyoGlobal = 'g-${secret}'; window.manyoyoFn = () => 'f-${secret}';</script><body>global`);
             return;
         }
         if (req.url === '/fingerprint') {

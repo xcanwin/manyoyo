@@ -14,7 +14,7 @@ There is a single global config: `~/.manyoyo/manyoyo.json`, read automatically b
 ```json5
 {
     // global defaults
-    imageVersion: "2.1.1-common",
+    imageVersion: "2.2.0-common",
     runs: {
         // named run profile: manyoyo run -r claude
         claude: {
@@ -48,10 +48,10 @@ Different parameter types merge differently:
 ## Minimal example
 
 ```bash
-# global: imageVersion 2.1.1-common; runs.demo: imageVersion 2.1.1-full, env VAR2
+# global: imageVersion 2.2.0-common; runs.demo: imageVersion 2.2.0-full, env VAR2
 # command line: -e VAR3=value3
 manyoyo run -r demo -e "VAR3=value3"
-# image is 2.1.1-full (runs overrides global); VAR2, VAR3 and the global env all apply
+# image is 2.2.0-full (runs overrides global); VAR2, VAR3 and the global env all apply
 ```
 
 ## See the final result
