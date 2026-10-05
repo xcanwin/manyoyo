@@ -83,7 +83,9 @@ maybe('container-network（真实容器）', () => {
         const st = state.createState({ homeDir: home, autostart, network, netRequired: network.preset !== 'open', meta: { name } });
         const args = buildContainerRunArgs({
             state: st, containerName: name, hostPath: work, containerPath: '/workspace', imageName: IMAGE_NAME, imageVersion,
-            defaultNetwork: NETWORK_NAME, defaultCommand: '/bin/bash'
+            defaultNetwork: NETWORK_NAME, defaultCommand: '/bin/bash',
+            // 与 buildContainerIntegration 对 docker 的做法一致：让容器里有 host.docker.internal
+            containerExtraArgs: path.basename(runtime.command) === 'docker' ? ['--add-host', 'host.docker.internal:host-gateway'] : []
         });
         const r = rtSync(args);
         if (r.status !== 0) throw new Error(r.stderr);
