@@ -146,3 +146,18 @@ describe('box/ 里的不可信文件', () => {
         built.cleanup();
     });
 });
+
+describe('不凭空建状态目录', () => {
+    test('对不存在的 id 写下发状态 / managed.env / 门闩标记会报错且不留目录', () => {
+        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-ghost-'));
+        try {
+            const id = '0123456789abcdef';
+            expect(() => state.writeNetStatus(home, id, { status: 'error' })).toThrow(/状态目录不存在/);
+            expect(() => state.writeManagedEnv(home, id, [])).toThrow(/状态目录不存在/);
+            expect(() => state.setNetRequired(home, id, true)).toThrow(/状态目录不存在/);
+            expect(fs.existsSync(path.join(home, '.manyoyo', 'containers', id))).toBe(false);
+        } finally {
+            fs.rmSync(home, { recursive: true, force: true });
+        }
+    });
+});
