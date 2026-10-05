@@ -71,9 +71,9 @@ description: "~/.manyoyo/manyoyo.json 的全部字段、合并规则与最小示
 | `shell` | 字符串 | 主命令，如 `claude` |
 | `shellSuffix` | 字符串 | 追加在 `shell` 后，如 `resume --last`；可被 `--ss` 或 `-- ...` 覆盖（后者最高） |
 | `first` | 对象 | 仅在**新建容器后**执行一次，复用容器时不执行；含 `shellPrefix` / `shell` / `shellSuffix`（覆盖型）、`env`（按 key 合并）、`envFile`（追加） |
+| `network` | 对象 | 网络策略，新建容器时写入：`preset`（`restricted` 默认 / `allowlist` / `open`）、`host`（允许访问的宿主机端口 `[{ "ports": "11434" }]`）、`egress`（`domains` 域名白名单、`rules` 直连放行的 IP 规则 `[{ "cidr": "192.168.1.50", "ports": "8000" }]`）、`peers`；不写为默认收紧 |
 | `autostart` | 字符串 | 容器每次启动都由容器内 init 执行的 bash 脚本，新建容器时写入，之后在网页「容器」页修改，见[管理容器](../guide/container-manage.md) |
 | `autostartOnServe` | 布尔 | `serve` 启动时自动拉起此容器 |
-| `network` | 对象 | 网络策略，新建容器时写入：`preset`（`restricted` 默认 / `allowlist` / `open`）、`host`（允许访问的宿主机端口 `[{ "ports": "11434" }]`）、`egress`（`domains` 域名白名单、`rules` 直连放行的 IP 规则 `[{ "cidr": "192.168.1.50", "ports": "8000" }]`）、`peers`；不写为默认收紧 |
 | `agentPromptCommand` | 字符串 | 网页 AGENT 模式的提示词命令模板，须含 `{prompt}`；为空时按 `shell` / `yolo` 自动推断 |
 | `quiet` | 字符串数组 | 静默显示，可选 `tip` / `cmd` / `full` |
 

@@ -7,7 +7,7 @@ description: 介绍 manyoyo serve 网页服务的启动方式、认证网关、�
 
 本页讲 `manyoyo serve` 网页服务：怎么启动、怎么登录、怎么远程访问。风险与边界见[安全须知](./security.md)；SSH 机器上的 `ssh -L` 访问见[第一次使用](./first-run.md)。
 
-容器跑起来后，可在「容器」标签页随时修改它的环境变量、自启动脚本和网络规则，见[管理容器的 env、自启动与网络](./container-manage.md)。
+容器跑起来后，可在「容器」标签页随时修改它的环境变量、自启动脚本和网络规则，见[管理容器的 env、网络与自启动](./container-manage.md)。
 
 当前网页交互支持三种模式：`命令模式`、`AGENT 模式`、`交互终端`。其中 `AGENT 模式` 需要会话配置 `agentPromptCommand`（模板内必须包含 `{prompt}`）。
 

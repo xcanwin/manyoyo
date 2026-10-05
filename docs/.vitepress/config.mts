@@ -208,7 +208,7 @@ export default defineConfig({
                 { text: '命令行运行 Agent', link: '/guide/basic-usage' },
                 { text: '迁移已有 Agent 配置', link: '/guide/migrate' },
                 { text: '网页服务与远程访问', link: '/guide/web' },
-                { text: '管理容器的 env、自启动与网络', link: '/guide/container-manage' },
+                { text: '管理容器的 env、网络与自启动', link: '/guide/container-manage' },
                 { text: '安全须知', link: '/guide/security' }
               ]
             },
@@ -312,7 +312,7 @@ export default defineConfig({
                 { text: 'Run Agents from the CLI', link: '/en/guide/basic-usage' },
                 { text: 'Migrate Existing Agent Configs', link: '/en/guide/migrate' },
                 { text: 'Web Service and Remote Access', link: '/en/guide/web' },
-                { text: 'Manage env, autostart and network', link: '/en/guide/container-manage' },
+                { text: 'Manage env, network and autostart', link: '/en/guide/container-manage' },
                 { text: 'Security Notes', link: '/en/guide/security' }
               ]
             },

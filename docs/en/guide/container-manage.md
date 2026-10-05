@@ -1,9 +1,9 @@
 ---
-title: Manage a container's environment, autostart and network | MANYOYO
-description: Change a container's environment variables, autostart script and network rules (host ports, container-to-container access, domain allowlist, exposed ports) from the web "Container" tab at any time, without rebuilding or restarting it.
+title: Manage a container's environment, network and autostart | MANYOYO
+description: Change a container's environment variables, network rules and autostart script (host ports, container-to-container access, domain allowlist, exposed ports) from the web "Container" tab at any time, without rebuilding or restarting it.
 ---
 
-# Manage a container's environment, autostart and network
+# Manage a container's environment, network and autostart
 
 Set environment variables, an autostart script and the network when you create a container; once it is running, change them any time under **More tabs → Container** in the web workbench — **no restart or rebuild needed**. Risks and boundaries are in [Security Notes](./security.md).
 
@@ -30,14 +30,6 @@ The entry is **Container** in the top bar's "…" (More tabs) menu. The page sho
 - Terminals that are already open must be closed and reopened to see new variables (existing shell processes do not update their environment).
 - If the container changed the file just before you save, the page reports a conflict and asks you to reload instead of overwriting silently.
 
-## Autostart
-
-Write a bash script under "Autostart". Every time the container starts (creation, restart, start after a `podman machine` restart) the in-container init runs it once and appends output to `/run/manyoyo/autostart.log` ("View log"). With "start this container when serve starts" on, `manyoyo serve` also starts the container.
-
-The script runs as root in the container's default directory; write paths as **in-container** paths (the container path of your mounted host directory is the containerPath on the "Config" tab). The output of "Run now" is not shown automatically: click "View log"; script failures are written to that log too, so check it first when debugging.
-
-The container's PID 1 is manyoyo's own init: it reaps zombies and reacts to stop signals (`stop` no longer waits 10 seconds). The autostart script and the agent do not run until the network rules have been applied.
-
 ## Network
 
 New containers are **restricted by default**:
@@ -49,11 +41,11 @@ Under "Network" you can:
 
 | I want to… | Do this |
 | --- | --- |
-| Let the container reach a service on the host (e.g. local Ollama) | Add the port under "Host ports it may reach", e.g. `11434`. The service must listen on `0.0.0.0`; services bound to `127.0.0.1` are unreachable. Verify in the container terminal: `curl --noproxy '*' http://host.containers.internal:11434/` (containers often carry proxy variables, so add `--noproxy`) |
-| Reach a service on the LAN | Add `192.168.1.50 8000` under "Extra IP rules" |
-| Let container A reach port 7000 of container B | On **B**, add A and the port under "Allow other containers to reach me" |
-| Allow only a few domains such as github.com | Switch outbound to "Allowlist only" and list domains (`*.example.com` supported) |
-| Temporarily expose container port 8080 on the host | Add `127.0.0.1:18080 → 8080` under "Port exposure" and click "Open" |
+| Let the container reach a service on the host (e.g. local Ollama) | Add a row under "Host ports it may reach", port e.g. `11434`. The service must listen on `0.0.0.0`; services bound to `127.0.0.1` are unreachable. Verify in the container terminal: `curl --noproxy '*' http://host.containers.internal:11434/` (containers often carry proxy variables, so add `--noproxy`) |
+| Reach a service on the LAN | Add a row under "Extra IP rules": IP `192.168.1.50`, port `8000` |
+| Let container A reach port 7000 of container B | On **B**, add a row under "Allow other containers to reach me": source container A, port `7000` |
+| Allow only a few domains such as github.com | Switch outbound to "Allowlist only" and add domains one per row under "Allowed domains" (`*.example.com` supported) |
+| Temporarily expose container port 8080 on the host | Add a row under "Port exposure": listen `127.0.0.1`, host port `18080`, container port `8080`; after saving click "Open" on that row |
 | Go back to the old behavior | Choose "Open" outbound (asks for confirmation); no rules at all |
 
 If you put URLs that point to private addresses in the environment when creating a container (e.g. `OLLAMA_BASE_URL=http://host.containers.internal:11434`, or a model gateway on the LAN), those endpoints are added to the rules automatically so the agent can reach its own model service; they are visible (and removable) under "Network".
@@ -62,13 +54,32 @@ If you put URLs that point to private addresses in the environment when creating
 
 "Allowlist only" is enforced by a **filtering proxy** inside the `manyoyo serve` process: the container firewall only allows traffic to that proxy, direct connections are blocked. The proxy allows HTTP(S) (CONNECT) by domain, and rejects any destination that resolves to a private / loopback / link-local address (so it cannot be used to reach the host) unless you explicitly allow that IP in the IP rules. Non-HTTP protocols (ssh, databases) are allowed through "IP rules". Note:
 
-- The proxy listens on `0.0.0.0:8936` (containers can only reach the host through its LAN IP) and relies on a random per-container credential to keep other LAN devices out; the credential exists only in that container's environment.
+- The proxy listens on `0.0.0.0:8936` (containers can only reach the host through its LAN IP) and relies on a random per-container credential to keep other LAN / internet devices out; the credential exists only in that container's environment.
 - It exists only while `serve` runs; when serve stops, HTTP egress of allowlist containers fails (fail closed, never opens up).
 - `manyoyo run` on the command line does not provide the proxy; use the web service for containers with a domain allowlist.
 
 ### Port exposure
 
-Exposed ports are listened on by serve on the host and each connection is forwarded into the container; by default only `127.0.0.1` is bound. Binding `0.0.0.0` makes it reachable by any device on the LAN, and the page asks you to confirm. A port already in use is reported clearly.
+Exposed ports are listened on by serve on the host and each connection is forwarded into the container; by default only `127.0.0.1` is bound. Like the other rules they take effect when you click "Save network rules", and you can also fill them in when creating a container. Binding `0.0.0.0` makes the port reachable from the LAN / the internet (depending on the host's network and firewall), and the page asks you to confirm. A port already in use is reported clearly.
+
+### Deploying on a public server
+
+These ports listen on `0.0.0.0`, which on a public server means open to the whole internet (each is protected by a credential, but you should still allow only the sources you need in the cloud security group / firewall):
+
+| Port | Purpose | Advice |
+| --- | --- | --- |
+| The `serve` listen port | Web service | Use a strong password; behind an HTTPS reverse proxy when public, see [Web Service and Remote Access](./web.md) |
+| `8936` | Filtering proxy for the domain allowlist (containers reach it via the host IP) | Allow only the host itself in the security group; do not expose it |
+| `8935` | Playwright browser service (headed mode, token protected) | Same, do not expose it |
+| Exposed ports you bind to `0.0.0.0` | Services inside containers | Prefer `127.0.0.1`, then use `ssh -L` or an HTTPS reverse proxy; if you must expose, restrict source IPs in the firewall |
+
+## Autostart
+
+Write a bash script under "Autostart". Every time the container starts (creation, restart, start after a `podman machine` restart) the in-container init runs it once and appends output to `/run/manyoyo/autostart.log` ("View log"). With "start this container when serve starts" on, `manyoyo serve` also starts the container.
+
+The script runs as root in the container's default directory; write paths as **in-container** paths (the container path of your mounted host directory is the containerPath on the "Config" tab). The output of "Run now" is not shown automatically: click "View log"; script failures are written to that log too, so check it first when debugging.
+
+The container's PID 1 is manyoyo's own init: it reaps zombies and reacts to stop signals (`stop` no longer waits 10 seconds). The autostart script and the agent do not run until the network rules have been applied.
 
 ## Configuration fields
 
