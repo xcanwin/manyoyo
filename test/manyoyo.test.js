@@ -475,6 +475,32 @@ describe('MANYOYO CLI', () => {
             }
         });
 
+        test('config show 展示 autostart / network（runs 覆盖全局），非法 network 报错', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-run-manage-'));
+            writeGlobalConfig(tempHome, {
+                autostart: 'echo global',
+                network: { host: [{ ports: '1111' }] },
+                runs: {
+                    demo: { autostart: 'echo run', autostartOnServe: true, network: { preset: 'allowlist', egress: { domains: ['github.com'] } } },
+                    bad: { network: { host: [{ ports: '80; flush ruleset' }] } }
+                }
+            });
+            const env = { ...process.env, HOME: tempHome };
+            try {
+                const none = JSON.parse(execSync(`node ${BIN_PATH} config show`, { encoding: 'utf-8', env }));
+                expect(none.autostart).toBe('echo global');
+                expect(none.network.preset).toBe('restricted');
+                expect(none.network.host).toEqual([{ ports: '1111', proto: 'tcp' }]);
+                const demo = JSON.parse(execSync(`node ${BIN_PATH} config show -r demo`, { encoding: 'utf-8', env }));
+                expect(demo.autostart).toBe('echo run');
+                expect(demo.network).toEqual(expect.objectContaining({ preset: 'allowlist', autostartOnServe: true }));
+                expect(demo.network.egress.domains).toEqual(['github.com']);
+                expect(() => execSync(`node ${BIN_PATH} config show -r bad`, { encoding: 'utf-8', env, stdio: 'pipe' })).toThrow(/端口/);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
         test('should reject absolute path for --run', () => {
             expect(() => {
                 execSync(`node ${BIN_PATH} config show -r /tmp/myconfig.json`, {

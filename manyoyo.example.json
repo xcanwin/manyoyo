@@ -29,6 +29,21 @@
     "volumes": [],
     "ports": ["8888:8888"],
 
+    // 容器每次启动（新建、重启、serve 拉起）都由容器内 init 执行一次的 bash 脚本；新建容器时写入，之后在 Web「容器」页随时改
+    "autostart": "",
+    // serve 启动时是否自动拉起此容器（配合 autostart 使用）
+    "autostartOnServe": false,
+    // 网络策略（新建容器时写入，Web「容器」页随时改，不需要重启容器）。不写 = 默认收紧：允许公网，
+    // 禁止宿主机其他端口、局域网 / 私有网段、云元数据与其他容器。
+    // preset：restricted（默认）/ allowlist（域名白名单，需要 serve 运行）/ open（不加规则）
+    "network": {
+        "preset": "restricted",
+        // 允许容器访问的宿主机端口（宿主机上监听 0.0.0.0 的服务）
+        "host": [],
+        // 直连放行的 IP 规则，例如局域网里的模型网关：{ "cidr": "192.168.1.50", "ports": "8000", "proto": "tcp" }
+        "egress": { "domains": [], "rules": [] }
+    },
+
     // 仅首次创建容器时执行一次（创建后、常规 shell 前）
     "first": {
         // 仅支持绝对路径，如 /abs/path.env

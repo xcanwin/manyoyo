@@ -49,6 +49,7 @@ const { buildExecArgs, resolveContainerId } = require('../lib/container-exec');
 const { createNetworkManager, NETWORK_NAME } = require('../lib/container-network');
 const { normalizePolicy } = require('../lib/network-policy');
 const { withEnvEndpoints } = require('../lib/network-endpoints');
+const { resolveManageOptions } = require('../lib/container-manage-options');
 const {
     sanitizeSensitiveData,
     sanitizeServeLogText,
@@ -136,6 +137,7 @@ let CONTAINER_RUNTIME = null;
 let UPDATE_CHECK_ENABLED = true;
 // 全局配置 mirrors（apt/npm/pip 软件源，空 = 官方默认）：容器创建时在容器层生效，镜像不变
 let MIRRORS = { apt: '', npm: '', pip: '' };
+let MANAGE_OPTIONS = { autostart: '', network: null };
 // serve 的容器环境状态，供 GET /api/system/runtime 读取
 const RUNTIME_STATE = { status: 'ready', message: '' };
 const DOCKER_DAEMON_ERROR_CODES = new Set(['PODMAN_MACHINE_UNAVAILABLE', 'DOCKER_DAEMON_UNAVAILABLE', 'PORT_IN_USE']);
@@ -347,6 +349,9 @@ function installServeProcessDiagnostics(logger) {
  * @property {string} [yolo] - YOLO 模式
  * @property {string} [containerMode] - 容器模式
  * @property {string} [containerRuntime] - 容器运行时（auto/docker/podman，默认 auto；仅全局配置生效）
+ * @property {string} [autostart] - 容器每次启动时由容器内 init 执行的 bash 脚本（新建容器时写入状态目录）
+ * @property {boolean} [autostartOnServe] - serve 启动时自动拉起此容器
+ * @property {object} [network] - 网络策略（preset / host / egress / peers，见 lib/network-policy.js），不写为默认收紧
  * @property {{apt?: string, npm?: string, pip?: string}} [mirrors] - 容器内 apt/npm/pip 软件源（http/https URL，空/缺省为官方默认；仅全局配置生效）
  * @property {boolean} [updateCheck] - serve 是否每天检查一次新版本（默认 true；仅全局配置生效，请求不附带任何本机信息）
  * @property {number} [cacheTTL] - 缓存过期天数
@@ -1511,6 +1516,9 @@ https://github.com/xcanwin/manyoyo
     const runConfig = runNameToLoad ? loadRunConfig(runNameToLoad, config) : {};
     const globalFirstConfig = normalizeFirstConfig(config.first, '全局配置');
     const runFirstConfig = normalizeFirstConfig(runConfig.first, '运行配置');
+    // 自启动脚本与网络策略：runs.<name> > 全局配置（新建容器时写进状态目录，Web 上可随时改）
+    const manageOptions = resolveManageOptions({ runConfig, globalConfig: config });
+    MANAGE_OPTIONS = manageOptions;
 
     const resolvedRuntime = resolveRuntimeConfig({
         cliOptions: options,
@@ -1620,6 +1628,8 @@ https://github.com/xcanwin/manyoyo
             containerMode: contModeValue || "",
             containerRuntime: config.containerRuntime || "auto",
             mirrors: MIRRORS,
+            autostart: manageOptions.autostart,
+            network: manageOptions.network,
             shellPrefix: EXEC_COMMAND_PREFIX.trim(),
             shell: EXEC_COMMAND || "",
             shellSuffix: EXEC_COMMAND_SUFFIX || "",
@@ -1761,6 +1771,8 @@ function createRuntimeContext(modeState = {}) {
         containerExtraArgs: CONTAINER_EXTRA_ARGS,
         containerEnvs: CONTAINER_ENVS,
         mirrors: MIRRORS,
+        autostart: MANAGE_OPTIONS.autostart,
+        network: MANAGE_OPTIONS.network,
         firstContainerEnvs: FIRST_CONTAINER_ENVS,
         containerVolumes: CONTAINER_VOLUMES,
         containerPorts: CONTAINER_PORTS,
