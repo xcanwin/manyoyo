@@ -14,7 +14,8 @@
             "headless": false,
             "args": [
                 "--lang=en-US",
-                "--window-size=1920,1080",
+                "--window-size=1920,1058",
+                "--window-position=0,0",
                 "--disable-blink-features=AutomationControlled",
                 "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
                 "--disable-webrtc"

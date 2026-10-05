@@ -69,7 +69,9 @@ describe('指纹单一数据源', () => {
         expect(local.headless).toBe(false);
         expect(local.args).toEqual(expect.arrayContaining([
             '--lang=de-DE',
-            '--window-size=1920,1080',
+            // 虚拟屏 1920x1080，fluxbox 底栏占 22px：窗口必须是工作区大小并贴在 (0,0)，否则被整体顶上去、标签栏被截掉
+            '--window-size=1920,1058',
+            '--window-position=0,0',
             '--disable-blink-features=AutomationControlled',
             '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
             '--disable-webrtc'
