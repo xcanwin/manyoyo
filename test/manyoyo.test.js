@@ -1396,6 +1396,9 @@ if [ "$1" = "inspect" ] && [ "$2" = "-f" ]; then
   fi
 fi
 if [ "$1" = "exec" ]; then
+  if [ "$2" = "--env-file" ]; then
+    cp "$3" "$STATE_FILE.envcopy"
+  fi
   exit 0
 fi
 if [ "$1" = "rm" ]; then
@@ -1433,12 +1436,17 @@ exit 0
                 });
 
                 const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n').filter(Boolean);
+                // first.env 进 0600 临时 env 文件（不出现在参数里），exec 返回后删除
                 const firstExecIndex = dockerArgs.findIndex(line =>
-                    line.includes('exec --env FROM_FILE=file-first --env FIRST_ONLY=1 first-new-test /bin/bash -c first-cmd')
+                    /exec --env-file \S+ first-new-test \/bin\/bash -c first-cmd/.test(line)
                 );
                 const regularExecIndex = dockerArgs.findIndex(line =>
-                    line.includes('exec -it first-new-test /bin/bash -c regular-cmd')
+                    line.includes('exec -i -t first-new-test /bin/bash -c regular-cmd')
                 );
+                expect(dockerArgs.join('\n')).not.toContain('FIRST_ONLY=1');
+                const firstEnvCopy = fs.readFileSync(path.join(tempDir, 'state.txt.envcopy'), 'utf-8');
+                expect(firstEnvCopy).toContain('FIRST_ONLY=1');
+                expect(firstEnvCopy).toContain('FROM_FILE=file-first');
 
                 expect(firstExecIndex).toBeGreaterThan(-1);
                 expect(regularExecIndex).toBeGreaterThan(-1);
@@ -1516,7 +1524,7 @@ exit 0
 
                 const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n').filter(Boolean);
                 expect(dockerArgs.some(line => line.includes('first-should-not-run'))).toBe(false);
-                expect(dockerArgs.some(line => line.includes('exec -it existing-test /bin/bash -c regular-existing-cmd'))).toBe(true);
+                expect(dockerArgs.some(line => line.includes('exec -i -t existing-test /bin/bash -c regular-existing-cmd'))).toBe(true);
             } finally {
                 fs.rmSync(tempDir, { recursive: true, force: true });
                 fs.rmSync(tempHome, { recursive: true, force: true });

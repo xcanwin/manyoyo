@@ -239,7 +239,10 @@ describe('Web Server Session Clone/Duplicate/Cascade Delete', () => {
             }));
 
             const runArgs = dockerExecArgs.mock.calls.map(call => call[0]).find(args => args.includes('--name'));
-            expect(runArgs).toEqual(expect.arrayContaining(['--name', 'source-a-copy1', '--env', 'FOO=bar']));
+            expect(runArgs).toEqual(expect.arrayContaining(['--name', 'source-a-copy1']));
+            expect(runArgs).not.toContain('FOO=bar');
+            const cloneStateId = runArgs.find(arg => arg.startsWith('manyoyo.id=')).slice('manyoyo.id='.length);
+            expect(fs.readFileSync(path.join(tempHost, '.manyoyo', 'containers', cloneStateId, 'box', 'env'), 'utf-8')).toContain('FOO=bar');
 
             const cloneHistoryPath = path.join(webHistoryDir, 'source-a-copy1.json');
             const cloneHistory = JSON.parse(fs.readFileSync(cloneHistoryPath, 'utf-8'));

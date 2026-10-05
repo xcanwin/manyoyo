@@ -44,6 +44,8 @@ const {
     normalizeMirrors
 } = require('../lib/runtime-normalizers');
 const { applyAptMirror } = require('../lib/mirrors');
+const containerState = require('../lib/container-state');
+const { buildExecArgs, resolveContainerId } = require('../lib/container-exec');
 const {
     sanitizeSensitiveData,
     sanitizeServeLogText,
@@ -768,7 +770,10 @@ function getContainerStatus(name) {
 
 function removeContainer(name) {
     if ( !(QUIET.crm || QUIET.full) ) console.log(`${YELLOW}🗑️ 正在删除容器: ${name}...${NC}`);
+    // 先读 id：容器删掉后就查不到了；同时删状态目录，同名重建不会继承旧 env / 规则
+    const stateId = resolveContainerId(dockerExecArgs, name);
     dockerExecArgs(['rm', '-f', name], { stdio: 'pipe' });
+    if (stateId) containerState.removeState(os.homedir(), stateId);
     if ( !(QUIET.crm || QUIET.full) ) console.log(`${GREEN}✅ 已彻底删除。${NC}`);
 }
 
@@ -2047,15 +2052,16 @@ function executeFirstCommand(runtime) {
         console.log(`⚙️  首次预执行命令: ${YELLOW}${firstCommand}${NC}`);
     }
 
-    const firstExecArgs = [
-        'exec',
-        ...(runtime.firstContainerEnvs || []),
-        runtime.containerName,
-        '/bin/bash',
-        '-c',
-        firstCommand
-    ];
-    const firstExecResult = spawnSync(`${DOCKER_CMD}`, firstExecArgs, { stdio: 'inherit', env: DOCKER_ENV });
+    const firstExec = buildExecArgs({ homeDir: os.homedir(), dockerExecArgs }, runtime.containerName, {
+        extraEnv: containerState.envArgsToLines(runtime.firstContainerEnvs),
+        command: ['/bin/bash', '-c', firstCommand]
+    });
+    let firstExecResult;
+    try {
+        firstExecResult = spawnSync(`${DOCKER_CMD}`, firstExec.args, { stdio: 'inherit', env: DOCKER_ENV });
+    } finally {
+        firstExec.cleanup();
+    }
     if (firstExecResult.error) {
         throw firstExecResult.error;
     }
@@ -2083,14 +2089,25 @@ async function createNewContainer(runtime) {
     );
     const defaultCommand = runtime.execCommand;
 
+    // 用户 env 不进容器配置（podman inspect 看不到明文），改写进状态目录的 box/env，每次 exec 现读
+    const userEnvLines = containerState.userEnvLines(runtime.containerEnvs);
     await applyPlaywrightIntegration(runtime);
+    runtime.containerEnvs = containerState.stripEnvKeys(runtime.containerEnvs, new Set(userEnvLines.map(containerState.envLineKey)));
 
     if (runtime.showCommand) {
+        runtime.state = previewContainerState();
         console.log(buildDockerRunCmd(runtime));
         process.exit(0);
     }
 
     await ensureRunImage(runtime);
+
+    runtime.state = containerState.createState({
+        homeDir: os.homedir(),
+        envLines: userEnvLines,
+        autostart: runtime.autostart,
+        meta: { name: runtime.containerName }
+    });
 
     // 使用数组参数执行命令（安全方式）
     try {
@@ -2100,6 +2117,7 @@ async function createNewContainer(runtime) {
         showImagePullHint(e);
         // 失败的 run 可能留下 Created 状态的容器；这个名字创建前不存在，所以只清理本次留下的这一个
         try { dockerExecArgs(['rm', '-f', runtime.containerName], { stdio: 'pipe' }); } catch (cleanupError) { /* 尽力清理 */ }
+        containerState.removeState(os.homedir(), runtime.state.id);
         throw explainCreateFailure(e);
     }
 
@@ -2123,8 +2141,14 @@ async function createNewContainer(runtime) {
  * 构建 Docker run 命令参数数组（安全方式，避免命令注入）
  * @returns {string[]} 命令参数数组
  */
+function previewContainerState() {
+    const dir = path.join(os.homedir(), '.manyoyo', 'containers', '<id>');
+    return { id: '<id>', box: path.join(dir, 'box'), sys: path.join(dir, 'sys') };
+}
+
 function buildDockerRunArgs(runtime) {
     return buildContainerRunArgs({
+        state: runtime.state,
         containerName: runtime.containerName,
         hostPath: runtime.hostPath,
         containerPath: runtime.containerPath,
@@ -2183,6 +2207,8 @@ async function setupContainer(runtime) {
             process.exit(0);
         }
         runtime.execCommand = joinExecCommand(runtime.execCommandPrefix, runtime.execCommand, runtime.execCommandSuffix);
+        runtime.containerEnvs = containerState.stripEnvKeys(runtime.containerEnvs, new Set(containerState.userEnvLines(runtime.containerEnvs).map(containerState.envLineKey)));
+        runtime.state = previewContainerState();
         console.log(buildDockerRunCmd(runtime));
         process.exit(0);
     }
@@ -2210,10 +2236,15 @@ function executeInContainer(runtime, defaultCommand) {
     }
 
     // Execute command in container
-    if (runtime.execCommand) {
-        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash', '-c', runtime.execCommand], { stdio: 'inherit', env: DOCKER_ENV });
-    } else {
-        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash'], { stdio: 'inherit', env: DOCKER_ENV });
+    const exec = buildExecArgs({ homeDir: os.homedir(), dockerExecArgs }, runtime.containerName, {
+        interactive: true,
+        tty: true,
+        command: runtime.execCommand ? ['/bin/bash', '-c', runtime.execCommand] : ['/bin/bash']
+    });
+    try {
+        spawnSync(`${DOCKER_CMD}`, exec.args, { stdio: 'inherit', env: DOCKER_ENV });
+    } finally {
+        exec.cleanup();
     }
 }
 
