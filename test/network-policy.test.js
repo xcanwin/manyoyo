@@ -81,6 +81,15 @@ describe('buildNftRuleset', () => {
         expect(text).not.toMatch(/^\s+reject$/m);
     });
 
+    test('restricted 也放行 egress.rules（私有网段里的指定端点），且排在封私有网段之前', () => {
+        const policy = p.normalizePolicy({ egress: { rules: [{ cidr: '192.168.1.5', ports: '8080' }] } });
+        const lines = p.buildNftRuleset(policy, {}).split('\n');
+        const accept = lines.findIndex(l => l.includes('ip daddr 192.168.1.5 tcp dport 8080 accept'));
+        const deny = lines.findIndex(l => l.includes('ip daddr { 0.0.0.0/8'));
+        expect(accept).toBeGreaterThan(-1);
+        expect(accept).toBeLessThan(deny);
+    });
+
     test('allowlist：只放行必需端点与 egress.rules，末尾无条件 reject，不含私有网段列表', () => {
         const policy = p.normalizePolicy({ preset: 'allowlist', egress: { domains: ['github.com'], rules: [{ cidr: '140.82.112.0/20', ports: '22' }] } });
         const text = p.buildNftRuleset(policy, endpoints);

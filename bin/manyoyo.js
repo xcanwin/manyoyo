@@ -48,6 +48,7 @@ const containerState = require('../lib/container-state');
 const { buildExecArgs, resolveContainerId } = require('../lib/container-exec');
 const { createNetworkManager, NETWORK_NAME } = require('../lib/container-network');
 const { normalizePolicy } = require('../lib/network-policy');
+const { withEnvEndpoints } = require('../lib/network-endpoints');
 const {
     sanitizeSensitiveData,
     sanitizeServeLogText,
@@ -2104,7 +2105,7 @@ async function createNewContainer(runtime) {
 
     await ensureRunImage(runtime);
 
-    const networkPolicy = normalizePolicy(runtime.network);
+    const networkPolicy = await withEnvEndpoints(normalizePolicy(runtime.network), userEnvLines);
     const networkManager = createCliNetworkManager(runtime);
     if (!hasNetworkArg([...(runtime.contModeArgs || []), ...(runtime.containerExtraArgs || [])])) {
         try {

@@ -24,6 +24,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { apiGet, apiPost } from "@/lib/api"
 import { CLI_PROMPT_TEMPLATES, normalizeYolo } from "@/lib/agent-templates"
 import { DirectoryPickerDialog } from "@/components/directory-picker-dialog"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { AutostartEditor } from "@/components/container-manage/autostart-editor"
+import { EnvEditor } from "@/components/container-manage/env-editor"
+import { NetworkEditor } from "@/components/container-manage/network-editor"
+import { defaultPolicy, networkForCreate, type NetworkPolicy } from "@/lib/container-manage"
+import { ChevronDownIcon } from "lucide-react"
 
 type CreateContainerForm = {
   run: string
@@ -41,6 +47,9 @@ type CreateContainerForm = {
   env: string
   envFile: string
   volumes: string
+  autostart: string
+  autostartOnServe: boolean
+  network: NetworkPolicy
 }
 
 const DEFAULT_FORM: CreateContainerForm = {
@@ -59,6 +68,9 @@ const DEFAULT_FORM: CreateContainerForm = {
   env: "",
   envFile: "",
   volumes: "",
+  autostart: "",
+  autostartOnServe: false,
+  network: defaultPolicy(),
 }
 
 type RunPreset = {
@@ -87,7 +99,8 @@ function parseEnvText(text: string): Record<string, string> | undefined {
 
 function buildCreateOptions(form: CreateContainerForm) {
   const options: Record<string, unknown> = {}
-  const stringFields: Array<keyof CreateContainerForm> = [
+  type StringKey = { [K in keyof CreateContainerForm]: CreateContainerForm[K] extends string ? K : never }[keyof CreateContainerForm]
+  const stringFields: StringKey[] = [
     "hostPath",
     "containerName",
     "containerPath",
@@ -110,6 +123,14 @@ function buildCreateOptions(form: CreateContainerForm) {
   if (envFile.length) options.envFile = envFile
   const volumes = parseLines(form.volumes)
   if (volumes.length) options.volumes = volumes
+  if (form.autostart.trim()) options.autostart = form.autostart
+  if (form.autostartOnServe) options.autostartOnServe = true
+  // 放开类的改动（open）已在编辑器里确认过，这里带上 confirmRisk
+  const network = networkForCreate(form.network)
+  if (network) {
+    options.network = network
+    options.confirmRisk = true
+  }
   return options
 }
 
@@ -426,15 +447,11 @@ export function CreateContainerDialog({
               </div>
 
               <Field>
-                <FieldLabel htmlFor="create-env">
-                  env (KEY=VALUE，每行一项)
-                </FieldLabel>
-                <Textarea
-                  id="create-env"
-                  placeholder="KEY=value"
-                  className="min-h-16"
+                <FieldLabel>环境变量</FieldLabel>
+                <EnvEditor
+                  idPrefix="create"
                   value={form.env}
-                  onChange={(event) => setField("env", event.target.value)}
+                  onChange={(text) => setField("env", text)}
                 />
               </Field>
 
@@ -463,6 +480,42 @@ export function CreateContainerDialog({
                   onChange={(event) => setField("volumes", event.target.value)}
                 />
               </Field>
+
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger
+                  render={<Button type="button" variant="ghost" className="w-full justify-between" />}
+                >
+                  自启动命令
+                  <ChevronDownIcon data-icon="inline-end" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-3 pt-1 pb-3">
+                  <AutostartEditor
+                    idPrefix="create"
+                    script={form.autostart}
+                    onScriptChange={(value) => setField("autostart", value)}
+                    onServe={form.autostartOnServe}
+                    onServeChange={(value) => setField("autostartOnServe", value)}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger
+                  render={<Button type="button" variant="ghost" className="w-full justify-between" />}
+                >
+                  网络（默认收紧）
+                  <ChevronDownIcon data-icon="inline-end" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-3 pt-1 pb-3">
+                  <NetworkEditor
+                    idPrefix="create"
+                    policy={form.network}
+                    onChange={(value) => setField("network", value)}
+                    peers={[]}
+                    showPeers={false}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
 
               {error ? (
                 <Alert variant="destructive">
