@@ -506,18 +506,25 @@ describe('扩展', () => {
         return extPath;
     }
 
-    test('--ext-path 与 --ext-name 合并后生成启动参数', () => {
+    test('--ext-path 与 --ext-name 合并解析；扩展名/路径校验', () => {
         const fromPath = makeExt('from-path');
         const named = makeExt(path.join('extensions', 'adguard'));
         const resolved = extensions.resolveExtensionInputs(dir, { extensionPaths: [fromPath], extensionNames: ['adguard'] });
         expect(resolved).toEqual([fromPath, named]);
-        const args = extensions.buildExtensionLaunchArgs(resolved);
-        expect(args[0]).toBe(`--disable-extensions-except=${fromPath},${named}`);
-        expect(args[1]).toBe(`--load-extension=${fromPath},${named}`);
-        expect(extensions.buildExtensionLaunchArgs([])).toEqual([]);
         expect(() => extensions.resolveExtensionInputs(dir, { extensionNames: ['../x'] })).toThrow('扩展名称无效');
         const comma = makeExt('a,b');
         expect(() => extensions.resolveExtensionPaths([comma])).toThrow('不能包含逗号');
+    });
+
+    test('扩展经 CDP Extensions.loadUnpacked 加载：官方 Google Chrome 从 M137 起忽略 --load-extension，只有扩展时才加调试开关', () => {
+        const withExt = fingerprint.buildServerConfig({ host: 'h', port: 1, wsPath: '/t', extensionPaths: ['/a', '/b'] });
+        expect(withExt.extensionPaths).toEqual(['/a', '/b']);
+        expect(withExt.args).toContain('--enable-unsafe-extension-debugging');
+        expect(withExt.args.join(' ')).not.toContain('--load-extension');
+        const without = fingerprint.buildServerConfig({ host: 'h', port: 1, wsPath: '/t' });
+        expect(without.extensionPaths).toBeUndefined();
+        expect(without.args).not.toContain('--enable-unsafe-extension-debugging');
+        expect(extensions.buildExtensionLaunchArgs).toBeUndefined();
     });
 
     test('容器内扩展目录映射为只读挂载', () => {
