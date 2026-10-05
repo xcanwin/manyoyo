@@ -44,6 +44,15 @@ async function request(url, options = {}) {
     return { response, text, json };
 }
 
+// 容器网络规则下发需要真实运行时，Web 单测里用替身
+function fakeNetworkManager() {
+    return {
+        ensureBridgeNetwork: async () => {},
+        apply: async () => ({ status: 'applied' }),
+        ensureReady: async () => ({ status: 'applied' })
+    };
+}
+
 function buildServerOptions(tempHost, port, overrides = {}) {
     return {
         serverHost: '127.0.0.1',
@@ -52,6 +61,7 @@ function buildServerOptions(tempHost, port, overrides = {}) {
         authPass: 'topsecret',
         authPassAuto: false,
         dockerCmd: 'docker',
+        networkManager: fakeNetworkManager(),
         hostPath: tempHost,
         homeDir: tempHost,
         containerPath: '/workspace',

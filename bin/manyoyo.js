@@ -9,7 +9,7 @@ const net = require('net');
 const readline = require('readline');
 const { Command, Help } = require('commander');
 const { startWebServer } = require('../lib/web/server');
-const { buildContainerRunArgs, buildContainerRunCommand, runWithEnvFile } = require('../lib/container-run');
+const { buildContainerRunArgs, buildContainerRunCommand, runWithEnvFile, hasNetworkArg } = require('../lib/container-run');
 const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = require('../lib/global-config');
 const { resolveUpdateImageVersion } = require('../lib/image-version-policy');
 const { selectContainerRuntime, mergeRuntimeEnv } = require('../lib/container-runtime');
@@ -46,6 +46,8 @@ const {
 const { applyAptMirror } = require('../lib/mirrors');
 const containerState = require('../lib/container-state');
 const { buildExecArgs, resolveContainerId } = require('../lib/container-exec');
+const { createNetworkManager, NETWORK_NAME } = require('../lib/container-network');
+const { normalizePolicy } = require('../lib/network-policy');
 const {
     sanitizeSensitiveData,
     sanitizeServeLogText,
@@ -2102,10 +2104,21 @@ async function createNewContainer(runtime) {
 
     await ensureRunImage(runtime);
 
+    const networkPolicy = normalizePolicy(runtime.network);
+    const networkManager = createCliNetworkManager(runtime);
+    if (!hasNetworkArg([...(runtime.contModeArgs || []), ...(runtime.containerExtraArgs || [])])) {
+        try {
+            await networkManager.ensureBridgeNetwork();
+        } catch (e) {
+            throw new Error(`无法创建 ${NETWORK_NAME} 网络: ${e.message}`);
+        }
+    }
     runtime.state = containerState.createState({
         homeDir: os.homedir(),
         envLines: userEnvLines,
         autostart: runtime.autostart,
+        network: networkPolicy,
+        netRequired: networkPolicy.preset !== 'open',
         meta: { name: runtime.containerName }
     });
 
@@ -2124,6 +2137,9 @@ async function createNewContainer(runtime) {
     // Wait for container to be ready
     await waitForContainerReady(runtime.containerName);
 
+    // 先下发网络规则再做任何 exec；失败即关闭（容器留着，init 在等门闩，不会跑自启动）
+    await networkManager.apply(runtime.containerName, { expectId: runtime.state.id });
+
     applyAptMirror({
         dockerExecArgs,
         containerName: runtime.containerName,
@@ -2141,6 +2157,17 @@ async function createNewContainer(runtime) {
  * 构建 Docker run 命令参数数组（安全方式，避免命令注入）
  * @returns {string[]} 命令参数数组
  */
+// 容器网络规则的下发器：CLI 与 serve 各建一份，helper 容器用当前 imageVersion 的官方镜像
+function createCliNetworkManager(runtime) {
+    return createNetworkManager({
+        command: DOCKER_CMD,
+        env: DOCKER_ENV,
+        homeDir: os.homedir(),
+        imageRef: () => `${runtime.imageName}:${runtime.imageVersion}`,
+        getMirrorUrls: () => Object.values(runtime.mirrors || {}).filter(Boolean)
+    });
+}
+
 function previewContainerState() {
     const dir = path.join(os.homedir(), '.manyoyo', 'containers', '<id>');
     return { id: '<id>', box: path.join(dir, 'box'), sys: path.join(dir, 'sys') };
@@ -2149,6 +2176,7 @@ function previewContainerState() {
 function buildDockerRunArgs(runtime) {
     return buildContainerRunArgs({
         state: runtime.state,
+        defaultNetwork: NETWORK_NAME,
         containerName: runtime.containerName,
         hostPath: runtime.hostPath,
         containerPath: runtime.containerPath,
@@ -2183,6 +2211,7 @@ async function connectExistingContainer(runtime) {
     if (status !== 'running') {
         dockerExecArgs(['start', runtime.containerName], { stdio: 'pipe' });
     }
+    await createCliNetworkManager(runtime).ensureReady(runtime.containerName);
 
     // Get default command from label
     const defaultCommand = dockerExecArgs(['inspect', '-f', '{{index .Config.Labels "manyoyo.default_cmd"}}', runtime.containerName]).trim();
@@ -2219,7 +2248,7 @@ async function setupContainer(runtime) {
     }
 }
 
-function executeInContainer(runtime, defaultCommand) {
+async function executeInContainer(runtime, defaultCommand) {
     if (!containerExists(runtime.containerName)) {
         throw new Error(`未找到容器: ${runtime.containerName}`);
     }
@@ -2228,6 +2257,7 @@ function executeInContainer(runtime, defaultCommand) {
     if (status !== 'running') {
         dockerExecArgs(['start', runtime.containerName], { stdio: 'pipe' });
     }
+    await createCliNetworkManager(runtime).ensureReady(runtime.containerName);
 
     getHelloTip(runtime.containerName, defaultCommand, runtime.execCommand);
     if (!(runtime.quiet.cmd || runtime.quiet.full)) {
@@ -2605,7 +2635,7 @@ async function main() {
         // 7-8. Execute command and handle post-exit interactions
         let shouldContinue = true;
         while (shouldContinue) {
-            executeInContainer(runtime, defaultCommand);
+            await executeInContainer(runtime, defaultCommand);
             shouldContinue = await handlePostExit(runtime, defaultCommand);
         }
 

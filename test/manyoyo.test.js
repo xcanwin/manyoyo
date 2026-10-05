@@ -1367,6 +1367,14 @@ if [ "$1" = "--version" ]; then
   echo "Docker version 26.0.0"
   exit 0
 fi
+if [ "$1" = "ps" ] && [ "$3" = "-q" ]; then
+  [ -f "$STATE_FILE.id" ] && echo "fakecontainer"
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "--format" ]; then
+  echo "{\\"Name\\":\\"/$(cat "$STATE_FILE")\\",\\"Config\\":{\\"Labels\\":{\\"manyoyo.id\\":\\"$(cat "$STATE_FILE.id")\\"},\\"Env\\":[]},\\"NetworkSettings\\":{\\"Networks\\":{}},\\"State\\":{\\"Running\\":true,\\"Status\\":\\"running\\"}}"
+  exit 0
+fi
 if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
   if [ -f "$STATE_FILE" ]; then
     cat "$STATE_FILE"
@@ -1376,10 +1384,11 @@ fi
 if [ "$1" = "run" ]; then
   shift
   while [ $# -gt 0 ]; do
+    if [ "$1" = "--label" ]; then
+      case "$2" in manyoyo.id=*) echo "\${2#manyoyo.id=}" > "$STATE_FILE.id";; esac
+    fi
     if [ "$1" = "--name" ]; then
-      shift
-      echo "$1" > "$STATE_FILE"
-      break
+      echo "$2" > "$STATE_FILE"
     fi
     shift
   done
@@ -1473,6 +1482,14 @@ if [ "$1" = "--version" ]; then
   echo "Docker version 26.0.0"
   exit 0
 fi
+if [ "$1" = "ps" ] && [ "$3" = "-q" ]; then
+  [ -f "$STATE_FILE.id" ] && echo "fakecontainer"
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "--format" ]; then
+  echo "{\\"Name\\":\\"/$(cat "$STATE_FILE")\\",\\"Config\\":{\\"Labels\\":{\\"manyoyo.id\\":\\"$(cat "$STATE_FILE.id")\\"},\\"Env\\":[]},\\"NetworkSettings\\":{\\"Networks\\":{}},\\"State\\":{\\"Running\\":true,\\"Status\\":\\"running\\"}}"
+  exit 0
+fi
 if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
   cat "${statePath}"
   exit 0
@@ -1545,6 +1562,14 @@ if [ "$1" = "--version" ]; then
   echo "Docker version 26.0.0"
   exit 0
 fi
+if [ "$1" = "ps" ] && [ "$3" = "-q" ]; then
+  [ -f "$STATE_FILE.id" ] && echo "fakecontainer"
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "--format" ]; then
+  echo "{\\"Name\\":\\"/$(cat "$STATE_FILE")\\",\\"Config\\":{\\"Labels\\":{\\"manyoyo.id\\":\\"$(cat "$STATE_FILE.id")\\"},\\"Env\\":[]},\\"NetworkSettings\\":{\\"Networks\\":{}},\\"State\\":{\\"Running\\":true,\\"Status\\":\\"running\\"}}"
+  exit 0
+fi
 if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
   if [ -f "$STATE_FILE" ]; then
     cat "$STATE_FILE"
@@ -1554,10 +1579,11 @@ fi
 if [ "$1" = "run" ]; then
   shift
   while [ $# -gt 0 ]; do
+    if [ "$1" = "--label" ]; then
+      case "$2" in manyoyo.id=*) echo "\${2#manyoyo.id=}" > "$STATE_FILE.id";; esac
+    fi
     if [ "$1" = "--name" ]; then
-      shift
-      echo "$1" > "$STATE_FILE"
-      break
+      echo "$2" > "$STATE_FILE"
     fi
     shift
   done
@@ -1569,7 +1595,7 @@ if [ "$1" = "inspect" ] && [ "$2" = "-f" ] && [ "$3" = "{{.State.Status}}" ]; th
 fi
 if [ "$1" = "exec" ]; then
   case "$*" in
-    *"first-fail"*)
+    *"-c first-fail"*)
       exit 12
       ;;
   esac
@@ -1634,6 +1660,14 @@ exit 0
             writeExecutable(fakeDockerPath, `#!/bin/sh
 if [ "$1" = "--version" ]; then
   echo "docker version 5.8.0"
+  exit 0
+fi
+if [ "$1" = "ps" ] && [ "$3" = "-q" ]; then
+  [ -f "$STATE_FILE.id" ] && echo "fakecontainer"
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "--format" ]; then
+  echo "{\\"Name\\":\\"/$(cat "$STATE_FILE")\\",\\"Config\\":{\\"Labels\\":{\\"manyoyo.id\\":\\"$(cat "$STATE_FILE.id")\\"},\\"Env\\":[]},\\"NetworkSettings\\":{\\"Networks\\":{}},\\"State\\":{\\"Running\\":true,\\"Status\\":\\"running\\"}}"
   exit 0
 fi
 if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
