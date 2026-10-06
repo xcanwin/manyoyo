@@ -17,7 +17,7 @@ manyoyo run -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-k
 manyoyo run --ef /abs/path/anthropic.env -x claude
 ```
 
-`--ef`（以及配置里的 `envFile`）**仅支持绝对路径**。`-e` 可多次传入。
+`--ef`（以及配置里的 `envFile`）**仅支持绝对路径**，环境文件在新容器里是**实时读取**的：每次执行命令时重新读取，改了文件下一条命令就生效（已在运行的进程除外）；也可以在网页「容器」页的“环境变量文件”里随时增删。`-e` 可多次传入。
 
 ## 环境文件格式
 
@@ -26,9 +26,12 @@ manyoyo run --ef /abs/path/anthropic.env -x claude
 export ANTHROPIC_BASE_URL="https://api.anthropic.com"
 export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
 API_TIMEOUT_MS=3000000      # 不带 export 也可以
+GREETING=hello world        # 值里的空格不需要引号
 ```
 
-- 支持 `KEY=VALUE` 与 `export KEY=VALUE`，值可用单引号、双引号或不加引号。
+- 支持 `KEY=VALUE` 与 `export KEY=VALUE`，值可用单引号、双引号或不加引号；值里的空格不需要引号（`KEY=abc 123`），值两端成对的引号会被去掉。
+- 同一套语法也用于网页「环境变量」的文本视图和容器里的 `/run/manyoyo/env`，只需要学这一种。它与 docker / podman 的 `--env-file` 一致（不展开变量、不执行命令），并且兼容 shell / dotenv 的 `export` 前缀和引号写法。
+- 不支持行尾注释：`#` 只在行首才是注释。
 - 变量名须匹配 `^[A-Za-z_][A-Za-z0-9_]*$`；值不能包含换行、`;`、`&`、`|`、`` ` ``、`$`、`<`、`>` 等 shell 特殊字符。
 
 ## 各 Agent 示例

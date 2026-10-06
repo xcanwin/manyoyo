@@ -17,7 +17,7 @@ manyoyo run -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-k
 manyoyo run --ef /abs/path/anthropic.env -x claude
 ```
 
-`--ef` (and `envFile` in config) **accepts absolute paths only**. `-e` can be repeated.
+`--ef` (and `envFile` in config) **accepts absolute paths only**. Env files are **read live** in a new container: they are re-read every time a command runs, so editing the file takes effect for the next command (running processes excepted); you can also add or remove them under "Environment variable files" on the web "Container" tab. `-e` can be repeated.
 
 ## Env file format
 
@@ -26,9 +26,12 @@ manyoyo run --ef /abs/path/anthropic.env -x claude
 export ANTHROPIC_BASE_URL="https://api.anthropic.com"
 export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxxx"
 API_TIMEOUT_MS=3000000      # export is optional
+GREETING=hello world        # spaces in a value need no quotes
 ```
 
-- Both `KEY=VALUE` and `export KEY=VALUE` work; values may use single quotes, double quotes, or none.
+- Both `KEY=VALUE` and `export KEY=VALUE` work; values may use single quotes, double quotes, or none; spaces in a value need no quotes (`KEY=abc 123`), and a matching pair of quotes around the value is removed.
+- The same syntax is used by the web "Environment variables" text view and `/run/manyoyo/env` inside the container, so there is only one to learn. It matches docker / podman `--env-file` (no variable expansion, no command execution) and also accepts the shell / dotenv `export` prefix and quoting.
+- Trailing comments are not supported: `#` starts a comment only at the beginning of a line.
 - Names must match `^[A-Za-z_][A-Za-z0-9_]*$`; values cannot contain newlines or shell special characters such as `;`, `&`, `|`, `` ` ``, `$`, `<`, `>`.
 
 ## Per-agent examples

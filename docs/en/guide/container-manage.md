@@ -24,7 +24,9 @@ The entry is **Container** in the top bar's "…" (More tabs) menu. The page sho
 
 ## Environment variables
 
-- The table view masks values whose names contain `KEY` / `TOKEN` / `SECRET` / `PASSWORD` / `AUTH` / `CREDENTIAL` until you click the eye; the text view is the raw `KEY=VALUE`, one per line.
+- This block has two parts: **environment variable files** (absolute paths on the host, several allowed) and **variables entered directly**. Files are re-read every time a command runs, so editing a file takes effect for the next command; multiple files are read in order (later wins) and directly entered variables win over files. The page shows how many variables each file yielded and which lines were skipped. The autostart script sees a snapshot of the files taken whenever the container's rules are applied at start.
+- Directly entered variables: the table view masks values whose names contain `KEY` / `TOKEN` / `SECRET` / `PASSWORD` / `AUTH` / `CREDENTIAL` until you click the eye; the text view is `KEY=VALUE`, one per line.
+- **There is one syntax** (text view, environment variable files and `/run/manyoyo/env` in the container are identical): it matches docker / podman env-files — no variable expansion, no command execution, and spaces in a value need no quotes (`KEY=abc 123`); it also accepts shell / dotenv forms: an `export ` prefix is allowed and a matching pair of quotes around the value is removed (`KEY="abc 123"` equals `KEY=abc 123`); `#` starts a comment only at the beginning of a line. Values typed in the table are written back to text with quotes only when necessary (leading / trailing whitespace).
 - Variables live in `~/.manyoyo/containers/<id>/box/env` on your machine and are **not written into the container config** (`podman inspect` / `docker inspect` do not show the values).
 - Inside the container you can edit `/run/manyoyo/env` directly (same format); it takes effect for the next command. The page shows "modified inside the container", and invalid lines (e.g. `1BAD=x`) are highlighted and skipped.
 - Terminals that are already open must be closed and reopened to see new variables (existing shell processes do not update their environment).
@@ -34,8 +36,8 @@ The entry is **Container** in the top bar's "…" (More tabs) menu. The page sho
 
 New containers are **restricted by default**:
 
-- Allowed: the public internet; endpoints manyoyo needs (DNS, your upstream proxy, the Playwright browser service, package mirrors).
 - Blocked: other ports on the host, the LAN and private ranges, cloud metadata (`169.254.169.254`), other containers.
+- Allowed: the public internet; endpoints manyoyo needs (DNS, your upstream proxy, the Playwright browser service, package mirrors).
 
 Under "Network" you can:
 

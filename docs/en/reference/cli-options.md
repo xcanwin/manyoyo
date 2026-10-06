@@ -67,7 +67,7 @@ These commands share the same core runtime options:
 | `--in, --image-name <name>` | Image name |
 | `--iv, --image-ver <version>` | Image version; must be `x.y.z-suffix`, for example `2.2.0-common` |
 | `-e, --env <env>` | Append environment variables, repeatable |
-| `--ef, --env-file <file>` | Append env files, absolute paths only |
+| `--ef, --env-file <file>` | Append environment variable files, absolute paths only; read live in a new container (edits take effect for the next command) |
 | `-v, --volume <volume>` | Append bind mounts, repeatable |
 | `-p, --port <port>` | Append port mappings, repeatable |
 | `--worktrees` / `--wt` | Enable Git worktree support and auto-mount the project-level `worktrees/<project>/` root |

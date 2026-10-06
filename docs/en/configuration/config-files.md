@@ -47,7 +47,7 @@ Priority: command line > `runs.<name>` > global config > defaults.
 
 | Field | Type | Merge rule | Description |
 | --- | --- | --- | --- |
-| `envFile` | string array | append | Env files, **absolute paths only** |
+| `envFile` | string array | append | Environment variable files, **absolute paths only**; read live in a new container on every command, so edits take effect for the next command |
 | `env` | object | override by key | Environment variables set directly |
 | `volumes` | string array | append | `host:container[:ro]`; host path may be absolute or start with `~` / `$HOME` |
 | `ports` | string array | append | Passed through as `--publish`, e.g. `"8080:80"` |
