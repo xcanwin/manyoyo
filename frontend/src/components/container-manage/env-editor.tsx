@@ -85,7 +85,7 @@ export function EnvEditor({
           <RowList
             ariaPrefix="环境变量文件"
             rows={fileRows}
-            columns={[{ key: "path", label: "文件路径（宿主机上的绝对路径）", placeholder: "/home/me/project/.env" }]}
+            columns={[{ key: "path", label: "文件路径（宿主机上的绝对路径）", placeholder: "/abs/path/.env" }]}
             newRow={() => ({ path: "" })}
             addLabel="添加环境变量文件"
             onChange={(next) => {
