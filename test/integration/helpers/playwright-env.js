@@ -13,6 +13,7 @@ const { buildContainerIntegration, mergeIntegration } = require('../../../lib/pl
 const { buildContainerRunArgs } = require('../../../lib/container-run');
 const { createNetworkManager, NETWORK_NAME } = require('../../../lib/container-network');
 const { normalizePolicy } = require('../../../lib/network-policy');
+const { sidecarName } = require('../../../lib/egress-sidecar');
 const containerState = require('../../../lib/container-state');
 const { buildExecArgs } = require('../../../lib/container-exec');
 const { googleChromeCandidates } = require('../../../lib/plugin/playwright');
@@ -154,6 +155,9 @@ async function exec(runtime, name, command, options = {}) {
 
 function removeContainer(runtime, name) {
     spawnSync(runtime, ['rm', '-f', name], { stdio: 'ignore' });
+    // allowlist 容器会带起这个 HOME 专属的过滤代理 sidecar
+    const home = containerHomes.get(name);
+    if (home) spawnSync(runtime, ['rm', '-f', sidecarName(home)], { stdio: 'ignore' });
 }
 
 function randomName(prefix) {
