@@ -85,7 +85,7 @@ describe('upsertValueByPath indentation', () => {
         const JSON5 = require('json5');
         let text = '{\n    a: 1,\n}\n';
         text = upsertValueByPath(text, ['runs', 'claude'], JSON.stringify({ env: { K: 'v' } }, null, 4));
-        expect(text).toBe('{\n    runs: {\n        claude: {\n            "env": {\n                "K": "v"\n            }\n        },\n    },\n    a: 1,\n}\n');
+        expect(text).toBe('{\n    "runs": {\n        "claude": {\n            "env": {\n                "K": "v"\n            }\n        }\n    },\n    a: 1,\n}\n');
         expect(JSON5.parse(text).runs.claude.env.K).toBe('v');
     });
 });
@@ -93,12 +93,49 @@ describe('upsertValueByPath indentation', () => {
 describe('upsertValueByPath 格式保持', () => {
     test('空对象插入不产生空行', () => {
         const text = upsertValueByPath('{\n}\n', ['runs', 'a'], '{}');
-        expect(text).toBe('{\n    runs: {\n        a: {},\n    },\n}\n');
+        expect(text).toBe('{\n    "runs": {\n        "a": {}\n    }\n}\n');
     });
 
     test("'{' 行尾注释留在原行，且头部注释里的 { 不影响定位", () => {
         const text = upsertValueByPath('// 头 {x}\n{ // 说明\n    a: 1,\n}\n', ['b'], '2');
-        expect(text).toBe('// 头 {x}\n{ // 说明\n    b: 2,\n    a: 1,\n}\n');
+        expect(text).toBe('// 头 {x}\n{ // 说明\n    "b": 2,\n    a: 1,\n}\n');
         expect(JSON5.parse(text)).toEqual({ a: 1, b: 2 });
+    });
+});
+
+describe('upsertValueByPath 写入严格 JSON 友好', () => {
+    test('从空对象依次写入多处：键名全带引号、无尾逗号，JSON.parse 可解析', () => {
+        let text = '{}\n';
+        text = upsertValueByPath(text, ['runs', 'claude'], JSON.stringify({ env: { K: 'v' } }, null, 4));
+        text = upsertValueByPath(text, ['serverPass'], JSON.stringify('x'));
+        text = upsertValueByPath(text, ['serve', 'quickChat', 'path'], JSON.stringify('~/w'));
+        text = upsertValueByPath(text, ['serve', 'quickChat', 'run'], JSON.stringify('claude'));
+        const parsed = JSON.parse(text);
+        expect(parsed.runs.claude.env.K).toBe('v');
+        expect(parsed.serverPass).toBe('x');
+        expect(parsed.serve.quickChat).toEqual({ path: '~/w', run: 'claude' });
+        expect(text).not.toMatch(/,\s*[}\]]/);
+    });
+
+    test('已有内容、注释与原有键名写法不动', () => {
+        const text = upsertValueByPath('{\n    // 注释\n    imageVersion: "1.0.0-common",\n}\n', ['serverPass'], '"p"');
+        expect(text).toContain('// 注释');
+        expect(text).toContain('imageVersion: "1.0.0-common",');
+        expect(JSON5.parse(text).serverPass).toBe('p');
+    });
+});
+
+describe('向导写配置产出的文件能被严格 JSON 解析', () => {
+    test('setup-config 的 agent / 密码 / 镜像源 / quickChat 依次写入', () => {
+        const { EMPTY_CONFIG_RAW, buildAgentConfigRaw, buildPasswordConfigRaw, buildMirrorsConfigRaw } = require('../lib/setup-config');
+        let raw = buildAgentConfigRaw(EMPTY_CONFIG_RAW, 'claude', { env: { ANTHROPIC_BASE_URL: 'http://x' } });
+        raw = buildPasswordConfigRaw(raw, 'pw');
+        raw = buildMirrorsConfigRaw(raw, { npm: 'https://r.example' });
+        raw = upsertValueByPath(raw, ['serve', 'quickChat', 'path'], '"~/w"');
+        raw = upsertValueByPath(raw, ['serve', 'quickChat', 'run'], '"claude"');
+        const parsed = JSON.parse(raw);
+        expect(parsed.runs.claude.env.ANTHROPIC_BASE_URL).toBe('http://x');
+        expect(parsed.serverPass).toBe('pw');
+        expect(parsed.serve.quickChat.run).toBe('claude');
     });
 });
