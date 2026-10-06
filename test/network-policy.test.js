@@ -99,6 +99,17 @@ describe('buildNftRuleset', () => {
         expect(text).not.toContain('github.com'); // 域名不进 nft，只在过滤代理里匹配
     });
 
+    test('antiSpoof：发往过滤代理的包来源必须是本容器 IP，规则排在放行规则之前；注入被拒', () => {
+        const policy = p.normalizePolicy({ preset: 'allowlist', egress: { domains: ['github.com'] } });
+        const text = p.buildNftRuleset(policy, { allow: [{ ip: '10.89.0.250', ports: '3128' }], antiSpoof: [{ daddr: '10.89.0.250', saddr: '10.89.0.7' }] });
+        const lines = text.split('\n');
+        const drop = lines.findIndex(l => l.includes('ip daddr 10.89.0.250 ip saddr != 10.89.0.7 drop'));
+        const accept = lines.findIndex(l => l.includes('ip daddr 10.89.0.250 tcp dport 3128 accept'));
+        expect(drop).toBeGreaterThan(-1);
+        expect(drop).toBeLessThan(accept);
+        expect(() => p.buildNftRuleset(policy, { antiSpoof: [{ daddr: '10.89.0.250', saddr: '1.1.1.1; flush ruleset' }] })).toThrow();
+    });
+
     test('注入：端点里的恶意字符串在生成时仍被拒', () => {
         const policy = p.normalizePolicy({});
         expect(() => p.buildNftRuleset(policy, { allow: [{ ip: '1.2.3.4; flush ruleset', ports: '80' }] })).toThrow();
