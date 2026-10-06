@@ -152,7 +152,7 @@ export const PRESET_LABELS: Record<Preset, string> = {
 
 export const PRESET_HINTS: Record<Preset, string> = {
   restricted: "禁止：宿主机其他端口、局域网 / 私有网段、云元数据与其他容器。\n允许：公网、manyoyo 必需的端点（DNS、上游代理、Playwright、镜像源）。",
-  allowlist: "只允许访问下列域名（经 serve 内的过滤代理）与 IP 规则，其余出站一律拒绝。",
+  allowlist: "只允许访问下列域名与 IP 规则，其余出站一律拒绝。",
   open: "不加任何网络规则（与旧版行为一致），容器可访问宿主机与局域网。",
 }
 
@@ -179,6 +179,8 @@ export type ContainerEnvState = {
   mtime: string | null
 }
 
+export type DeniedRecord = { host: string; port: number; count: number; last: string; reason: string; background: boolean }
+
 export type NetworkState = {
   legacy?: boolean
   message?: string
@@ -188,5 +190,6 @@ export type NetworkState = {
   status: NetStatus
   forwards: Array<{ bind: string; hostPort: number; port: number }>
   suggestedDomains?: string[]
+  denied?: DeniedRecord[]
   peers: PeerOption[]
 }
