@@ -29,7 +29,7 @@ The entry is **Container** in the top bar's "…" (More tabs) menu. The page sho
 - **There is one syntax** (text view, environment variable files and `/run/manyoyo/env` in the container are identical): it matches docker / podman env-files — no variable expansion, no command execution, and spaces in a value need no quotes (`KEY=abc 123`); it also accepts shell / dotenv forms: an `export ` prefix is allowed and a matching pair of quotes around the value is removed (`KEY="abc 123"` equals `KEY=abc 123`); `#` starts a comment only at the beginning of a line. Values typed in the table are written back to text with quotes only when necessary (leading / trailing whitespace).
 - Variables live in `~/.manyoyo/containers/<id>/box/env` on your machine and are **not written into the container config** (`podman inspect` / `docker inspect` do not show the values).
 - Inside the container you can edit `/run/manyoyo/env` directly (same format); it takes effect for the next command. The page shows "modified inside the container", and invalid lines (e.g. `1BAD=x`) are highlighted and skipped.
-- Terminals that are already open must be closed and reopened to see new variables (existing shell processes do not update their environment).
+- Newly opened terminals pick up new variables automatically; in an already open terminal run `reload-env` (running processes are unaffected).
 - If the container changed the file just before you save, the page reports a conflict and asks you to reload instead of overwriting silently.
 
 ## Network
@@ -54,12 +54,12 @@ If you put URLs that point to private addresses in the environment when creating
 
 ### Domain allowlist
 
-"Allowlist only" is enforced by a **filtering proxy** inside the `manyoyo serve` process: the container firewall only allows traffic to that proxy, direct connections are blocked. The proxy allows HTTP(S) (CONNECT) by domain, and rejects any destination that resolves to a private / loopback / link-local address (so it cannot be used to reach the host) unless you explicitly allow that IP in the IP rules. Non-HTTP protocols (ssh, databases) are allowed through "IP rules". Note:
+"Allowlist only" lets a container reach just the sites you list. The container firewall only allows traffic to a small dedicated container in the manyoyo network (the filtering proxy, which opens no port on the host); all other egress is blocked. The browser, `curl` and agents in the container use it automatically, with no extra setup. Destinations that resolve to private / local addresses are always refused (so it cannot be used to reach the host) unless you allow them explicitly in "IP rules"; ssh, databases and other non-HTTP protocols are also allowed through "IP rules".
 
-- The proxy listens on `0.0.0.0:8936` (containers can only reach the host through its LAN IP) and relies on a random per-container credential to keep other LAN / internet devices out; the credential exists only in that container's environment.
-- **The agent's model service goes through this proxy too**: its domain (e.g. the host of `ANTHROPIC_BASE_URL`) must be in the allowlist, otherwise the agent's first request is refused and you only see errors such as `ERR_PROXY_TUNNEL`. When a container is created, the domains of URLs in its environment (including environment variable files) are registered in the allowlist automatically; for existing containers, after switching to "Allowlist only" the page lists the domains found in the environment as buttons you can click to add. Other domains a web page depends on (CDNs, static assets, e.g. Baidu's `bdstatic.com`) must be added by you.
-- It exists only while `serve` runs; when serve stops, HTTP egress of allowlist containers fails (fail closed, never opens up).
-- `manyoyo run` on the command line does not provide the proxy; use the web service for containers with a domain allowlist.
+- **The agent's model service goes through it too**: its domain (e.g. the host of `ANTHROPIC_BASE_URL`) must be in the allowlist. When a container is created, domains of URLs in its environment (including environment variable files) are added automatically; for existing containers, after switching to "Allowlist only" the page lists the domains found in the environment as buttons you can click to add.
+- **Page won't load, clicks do nothing?** Open **Recently blocked** on the "Container" tab: it lists sites the container tried to reach that are not in the allowlist (images, CDNs, ...); click "Allow" and it takes effect immediately, no restart. The browser's own background requests are folded into "Browser background requests" and can be ignored. While an agent is running, a newly blocked site is also announced once in the conversation.
+- Blocked requests get a `403`.
+- The proxy container is created and revived by manyoyo automatically, named like `manyoyo-egress-xxxxxxxx`; do not delete or modify it. It does not depend on `serve`; the command line and the web UI both use it.
 
 ### Port exposure
 
@@ -72,7 +72,6 @@ These ports listen on `0.0.0.0`, which on a public server means open to the whol
 | Port | Purpose | Advice |
 | --- | --- | --- |
 | The `serve` listen port | Web service | Use a strong password; behind an HTTPS reverse proxy when public, see [Web Service and Remote Access](./web.md) |
-| `8936` | Filtering proxy for the domain allowlist (containers reach it via the host IP) | Allow only the host itself in the security group; do not expose it |
 | `8935` | Playwright browser service (headed mode, token protected) | Same, do not expose it |
 | Exposed ports you bind to `0.0.0.0` | Services inside containers | Prefer `127.0.0.1`, then use `ssh -L` or an HTTPS reverse proxy; if you must expose, restrict source IPs in the firewall |
 
