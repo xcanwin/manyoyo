@@ -108,7 +108,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 
 **容器模式**（`setContMode()`）：`common`（默认）标准容器；`dind` 加 `--privileged`、需手动启 `dockerd`；`sock` 加 `--privileged + -v /var/run/docker.sock`，可访问宿主机 Docker（有安全风险）。
 
-**容器生命周期**：入口点为 `tail -f /dev/null`，默认命令存储在容器标签 `manyoyo.default_cmd`；容器就绪等待采用指数退避 100ms→2000ms，最多 30 次。
+**容器生命周期**：新容器 PID 1 是 `lib/container-init.sh`（见项目结构），旧容器是 `tail -f /dev/null`；默认命令存储在容器标签 `manyoyo.default_cmd`；容器就绪等待采用指数退避 100ms→2000ms，最多 30 次。
 
 ### docker/manyoyo.Dockerfile
 
