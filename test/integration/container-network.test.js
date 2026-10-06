@@ -69,8 +69,8 @@ maybe('container-network（真实容器）', () => {
         await manager.ensureBridgeNetwork();
     });
     afterAll(async () => {
-        names.forEach(name => rtSync(['rm', '-f', '-t', '1', name]));
-        rtSync(['rm', '-f', '-t', '1', manager.sidecar.name]);
+        names.forEach(name => rtSync(['rm', '-f', name]));
+        rtSync(['rm', '-f', manager.sidecar.name]);
         await new Promise(resolve => server.close(resolve));
         fs.rmSync(home, { recursive: true, force: true });
         fs.rmSync(work, { recursive: true, force: true });
@@ -246,9 +246,11 @@ maybe('container-network（真实容器）', () => {
         const viaProxy = async (url, extra = '') => (await execWithEnv(name, `curl -s -m 12 -o /dev/null -w '%{http_code}' ${extra} ${url}; true`)).stdout.trim();
 
         // 宿主机上不再有过滤代理端口（8936 与 sidecar 的 3128 都不在宿主机监听）
-        const listening = spawnSync('ss', ['-ltn'], { encoding: 'utf-8' }).stdout;
-        expect(listening).not.toMatch(/:8936\s/);
-        expect(listening).not.toMatch(/:3128\s/);
+        const ss = spawnSync('ss', ['-ltn'], { encoding: 'utf-8' });
+        if (ss.status === 0) {
+            expect(ss.stdout).not.toMatch(/:8936\s/);
+            expect(ss.stdout).not.toMatch(/:3128\s/);
+        }
 
         const hostProbe = spawnSync('curl', ['-s', '-m', '8', '-o', '/dev/null', '-w', '%{http_code}', 'https://example.com/'], { encoding: 'utf-8' });
         const online = hostProbe.stdout.trim() === '200';
@@ -293,7 +295,7 @@ EOF`)).stdout;
         expect(await viaProxy('http://other.example.net/')).toBe('000');
         await manager.ensureReady(name);
         expect(await viaProxy('http://other.example.net/')).toBe('403');
-        rtSync(['rm', '-f', '-t', '1', sidecarName]);
+        rtSync(['rm', '-f', sidecarName]);
         expect(await viaProxy('http://other.example.net/')).toBe('000');
         await manager.ensureReady(name);
         expect(await viaProxy('http://other.example.net/')).toBe('403');

@@ -77,6 +77,10 @@ describe('container-state', () => {
 
 describe('buildContainerRunArgs 状态目录参数', () => {
     const base = { state: { id: '0123456789abcdef', box: '/s/box', sys: '/s/sys' }, containerName: 'c', hostPath: '/h', containerPath: '/w', imageName: 'i', imageVersion: '1.0.0-common', containerEnvs: [] };
+    test('去掉 NET_RAW（docker 默认带，能伪造来源 IP，过滤代理按来源 IP 认容器）', () => {
+        const args = buildContainerRunArgs(base);
+        expect(args.slice(args.indexOf('--cap-drop'), args.indexOf('--cap-drop') + 2)).toEqual(['--cap-drop', 'NET_RAW']);
+    });
     test('PID 1 换成 init，挂载 box(rw)/sys(ro)/gate(tmpfs)，打 manyoyo.id 标签，不再有 tail', () => {
         const args = buildContainerRunArgs(base);
         expect(args.slice(args.indexOf('--entrypoint'), args.indexOf('--entrypoint') + 2)).toEqual(['--entrypoint', '/run/manyoyo-sys/init.sh']);
