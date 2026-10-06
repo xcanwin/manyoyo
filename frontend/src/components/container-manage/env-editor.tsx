@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { RowList } from "@/components/container-manage/row-list"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import {
   type EnvEntry,
+  type EnvFileStatus,
   type EnvInvalid,
   isSensitiveKey,
   parseEnvText,
@@ -16,17 +19,28 @@ import {
 
 // 环境变量编辑：默认是表格（名字含 KEY / TOKEN / SECRET… 的值遮罩，点眼睛显示），也可切到原始文本。
 // 唯一数据源是 text（与容器里 /run/manyoyo/env 同一格式），表格每次编辑都回写成文本。
+type FileRow = { path: string }
+
 export function EnvEditor({
   value,
   onChange,
   invalid = [],
   idPrefix,
+  files,
+  onFilesChange,
+  fileStatus,
 }: {
   value: string
   onChange: (text: string) => void
   invalid?: EnvInvalid[]
   idPrefix: string
+  /** 环境变量文件（宿主机上的绝对路径）；不传则不显示这一块 */
+  files?: string[]
+  onFilesChange?: (files: string[]) => void
+  /** 服务端读取这些文件的结果（路径、变量个数、被跳过的行） */
+  fileStatus?: EnvFileStatus[]
 }) {
+  const [fileRows, setFileRows] = React.useState<FileRow[]>(() => (files ?? []).map((path) => ({ path })))
   const [view, setView] = React.useState<"table" | "text">("table")
   const [revealed, setRevealed] = React.useState<Set<number>>(new Set())
   // 表格行允许暂时是空名字（正在输入）：行状态自己持有，序列化后与外部 value 一致时不重置；
@@ -64,7 +78,39 @@ export function EnvEditor({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
+      {files && onFilesChange ? (
+        <Field>
+          <FieldLabel>环境变量文件</FieldLabel>
+          <RowList
+            ariaPrefix="环境变量文件"
+            rows={fileRows}
+            columns={[{ key: "path", label: "文件路径（宿主机上的绝对路径）", placeholder: "/home/me/project/.env" }]}
+            newRow={() => ({ path: "" })}
+            addLabel="添加环境变量文件"
+            onChange={(next) => {
+              setFileRows(next)
+              onFilesChange(next.map((row) => row.path.trim()).filter(Boolean))
+            }}
+          />
+          {fileStatus?.length ? (
+            <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+              {fileStatus.map((file) => (
+                <li key={file.path} className={file.error ? "text-destructive" : undefined}>
+                  {file.path}：{file.error || `${file.count} 个变量`}
+                  {file.invalid.length ? `，${file.invalid.length} 行被跳过（第 ${file.invalid.map((item) => item.line).join("、")} 行）` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <FieldDescription>
+            按顺序读取，后面的覆盖前面的；下面的「环境变量」优先于文件。文件每次执行命令时重新读取，改了文件下一条命令就生效；语法与下面的文本相同。
+          </FieldDescription>
+        </Field>
+      ) : null}
+
+      <Field>
+      <FieldLabel>直接填写的变量</FieldLabel>
       <ToggleGroup
         variant="outline"
         size="sm"
@@ -172,6 +218,7 @@ export function EnvEditor({
           </AlertDescription>
         </Alert>
       ) : null}
+      </Field>
     </div>
   )
 }

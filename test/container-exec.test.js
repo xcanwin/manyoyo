@@ -60,6 +60,33 @@ describe('container-exec', () => {
     });
 });
 
+describe('环境变量文件参与 exec', () => {
+    let home;
+    beforeEach(() => { home = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-exec-files-')); });
+    afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
+
+    test('文件改了下一次 exec 就生效；优先级 managed < 文件（按顺序）< box/env < extra；值按字面量写出', () => {
+        const f1 = path.join(home, 'one.env');
+        const f2 = path.join(home, 'two.env');
+        fs.writeFileSync(f1, 'F=one\nSHARED=file1\nQ="a b"\n');
+        fs.writeFileSync(f2, 'SHARED=file2\nBOXED=file2\n');
+        const st = state.createState({ homeDir: home, envLines: ['BOXED=box'], envFiles: [f1, f2] });
+        const exec = () => {
+            const b = buildExecArgs({ homeDir: home, dockerExecArgs: () => st.id }, 'c', { command: ['env'], extraEnv: ['X=extra'] });
+            const text = fs.readFileSync(b.args[b.args.indexOf('--env-file') + 1], 'utf-8');
+            b.cleanup();
+            return text;
+        };
+        expect(exec()).toBe('F=one\nSHARED=file2\nQ=a b\nBOXED=box\nX=extra\n');
+        fs.writeFileSync(f1, 'F=changed\n');
+        expect(exec()).toContain('F=changed');
+        fs.rmSync(f2);
+        const after = exec();
+        expect(after).not.toContain('SHARED');
+        expect(after).not.toContain('file2');
+    });
+});
+
 describe('exec 调用点收敛', () => {
     const root = path.join(__dirname, '..');
     // 与用户容器无关或必须绕开 env 的 exec（apt 源改写、插件自己的容器）

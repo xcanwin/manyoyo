@@ -10,20 +10,48 @@ import {
   serializeEnv,
 } from "./container-manage"
 
+// 与 test/env-text.test.js 同一组语料（服务端 node 实现、容器内 bash 实现都对照过）
+const CORPUS: Array<[string, Record<string, string>]> = [
+  ["CMT_A=1", { CMT_A: "1" }],
+  ["CMT_SP=abc 123", { CMT_SP: "abc 123" }],
+  ['CMT_Q="abc 123"', { CMT_Q: "abc 123" }],
+  ["CMT_SQ='abc 123'", { CMT_SQ: "abc 123" }],
+  ["export CMT_E=1", { CMT_E: "1" }],
+  ["export   CMT_E2 = two ", { CMT_E2: "two" }],
+  ["CMT_SPACES = a b ", { CMT_SPACES: "a b" }],
+  ['CMT_KEEP="  padded  "', { CMT_KEEP: "  padded  " }],
+  ["CMT_EMPTY=", { CMT_EMPTY: "" }],
+  ["CMT_EQ=a=b=c", { CMT_EQ: "a=b=c" }],
+  ['CMT_ONEQ="abc', { CMT_ONEQ: '"abc' }],
+  ["CMT_MIX=\"a'", { CMT_MIX: "\"a'" }],
+  ["CMT_NESTED='\"x\"'", { CMT_NESTED: '"x"' }],
+  ["CMT_URL=http://h:1/?a=1&b=2", { CMT_URL: "http://h:1/?a=1&b=2" }],
+  ["CMT_DOLLAR=$HOME `id` $(id)", { CMT_DOLLAR: "$HOME `id` $(id)" }],
+  ["# comment", {}],
+  ["   # indented comment", {}],
+  ["", {}],
+  ["1BAD=x", {}],
+  ["BAD KEY=x", {}],
+  ["noequals", {}],
+]
+
 describe("env 文本", () => {
-  test("按第一个 = 切分、不去引号、跳过注释；非法行单独报出", () => {
-    const parsed = parseEnvText('A=1\n# c\n\nQ="a b"\nE=x=y\n1BAD=x\nnoequals\n')
-    expect(parsed.entries).toEqual([
-      { key: "A", value: "1" },
-      { key: "Q", value: '"a b"' },
-      { key: "E", value: "x=y" },
-    ])
-    expect(parsed.invalid.map((item) => item.line)).toEqual([6, 7])
+  test.each(CORPUS)("语料：%s", (line, expected) => {
+    const parsed = parseEnvText(line)
+    expect(Object.fromEntries(parsed.entries.map((entry) => [entry.key, entry.value]))).toEqual(expected)
   })
 
-  test("serializeEnv 丢掉空 key，保留值里的引号", () => {
-    expect(serializeEnv([{ key: "A", value: "1" }, { key: " ", value: "x" }, { key: "Q", value: '"a b"' }])).toBe('A=1\nQ="a b"\n')
+  test("非法行带行号单独报出", () => {
+    const parsed = parseEnvText("A=1\n1BAD=x\n# c\nnoequals\n")
+    expect(parsed.invalid.map((item) => item.line)).toEqual([2, 4])
+  })
+
+  test("serializeEnv：空 key 丢掉；只在首尾空白或首尾恰好一对引号时加引号，且能原样读回", () => {
+    expect(serializeEnv([{ key: "A", value: "1" }, { key: " ", value: "x" }, { key: "S", value: "abc 123" }])).toBe("A=1\nS=abc 123\n")
     expect(serializeEnv([])).toBe("")
+    for (const value of ["abc", "abc 123", " lead", "trail ", '"x"', "'x'", '"', "it's", "", "a=b", "\"a'", "'\"y\"'"]) {
+      expect(parseEnvText(serializeEnv([{ key: "K", value }])).entries).toEqual([{ key: "K", value }])
+    }
   })
 
   test("敏感 key 判断", () => {

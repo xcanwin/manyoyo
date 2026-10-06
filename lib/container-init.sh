@@ -10,17 +10,28 @@ log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG" 2>/dev/null; }
 
 trap 'kill -TERM -1 2>/dev/null; exit 0' TERM INT
 
-# 与宿主机侧同一语义：按第一个 = 切分，不去引号、不展开变量，跳过空行与 # 注释，key 必须合法
+# 与宿主机侧（lib/env-text.js）同一语法：一行 KEY=VALUE，# 注释与空行忽略，可选 `export ` 前缀与 `=` 两侧空白，
+# 值两端成对的引号去掉；不展开变量、不执行命令；key 必须合法
 load_env() {
-    local file=$1 line key
+    local file=$1 line key val
     [ -f "$file" ] || return 0
     while IFS= read -r line || [ -n "$line" ]; do
         line=${line%$'\r'}
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
         case $line in ''|'#'*) continue ;; esac
-        case $line in *=*) ;; *) continue ;; esac
-        key=${line%%=*}
+        if [[ $line =~ ^export[[:space:]]+ ]]; then line=${line#"${BASH_REMATCH[0]}"}; fi
+        [[ $line =~ ^([^=[:space:]]+)[[:space:]]*=[[:space:]]*(.*)$ ]] || continue
+        key=${BASH_REMATCH[1]}
+        val=${BASH_REMATCH[2]}
         [[ $key =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-        export "$key=${line#*=}"
+        if [ "${#val}" -ge 2 ]; then
+            case $val in
+                \"*\") val=${val:1:${#val}-2} ;;
+                \'*\') val=${val:1:${#val}-2} ;;
+            esac
+        fi
+        export "$key=$val"
     done < "$file"
 }
 
@@ -36,6 +47,7 @@ run_autostart() {
     fi
     [ -s "$BOX/autostart.sh" ] || exit 0
     load_env "$SYS/managed.env"
+    load_env "$SYS/files.env"
     load_env "$BOX/env"
     log "开始运行自启动脚本"
     /bin/bash "$BOX/autostart.sh" >> "$LOG" 2>&1

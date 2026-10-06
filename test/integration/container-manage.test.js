@@ -53,10 +53,10 @@ maybe('container-manage（真实容器）', () => {
         fs.rmSync(work, { recursive: true, force: true });
     });
 
-    function create({ envLines = [], autostart = '', extraArgs = [] } = {}) {
+    function create({ envLines = [], envFiles = [], autostart = '', extraArgs = [] } = {}) {
         const name = `cm-int-${crypto.randomBytes(3).toString('hex')}`;
         names.push(name);
-        const st = state.createState({ homeDir: home, envLines, autostart, meta: { name } });
+        const st = state.createState({ homeDir: home, envLines, envFiles, autostart, meta: { name } });
         const args = buildContainerRunArgs({
             state: st, containerName: name, hostPath: work, containerPath: '/workspace',
             imageName: IMAGE_NAME, imageVersion, containerExtraArgs: extraArgs, defaultCommand: '/bin/bash'
@@ -96,6 +96,20 @@ maybe('container-manage（真实容器）', () => {
         expect(after.stdout.split('\n')[0]).toBe('x');
         expect(after.stdout.split('\n')[1]).toBe('0');
         expect(after.invalid.map(i => i.text)).toEqual(['1BAD=y']);
+    });
+
+    test('环境变量文件：改了文件下一次 exec 就生效；表格变量优先；统一语法（export / 引号 / 空格）；自启动看到启动时的快照', async () => {
+        const file = path.join(work, 'shared.env');
+        fs.writeFileSync(file, 'export CM_F1="a b"\nCM_F2=plain value\nCM_BOTH=file\n');
+        const { name, st } = create({ envLines: ['CM_BOTH=box'], envFiles: [file], autostart: 'echo "$CM_F1|$CM_F2|$CM_BOTH" >> /run/manyoyo/boot-env.txt\n' });
+        expect(exec(name, 'echo "$CM_F1|$CM_F2|$CM_BOTH"').stdout.trim()).toBe('a b|plain value|box');
+        fs.writeFileSync(file, 'CM_F1=changed\n');
+        expect(exec(name, 'echo "$CM_F1|${CM_F2:-gone}"').stdout.trim()).toBe('changed|gone');
+        // 自启动是容器启动时（快照）跑的：看到的是创建时文件的内容
+        expect(await waitFor(() => fs.existsSync(path.join(st.box, 'boot-env.txt')))).toBe(true);
+        expect(fs.readFileSync(path.join(st.box, 'boot-env.txt'), 'utf-8').trim()).toBe('a b|plain value|box');
+        fs.rmSync(file);
+        expect(exec(name, 'echo "${CM_F1:-gone}"').stdout.trim()).toBe('gone');
     });
 
     test('自启动：新建、restart、stop+start 各执行一次；容器写不了只读的 sys', async () => {

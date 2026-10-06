@@ -377,3 +377,49 @@ describe('网络策略里的端口暴露随「保存网络规则」一起生效'
         }
     });
 });
+
+describe('环境变量文件接口', () => {
+    test('GET 返回文件状态（不回传值）；PUT 带 files 时校验绝对路径、写入列表；文件内容改了下一次读取就是新的', async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-envfiles-'));
+        const file = path.join(dir, 'shared.env');
+        fs.writeFileSync(file, 'TOKEN_X=secret-from-file\nBAD=a&b\n');
+        const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-envfiles-home-'));
+        const st = state.createState({ homeDir: tmpHome, envFiles: [file], network: normalizePolicy({}), netRequired: true, meta: { name: 'boxa' } });
+        const port = await getFreePort();
+        const handle = await startWebServer({
+            serverHost: '127.0.0.1', serverPort: port, authUser: 'webadmin', authPass: 'topsecret', authPassAuto: false,
+            dockerCmd: 'docker', hostPath: tmpHome, homeDir: tmpHome, containerPath: '/workspace',
+            imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.0.0-common',
+            execCommandPrefix: '', execCommand: '', execCommandSuffix: '', contModeArgs: [], containerEnvs: [], containerVolumes: [],
+            validateHostPath: () => {}, formatDate: () => '0101-0000',
+            isValidContainerName: value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value),
+            containerExists: name => name === 'boxa', getContainerStatus: () => 'running', waitForContainerReady: async () => {},
+            dockerExecArgs: args => (args[0] === 'inspect' && String(args[2]).includes('manyoyo.id') ? st.id : ''),
+            networkManager: { ensureBridgeNetwork: async () => {}, apply: async () => ({}), ensureReady: async () => ({}), relatedContainers: async () => [], listManaged: async () => [] },
+            showImagePullHint: () => {}, removeContainer: () => {},
+            webHistoryDir: path.join(tmpHome, 'web-history'), webConfigPath: path.join(tmpHome, 'manyoyo.json'),
+            colors: { GREEN: '', CYAN: '', YELLOW: '', NC: '' }
+        });
+        try {
+            const base = `http://127.0.0.1:${handle.port || port}`;
+            const login = await request(`${base}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'webadmin', password: 'topsecret' }) });
+            const cookie = login.response.headers.get('set-cookie').split(';')[0];
+            const get = await request(`${base}/api/containers/boxa/env`, { headers: { Cookie: cookie } });
+            expect(get.json.files).toEqual([expect.objectContaining({ path: file, exists: true, count: 1 })]);
+            expect(get.json.files[0].invalid).toEqual([expect.objectContaining({ line: 2 })]);
+            expect(get.text).not.toContain('secret-from-file');
+
+            const bad = await request(`${base}/api/containers/boxa/env`, json(cookie, 'PUT', { text: '', files: ['relative.env'] }, { 'If-Match': get.json.etag }));
+            expect(bad.response.status).toBe(400);
+            const file2 = path.join(dir, 'missing.env');
+            const put = await request(`${base}/api/containers/boxa/env`, json(cookie, 'PUT', { text: 'A=1', files: [file, file2] }, { 'If-Match': get.json.etag }));
+            expect(put.response.status).toBe(200);
+            expect(put.json.files.map(f => [f.path, f.exists])).toEqual([[file, true], [file2, false]]);
+            expect(state.readEnvFileList(tmpHome, st.id)).toEqual([file, file2]);
+        } finally {
+            await handle.close();
+            fs.rmSync(dir, { recursive: true, force: true });
+            fs.rmSync(tmpHome, { recursive: true, force: true });
+        }
+    });
+});

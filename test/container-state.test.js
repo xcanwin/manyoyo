@@ -12,9 +12,9 @@ describe('container-state', () => {
     beforeEach(() => { home = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-state-')); });
     afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
 
-    test('parseEnvText: 按第一个 = 切分、不去引号、跳过注释，非法行单独报出', () => {
+    test('parseEnvText：统一语法（引号成对去掉、空格不必加引号），非法行单独报出；语料见 env-text.test.js', () => {
         const parsed = state.parseEnvText('A=1\n# c\n\nQ="a b"\nE=x=y\n1BAD=x\nnoequals\nA 1=x\nEMPTY=\n');
-        expect(parsed.entries.map(e => [e.key, e.value])).toEqual([['A', '1'], ['Q', '"a b"'], ['E', 'x=y'], ['EMPTY', '']]);
+        expect(parsed.entries.map(e => [e.key, e.value])).toEqual([['A', '1'], ['Q', 'a b'], ['E', 'x=y'], ['EMPTY', '']]);
         expect(parsed.invalid.map(i => i.line)).toEqual([6, 7, 8]);
     });
 
@@ -159,5 +159,27 @@ describe('不凭空建状态目录', () => {
         } finally {
             fs.rmSync(home, { recursive: true, force: true });
         }
+    });
+});
+
+
+describe('环境变量文件（每次 exec 现读）', () => {
+    let home;
+    beforeEach(() => { home = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-envfiles-')); });
+    afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
+
+    test('路径列表：只收绝对路径、去重、有数量上限；读取时统一语法并报出被跳过的行与读不到的文件', () => {
+        expect(() => state.normalizeEnvFileList(['relative.env'])).toThrow(/绝对路径/);
+        expect(() => state.normalizeEnvFileList(Array.from({ length: 21 }, (_, i) => `/tmp/f${i}`))).toThrow(/最多/);
+        const good = path.join(home, 'good.env');
+        fs.writeFileSync(good, 'export A="x y"\nB=2\nC=bad&value\nnoequals\n');
+        const st = state.createState({ homeDir: home, envFiles: [good, good, path.join(home, 'missing.env')] });
+        const files = state.readEnvFiles(home, st.id);
+        expect(files.map(f => f.path)).toEqual([good, path.join(home, 'missing.env')]);
+        expect(files[0].entries.map(e => [e.key, e.value])).toEqual([['A', 'x y'], ['B', '2']]);
+        expect(files[0].invalid.length).toBe(2);
+        expect(files[1]).toEqual(expect.objectContaining({ exists: false, error: '文件不存在' }));
+        // 自启动用的快照
+        expect(fs.readFileSync(st.filesEnv, 'utf-8')).toBe('A=x y\nB=2\n');
     });
 });

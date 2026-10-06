@@ -38,9 +38,11 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
   const [loadError, setLoadError] = React.useState("")
   const [legacy, setLegacy] = React.useState<string | null>(null)
   const [revision, setRevision] = React.useState(0)
+  const [envRevision, setEnvRevision] = React.useState(0)
 
   const [envState, setEnvState] = React.useState<ContainerEnvState | null>(null)
   const [envText, setEnvText] = React.useState("")
+  const [envFiles, setEnvFiles] = React.useState<string[]>([])
   const [envMessage, setEnvMessage] = React.useState<{ tone: "ok" | "error" | "conflict"; text: string } | null>(null)
   const [envSaving, setEnvSaving] = React.useState(false)
 
@@ -75,6 +77,8 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
       const loadedEnv = env as unknown as ContainerEnvState
       setEnvState(loadedEnv)
       setEnvText(loadedEnv.text)
+      setEnvFiles(loadedEnv.files.map((file) => file.path))
+      setEnvRevision((value) => value + 1)
       setEnvMessage(null)
       const loadedAuto = {
         script: String(auto.script || ""),
@@ -99,7 +103,9 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
     queueMicrotask(() => void load())
   }, [load])
 
-  const envDirty = envState !== null && envText !== envState.text
+  const envDirty =
+    envState !== null &&
+    (envText !== envState.text || JSON.stringify(envFiles) !== JSON.stringify(envState.files.map((file) => file.path)))
   const envInvalid = React.useMemo(() => parseEnvText(envText).invalid, [envText])
   const netDirty = net !== null && policy !== null && JSON.stringify(policy) !== JSON.stringify(net.policy)
   const autostartDirty =
@@ -110,10 +116,12 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
     setEnvSaving(true)
     setEnvMessage(null)
     try {
-      const data = await apiPut(`${base}/env`, { text: envText }, { "If-Match": envState.etag })
+      const data = await apiPut(`${base}/env`, { text: envText, files: envFiles }, { "If-Match": envState.etag })
       const next = data as unknown as ContainerEnvState
       setEnvState(next)
       setEnvText(next.text)
+      setEnvFiles(next.files.map((file) => file.path))
+      setEnvRevision((value) => value + 1)
       setEnvMessage({ tone: "ok", text: "已保存。下一条命令起生效；已在运行的进程不受影响。" })
     } catch (error) {
       const { status, data } = apiErrorData(error)
@@ -263,7 +271,16 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <EnvEditor value={envText} onChange={setEnvText} invalid={envInvalid} idPrefix="manage" />
+            <EnvEditor
+              key={envRevision}
+              value={envText}
+              onChange={setEnvText}
+              invalid={envInvalid}
+              idPrefix="manage"
+              files={envFiles}
+              onFilesChange={setEnvFiles}
+              fileStatus={envState?.files}
+            />
             {envState?.warning ? (
               <Alert variant="destructive">
                 <AlertDescription>{envState.warning}</AlertDescription>

@@ -6,30 +6,56 @@ export type EnvInvalid = { line: number; text: string; reason: string }
 
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 const SENSITIVE_KEY_RE = /KEY|TOKEN|SECRET|PASSWORD|AUTH|CREDENTIAL/i
+const LINE_RE = /^(?:export\s+)?([^=\s]+)\s*=\s*(.*)$/
+
+// 环境变量的唯一语法，与服务端 lib/env-text.js、容器内 init.sh 等价（同一组语料测试）：
+// 一行 KEY=VALUE；空行与 # 注释忽略；与 docker / podman env-file 一致，值里的空格不需要引号；
+// 兼容 shell / dotenv 写法：可选 `export ` 前缀、= 两侧空白、值两端成对引号会被去掉。
+function unquote(value: string): string {
+  const v = value.trim()
+  if (v.length >= 2 && ((v[0] === '"' && v[v.length - 1] === '"') || (v[0] === "'" && v[v.length - 1] === "'"))) {
+    return v.slice(1, -1)
+  }
+  return v
+}
 
 export function parseEnvText(text: string): { entries: EnvEntry[]; invalid: EnvInvalid[] } {
   const entries: EnvEntry[] = []
   const invalid: EnvInvalid[] = []
   text.split("\n").forEach((raw, index) => {
     const line = raw.replace(/\r$/, "")
-    if (!line.trim() || line.startsWith("#")) return
-    const eq = line.indexOf("=")
-    if (eq <= 0) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith("#")) return
+    const match = LINE_RE.exec(trimmed)
+    if (!match) {
       invalid.push({ line: index + 1, text: line, reason: "缺少 KEY=VALUE" })
       return
     }
-    const key = line.slice(0, eq)
-    if (!ENV_KEY_RE.test(key)) {
-      invalid.push({ line: index + 1, text: line, reason: `key 非法: ${key}` })
+    if (!ENV_KEY_RE.test(match[1])) {
+      invalid.push({ line: index + 1, text: line, reason: `key 非法: ${match[1]}` })
       return
     }
-    entries.push({ key, value: line.slice(eq + 1) })
+    entries.push({ key: match[1], value: unquote(match[2]) })
   })
   return { entries, invalid }
 }
 
+function needsQuote(value: string): boolean {
+  return (
+    /^\s|\s$/.test(value) ||
+    (value.length >= 2 && ((value[0] === '"' && value[value.length - 1] === '"') || (value[0] === "'" && value[value.length - 1] === "'")))
+  )
+}
+
+// 只在值首尾有空白、或首尾恰好是一对引号时才加引号，其余原样（表格里填 `abc 123`，文本里就是 `KEY=abc 123`）
+export function formatEnvValue(value: string): string {
+  if (!needsQuote(value)) return value
+  const q = value[0] === '"' ? "'" : '"'
+  return `${q}${value}${q}`
+}
+
 export function serializeEnv(entries: EnvEntry[]): string {
-  const lines = entries.filter((entry) => entry.key.trim()).map((entry) => `${entry.key.trim()}=${entry.value}`)
+  const lines = entries.filter((entry) => entry.key.trim()).map((entry) => `${entry.key.trim()}=${formatEnvValue(entry.value)}`)
   return lines.length ? `${lines.join("\n")}\n` : ""
 }
 
@@ -125,12 +151,20 @@ export const PRESET_LABELS: Record<Preset, string> = {
 }
 
 export const PRESET_HINTS: Record<Preset, string> = {
-  restricted: "允许公网；禁止宿主机其他端口、局域网 / 私有网段、云元数据与其他容器。manyoyo 必需的端点（DNS、上游代理、Playwright、镜像源）自动放行。",
+  restricted: "禁止：宿主机其他端口、局域网 / 私有网段、云元数据与其他容器。\n允许：公网、manyoyo 必需的端点（DNS、上游代理、Playwright、镜像源）。",
   allowlist: "只允许访问下列域名（经 serve 内的过滤代理）与 IP 规则，其余出站一律拒绝。",
   open: "不加任何网络规则（与旧版行为一致），容器可访问宿主机与局域网。",
 }
 
 export type PeerOption = { id: string; name: string; running: boolean }
+
+export type EnvFileStatus = {
+  path: string
+  exists: boolean
+  error: string
+  count: number
+  invalid: EnvInvalid[]
+}
 
 export type ContainerEnvState = {
   legacy?: boolean
@@ -140,6 +174,7 @@ export type ContainerEnvState = {
   text: string
   entries: EnvEntry[]
   invalid: EnvInvalid[]
+  files: EnvFileStatus[]
   etag: string
   mtime: string | null
 }

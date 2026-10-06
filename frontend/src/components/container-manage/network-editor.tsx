@@ -115,8 +115,8 @@ export function NetworkEditor({
     { key: "proto", label: "协议", options: PROTO_OPTIONS, className: "w-[4.5rem]" },
   ]
   const exposeColumns: RowColumn<ExposeRow>[] = [
-    { key: "bind", label: "监听地址", options: BIND_OPTIONS, className: "flex-[2]" },
-    { key: "hostPort", label: "宿主机端口", placeholder: "18080", inputMode: "numeric", className: "w-24 sm:w-28" },
+    { key: "bind", label: "宿主机监听地址", options: BIND_OPTIONS, className: "flex-[2]" },
+    { key: "hostPort", label: "宿主机监听端口", placeholder: "18080", inputMode: "numeric", className: "w-28 sm:w-32" },
     { key: "port", label: "容器端口", placeholder: "8080", inputMode: "numeric", className: "w-24 sm:w-28" },
   ]
 
@@ -139,7 +139,7 @@ export function NetworkEditor({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        <FieldDescription>{PRESET_HINTS[policy.preset]}</FieldDescription>
+        <FieldDescription className="whitespace-pre-line">{PRESET_HINTS[policy.preset]}</FieldDescription>
       </Field>
 
       {policy.preset === "allowlist" ? (

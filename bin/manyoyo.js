@@ -138,6 +138,7 @@ let UPDATE_CHECK_ENABLED = true;
 // 全局配置 mirrors（apt/npm/pip 软件源，空 = 官方默认）：容器创建时在容器层生效，镜像不变
 let MIRRORS = { apt: '', npm: '', pip: '' };
 let MANAGE_OPTIONS = { autostart: '', network: null };
+let ENV_FILES = [];
 // serve 的容器环境状态，供 GET /api/system/runtime 读取
 const RUNTIME_STATE = { status: 'ready', message: '' };
 const DOCKER_DAEMON_ERROR_CODES = new Set(['PODMAN_MACHINE_UNAVAILABLE', 'DOCKER_DAEMON_UNAVAILABLE', 'PORT_IN_USE']);
@@ -577,41 +578,14 @@ function addEnvFileTo(targetEnvs, envFile) {
     }
 
     if (fs.existsSync(filePath)) {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const lines = content.split('\n');
-
-        for (let line of lines) {
-            // Match pattern: (export )?(KEY)=(VALUE)
-            const match = line.match(/^(?:export\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/);
-            if (match) {
-                let key = match[1];
-                let value = match[2].trim();
-
-                // Filter malicious characters
-                if (/[\r\n\0]/.test(value)) continue;
-                if (/[\$\(\)\`\|\&\*\{\};<>]/.test(value)) continue;
-                if (/^\(/.test(value)) continue;
-
-                // Remove quotes
-                if (/^"(.*)"$/.test(value)) {
-                    value = value.slice(1, -1);
-                } else if (/^'(.*)'$/.test(value)) {
-                    value = value.slice(1, -1);
-                }
-
-                if (key) {
-                    targetEnvs.push("--env", `${key}=${value}`);
-                }
-            }
-        }
+        // 与「环境变量」文本同一套语法（见 lib/env-text.js）；值里有被禁止的字符的行会被跳过并提示
+        const { entries, invalid } = containerState.parseEnvFileContent(fs.readFileSync(filePath, 'utf-8'));
+        entries.forEach(entry => targetEnvs.push('--env', `${entry.key}=${entry.value}`));
+        invalid.forEach(item => console.error(`${YELLOW}⚠️  ${filePath} 第 ${item.line} 行已跳过: ${item.reason}${NC}`));
         return {};
     }
     console.error(`${RED}⚠️  未找到环境文件: ${envFile}${NC}`);
     return {};
-}
-
-function addEnvFile(envFile) {
-    return addEnvFileTo(CONTAINER_ENVS, envFile);
 }
 
 // Playwright 浏览器模式的容器参数；在容器创建时（运行时已确定）才计算，失败只警告，不影响 run
@@ -1567,7 +1541,17 @@ https://github.com/xcanwin/manyoyo
 
     // Merge mode (array values): concatenate all sources
     const envFileList = resolvedRuntime.envFile;
-    envFileList.forEach(ef => addEnvFile(ef));
+    // 环境变量文件不再在创建时展开成 --env：登记路径，每次 exec 现读（改了文件下一条命令就生效）
+    ENV_FILES = [];
+    envFileList.forEach(ef => {
+        const filePath = String(ef || '').trim();
+        if (!path.isAbsolute(filePath)) {
+            console.error(`${RED}⚠️  错误: --env-file 仅支持绝对路径: ${ef}${NC}`);
+            process.exit(1);
+        }
+        if (!fs.existsSync(filePath)) console.error(`${YELLOW}⚠️  未找到环境文件（创建后放进去也会生效）: ${ef}${NC}`);
+        ENV_FILES.push(filePath);
+    });
 
     const envMap = resolvedRuntime.env;
     Object.entries(envMap).forEach(([key, value]) => addEnv(`${key}=${value}`));
@@ -1773,6 +1757,7 @@ function createRuntimeContext(modeState = {}) {
         mirrors: MIRRORS,
         autostart: MANAGE_OPTIONS.autostart,
         network: MANAGE_OPTIONS.network,
+        envFiles: ENV_FILES,
         firstContainerEnvs: FIRST_CONTAINER_ENVS,
         containerVolumes: CONTAINER_VOLUMES,
         containerPorts: CONTAINER_PORTS,
@@ -2129,6 +2114,7 @@ async function createNewContainer(runtime) {
     runtime.state = containerState.createState({
         homeDir: os.homedir(),
         envLines: userEnvLines,
+        envFiles: runtime.envFiles,
         autostart: runtime.autostart,
         network: networkPolicy,
         netRequired: networkPolicy.preset !== 'open',
@@ -2532,6 +2518,7 @@ async function runWebServerMode(runtime) {
         contModeArgs: runtime.contModeArgs,
         containerExtraArgs: runtime.containerExtraArgs,
         containerEnvs: runtime.containerEnvs,
+        envFiles: runtime.envFiles,
         containerVolumes: runtime.containerVolumes,
         containerPorts: runtime.containerPorts,
         validateHostPath: value => validateHostPathOrThrow(value),
