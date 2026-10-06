@@ -5,10 +5,12 @@
     "playwrightCliVersion": "0.1.19",
     "patchrightCoreVersion": "1.63.0",
     "patchrightCoreIntegrity": "sha512-nuRJVTMVKoOFzY8vmwFqJZR3F0trUCKiPzDSgCOPq/yHHTefm9czILV23dXJsi5mvS7sCy7U1CqG7edA/21DtQ==",
-    "description": "MANYOYO – open-source AI agent sandbox: run AI coding agents (Claude Code / Codex / Gemini) safely in Docker/Podman",
+    "description": "MANYOYO（慢悠悠）– open-source AI coding agent sandbox: run Claude Code, Codex, Gemini CLI and OpenCode in YOLO mode safely inside Docker/Podman",
     "keywords": [
         "manyoyo",
         "ai-agent",
+        "ai-sandbox",
+        "coding-agent",
         "agent-cli",
         "security-sandbox",
         "claude-code",
@@ -23,7 +25,7 @@
         "type": "git",
         "url": "git+https://github.com/xcanwin/manyoyo.git"
     },
-    "license": "MIT",
+    "license": "Apache-2.0",
     "author": "xcanwin",
     "type": "commonjs",
     "main": "bin/manyoyo.js",

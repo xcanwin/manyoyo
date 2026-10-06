@@ -78,3 +78,25 @@ describe('check-docs-seo', () => {
         expect(problems).toContain('缺少旧地址跳转页: en/guide/old.html');
     });
 });
+
+describe('checkInstallScript', () => {
+    const { checkInstallScript } = require('../scripts/check-docs-seo');
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+
+    test('产物缺少或与源文件不一致时报问题，一致时通过', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'seo-install-'));
+        const source = path.join(dir, 'source.sh');
+        fs.writeFileSync(source, 'echo hi\n');
+        try {
+            expect(checkInstallScript(dir, source)).toHaveLength(1);
+            fs.writeFileSync(path.join(dir, 'install.sh'), 'echo other\n');
+            expect(checkInstallScript(dir, source)[0]).toMatch(/不一致/);
+            fs.writeFileSync(path.join(dir, 'install.sh'), 'echo hi\n');
+            expect(checkInstallScript(dir, source)).toEqual([]);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});

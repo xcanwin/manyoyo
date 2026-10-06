@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - docs/**
+      - scripts/install.sh
       - package.json
       - package-lock.json
       - .github/workflows/docs-pages.yml

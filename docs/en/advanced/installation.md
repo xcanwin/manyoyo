@@ -211,7 +211,7 @@ For offline-package installs, use `manyoyo update` and `manyoyo uninstall`, see 
 
 For maintainers and anyone curious about what is inside. The one-line installer `scripts/install.sh` only downloads, verifies and starts the `.run`; the real installation logic is `install/install.sh` inside the unpacked `.run`.
 
-- **Assets on a Release**: for each platform (`macos` / `linux`) × chip (`arm64` / `x64`) there is one installer `manyoyo-<version>-<os>-<arch>.run` and one upgrade package `manyoyo-<version>-<os>-<arch>-app.tar.gz`, plus one checksum list `SHA256SUMS`, 9 files in total. The `-app.tar.gz` is downloaded by `manyoyo update` automatically (only Node.js and manyoyo, tens of MB); you do not need to download it.
+- **Assets on a Release**: for each platform (`macos` / `linux`) × chip (`arm64` / `x64`) there is one installer `manyoyo-<version>-<os>-<arch>.run` and one upgrade package `manyoyo-<version>-<os>-<arch>-app.tar.gz`, plus one checksum list `SHA256SUMS`, 9 files in total. The `-app.tar.gz` is downloaded by `manyoyo update` automatically (only Node.js and manyoyo, tens of MB); you normally do not need to download it; if GitHub is unreachable, download it with `SHA256SUMS` into the same directory and install it with `manyoyo update --file <package>`.
 - **Self-verification**: the `.run` verifies itself before installing. To only verify without installing: `sh manyoyo-*.run --check`; to list the contents: `--list`; to unpack into a directory only: `--extract <dir>`.
 - **Compare checksums by hand**: `grep "$(shasum -a 256 manyoyo-*-macos-arm64.run | cut -d' ' -f1)" SHA256SUMS`; one line with the file name means a match.
 - **Read the script before running it**: `sed -n '1,/^__MANYOYO_PAYLOAD_BELOW__$/p' manyoyo-*.run`.

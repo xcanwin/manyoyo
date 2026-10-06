@@ -91,9 +91,16 @@ function checkDocsSeo(distDir, redirectsFile = path.join(ROOT, 'docs', '.vitepre
     return [...problemSet];
 }
 
+// 站点根的 install.sh 必须与 scripts/install.sh 字节一致
+function checkInstallScript(distDir, source = path.join(ROOT, 'scripts', 'install.sh')) {
+    const file = path.join(distDir, 'install.sh');
+    if (!fs.existsSync(file)) return ['产物里缺少 install.sh（构建时应从 scripts/install.sh 复制）'];
+    return fs.readFileSync(file).equals(fs.readFileSync(source)) ? [] : ['产物里的 install.sh 与 scripts/install.sh 不一致'];
+}
+
 if (require.main === module) {
     const distDir = path.resolve(process.argv[2] || path.join(ROOT, 'docs', '.vitepress', 'dist'));
-    const problems = checkDocsSeo(distDir);
+    const problems = [...checkDocsSeo(distDir), ...(fs.existsSync(distDir) ? checkInstallScript(distDir) : [])];
     if (problems.length > 0) {
         console.error(`文档站 SEO 检查未通过（${problems.length} 项）:`);
         problems.forEach(problem => console.error(`  - ${problem}`));
@@ -102,4 +109,4 @@ if (require.main === module) {
     console.log('文档站 SEO 检查通过');
 }
 
-module.exports = { checkDocsSeo };
+module.exports = { checkDocsSeo, checkInstallScript };

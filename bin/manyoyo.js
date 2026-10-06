@@ -26,6 +26,7 @@ const { listServeInstances, formatServeTable } = require('../lib/serve-instances
 const { pruneDanglingImages: pruneDanglingImagesSafely } = require('../lib/image-prune');
 const { runUninstall, readPid, defaultIsManyoyoServe, defaultKill } = require('../lib/uninstall');
 const appUpdate = require('../lib/app-update');
+const { getGithubFetch } = require('../lib/net-proxy');
 const { createUpdateChecker } = require('../lib/update-check');
 const { getLoginTokenDir, issueLoginToken } = require('../lib/login-token');
 const { launchApp, getAppStatePath, openBrowser } = require('../lib/app-launcher');
@@ -836,6 +837,18 @@ async function prepareRuntimeForUpdate(configuredRuntime) {
     return true;
 }
 
+// 网络失败后的“下一步”：先说代理，再给手动下载升级包的办法（地址写完整，能直接复制）
+function updateNetworkNextSteps(proxy, release) {
+    const lines = [proxy && proxy.proxyEnv
+        ? `当前代理: ${proxy.display}，请确认代理可用`
+        : '有代理的话先在终端设置: export https_proxy=http://127.0.0.1:7890'];
+    const names = appUpdate.releaseAssetNames(release ? release.version : '<版本>', appUpdate.arch(), appUpdate.platformOs());
+    lines.push(`也可以手动下载这两个文件到同一目录，再执行: ${MANYOYO_NAME} update --file <下载的 ${names.app}>`);
+    const base = release ? `https://github.com/xcanwin/manyoyo/releases/download/v${release.version}` : 'https://github.com/xcanwin/manyoyo/releases/latest';
+    lines.push(release ? `${base}/${names.app}` : base, release ? `${base}/${names.sums}` : '');
+    return `\n   ${lines.filter(Boolean).join('\n   ')}`;
+}
+
 async function updateOfflineInstall(mode, options, globalConfig) {
     const { appRoot } = mode;
     if (options.rollback) {
@@ -847,14 +860,33 @@ async function updateOfflineInstall(mode, options, globalConfig) {
 
     const installed = appUpdate.currentVersion(appRoot) || mode.version;
     console.log(`${CYAN}🔄 当前版本: ${installed}${NC}`);
-    console.log(`${CYAN}🔄 正在查询最新版本...${NC}`);
-    const release = await appUpdate.fetchLatestRelease();
-    if (appUpdate.compareVersions(release.version, installed) <= 0) {
-        console.log(`${GREEN}✅ 已是最新版本 ${installed}${NC}`);
-        return;
+    let result;
+    if (options.file) {
+        const info = appUpdate.parseAppFileName(options.file);
+        if (info && appUpdate.compareVersions(info.version, installed) <= 0) {
+            console.log(`${GREEN}✅ 已是最新版本 ${installed}${NC}`);
+            return;
+        }
+        console.log(`${CYAN}⬇️  安装本地升级包 ${path.basename(options.file)}${NC}`);
+        result = await appUpdate.installAppFile({ appRoot, file: path.resolve(options.file), targetOs: appUpdate.platformOs() });
+    } else {
+        const github = getGithubFetch();
+        if (github.notice) console.log(`${CYAN}🌐 ${github.notice}${NC}`);
+        let release = null;
+        try {
+            console.log(`${CYAN}🔄 正在查询最新版本...${NC}`);
+            release = await appUpdate.fetchLatestRelease({ fetchImpl: github.fetch });
+            if (appUpdate.compareVersions(release.version, installed) <= 0) {
+                console.log(`${GREEN}✅ 已是最新版本 ${installed}${NC}`);
+                return;
+            }
+            console.log(`${CYAN}⬇️  发现新版本 ${release.version}，只下载 manyoyo 本体（数十 MB）${NC}`);
+            result = await appUpdate.installAppUpdate({ appRoot, release, fetchImpl: github.fetch, targetOs: appUpdate.platformOs(), log: line => console.log(`   ${line}`) });
+        } catch (error) {
+            if (error instanceof appUpdate.UpdateError && error.code === 'NETWORK') error.message += updateNetworkNextSteps(github.proxy, release);
+            throw error;
+        }
     }
-    console.log(`${CYAN}⬇️  发现新版本 ${release.version}，只下载 manyoyo 本体（数十 MB）${NC}`);
-    const result = await appUpdate.installAppUpdate({ appRoot, release, targetOs: appUpdate.platformOs(), log: line => console.log(`   ${line}`) });
     console.log(`${GREEN}✅ 更新完成: ${installed} → ${result.version}（上一版本 ${result.previous || '无'} 已保留，可用 ${MANYOYO_NAME} update --rollback 回滚）${NC}`);
 
     // Podman / VM 磁盘有变化只提示（需要新的完整包）
@@ -920,6 +952,10 @@ async function updateManyoyo(options = {}, globalConfig = {}) {
     }
     if (options.rollback) {
         console.error(`${RED}❌ --rollback 只适用于离线包安装；npm 安装的版本请用 npm install -g @xcanwin/manyoyo@<版本> 回退。${NC}`);
+        process.exit(1);
+    }
+    if (options.file) {
+        console.error(`${RED}❌ --file 只适用于离线包安装；npm 安装请用 npm install -g @xcanwin/manyoyo 升级。${NC}`);
         process.exit(1);
     }
 
@@ -1187,7 +1223,8 @@ https://github.com/xcanwin/manyoyo
         .helpGroup('日常:')
         .description('升级到最新版本')
         .option('--rollback', '回到上一版本')
-        .action(options => selectAction('update', { update: true, rollback: Boolean(options.rollback) }));
+        .option('--file <path>', '安装手动下载的升级包（manyoyo-<版本>-<系统>-<架构>-app.tar.gz，同目录需有 SHA256SUMS）')
+        .action(options => selectAction('update', { update: true, rollback: Boolean(options.rollback), file: options.file || '' }));
 
     program.command('uninstall')
         .helpGroup('日常:')
@@ -2434,7 +2471,7 @@ async function runWebServerMode(runtime) {
         currentVersion: require('../package.json').version,
         installMode: appUpdate.detectInstallMode({ scriptPath: __filename }).mode,
         enabled: UPDATE_CHECK_ENABLED,
-        fetchLatest: () => appUpdate.fetchLatestRelease()
+        fetchLatest: () => appUpdate.fetchLatestRelease({ fetchImpl: getGithubFetch().fetch })
     });
 
     // 启动时检查 Playwright 当前模式是否还活着，失效就回退到默认模式（只警告，不阻塞启动）

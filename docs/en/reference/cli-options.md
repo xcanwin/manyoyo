@@ -19,7 +19,7 @@ manyoyo
 
 | Command | Description | Example |
 | --- | --- | --- |
-| `update` | Upgrade to the latest version; `--rollback` returns to the previous one | `manyoyo update` |
+| `update` | Upgrade to the latest version; `--rollback` returns to the previous one; `--file <package>` installs a manually downloaded upgrade package (needs `SHA256SUMS` in the same directory; offline-package installs only) | `manyoyo update` |
 | `uninstall` | Uninstall MANYOYO (config and data are kept by default); `--yes` only confirms removing the program itself | `manyoyo uninstall` |
 | `setup` | Command line setup wizard (for machines without a graphical session) | `manyoyo setup` |
 | `doctor` | Diagnose container runtime, image, config and ports; `--json` prints JSON, `--fix` repairs what it can | `manyoyo doctor` |

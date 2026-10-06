@@ -471,6 +471,8 @@ describe('命令行', () => {
         expect(none.status).toBe(1);
         expect(none.stderr).toContain('没有找到开启了远程调试的 Chrome');
         expect(none.stderr).toContain('chrome://inspect/#remote-debugging');
+        expect(none.stderr.split('\n')).toContain('chrome://inspect/#remote-debugging'); // 地址独占一行，方便复制
+        expect(none.stderr).toContain('勾选“Allow remote debugging”（Chrome 没开就先打开它），然后重试。');
 
         const stale = path.join(home, 'DevToolsActivePort');
         fs.writeFileSync(stale, '9\n/devtools/browser/x\n');

@@ -167,7 +167,7 @@ describe('fetchLatestRelease', () => {
         await startServer();
         const dead = base;
         await new Promise(resolve => server.close(resolve));
-        await expect(fetchLatestRelease({ apiBase: dead })).rejects.toMatchObject({ code: 'NETWORK', message: expect.stringContaining('网络') });
+        await expect(fetchLatestRelease({ apiBase: dead })).rejects.toMatchObject({ code: 'NETWORK', message: expect.stringContaining('连不上') });
     });
 });
 
@@ -516,5 +516,66 @@ describe('compatibility with the 8.0.1 client', () => {
         // 旧客户端对不存在的 release-manifest 直接跳过提示
         const names = oldUpdate.releaseAssetNames('9.0.0', ARCH, osName);
         expect(release.assets[names.manifest]).toBeUndefined();
+    });
+});
+
+describe('网络错误带地址与中文原因', () => {
+    test('NETWORK 错误含主机名、中文原因与完整 URL', () => {
+        const timeout = Object.assign(new Error('fetch failed'), { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } });
+        const error = appUpdate.networkError('https://github.com/xcanwin/manyoyo/releases/download/v8.5.0/SHA256SUMS', timeout);
+        expect(error.code).toBe('NETWORK');
+        expect(error.message).toContain('github.com');
+        expect(error.message).toContain('连接超时');
+        expect(error.message).toContain('https://github.com/xcanwin/manyoyo/releases/download/v8.5.0/SHA256SUMS');
+        expect(appUpdate.networkError('http://x/y', { code: 'ECONNRESET' }).message).toContain('连接被重置');
+        expect(appUpdate.networkError('http://x/y', { code: 'WEIRD' }).message).toContain('WEIRD');
+    });
+
+    test('下载升级包中断时也带升级包地址', async () => {
+        seedInstalled('1.0.0');
+        await startServer();
+        publish('9.0.0');
+        const release = await fetchLatestRelease({ apiBase: base });
+        const reset = (url, options) => (/\/dl\/manyoyo-/.test(url) ? Promise.reject(Object.assign(new Error('x'), { code: 'ECONNRESET' })) : fetch(url, options));
+        await expect(installAppUpdate({ appRoot, release, fetchImpl: reset, tmpRoot: root }))
+            .rejects.toMatchObject({ code: 'NETWORK', message: expect.stringContaining(`/dl/manyoyo-9.0.0-macos-${ARCH}-app.tar.gz`) });
+    });
+});
+
+describe('installAppFile（update --file）', () => {
+    function stage(version, { osName = 'linux', sums = true, tamper = false } = {}) {
+        const dir = path.join(root, 'manual');
+        fs.mkdirSync(dir, { recursive: true });
+        const names = appUpdate.releaseAssetNames(version, ARCH, osName);
+        const data = buildAppTarball(version, { osName });
+        fs.writeFileSync(path.join(dir, names.app), data);
+        if (sums) fs.writeFileSync(path.join(dir, 'SHA256SUMS'), `${tamper ? 'f'.repeat(64) : sha(data)}  ${names.app}\n`);
+        return path.join(dir, names.app);
+    }
+    const install = file => appUpdate.installAppFile({ appRoot, file, targetOs: 'linux' });
+
+    test('文件名解析', () => {
+        expect(appUpdate.parseAppFileName(`/tmp/manyoyo-9.0.0-linux-${ARCH}-app.tar.gz`)).toEqual({ version: '9.0.0', os: 'linux', arch: ARCH });
+        expect(appUpdate.parseAppFileName('manyoyo-9.0.0.run')).toBeNull();
+    });
+
+    test('合规时切换 current 并保留上一版本', async () => {
+        seedInstalled('1.0.0');
+        const result = await install(stage('9.0.0'));
+        expect(result).toEqual(expect.objectContaining({ version: '9.0.0', previous: '1.0.0' }));
+        expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe('9.0.0');
+        expect(fs.existsSync(path.join(appRoot, '1.0.0'))).toBe(true);
+    });
+
+    test('文件名不合规、缺 SHA256SUMS、哈希不符都拒绝且 current 不变', async () => {
+        seedInstalled('1.0.0');
+        const bad = path.join(root, 'foo.tar.gz');
+        fs.writeFileSync(bad, 'x');
+        await expect(install(bad)).rejects.toMatchObject({ code: 'BAD_FILE' });
+        await expect(install(stage('9.0.0', { sums: false }))).rejects.toMatchObject({ code: 'CHECKSUM', message: expect.stringContaining('releases/download/v9.0.0/SHA256SUMS') });
+        await expect(install(stage('9.0.0', { tamper: true }))).rejects.toMatchObject({ code: 'CHECKSUM' });
+        await expect(install(stage('9.0.0', { osName: 'macos' }))).rejects.toMatchObject({ code: 'BAD_FILE' });
+        expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe('1.0.0');
+        expect(fs.existsSync(path.join(appRoot, '9.0.0'))).toBe(false);
     });
 });

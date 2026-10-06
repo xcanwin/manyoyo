@@ -21,6 +21,9 @@ description: MANYOYO 常见问题按症状索引：安装、登录、权限、�
 **升级后想回到上一版本**
 `manyoyo update --rollback`，见[日常使用](../guide/daily.md)。
 
+**`manyoyo update` 或安装时连接超时**
+先在终端设置代理 `export https_proxy=http://127.0.0.1:7890` 再重试（macOS 的系统代理会自动识别）；仍不行就按屏幕上列出的地址手动下载，见[安装](../guide/quick-start.md)。
+
 ## 运行与镜像
 
 **`permission denied`**
