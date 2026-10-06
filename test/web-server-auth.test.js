@@ -6185,7 +6185,8 @@ exit 1
             await withPullServer('ok', async ({ call }) => {
                 const pulling = await waitFor(async () => {
                     const { json } = await call('GET', '/api/setup/status');
-                    return json.image.status === 'pulling' ? json : null;
+                    // 状态先变成 pulling、进度文本稍后才出现：等进度文本出现再断言（否则在负载高时偶发失败）
+                    return json.image.status === 'pulling' && String(json.image.message).includes('Copying blob') ? json : null;
                 });
                 expect(pulling.image.message).toContain('Copying blob 3/5');
 
