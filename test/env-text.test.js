@@ -6,7 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { parseEnvText, serializeEnvEntries, formatEnvValue } = require('../lib/env-text');
 
-// 同一组语料也在 frontend/src/lib/container-manage.test.ts 里测前端的等价实现，容器内 init.sh 的 bash 实现在下面对照
+// 同一组语料也在 frontend/src/lib/container-manage.test.ts 里测前端的等价实现，容器内 env.sh 的 bash 实现在下面对照
 const CORPUS = [
     ['CMT_A=1', { CMT_A: '1' }],
     ['CMT_SP=abc 123', { CMT_SP: 'abc 123' }],
@@ -56,8 +56,8 @@ describe('env-text 语法', () => {
         expect(formatEnvValue('"x"')).toBe("'\"x\"'");
     });
 
-    test('容器内 init.sh 的 bash 实现与 node 解析同一语料同一结果', () => {
-        const initSh = path.join(__dirname, '..', 'lib', 'container-init.sh');
+    test('容器内 env.sh 的 bash 实现与 node 解析同一语料同一结果', () => {
+        const initSh = path.join(__dirname, '..', 'lib', 'container-env.sh');
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'env-text-'));
         try {
             const file = path.join(dir, 'env');
@@ -71,6 +71,28 @@ describe('env-text 语法', () => {
             Object.entries(nodeEnv).forEach(([key, value]) => expect([key, bashEnv[key]]).toEqual([key, value]));
             // bash 里没有多出来的、node 认为非法的变量
             expect(Object.keys(bashEnv).filter(k => !(k in nodeEnv) && /^(CMT_|BAD|1BAD|noequals)/.test(k))).toEqual([]);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('reload-env 按 managed < 环境变量文件 < 用户 env 的优先级重新加载', () => {
+        const envSh = path.join(__dirname, '..', 'lib', 'container-env.sh');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'env-reload-'));
+        try {
+            const sys = path.join(dir, 'sys');
+            const box = path.join(dir, 'box');
+            fs.mkdirSync(sys);
+            fs.mkdirSync(box);
+            fs.writeFileSync(path.join(sys, 'managed.env'), 'A=managed\nB=managed\nC=managed\n');
+            fs.writeFileSync(path.join(sys, 'files.env'), 'B=files\nC=files\n');
+            fs.writeFileSync(path.join(box, 'env'), 'C=\"user\"\n');
+            const script = `source ${JSON.stringify(envSh)}; export C=old; reload-env; echo "$A $B $C"`;
+            const out = spawnSync('bash', ['-c', script], { encoding: 'utf-8', env: { PATH: process.env.PATH, MANYOYO_SYS_DIR: sys, MANYOYO_BOX_DIR: box } });
+            expect(out.stdout.trim()).toBe('managed files user');
+            // 文件不存在也不报错
+            const none = spawnSync('bash', ['-c', `source ${JSON.stringify(envSh)}; reload-env; echo ok`], { encoding: 'utf-8', env: { PATH: process.env.PATH, MANYOYO_SYS_DIR: path.join(dir, 'x'), MANYOYO_BOX_DIR: path.join(dir, 'y') } });
+            expect(none.stdout.trim()).toBe('ok');
         } finally {
             fs.rmSync(dir, { recursive: true, force: true });
         }

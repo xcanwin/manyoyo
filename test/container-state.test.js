@@ -183,3 +183,24 @@ describe('环境变量文件（每次 exec 现读）', () => {
         expect(fs.readFileSync(st.filesEnv, 'utf-8')).toBe('A=x y\nB=2\n');
     });
 });
+
+describe('sys 目录里的容器内脚本', () => {
+    test('创建时写入 init.sh 与 env.sh（reload-env 的来源），init 加载它并记录就绪 / 无自启动日志', () => {
+        const fs = require('fs');
+        const os = require('os');
+        const path = require('path');
+        const state = require('../lib/container-state');
+        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cs-env-'));
+        try {
+            const { id } = state.createState({ homeDir: home });
+            const p = state.paths(home, id);
+            expect(fs.readFileSync(p.envLoader, 'utf-8')).toContain('reload-env()');
+            const init = fs.readFileSync(p.init, 'utf-8');
+            expect(init).toContain('. "$SYS/env.sh"');
+            expect(init).toContain('网络规则已就绪');
+            expect(init).toContain('没有自启动命令');
+        } finally {
+            fs.rmSync(home, { recursive: true, force: true });
+        }
+    });
+});
