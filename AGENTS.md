@@ -202,6 +202,8 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 容器重启后 netns 重建，**nft 规则全部丢失**：每次启动后必须重新下发（CLI `ensureReady` / Web `ensureWebContainer` / serve 订阅 `events`）。`/run/manyoyo-gate/ready`（tmpfs，重启即清）是“本次启动已下发”的门闩，没有它 init 不跑自启动、manyoyo 也不往里 exec（失败即关闭）。创建路径调用 `apply(name, { expectId })`：找不到刚建的容器必须报错，不能当旧容器放过。规则不能由容器可写的文件（如 `/run/manyoyo/env`）推导，否则容器能改自己的防火墙。
 - 改容器创建流程会牵动测试替身：Web 单测注入 `networkManager`（见 `test/web-server-*.test.js` 的 `fakeNetworkManager`），CLI 假 docker 脚本要实现 `ps -q` / `inspect --format {{json .}}` / `run --label manyoyo.id`；集成测试 helper 走真实路径，宿主机上的夹具端口要用 `hostPorts` 放行。嵌套验证 docker / podman 5：在特权 `docker:dind` / `quay.io/podman/stable` 里 `-v /tmp:/tmp`（bind 源路径必须两边一致，且 `TMPDIR=/tmp`），用 `podman unshare nsenter -t <pid> -n` 让宿主机的 jest 进嵌套容器的网络命名空间，docker 客户端用 `DOCKER_HOST=tcp://127.0.0.1:2375`。
 
+- 过滤代理 sidecar 按来源 IP 认容器，前提是容器伪造不了来源：`buildContainerRunArgs` 统一 `--cap-drop NET_RAW`（docker 默认带，podman 没有），nft 另有“发往 sidecar 且源地址不是自己就丢弃”；sidecar 要固定 IP **和** MAC（只固定 IP 时重启后 ARP 缓存让出网断约一分钟），rootful 下要 `--cap-add DAC_OVERRIDE`（`--cap-drop ALL` 后 root 读不了用户的 0700 目录，rootless 与嵌套 dind 都测不出来）；sidecar 的重建版本号只含程序文件（上游代理写 `upstream.txt` 热更新），否则 CLI 与 serve 环境不同会互相删重建；凡是按名字 / 镜像列容器的地方都要用 `isSidecarName` 排除它。嵌套 dind 重启要 stop + start（`restart` 会因 containerd 残留 pid 起不来）；docker 的 `rm` 没有 `-t`。
+
 ## 版本对齐
 
 - 镜像版本读取 `package.json` 的 `imageVersion`（格式 `x.y.z-variant`），与 `version` 字段独立。
