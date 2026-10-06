@@ -30,6 +30,11 @@ describe('对话里的拦截提示', () => {
         notifier.stop();
     });
 
+    test('emit 抛异常（例如写历史失败）也不冒泡：定时器里的异常会打挂 serve', () => {
+        const notifier = createDeniedNotifier({ read: () => [{ host: 'a.example.com', port: 443, count: 1 }], isIgnored: () => false, emit: () => { throw new Error('ENOSPC'); } });
+        expect(() => notifier.tick()).not.toThrow();
+    });
+
     test('读记录失败不抛错', () => {
         const notifier = createDeniedNotifier({ read: () => { throw new Error('x'); }, isIgnored: () => false, emit: () => { throw new Error('should not'); } });
         notifier.start();

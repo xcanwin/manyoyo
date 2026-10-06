@@ -102,7 +102,7 @@ describe('createSidecarManager（假运行时）', () => {
         expect(info).toEqual({ name: sidecar.sidecarName(home), ip: expect.stringMatching(/^10\.89\.0\.\d+$/), port: 3128 });
         const run = calls.find(a => a[0] === 'run');
         const p = mgr.paths();
-        expect(run).toEqual(expect.arrayContaining(['--cap-drop', 'ALL', '--read-only', '--ip', info.ip, '--mac-address', sidecar.macForIp(info.ip), '--entrypoint', 'node', `${p.app}:/app:ro`, `${p.data}:/data:ro`, `${p.denied}:/denied`]));
+        expect(run).toEqual(expect.arrayContaining(['--cap-drop', 'ALL', '--cap-add', 'DAC_OVERRIDE', '--read-only', '--ip', info.ip, '--mac-address', sidecar.macForIp(info.ip), '--entrypoint', 'node', `${p.app}:/app:ro`, `${p.data}:/data:ro`, `${p.denied}:/denied`]));
         expect(run.join(' ')).not.toMatch(/--publish|-p /);
         expect(run.slice(-2)).toEqual(['img:1', '/app/egress-sidecar-main.js']);
         await mgr.ensure();
@@ -110,7 +110,7 @@ describe('createSidecarManager（假运行时）', () => {
         APP_FILES_PRESENT(p.app);
     });
 
-    test('已停止就 start；被删或配置（上游）变了就重建；上游写进 0600 文件而不是 env / 参数', async () => {
+    test('已停止就 start；程序文件变了才重建；上游只写进 0600 文件（不重建、不进 env / 参数）', async () => {
         const mgr = make();
         await mgr.ensure();
         containers.get(sidecar.sidecarName(home)).State.Running = false;
@@ -120,12 +120,35 @@ describe('createSidecarManager（假运行时）', () => {
 
         const mgr2 = make('http://127.0.0.1:7890');
         await mgr2.ensure();
+        // 上游变了不重建（CLI 与 serve 的环境不同时不能互相删对方的容器），sidecar 自己热更新 upstream.txt
+        expect(calls.filter(a => a[0] === 'run').length).toBe(1);
+        containers.get(sidecar.sidecarName(home)).Config.Labels['manyoyo.egress.rev'] = 'stale';
+        await mgr2.ensure();
         expect(calls.filter(a => a[0] === 'run').length).toBe(2);
         expect(calls.some(a => a[0] === 'rm')).toBe(true);
         const upstreamFile = path.join(mgr2.paths().data, 'upstream.txt');
         expect(fs.readFileSync(upstreamFile, 'utf-8').trim()).toBe('http://host.containers.internal:7890');
         expect(fs.statSync(upstreamFile).mode & 0o777).toBe(0o600);
         expect(calls.filter(a => a[0] === 'run').pop().join(' ')).not.toContain('7890');
+    });
+
+    test('同时被另一个进程建好（名字已存在）：直接用现成的，不报错也不删', async () => {
+        let first = true;
+        const base = fakeRun;
+        const mgr = sidecar.createSidecarManager({
+            run: async (args, opts) => {
+                if (args[0] === 'run' && first) {
+                    first = false;
+                    await base(args, opts); // 另一个进程已经建好
+                    throw new Error('Error: the container name "x" is already in use by container abc. You have to remove that container');
+                }
+                return base(args, opts);
+            },
+            command: 'podman', homeDir: home, imageRef: () => 'img:1', networkName: 'manyoyo', ensureNetwork: async () => {}
+        });
+        const info = await mgr.ensure();
+        expect(info.ip).toMatch(/^10\.89\.0\./);
+        expect(calls.filter(a => a[0] === 'rm').length).toBe(0);
     });
 
     test('writeClients 原子写入映射，内容不变不重写', () => {

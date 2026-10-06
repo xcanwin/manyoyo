@@ -74,4 +74,16 @@ describe('egress-denied 拒绝记录', () => {
             jest.useRealTimers();
         }
     });
+
+    test('内存增量有上限：不同 host 太多时丢弃多出来的，超长 host 不记录', () => {
+        const rec = makeRecorder();
+        for (let i = 0; i < denied.MAX_PENDING_PER_ID + 100; i += 1) rec.record({ id: ID, host: `h${i}.example.com`, port: 443, reason: 'domain' });
+        rec.record({ id: ID, host: `${'a'.repeat(300)}.example.com`, port: 443, reason: 'domain' });
+        rec.record({ id: ID, host: 'h0.example.com', port: 443, reason: 'domain' }); // 已有的 key 仍然累加
+        rec.flush();
+        const list = denied.read(dir, ID);
+        expect(list.length).toBe(denied.MAX_PENDING_PER_ID);
+        expect(list.find(r => r.host === 'h0.example.com').count).toBe(2);
+        expect(list.some(r => r.host.length > 255)).toBe(false);
+    });
 });

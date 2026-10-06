@@ -157,7 +157,16 @@ describe('egress-proxy', () => {
             const ok = await get(`http://ok.example.com:${targetPort}/x?y=1`, SRC.A);
             expect(ok.status).toBe(200);
             // 目标收到的头与客户端发出的一致（只有 host / connection），没有 via / x-forwarded-for 等
-            expect(ok.body).toMatch(/^got \/x\?y=1 host=ok\.example\.com headers=(connection,)?host$/);
+            expect(ok.body).toMatch(/^got \/x\?y=1 host=ok\.example\.com:\d+ headers=(connection,)?host$/);
+            // 客户端发来的 Host 与 URL 里的主机不一致时，以 URL 为准（放行判断看的就是 URL）
+            const spoofed = await new Promise(resolve => {
+                http.get({ host: '127.0.0.1', port: proxyPort, path: `http://ok.example.com:${targetPort}/h`, headers: { Host: 'evil.example.org' } }, res => {
+                    let body = '';
+                    res.on('data', c => { body += c; });
+                    res.on('end', () => resolve(body));
+                });
+            });
+            expect(spoofed).toContain(`host=ok.example.com:${targetPort}`);
             const bad = await get(`http://evil.example.org:${targetPort}/`, SRC.A);
             expect(bad.status).toBe(403);
             expect(bad.body).toBe('Forbidden');
