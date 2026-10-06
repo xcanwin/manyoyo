@@ -2102,7 +2102,7 @@ async function createNewContainer(runtime) {
 
     await ensureRunImage(runtime);
 
-    const networkPolicy = await withEnvEndpoints(normalizePolicy(runtime.network), userEnvLines);
+    const networkPolicy = await withEnvEndpoints(normalizePolicy(runtime.network), [...userEnvLines, ...containerState.readEnvFilePaths(runtime.envFiles || []).flatMap(file => file.entries.map(entry => `${entry.key}=${entry.value}`))]);
     const networkManager = createCliNetworkManager(runtime);
     if (!hasNetworkArg([...(runtime.contModeArgs || []), ...(runtime.containerExtraArgs || [])])) {
         try {

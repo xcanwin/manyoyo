@@ -17,6 +17,7 @@ describe('inferEnvEndpoints', () => {
       'DUP=https://llm.corp.example/other'
     ], lookup);
     expect(out.host).toEqual([{ ports: '11434', proto: 'tcp' }]);
+    expect(out.domains).toEqual(['llm.corp.example', 'public.example.com', 'loop.example']);
     expect(out.rules).toEqual([
       { cidr: '10.2.3.4', ports: '443', proto: 'tcp' },
       { cidr: '192.168.1.50', ports: '8000', proto: 'tcp' }
@@ -25,7 +26,7 @@ describe('inferEnvEndpoints', () => {
 
   test('解析失败不抛错', async () => {
     const out = await inferEnvEndpoints(['X=http://nx.example'], async () => { throw new Error('nx'); });
-    expect(out).toEqual({ host: [], rules: [] });
+    expect(out).toEqual({ host: [], rules: [], domains: ['nx.example'] });
   });
 });
 
@@ -35,6 +36,11 @@ describe('withEnvEndpoints', () => {
     const merged = await withEnvEndpoints(base, ['A=http://host.containers.internal:11434', 'B=http://192.168.1.50:8000'], lookup);
     expect(merged.host).toEqual([{ ports: '11434', proto: 'tcp' }]);
     expect(merged.egress.rules).toEqual([{ cidr: '192.168.1.50', ports: '8000', proto: 'tcp' }]);
+    // 模型服务的域名在任何预设下都登记进白名单列表（代理 / 主机别名 / IP 不算）
+    const withDomains = await withEnvEndpoints(normalizePolicy({ preset: 'allowlist', egress: { domains: ['github.com'] } }), [
+      'ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic', 'HTTPS_PROXY=http://proxy.corp.example:3128', 'OLLAMA=http://host.containers.internal:11434', 'LAN=http://192.168.1.50:8000'
+    ], lookup);
+    expect(withDomains.egress.domains).toEqual(['github.com', 'open.bigmodel.cn']);
     const open = normalizePolicy({ preset: 'open' });
     expect(await withEnvEndpoints(open, ['B=http://192.168.1.50:8000'], lookup)).toBe(open);
     expect(await withEnvEndpoints(base, ['C=x'], lookup)).toBe(base);

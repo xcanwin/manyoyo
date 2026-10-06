@@ -187,5 +187,6 @@ export type NetworkState = {
   policy: NetworkPolicy
   status: NetStatus
   forwards: Array<{ bind: string; hostPort: number; port: number }>
+  suggestedDomains?: string[]
   peers: PeerOption[]
 }

@@ -203,6 +203,15 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(r.json.running).toBe(true);
         });
 
+        test('建议放行的域名来自当前 env 里的 URL（含容器里改过的），已在列表里的不再建议', async () => {
+            fs.appendFileSync(boxA.env, 'ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api\nHTTPS_PROXY=http://proxy.corp.example:3128\nLAN=http://192.168.1.5:80\n');
+            const r = await request(`${baseUrl}/api/containers/boxa/network`, { headers: { Cookie: cookie } });
+            expect(r.json.suggestedDomains).toEqual(['open.bigmodel.cn']);
+            await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { preset: 'allowlist', egress: { domains: ['open.bigmodel.cn'] } } }));
+            const after = await request(`${baseUrl}/api/containers/boxa/network`, { headers: { Cookie: cookie } });
+            expect(after.json.suggestedDomains).toEqual([]);
+        });
+
         test('保存即下发；放开成 open 需要二次确认（服务端也校验）', async () => {
             const hostRule = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { host: [{ ports: '18601' }] } }));
             expect(hostRule.response.status).toBe(200);

@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { RowList, type RowColumn } from "@/components/container-manage/row-list"
@@ -40,6 +41,7 @@ export function NetworkEditor({
   showPeers = true,
   forwards = [],
   showAccess = true,
+  suggestedDomains = [],
 }: {
   policy: NetworkPolicy
   onChange: (policy: NetworkPolicy) => void
@@ -49,6 +51,8 @@ export function NetworkEditor({
   forwards?: Array<{ bind: string; hostPort: number; port: number }>
   /** 是否显示「访问」列（新建容器时还没有在监听，不需要） */
   showAccess?: boolean
+  /** 来自环境变量里 URL 的域名（如模型服务），白名单模式下可一键加入 */
+  suggestedDomains?: string[]
 }) {
   const { confirm, dialog } = useConfirmDialog()
   const [domains, setDomains] = React.useState<DomainRow[]>(() => policy.egress.domains.map((domain) => ({ domain })))
@@ -156,7 +160,31 @@ export function NetworkEditor({
               emit({ domains: next })
             }}
           />
-          <FieldDescription>仅 HTTP(S)：经 serve 内的过滤代理，按域名放行；解析到私有地址的域名一律拒绝。</FieldDescription>
+          {suggestedDomains.filter((domain) => !domains.some((row) => row.domain.trim().toLowerCase() === domain)).length ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>环境变量里出现的域名（如 Agent 的模型服务，不放行 Agent 就无法对话）：</span>
+              {suggestedDomains
+                .filter((domain) => !domains.some((row) => row.domain.trim().toLowerCase() === domain))
+                .map((domain) => (
+                  <Button
+                    key={domain}
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    onClick={() => {
+                      const next = [...domains.filter((row) => row.domain.trim()), { domain }]
+                      setDomains(next)
+                      emit({ domains: next })
+                    }}
+                  >
+                    + {domain}
+                  </Button>
+                ))}
+            </div>
+          ) : null}
+          <FieldDescription>
+            仅 HTTP(S)：经 serve 内的过滤代理，按域名放行；解析到私有地址的域名一律拒绝。注意 Agent 访问模型服务也走这条路：它的域名（如 ANTHROPIC_BASE_URL 的主机）必须在这里，页面里的网站依赖的其他域名（CDN 等）也要一并放行。
+          </FieldDescription>
         </Field>
       ) : null}
 

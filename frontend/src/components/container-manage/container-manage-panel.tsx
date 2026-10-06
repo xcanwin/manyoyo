@@ -324,7 +324,14 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
               <CardDescription>规则与端口暴露保存后 2 秒内生效，容器不需要重启。</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <NetworkEditor key={revision} policy={policy} onChange={setPolicy} peers={net.peers} forwards={net.forwards} />
+              <NetworkEditor
+                key={revision}
+                policy={policy}
+                onChange={setPolicy}
+                peers={net.peers}
+                forwards={net.forwards}
+                suggestedDomains={net.suggestedDomains}
+              />
               {net.status?.warning ? (
                 <Alert>
                   <AlertDescription>{net.status.warning}</AlertDescription>
