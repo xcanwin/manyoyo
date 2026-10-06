@@ -11,7 +11,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 
 ## 协作偏好
 
-- 交流必须使用中文，回复简洁、直接、高信噪比，避免客套话。
+- 交流必须使用中文，回复简洁、直接、高信噪比，避免客套话。文档与界面提示文字要言简意赅、通俗易懂（一句话说清，不堆术语，不写实现细节）。
 - 代码改动尽量最小化：只改解决问题所必须的代码，严禁顺手重构无关代码或做无关格式化。
 - 不提供时间预估或承诺时间线。
 - 多方案时给出清晰选项，避免来回确认。
@@ -40,7 +40,7 @@ MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 
 - `scripts/release/`：发布控制台（维护者工具，不进 npm 包），**唯一的发布入口**：网页（人用，`npm run release`，`127.0.0.1:3900`，令牌 + Host/Origin 校验，只能选固定阶段、不能提交任意命令）与命令行（agent 用，`--status [--json]` / `--notes-draft` / `--run <阶段,…> [--yes]` / `--check <id>`，`--help` 有完整用法与典型流程）共用同一套引擎。状态完全由 git / GitHub / npm 的真实状态推出（`facts.js` → `stages.js`），可随时中断续跑；阶段执行在 `actions.js`，任务执行器 `jobs.js`（single / 逐步确认 step / 一次确认 auto；相邻同组阶段 verify ∥ npm 并行），`lock.js` 是网页与命令行共用的跨进程单实例锁（持有者 pid 已死则接管）。对外动作每次都要确认（网页弹窗；命令行必须加 `--yes`，否则只打印命令并以退出码 2 结束）。`device-rules.js` 是发布前真机检查的区域规则（数据，按“自上个 tag 以来改了哪些文件”匹配，只匹配会在用户机器上运行的文件，CI-only 构建脚本和控制台自己的页面不算），勾选只能由人做（网页，或有 TTY 的 `--check`；没有 TTY 拒绝）。页面源码在 `frontend/release.html` + `frontend/src/release/`，`npm run build:release` 构建成 `scripts/release/console.html`（已忽略，首次运行自动构建）。`--dry-run` 对外动作只打印命令（本地检查如 preflight 仍会真跑）。
 - `lib/plugin/`：Playwright 插件，容器内浏览器只有四种模式（默认容器内 Xvfb 有头 / `headed` / `chrome` / `vnc`），同一时间一个。宿主机 `~/.manyoyo/plugin/playwright/current/` 以**目录**只读挂进容器 `/run/manyoyo-playwright/`，`config.json` 一律原子替换，切模式后已运行容器自动跟随（不要改回单文件挂载）；`fingerprint.js` 是指纹唯一数据源，`docker/res/playwright/{browser.json,stealth.init.js,env}` 由 `scripts/gen-playwright-res.js` 生成并有单测校验；浏览器是 Google Chrome stable + patchright-core（替换 `@playwright/cli` 自带的 playwright-core，去掉 CDP Runtime 痕迹）；语言时区靠进程原生环境变量（容器内由 `playwright-cli.sh` source 挂载目录里的 `env`，宿主机服务 spawn 时合并 `process.env`）而不是 contextOptions（只作用于页面、Worker 不一致）；注意 launchOptions.env 会**整体替换**进程环境，别用它传 TZ；镜像构建时（integrity 校验之后）把 patchright 客户端 12 处 `isolatedContext = true` 默认值 sed 成 `false`（否则 `eval` / `run-code` 在隔离世界执行、读不到页面全局变量），次数写在 Dockerfile 的 `ISOLATED_DEFAULTS` 并有单测对照，升级 patchright 必须复核；扩展不能再用 `--load-extension`（官方 Google Chrome 自 M137 起忽略它，Chrome 154 实测连 `DisableLoadExtensionCommandLineSwitch` 也无效），`playwright-server.js` 启动后经 CDP `Extensions.loadUnpacked` 加载（需 `--enable-unsafe-extension-debugging`，只在有扩展时加）；`chrome-policy.json` 关闭 Chrome 154 的 Local Network Access 检查（否则不安全页面经 `host.containers.internal` 访问宿主机服务时 fetch 被拦）；`playwright-relay.js`（chrome 中继，只放行带 token 的 upgrade）、`playwright-server.js`（宿主机/vnc 容器里的浏览器服务）、`playwright-probe.js`（真实探测）、`playwright-assets/`（vnc 镜像）；`buildContainerIntegration` 是 CLI run 与 Web 建会话共用的唯一入口，永远不能因 playwright 让 run 退出。Playwright 1.64 起浏览器服务只绑 loopback 时会校验 Host（非 localhost/127.0.0.1 一律 403），所以 headed 在所有平台监听 0.0.0.0 + token；rootless 运行时的发布端口在容器没起来时 TCP 也能连上，就绪/存活判断不能只看端口。
 - `lib/container-state.js` / `container-exec.js` / `container-init.sh`：每容器一个状态目录 `~/.manyoyo/containers/<manyoyo.id>/`（`box/` 读写挂到 `/run/manyoyo/`：用户 `env`、`autostart.sh`；`sys/` 只读挂到 `/run/manyoyo-sys/`：`init.sh`、`managed.env`；`network.json` 等不挂进容器），按随机 id 而非容器名索引，删了重建同名容器不继承。容器 PID 1 是 `init.sh`（回收僵尸、响应 SIGTERM、网络规则就绪后跑自启动）。用户 env 不进容器配置，**所有进用户容器的 exec 必须经 `buildExecArgs`**（现读 managed.env + 环境变量文件（`env-files.json` 里的宿主机绝对路径，每次 exec 重新读）+ box/env，优先级依次升高；语法只有一种，见 `lib/env-text.js`，前端 `container-manage.ts` 与 `container-init.sh` 各有等价实现并用同一组语料测试；先过滤非法行再写 0600 临时 env 文件（值按字面量写出，docker/podman 不处理引号），调用方用完 `cleanup()`；`test/container-exec.test.js` 用 grep 断言 `bin/` 与 `server.js` 里没有裸 `['exec'`）。
-- `lib/network-policy.js` / `container-network.js` / `egress-proxy.js` / `port-forward.js` / `network-endpoints.js` / `container-manage-options.js`：网络策略校验与 nft 生成（规则文本只由校验过的结构化数据生成）、用一次性 helper 容器（`--network container:<名>` + `NET_ADMIN`）把规则写进目标容器的 netns、serve 内的域名白名单过滤代理（固定端口 8936，按容器凭据鉴权，解析到私有地址一律拒绝）、运行中端口暴露（`exec socat` 转发）、从创建时 env 推断 Agent 端点、`autostart` / `network` 配置字段合并。新容器默认加入 `manyoyo` bridge 网络，策略默认 `restricted`。
+- `lib/network-policy.js` / `container-network.js` / `egress-sidecar.js` / `egress-proxy.js` / `egress-denied.js` / `port-forward.js` / `network-endpoints.js` / `container-manage-options.js`：网络策略校验与 nft 生成（规则文本只由校验过的结构化数据生成）、用一次性 helper 容器（`--network container:<名>` + `NET_ADMIN`）把规则写进目标容器的 netns、域名白名单的过滤代理（`manyoyo` 网络里的专用 sidecar 容器 `manyoyo-egress-<HOME 哈希>`，固定 IP + 固定 MAC，用镜像自带的 node 跑只读挂入的 `egress-sidecar-main.js` 等几个无依赖文件；按**来源 IP** 查 `~/.manyoyo/egress/data/clients.json` 认容器，认不出一律 403，不要账号密码、宿主机不监听端口，被拒记录写进 `egress/denied/<id>.jsonl`，解析到私有地址一律拒绝）、运行中端口暴露（`exec socat` 转发）、从创建时 env 推断 Agent 端点、`autostart` / `network` 配置字段合并。新容器默认加入 `manyoyo` bridge 网络，策略默认 `restricted`。
 - `lib/web/`：`serve` 网页服务；`server.js` 单文件 6000+ 行，靠 `Grep "^function <名>"` 定位，不要整文件读。
 - `frontend/`：默认 Web 前端（`/` 路由，登录页 `/auth/login`；React + shadcn/ui），独立 Vite + React + TS 项目，约 70 个源文件；组件地图见该目录 `AGENTS.md`。
 - `docker/`：多阶段 `manyoyo.Dockerfile`、构建缓存 `cache/`（Node.js、JDT LSP、gopls，2 天有效）、各 Agent 默认配置与 supervisor 模板 `res/`。
@@ -108,7 +108,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 
 **容器模式**（`setContMode()`）：`common`（默认）标准容器；`dind` 加 `--privileged`、需手动启 `dockerd`；`sock` 加 `--privileged + -v /var/run/docker.sock`，可访问宿主机 Docker（有安全风险）。
 
-**容器生命周期**：入口点为 `tail -f /dev/null`，默认命令存储在容器标签 `manyoyo.default_cmd`；容器就绪等待采用指数退避 100ms→2000ms，最多 30 次。
+**容器生命周期**：新容器 PID 1 是 `lib/container-init.sh`（见项目结构），旧容器是 `tail -f /dev/null`；默认命令存储在容器标签 `manyoyo.default_cmd`；容器就绪等待采用指数退避 100ms→2000ms，最多 30 次。
 
 ### docker/manyoyo.Dockerfile
 
@@ -201,6 +201,8 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 
 - 容器重启后 netns 重建，**nft 规则全部丢失**：每次启动后必须重新下发（CLI `ensureReady` / Web `ensureWebContainer` / serve 订阅 `events`）。`/run/manyoyo-gate/ready`（tmpfs，重启即清）是“本次启动已下发”的门闩，没有它 init 不跑自启动、manyoyo 也不往里 exec（失败即关闭）。创建路径调用 `apply(name, { expectId })`：找不到刚建的容器必须报错，不能当旧容器放过。规则不能由容器可写的文件（如 `/run/manyoyo/env`）推导，否则容器能改自己的防火墙。
 - 改容器创建流程会牵动测试替身：Web 单测注入 `networkManager`（见 `test/web-server-*.test.js` 的 `fakeNetworkManager`），CLI 假 docker 脚本要实现 `ps -q` / `inspect --format {{json .}}` / `run --label manyoyo.id`；集成测试 helper 走真实路径，宿主机上的夹具端口要用 `hostPorts` 放行。嵌套验证 docker / podman 5：在特权 `docker:dind` / `quay.io/podman/stable` 里 `-v /tmp:/tmp`（bind 源路径必须两边一致，且 `TMPDIR=/tmp`），用 `podman unshare nsenter -t <pid> -n` 让宿主机的 jest 进嵌套容器的网络命名空间，docker 客户端用 `DOCKER_HOST=tcp://127.0.0.1:2375`。
+
+- 过滤代理 sidecar 按来源 IP 认容器，前提是容器伪造不了来源：`buildContainerRunArgs` 统一 `--cap-drop NET_RAW`（docker 默认带，podman 没有），nft 另有“发往 sidecar 且源地址不是自己就丢弃”；sidecar 要固定 IP **和** MAC（只固定 IP 时重启后 ARP 缓存让出网断约一分钟），rootful 下要 `--cap-add DAC_OVERRIDE`（`--cap-drop ALL` 后 root 读不了用户的 0700 目录，rootless 与嵌套 dind 都测不出来）；sidecar 的重建版本号只含程序文件（上游代理写 `upstream.txt` 热更新），否则 CLI 与 serve 环境不同会互相删重建；凡是按名字 / 镜像列容器的地方都要用 `isSidecarName` 排除它。嵌套 dind 重启要 stop + start（`restart` 会因 containerd 残留 pid 起不来）；docker 的 `rm` 没有 `-t`。
 
 ## 版本对齐
 

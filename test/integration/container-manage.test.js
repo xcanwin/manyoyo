@@ -98,6 +98,23 @@ maybe('container-manage（真实容器）', () => {
         expect(after.invalid.map(i => i.text)).toEqual(['1BAD=y']);
     });
 
+    test('reload-env：已经在运行的 shell 里执行后拿到新值（管理的变量也一并刷新）', async () => {
+        const { name, st } = create({ envLines: ['CM_R=old'] });
+        const built = buildExecArgs({ homeDir: home, dockerExecArgs }, name, {
+            command: ['/bin/bash', '-c', 'source /run/manyoyo-sys/env.sh; echo "before:$CM_R"; for i in $(seq 60); do [ -f /run/manyoyo/go ] && break; sleep 0.25; done; reload-env; echo "after:$CM_R"']
+        });
+        const child = require('child_process').spawn(runtime.command, built.args, { env: { ...process.env, ...runtime.env }, stdio: ['ignore', 'pipe', 'pipe'] });
+        let out = '';
+        child.stdout.on('data', c => { out += c; });
+        const done = new Promise(resolve => child.on('close', resolve));
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        state.writeEnv(home, st.id, 'CM_R=new\n');
+        fs.writeFileSync(path.join(st.box, 'go'), '');
+        await done;
+        built.cleanup();
+        expect(out.trim().split('\n')).toEqual(['before:old', 'after:new']);
+    });
+
     test('环境变量文件：改了文件下一次 exec 就生效；表格变量优先；统一语法（export / 引号 / 空格）；自启动看到启动时的快照', async () => {
         const file = path.join(work, 'shared.env');
         fs.writeFileSync(file, 'export CM_F1="a b"\nCM_F2=plain value\nCM_BOTH=file\n');

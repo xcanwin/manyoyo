@@ -84,6 +84,27 @@ maybe('指纹一致性：default（容器内 Xvfb 有头浏览器）', () => {
     });
 });
 
+maybe('指纹一致性：allowlist 预设下浏览器走过滤代理，指纹不退化', () => {
+    test('各项信号自洽，且与 default 一致', async () => {
+        const home = env.makeHome();
+        const name = env.randomName('pw-fp');
+        try {
+            await env.createContainer(runtime, home, name, { network: { preset: 'allowlist', egress: { domains: ['example.com'] } } });
+            const data = await inContainerFixture(name);
+            expectSelfConsistent(data);
+            expect(data.report.screen.width).toBe(1920);
+            if (collected.default) {
+                expect(data.report.userAgent).toBe(collected.default.report.userAgent);
+                expect(data.report.languages).toEqual(collected.default.report.languages);
+                expect(data.report.timezone).toBe(collected.default.report.timezone);
+            }
+        } finally {
+            env.removeContainer(runtime, name);
+            fs.rmSync(home, { recursive: true, force: true });
+        }
+    });
+});
+
 maybe('default：Agent 读得到页面主世界的 JS 全局变量', () => {
     test('playwright-cli eval 与 run-code 里的 page.evaluate 都能读到页面自己定义的全局变量和函数', async () => {
         const home = env.makeHome();

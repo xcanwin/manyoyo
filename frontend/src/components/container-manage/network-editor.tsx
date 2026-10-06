@@ -183,7 +183,7 @@ export function NetworkEditor({
             </div>
           ) : null}
           <FieldDescription>
-            仅 HTTP(S)：经 serve 内的过滤代理，按域名放行；解析到私有地址的域名一律拒绝。注意 Agent 访问模型服务也走这条路：它的域名（如 ANTHROPIC_BASE_URL 的主机）必须在这里，页面里的网站依赖的其他域名（CDN 等）也要一并放行。
+            只能访问这里列出的网站（HTTP/HTTPS）。Agent 的模型服务域名必须在这里，否则无法对话。网页里被拦的其他域名（图片、CDN 等）会出现在下方「最近被拦截」，点一下就能放行。
           </FieldDescription>
         </Field>
       ) : null}

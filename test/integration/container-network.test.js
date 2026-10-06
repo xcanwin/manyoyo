@@ -15,7 +15,6 @@ const { buildExecArgs } = require('../../lib/container-exec');
 const { createNetworkManager, NETWORK_NAME } = require('../../lib/container-network');
 const { normalizePolicy } = require('../../lib/network-policy');
 const state = require('../../lib/container-state');
-const { createEgressProxy } = require('../../lib/egress-proxy');
 const { createPortForwarder } = require('../../lib/port-forward');
 
 const IMAGE_NAME = 'ghcr.io/xcanwin/manyoyo';
@@ -70,7 +69,8 @@ maybe('container-network（真实容器）', () => {
         await manager.ensureBridgeNetwork();
     });
     afterAll(async () => {
-        names.forEach(name => rtSync(['rm', '-f', '-t', '1', name]));
+        names.forEach(name => rtSync(['rm', '-f', name]));
+        rtSync(['rm', '-f', manager.sidecar.name]);
         await new Promise(resolve => server.close(resolve));
         fs.rmSync(home, { recursive: true, force: true });
         fs.rmSync(work, { recursive: true, force: true });
@@ -234,63 +234,116 @@ maybe('container-network（真实容器）', () => {
         }
     }, 120000);
 
-    test('allowlist + 过滤代理：白名单域名可达；其他域名 403；直连被挡；经代理打宿主机 loopback 被拒；无凭据 407；切回 restricted 后凭据失效', async () => {
-        const upstream = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy || '';
-        let proxy;
-        let proxyPort;
-        const mgr = () => createNetworkManager({
-            command: runtime.command, env: runtime.env, homeDir: home, imageRef: () => IMAGE,
-            getFilterProxy: async () => ({ port: proxyPort })
-        });
+    test('allowlist + sidecar 过滤代理：白名单域名可达、其他 403、直连被挡、按来源 IP 识别（未知来源 403、不能伪造）、宿主机无监听、记录被拦截、sidecar 被杀失败即关闭并自愈、重启后 IP 不变', async () => {
         const { name, st } = await create({ policy: { preset: 'allowlist', egress: { domains: ['example.com'] } } });
-        proxy = createEgressProxy({
-            upstream,
-            getToken: id => state.readEgressToken(home, id),
-            getPolicy: id => {
-                const raw = normalizePolicy(state.readNetworkRaw(home, id));
-                return { preset: raw.preset, domains: raw.egress.domains, rules: raw.egress.rules };
-            }
-        });
-        proxyPort = await proxy.start({ host: '0.0.0.0', port: 0 });
-        try {
-            const manager2 = mgr();
-            await manager2.apply(name);
-            const env = (await execWithEnv(name, 'env | grep -i "^https\\?_proxy=" | sort')).stdout;
-            expect(env).toContain(`${st.id}:`);
-            const ip = await hostIp(name);
+        const sidecarName = manager.sidecar.name;
+        const denied = require('../../lib/egress-denied');
+        await manager.apply(name);
+        const env = (await execWithEnv(name, 'env | grep -i "^https\\?_proxy=" | sort')).stdout;
+        const proxyUrl = env.split('\n')[0].split('=')[1];
+        expect(proxyUrl).toMatch(/^http:\/\/\d+\.\d+\.\d+\.\d+:3128$/); // 没有账号密码
+        const proxyIp = proxyUrl.replace('http://', '').split(':')[0];
+        const viaProxy = async (url, extra = '') => (await execWithEnv(name, `curl -s -m 12 -o /dev/null -w '%{http_code}' ${extra} ${url}; true`)).stdout.trim();
 
-            const hostProbe = spawnSync('curl', ['-s', '-m', '8', '-o', '/dev/null', '-w', '%{http_code}', 'https://example.com/'], { encoding: 'utf-8' });
-            if (hostProbe.stdout.trim() === '200') {
-                const ok = (await execWithEnv(name, "curl -s -m 15 -o /dev/null -w '%{http_code}' https://example.com/; true")).stdout.trim();
-                expect(ok).toBe('200');
-            }
-            const other = (await execWithEnv(name, "curl -s -m 8 -o /dev/null -w '%{http_code}' https://www.baidu.com/; true")).stdout.trim();
-            expect(other).not.toBe('200');
-            const otherHttp = (await execWithEnv(name, "curl -s -m 8 -o /dev/null -w '%{http_code}' http://other.example.net/; true")).stdout.trim();
-            expect(otherHttp).toBe('403');
-            expect(await code(name, 'https://example.com/')).toBe('000'); // --noproxy 直连被防火墙挡
-            expect(await code(name, `http://${ip}:${serverPort}/`)).toBe('000');
-            // 借代理打宿主机 loopback（SSRF）：CONNECT 到 127.0.0.1 与 serve 自己的端口
-            const creds = env.split('\n')[0].split('=')[1];
-            const ssrf = (await execWithEnv(name, `env -u NO_PROXY -u no_proxy curl -s -m 8 -o /dev/null -w '%{http_code}' -x '${creds}' http://127.0.0.1:${serverPort}/; true`)).stdout.trim();
-            expect(ssrf).toBe('403');
-            // 局域网主机没有凭据：407
-            const anon = await new Promise(resolve => {
-                const req = http.request({ host: ip, port: proxyPort, method: 'GET', path: 'http://example.com/', headers: { Host: 'example.com' } }, res => { res.resume(); resolve(res.statusCode); });
-                req.on('error', () => resolve(0));
-                req.end();
-            });
-            expect([407, 0]).toContain(anon);
-
-            setPolicy(st, {});
-            await manager2.apply(name);
-            expect((await execWithEnv(name, 'env | grep -c "^HTTPS_PROXY=http://' + st.id + '" || true')).stdout.trim()).toBe('0');
-            const stale = (await execWithEnv(name, `env -u NO_PROXY -u no_proxy curl -s -m 8 -o /dev/null -w '%{http_code}' -x '${creds}' http://example.com/; true`)).stdout.trim();
-            expect(['403', '000']).toContain(stale);
-        } finally {
-            await proxy.stop();
+        // 宿主机上不再有过滤代理端口（8936 与 sidecar 的 3128 都不在宿主机监听）
+        const ss = spawnSync('ss', ['-ltn'], { encoding: 'utf-8' });
+        if (ss.status === 0) {
+            expect(ss.stdout).not.toMatch(/:8936\s/);
+            expect(ss.stdout).not.toMatch(/:3128\s/);
         }
-    }, 180000);
+
+        const hostProbe = spawnSync('curl', ['-s', '-m', '8', '-o', '/dev/null', '-w', '%{http_code}', 'https://example.com/'], { encoding: 'utf-8' });
+        const online = hostProbe.stdout.trim() === '200';
+        if (online) expect(await viaProxy('https://example.com/')).toBe('200');
+        expect(await viaProxy('http://other.example.net/')).toBe('403');
+        expect(await viaProxy('https://www.baidu.com/')).not.toBe('200');
+        expect(await code(name, 'https://example.com/')).toBe('000'); // --noproxy 直连被防火墙挡
+        expect(await code(name, `http://${await hostIp(name)}:${serverPort}/`)).toBe('000');
+        // 借代理打宿主机 loopback（SSRF）
+        expect((await execWithEnv(name, `env -u NO_PROXY -u no_proxy curl -s -m 8 -o /dev/null -w '%{http_code}' http://127.0.0.1:${serverPort}/; true`)).stdout.trim()).toBe('403');
+
+        // 被拦截记录：访问过的被拒域名出现在列表里，计数正确
+        await viaProxy('http://other.example.net/');
+        await sleep(1500);
+        const list = denied.read(manager.sidecar.paths().denied, st.id);
+        const hit = list.find(r => r.host === 'other.example.net' && r.port === 80);
+        expect(hit && hit.count).toBe(2);
+
+        // 来源识别：不在映射里的容器（open 预设）连 sidecar → 403
+        const other = await create({ policy: { preset: 'open' } });
+        await manager.apply(other.name);
+        expect((await exec(other.name, `env -u NO_PROXY -u no_proxy -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY curl -s -m 8 -o /dev/null -w '%{http_code}' -x http://${proxyIp}:3128 http://example.com/; true`)).stdout.trim()).toBe('403');
+
+        // 来源伪造：容器里没有 NET_RAW，也绑不到别人的地址
+        const spoof = (await exec(name, `python3 - <<'EOF'
+import socket
+try:
+    socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW); print('raw-ok')
+except Exception as e: print('raw-denied')
+s = socket.socket()
+try:
+    s.bind(('10.89.0.99', 0)); print('bind-ok')
+except Exception as e: print('bind-denied')
+EOF`)).stdout;
+        expect(spoof).toContain('raw-denied');
+        expect(spoof).toContain('bind-denied');
+        const ruleset = await rtAsync(['run', '--rm', '--pull=never', '--network', `container:${name}`, '--cap-drop', 'ALL', '--cap-add', 'NET_ADMIN', '--user', 'root', '--entrypoint', 'nft', IMAGE, 'list', 'ruleset']);
+        expect(ruleset.stdout).toMatch(new RegExp(`ip daddr ${proxyIp.replace(/\./g, '\\.')} ip saddr != \\S+ drop`));
+
+        // sidecar 被杀：容器出网失败（不放开）；ensureReady 自愈后恢复，IP 不变
+        rtSync(['kill', sidecarName]);
+        expect(await viaProxy('http://other.example.net/')).toBe('000');
+        await manager.ensureReady(name);
+        expect(await viaProxy('http://other.example.net/')).toBe('403');
+        rtSync(['rm', '-f', sidecarName]);
+        expect(await viaProxy('http://other.example.net/')).toBe('000');
+        await manager.ensureReady(name);
+        expect(await viaProxy('http://other.example.net/')).toBe('403');
+        // sidecar 重启：固定 IP 不变，映射与规则仍然有效
+        rtSync(['restart', '-t', '1', sidecarName]);
+        await sleep(1500);
+        const ipOf = () => rtSync(['inspect', '-f', `{{(index .NetworkSettings.Networks "${NETWORK_NAME}").IPAddress}}`, sidecarName]).stdout.trim();
+        expect(ipOf()).toBe(proxyIp);
+        expect(await viaProxy('http://other.example.net/')).toBe('403');
+
+        // 一键放行：加入白名单并下发后 2 秒内可访问
+        if (online) {
+            expect(await viaProxy('http://example.org/')).toBe('403');
+            setPolicy(st, { preset: 'allowlist', egress: { domains: ['example.com', 'example.org'] } });
+            const t0 = Date.now();
+            await manager.apply(name);
+            await sleep(700);
+            expect(await viaProxy('http://example.org/')).toMatch(/^(200|30\d)$/);
+            console.log(`[L3] 放行 → 可访问耗时 ${Date.now() - t0} ms`);
+        }
+
+        // 切回 restricted：代理地址不再注入，clients 里不再有它
+        setPolicy(st, {});
+        await manager.apply(name);
+        expect((await execWithEnv(name, 'env | grep -c "^HTTPS_PROXY=http://' + proxyIp + '" || true')).stdout.trim()).toBe('0');
+    }, 240000);
+
+    test('allowlist 下容器内 Chrome 直接用环境变量里的代理：白名单站点能打开，被拒站点报网络错误，浏览器配置不被改动', async () => {
+        const hostProbe = spawnSync('curl', ['-s', '-m', '8', '-o', '/dev/null', '-w', '%{http_code}', 'https://example.com/'], { encoding: 'utf-8' });
+        if (hostProbe.stdout.trim() !== '200') {
+            console.warn('[跳过] 宿主机访问不了 example.com');
+            return;
+        }
+        const { name } = await create({ policy: { preset: 'allowlist', egress: { domains: ['example.com'] } } });
+        await manager.apply(name);
+        const sum = async () => (await execWithEnv(name, 'md5sum /run/manyoyo-playwright/config.json')).stdout.trim();
+        const before = await sum();
+        const open = async url => {
+            const r = await execWithEnv(name, `playwright-cli open ${url} 2>&1; playwright-cli snapshot 2>&1; playwright-cli close >/dev/null 2>&1; true`);
+            return r.stdout;
+        };
+        const good = await open('https://example.com/');
+        expect(good).toContain('Example Domain');
+        const bad = await open('https://example.net/');
+        expect(bad).toMatch(/ERR_|net::|Error/);
+        expect(bad).not.toContain('Example Domain');
+        expect(await sum()).toBe(before);
+    }, 240000);
 
     test('端口暴露：运行中加 127.0.0.1:P→8080 立即可访问；删除后被拒；端口被占时明确报错；容器停止后连接断开而不是崩', async () => {
         const { name, st } = await create({ policy: { preset: 'open' } });

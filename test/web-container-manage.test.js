@@ -114,6 +114,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             ['GET', '/api/containers/boxa/autostart'], ['PUT', '/api/containers/boxa/autostart'],
             ['POST', '/api/containers/boxa/autostart/run'], ['GET', '/api/containers/boxa/autostart/log'],
             ['GET', '/api/containers/boxa/network'], ['PUT', '/api/containers/boxa/network'],
+            ['POST', '/api/containers/boxa/network/allow'], ['DELETE', '/api/containers/boxa/network/denied'],
             ['POST', '/api/containers/boxa/expose'], ['DELETE', '/api/containers/boxa/expose'],
             ['GET', '/api/containers/orphans'], ['DELETE', '/api/containers/orphans/0123456789abcdef']
         ];
@@ -201,6 +202,36 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(r.json.policy.preset).toBe('restricted');
             expect(r.json.peers).toEqual([{ id: boxB.id, name: 'boxb', running: true }]);
             expect(r.json.running).toBe(true);
+        });
+
+        test('最近被拦截：按最近时间列出，浏览器后台请求打标记，已放行的不再列出；一键允许后立即下发；清空', async () => {
+            const { egressPaths } = require('../lib/egress-sidecar');
+            const denied = require('../lib/egress-denied');
+            const dir = egressPaths(tempHost).denied;
+            fs.mkdirSync(dir, { recursive: true });
+            const rec = denied.createRecorder({ dir });
+            ['pss.bdstatic.com', 'pss.bdstatic.com', 'www.google.com', 'open.bigmodel.cn'].forEach(host => rec.record({ id: boxA.id, host, port: 443, reason: 'domain' }));
+            rec.flush();
+            await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { preset: 'allowlist', egress: { domains: ['open.bigmodel.cn'] } } }));
+            const r = await request(`${baseUrl}/api/containers/boxa/network`, { headers: { Cookie: cookie } });
+            expect(r.json.denied.map(d => [d.host, d.count, d.background]).sort()).toEqual([['pss.bdstatic.com', 2, false], ['www.google.com', 1, true]]);
+
+            const allow = await request(`${baseUrl}/api/containers/boxa/network/allow`, json(cookie, 'POST', { domain: 'pss.bdstatic.com' }));
+            expect(allow.response.status).toBe(200);
+            expect(allow.json.policy.egress.domains).toEqual(['open.bigmodel.cn', 'pss.bdstatic.com']);
+            expect(allow.json.denied.map(d => d.host)).toEqual(['www.google.com']);
+            expect(JSON.parse(fs.readFileSync(boxA.network, 'utf-8')).egress.domains).toContain('pss.bdstatic.com');
+            // 重复允许：不报错；非法域名 400
+            expect((await request(`${baseUrl}/api/containers/boxa/network/allow`, json(cookie, 'POST', { domain: 'pss.bdstatic.com' }))).response.status).toBe(200);
+            expect((await request(`${baseUrl}/api/containers/boxa/network/allow`, json(cookie, 'POST', { domain: 'bad domain;' }))).response.status).toBe(400);
+
+            const cleared = await request(`${baseUrl}/api/containers/boxa/network/denied`, json(cookie, 'DELETE', {}));
+            expect(cleared.json.denied).toEqual([]);
+        });
+
+        test('不是 allowlist 的容器不能一键允许', async () => {
+            const r = await request(`${baseUrl}/api/containers/boxa/network/allow`, json(cookie, 'POST', { domain: 'a.example.com' }));
+            expect(r.response.status).toBe(400);
         });
 
         test('建议放行的域名来自当前 env 里的 URL（含容器里改过的），已在列表里的不再建议', async () => {

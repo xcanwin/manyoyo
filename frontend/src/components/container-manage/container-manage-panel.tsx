@@ -8,9 +8,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Spinner } from "@/components/ui/spinner"
 import { AutostartEditor } from "@/components/container-manage/autostart-editor"
 import { EnvEditor } from "@/components/container-manage/env-editor"
+import { DeniedList } from "@/components/container-manage/denied-list"
 import { NetworkEditor } from "@/components/container-manage/network-editor"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
-import { apiErrorData, apiGet, apiPost, apiPut } from "@/lib/api"
+import { apiDelete, apiErrorData, apiGet, apiPost, apiPut } from "@/lib/api"
 import {
   type ContainerEnvState,
   type NetworkPolicy,
@@ -55,6 +56,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
   const [net, setNet] = React.useState<NetworkState | null>(null)
   const [policy, setPolicy] = React.useState<NetworkPolicy | null>(null)
   const [netMessage, setNetMessage] = React.useState<{ tone: "ok" | "error"; text: string } | null>(null)
+  const [deniedMessage, setDeniedMessage] = React.useState<{ tone: "ok" | "error"; text: string } | null>(null)
   const [netSaving, setNetSaving] = React.useState(false)
 
   const { confirm, dialog } = useConfirmDialog()
@@ -122,7 +124,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
       setEnvText(next.text)
       setEnvFiles(next.files.map((file) => file.path))
       setEnvRevision((value) => value + 1)
-      setEnvMessage({ tone: "ok", text: "已保存。下一条命令起生效；已在运行的进程不受影响。" })
+      setEnvMessage({ tone: "ok", text: "已保存。新开的终端和之后的命令立即生效；已打开的终端里执行 reload-env。" })
     } catch (error) {
       const { status, data } = apiErrorData(error)
       if (status === 409 && data.conflict === true) {
@@ -213,6 +215,29 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
       setNetMessage({ tone: "error", text: error instanceof Error ? error.message : "保存失败" })
     } finally {
       setNetSaving(false)
+    }
+  }
+
+  async function allowDenied(host: string) {
+    setDeniedMessage(null)
+    try {
+      const data = await apiPost(`${base}/network/allow`, { domain: host })
+      applyNetwork(data as unknown as NetworkState)
+      setDeniedMessage({ tone: "ok", text: `已允许 ${host}，马上生效。` })
+    } catch (error) {
+      const { data } = apiErrorData(error)
+      if (data.policy) applyNetwork(data as unknown as NetworkState)
+      setDeniedMessage({ tone: "error", text: error instanceof Error ? error.message : "操作失败" })
+    }
+  }
+
+  async function clearDenied() {
+    setDeniedMessage(null)
+    try {
+      const data = await apiDelete(`${base}/network/denied`)
+      setNet((current) => (current ? { ...current, denied: (data as unknown as NetworkState).denied ?? [] } : current))
+    } catch (error) {
+      setDeniedMessage({ tone: "error", text: error instanceof Error ? error.message : "操作失败" })
     }
   }
 
@@ -347,6 +372,31 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
               <Button size="sm" disabled={!netDirty || netSaving} onClick={() => void saveNetwork()}>
                 {netSaving ? <Spinner data-icon="inline-start" /> : null}
                 保存网络规则
+              </Button>
+            </CardFooter>
+          </Card>
+        ) : null}
+
+        {net && net.policy.preset === "allowlist" ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">最近被拦截</CardTitle>
+              <CardDescription>容器想访问但不在白名单里的网站。网页打不开、点了没反应时先看这里，点「允许」马上生效。</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <DeniedList denied={net.denied ?? []} disabled={netDirty} onAllow={(host) => void allowDenied(host)} />
+              {deniedMessage ? (
+                <Alert variant={deniedMessage.tone === "ok" ? "default" : "destructive"}>
+                  <AlertDescription>{deniedMessage.text}</AlertDescription>
+                </Alert>
+              ) : null}
+            </CardContent>
+            <CardFooter className="gap-2">
+              <Button size="sm" variant="outline" onClick={() => void load()}>
+                刷新
+              </Button>
+              <Button size="sm" variant="outline" disabled={!(net.denied ?? []).length} onClick={() => void clearDenied()}>
+                清空
               </Button>
             </CardFooter>
           </Card>

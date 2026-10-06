@@ -77,6 +77,10 @@ describe('container-state', () => {
 
 describe('buildContainerRunArgs 状态目录参数', () => {
     const base = { state: { id: '0123456789abcdef', box: '/s/box', sys: '/s/sys' }, containerName: 'c', hostPath: '/h', containerPath: '/w', imageName: 'i', imageVersion: '1.0.0-common', containerEnvs: [] };
+    test('去掉 NET_RAW（docker 默认带，能伪造来源 IP，过滤代理按来源 IP 认容器）', () => {
+        const args = buildContainerRunArgs(base);
+        expect(args.slice(args.indexOf('--cap-drop'), args.indexOf('--cap-drop') + 2)).toEqual(['--cap-drop', 'NET_RAW']);
+    });
     test('PID 1 换成 init，挂载 box(rw)/sys(ro)/gate(tmpfs)，打 manyoyo.id 标签，不再有 tail', () => {
         const args = buildContainerRunArgs(base);
         expect(args.slice(args.indexOf('--entrypoint'), args.indexOf('--entrypoint') + 2)).toEqual(['--entrypoint', '/run/manyoyo-sys/init.sh']);
@@ -181,5 +185,26 @@ describe('环境变量文件（每次 exec 现读）', () => {
         expect(files[1]).toEqual(expect.objectContaining({ exists: false, error: '文件不存在' }));
         // 自启动用的快照
         expect(fs.readFileSync(st.filesEnv, 'utf-8')).toBe('A=x y\nB=2\n');
+    });
+});
+
+describe('sys 目录里的容器内脚本', () => {
+    test('创建时写入 init.sh 与 env.sh（reload-env 的来源），init 加载它并记录就绪 / 无自启动日志', () => {
+        const fs = require('fs');
+        const os = require('os');
+        const path = require('path');
+        const state = require('../lib/container-state');
+        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cs-env-'));
+        try {
+            const { id } = state.createState({ homeDir: home });
+            const p = state.paths(home, id);
+            expect(fs.readFileSync(p.envLoader, 'utf-8')).toContain('reload-env()');
+            const init = fs.readFileSync(p.init, 'utf-8');
+            expect(init).toContain('. "$SYS/env.sh"');
+            expect(init).toContain('网络规则已就绪');
+            expect(init).toContain('没有自启动命令');
+        } finally {
+            fs.rmSync(home, { recursive: true, force: true });
+        }
     });
 });

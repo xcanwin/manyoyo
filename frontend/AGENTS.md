@@ -45,3 +45,13 @@
 - **`DialogContent` 是 `grid gap-4`，直接子元素之间才有间距**。表单类弹窗如果用 `<form>` 包住 `FieldGroup` + `DialogFooter`（提交需要整体在 `<form>` 里），`<form>` 本身会挡住这层 grid gap，字段和底部按钮栏会贴在一起——`<form>` 必须显式补 `className="flex flex-col gap-4"`。不需要 `<form>` 包裹时（`FieldGroup`/`DialogFooter` 直接作为 `DialogContent` 的子元素）不用管，gap 是自动的。参考 `prompt-dialog.tsx`、`create-container-dialog.tsx`、`clone-name-dialog.tsx`。
 - **确认类弹窗（删除确认、未保存修改提示等）一律用 `Dialog`，不用 `AlertDialog`**：base-ui 的 `AlertDialog` 语义上要求必须点按钮才能关闭，默认不响应背景点击、`AlertDialogContent` 也没有右上角关闭按钮；本项目约定所有弹窗都可以背景点击 / 右上角 ✕ 关闭（等价于「取消」），因此统一用 `Dialog` + 手动的「取消」`Button`（`variant="outline"`，`onClick` 里做取消逻辑），不要用 `AlertDialogCancel`。参考实现见 `src/hooks/use-confirm-dialog.tsx`、`use-unsaved-changes-dialog.tsx`。
 - 避免常驻高开销视觉效果：不要在常驻元素使用 `animation: ... infinite`，避免大面积叠加 `backdrop-filter` / `filter` 模糊；确需使用时仅限短时场景，并提供 `prefers-reduced-motion` 降级。
+
+## 界面一致性与自查
+
+功能对、截图能用，不等于界面合格：上一轮容器管理页被人工纠正了十几处，全是一致性问题。新增或改动界面按下面做：
+
+- **先找同页已有范式再写新控件**：字段标签（加粗 label）；一行一项的列表编辑一律用 `RowList`（表头 + 每行输入 + 删除 + 下方添加 + 页脚保存）；卡片标题加粗、保存按钮放带底色的页脚；折叠区与既有字段标签同样式（`SectionToggle` / `denied-list.tsx` 的写法），默认收起。
+- **同类控件只用一个组件**；不发明复合文本语法（比如把“端口/协议”塞进一个输入框），拆成独立输入框和下拉。
+- **模块顺序按依赖关系排**；与已有字段语义重叠时先合并概念再做界面（别让两套 env 并存）。
+- **提示文字**：一句话、通俗、先说结果再说做法；按部署场景（本机 / 局域网 / 公网服务器）检查措辞。
+- **自查流程**：亮 / 暗主题 × 桌面 / 390px 手机宽度各截一张，与同页已有控件并排对比（标签粗细、对齐、按钮位置与尺寸、页脚、折叠区、文案长度）；再派一个只看截图和本节规则的子 agent 审查；问题清零再交付。
