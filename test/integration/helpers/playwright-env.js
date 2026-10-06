@@ -10,6 +10,11 @@ const os = require('os');
 const path = require('path');
 const { imageVersion } = require('../../../package.json');
 const { buildContainerIntegration, mergeIntegration } = require('../../../lib/plugin');
+const { buildContainerRunArgs } = require('../../../lib/container-run');
+const { createNetworkManager, NETWORK_NAME } = require('../../../lib/container-network');
+const { normalizePolicy } = require('../../../lib/network-policy');
+const containerState = require('../../../lib/container-state');
+const { buildExecArgs } = require('../../../lib/container-exec');
 const { googleChromeCandidates } = require('../../../lib/plugin/playwright');
 
 const BIN_PATH = path.join(__dirname, '../../../bin/manyoyo.js');
@@ -89,31 +94,62 @@ function hostAlias(runtime) {
     return runtime === 'podman' ? 'host.containers.internal' : 'host.docker.internal';
 }
 
-// 与 manyoyo run 创建会话容器相同的集成参数
-async function createContainer(runtime, home, name, { env = [] } = {}) {
+// 与 manyoyo run 创建会话容器相同的路径：集成参数 + 状态目录 + manyoyo 网络 + 默认 restricted 规则。
+// 夹具 / 假代理跑在宿主机上，要用 hostPorts 放行（restricted 默认不让容器访问宿主机其他端口）。
+async function createContainer(runtime, home, name, { env = [], hostPorts = [], network = {} } = {}) {
     const integration = await buildContainerIntegration({
         homeDir: home,
         runtimeCommand: runtime,
         envEntries: env
     });
     const merged = mergeIntegration({
-        containerEnvs: env.flatMap(entry => ['--env', entry]),
+        containerEnvs: [],
         containerVolumes: [],
         containerExtraArgs: []
     }, integration);
-    const result = await run(runtime, [
-        'run', '-d', '--name', name, '--entrypoint', '',
-        ...merged.containerExtraArgs, ...merged.containerEnvs, ...merged.containerVolumes,
-        IMAGE, 'tail', '-f', '/dev/null'
-    ]);
+    const policy = normalizePolicy({ ...network, host: [...(network.host || []), ...hostPorts.map(port => ({ ports: String(port) }))] });
+    const st = containerState.createState({
+        homeDir: home,
+        envLines: env,
+        network: policy,
+        netRequired: policy.preset !== 'open',
+        meta: { name }
+    });
+    const manager = createNetworkManager({ command: runtime, homeDir: home, imageRef: () => IMAGE });
+    await manager.ensureBridgeNetwork();
+    const result = await run(runtime, buildContainerRunArgs({
+        state: st,
+        containerName: name,
+        hostPath: os.tmpdir(),
+        containerPath: '/tmp/manyoyo-it-work',
+        imageName: IMAGE.split(':')[0],
+        imageVersion: IMAGE.split(':')[1],
+        defaultNetwork: NETWORK_NAME,
+        containerExtraArgs: merged.containerExtraArgs,
+        containerEnvs: merged.containerEnvs,
+        containerVolumes: merged.containerVolumes,
+        defaultCommand: '/bin/bash'
+    }));
     if (result.status !== 0) {
         throw new Error(`创建容器失败: ${result.stderr}`);
     }
+    containerHomes.set(name, home);
+    await manager.apply(name, { expectId: st.id });
     return name;
 }
 
-function exec(runtime, name, command, options = {}) {
-    return run(runtime, ['exec', name, 'sh', '-c', command], options);
+// 与 manyoyo 的 exec 一致：用户 env 来自状态目录，经 buildExecArgs 每次现读
+const containerHomes = new Map();
+
+async function exec(runtime, name, command, options = {}) {
+    const home = containerHomes.get(name);
+    if (!home) return run(runtime, ['exec', name, 'sh', '-c', command], options);
+    const built = buildExecArgs({ homeDir: home, dockerExecArgs: args => spawnSync(runtime, args, { encoding: 'utf-8' }).stdout }, name, { command: ['sh', '-c', command] });
+    try {
+        return await run(runtime, built.args, options);
+    } finally {
+        built.cleanup();
+    }
 }
 
 function removeContainer(runtime, name) {

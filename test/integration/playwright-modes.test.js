@@ -84,7 +84,7 @@ maybe('Playwright 模式（容器内默认 + 宿主机 headed）', () => {
     async function newContainer(options) {
         const name = env.randomName('pw-it');
         containers.push(name);
-        await env.createContainer(runtime, home, name, options);
+        await env.createContainer(runtime, home, name, { ...options, hostPorts: [fixture.port] });
         return name;
     }
 
@@ -183,7 +183,7 @@ maybeHeaded('Playwright headed 模式', () => {
     async function newContainer(options) {
         const name = env.randomName('pw-it');
         containers.push(name);
-        await env.createContainer(runtime, home, name, options);
+        await env.createContainer(runtime, home, name, { ...options, hostPorts: [fixture.port] });
         return name;
     }
 
@@ -348,7 +348,7 @@ maybe('Playwright vnc 模式', () => {
 
         const name = env.randomName('pw-it');
         containers.push(name);
-        await env.createContainer(runtime, home, name);
+        await env.createContainer(runtime, home, name, { hostPorts: [fixture.port] });
         const result = await env.openAndSnapshot(runtime, name, `http://${env.hostAlias(runtime)}:${fixture.port}/`);
         expect(result.text).toContain(fixture.secret);
 

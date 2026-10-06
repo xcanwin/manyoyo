@@ -21,6 +21,10 @@
 - 空闲保活是 `/agent/stream` 那条心跳规则的同类问题，**两个入口都要守**：终端侧服务端每 `WEB_TERMINAL_PING_INTERVAL_MS`（30s）发 WebSocket ping 帧，连续 `WEB_TERMINAL_MAX_MISSED_PONGS`（3 次，约 90s）无 pong 才判死；前端另发应用层 `ping`（浏览器 JS 发不出 ping 帧，上行需要自己造流量）。判死阈值不要收紧到一个周期：手机切后台会让连接短暂挂起，误杀等于用户的 shell 没了。升级后的 socket 还要 `setTimeout(0)` + `setKeepAlive`，解除 HTTP 侧空闲超时。
 - 新增接口/页面必须走全局认证网关，禁止在业务路由里零散补认证；匿名白名单见根 `AGENTS.md` 的安全约束。
 
+## 容器管理接口
+
+`lib/web/container-manage.js`（路由工厂，由 `handleWebApi` 追加进路由表）：`/api/containers/:name/{env,autostart,autostart/run,autostart/log,network,expose}` 与 `/api/containers/orphans`。旧容器（无 `manyoyo.id`）GET 返回 `{legacy:true}`、写返回 409。`PUT env` 用 `If-Match`（etag）防止覆盖容器内的修改；放开类改动（`open`、非 loopback 暴露）服务端也要求 `confirmRisk:true`。serve 运行时就绪后 `startContainerServices` 订阅 `<runtime> events`（start）补下发规则、拉起 `autostartOnServe` 容器、恢复端口暴露；过滤代理 `ensureWebEgressProxy` 懒启动。所有 exec 经 `spawnContainerExec`（env 临时文件在子进程 close 时删）。
+
 ## lib/web/index.html
 
 前端构建产物（`npm run build:web`，已 `.gitignore`），由 `loadIndexHtml()` 在每次请求时读取，`/` 与登录页 `/auth/login` 共用。服务端不托管其它前端静态资源，别往 `lib/web/` 里放散装 js/css。

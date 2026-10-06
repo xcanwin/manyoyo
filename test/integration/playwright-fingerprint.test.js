@@ -90,7 +90,7 @@ maybe('default：Agent 读得到页面主世界的 JS 全局变量', () => {
         const name = env.randomName('pw-fp');
         const fixture = await startFixture();
         try {
-            await env.createContainer(runtime, home, name);
+            await env.createContainer(runtime, home, name, { hostPorts: [fixture.port] });
             // 夹具在宿主机，容器里的浏览器经 host 别名访问
             await env.exec(runtime, name, `playwright-cli open http://${env.hostAlias(runtime)}:${fixture.port}/global`, { timeout: 90000 });
             const global = await env.exec(runtime, name, 'playwright-cli eval "window.manyoyoGlobal"', { timeout: 60000 });
@@ -120,7 +120,7 @@ maybe('default：语言时区用原生环境变量，代理等环境变量不丢
         await new Promise(resolve => proxy.listen(0, '0.0.0.0', resolve));
         try {
             const proxyUrl = `http://${env.hostAlias(runtime)}:${proxy.address().port}`;
-            await env.createContainer(runtime, home, name, { env: [`HTTP_PROXY=${proxyUrl}`, `http_proxy=${proxyUrl}`] });
+            await env.createContainer(runtime, home, name, { env: [`HTTP_PROXY=${proxyUrl}`, `http_proxy=${proxyUrl}`], hostPorts: [proxy.address().port] });
             const opened = await env.exec(runtime, name, 'playwright-cli open http://proxy-probe.invalid/', { timeout: 90000 });
             await env.exec(runtime, name, 'playwright-cli close');
             expect(opened.stdout + opened.stderr).toContain('via-proxy');
@@ -160,7 +160,7 @@ maybeHeaded('指纹一致性：headed / chrome 与跨模式一致', () => {
     async function collectViaContainer() {
         const name = env.randomName('pw-fp');
         containers.push(name);
-        await env.createContainer(runtime, home, name);
+        await env.createContainer(runtime, home, name, { hostPorts: [fixture.port] });
         await env.exec(runtime, name, `playwright-cli open http://127.0.0.1:${fixture.port}/fingerprint`, { timeout: 90000 });
         await fixture.waitForReport();
         await env.exec(runtime, name, 'playwright-cli close');
@@ -221,7 +221,7 @@ maybe('指纹一致性：vnc 与 default 一致', () => {
         const name = env.randomName('pw-fp');
         try {
             expect((await env.cli(home, ['playwright', 'up', 'vnc'], { timeout: 400000 })).status).toBe(0);
-            await env.createContainer(runtime, home, name);
+            await env.createContainer(runtime, home, name, { hostPorts: [fixture.port] });
             await env.exec(runtime, name, `playwright-cli open http://${env.hostAlias(runtime)}:${fixture.port}/fingerprint`, { timeout: 90000 });
             await fixture.waitForReport();
             await env.exec(runtime, name, 'playwright-cli close');

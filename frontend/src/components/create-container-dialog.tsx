@@ -24,6 +24,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { apiGet, apiPost } from "@/lib/api"
 import { CLI_PROMPT_TEMPLATES, normalizeYolo } from "@/lib/agent-templates"
 import { DirectoryPickerDialog } from "@/components/directory-picker-dialog"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { AutostartEditor } from "@/components/container-manage/autostart-editor"
+import { EnvEditor } from "@/components/container-manage/env-editor"
+import { NetworkEditor } from "@/components/container-manage/network-editor"
+import { defaultPolicy, networkForCreate, parseEnvText, policyRisks, type NetworkPolicy } from "@/lib/container-manage"
+import { ChevronDownIcon } from "lucide-react"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 
 type CreateContainerForm = {
   run: string
@@ -39,8 +46,11 @@ type CreateContainerForm = {
   yolo: string
   agentPromptCommand: string
   env: string
-  envFile: string
+  envFiles: string[]
   volumes: string
+  autostart: string
+  autostartOnServe: boolean
+  network: NetworkPolicy
 }
 
 const DEFAULT_FORM: CreateContainerForm = {
@@ -57,8 +67,11 @@ const DEFAULT_FORM: CreateContainerForm = {
   yolo: "",
   agentPromptCommand: "",
   env: "",
-  envFile: "",
+  envFiles: [],
   volumes: "",
+  autostart: "",
+  autostartOnServe: false,
+  network: defaultPolicy(),
 }
 
 type RunPreset = {
@@ -74,20 +87,15 @@ function parseLines(text: string): string[] {
     .filter(Boolean)
 }
 
-function parseEnvText(text: string): Record<string, string> | undefined {
-  const entries = parseLines(text)
-    .map((line) => {
-      const index = line.indexOf("=")
-      if (index <= 0) return null
-      return [line.slice(0, index).trim(), line.slice(index + 1)] as [string, string]
-    })
-    .filter((entry): entry is [string, string] => entry !== null)
-  return entries.length ? Object.fromEntries(entries) : undefined
+function parseEnvForm(text: string): Record<string, string> | undefined {
+  const { entries } = parseEnvText(text)
+  return entries.length ? Object.fromEntries(entries.map((entry) => [entry.key, entry.value])) : undefined
 }
 
 function buildCreateOptions(form: CreateContainerForm) {
   const options: Record<string, unknown> = {}
-  const stringFields: Array<keyof CreateContainerForm> = [
+  type StringKey = { [K in keyof CreateContainerForm]: CreateContainerForm[K] extends string ? K : never }[keyof CreateContainerForm]
+  const stringFields: StringKey[] = [
     "hostPath",
     "containerName",
     "containerPath",
@@ -104,13 +112,34 @@ function buildCreateOptions(form: CreateContainerForm) {
     const value = form[key].trim()
     if (value) options[key] = value
   }
-  const env = parseEnvText(form.env)
+  const env = parseEnvForm(form.env)
   if (env) options.env = env
-  const envFile = parseLines(form.envFile)
+  const envFile = form.envFiles.map((file) => file.trim()).filter(Boolean)
   if (envFile.length) options.envFile = envFile
   const volumes = parseLines(form.volumes)
   if (volumes.length) options.volumes = volumes
+  if (form.autostart.trim()) options.autostart = form.autostart
+  if (form.autostartOnServe) options.autostartOnServe = true
+  // 放开类的改动（open）已在编辑器里确认过，这里带上 confirmRisk
+  const network = networkForCreate(form.network)
+  if (network) {
+    options.network = network
+    options.confirmRisk = true
+  }
   return options
+}
+
+// 与上面的字段标签（run、containerName…）同样式的折叠标题：加粗文字 + 右侧箭头，默认收起
+function SectionToggle({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger className="group/section flex w-full items-center justify-between gap-2 rounded-md py-0.5 text-left text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+        {title}
+        <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]/section:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2">{children}</CollapsibleContent>
+    </Collapsible>
+  )
 }
 
 export function CreateContainerDialog({
@@ -127,6 +156,7 @@ export function CreateContainerDialog({
   const [submitting, setSubmitting] = React.useState(false)
   const [runs, setRuns] = React.useState<Record<string, RunPreset>>({})
   const [pickerOpen, setPickerOpen] = React.useState(false)
+  const { confirm, dialog: confirmDialog } = useConfirmDialog()
 
   const loadDefaults = React.useCallback(async () => {
     try {
@@ -211,6 +241,18 @@ export function CreateContainerDialog({
       setError("hostPath 不能为空")
       return
     }
+    // 放开类的改动（open 已在编辑器里确认过）：范围很大的出站规则、绑定 0.0.0.0 的端口暴露在这里确认
+    const risks = policyRisks(defaultPolicy(), form.network)
+    if (risks.includes("wide") && !(await confirm({
+      title: "放开范围很大的出站规则？",
+      message: "这条规则覆盖的地址范围很大（整个 /8 以上的网段，或类似 *.co.uk 的公共后缀通配），效果接近完全放开出站限制。",
+      confirmLabel: "确认放开",
+    }))) return
+    if (risks.includes("publicBind") && !(await confirm({
+      title: "让局域网 / 公网可见？",
+      message: "端口暴露绑定了 0.0.0.0：能访问到这台机器的任何设备（局域网，服务器在公网时是整个互联网）都可以访问这个宿主机端口，并直达容器里的服务。请确认防火墙已按需限制来源。",
+      confirmLabel: "确认暴露",
+    }))) return
     setSubmitting(true)
     setError("")
     try {
@@ -246,7 +288,7 @@ export function CreateContainerDialog({
             <FieldGroup className="gap-4">
               <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel htmlFor="create-run">run</FieldLabel>
+                  <FieldLabel className="font-semibold" htmlFor="create-run">run</FieldLabel>
                   <Select value={form.run} onValueChange={handleRunChange}>
                     <SelectTrigger id="create-run" className="w-full">
                       <SelectValue placeholder="(不使用 run)" />
@@ -263,7 +305,7 @@ export function CreateContainerDialog({
                   </Select>
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="create-container-name">
+                  <FieldLabel className="font-semibold" htmlFor="create-container-name">
                     containerName
                   </FieldLabel>
                   <Input
@@ -277,7 +319,7 @@ export function CreateContainerDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor="create-host-path">hostPath</FieldLabel>
+                  <FieldLabel className="font-semibold" htmlFor="create-host-path">hostPath</FieldLabel>
                   <div className="flex gap-2">
                     <Input
                       id="create-host-path"
@@ -297,7 +339,7 @@ export function CreateContainerDialog({
                   </div>
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="create-container-path">
+                  <FieldLabel className="font-semibold" htmlFor="create-container-path">
                     containerPath
                   </FieldLabel>
                   <Input
@@ -311,7 +353,7 @@ export function CreateContainerDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor="create-image-name">imageName</FieldLabel>
+                  <FieldLabel className="font-semibold" htmlFor="create-image-name">imageName</FieldLabel>
                   <Input
                     id="create-image-name"
                     placeholder="ghcr.io/xcanwin/manyoyo"
@@ -322,7 +364,7 @@ export function CreateContainerDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="create-image-version">
+                  <FieldLabel className="font-semibold" htmlFor="create-image-version">
                     imageVersion
                   </FieldLabel>
                   <Input
@@ -336,7 +378,7 @@ export function CreateContainerDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor="create-container-mode">
+                  <FieldLabel className="font-semibold" htmlFor="create-container-mode">
                     containerMode
                   </FieldLabel>
                   <Select
@@ -358,7 +400,7 @@ export function CreateContainerDialog({
                   </Select>
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="create-shell-prefix">
+                  <FieldLabel className="font-semibold" htmlFor="create-shell-prefix">
                     shellPrefix
                   </FieldLabel>
                   <Input
@@ -372,7 +414,7 @@ export function CreateContainerDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor="create-shell">shell</FieldLabel>
+                  <FieldLabel className="font-semibold" htmlFor="create-shell">shell</FieldLabel>
                   <Input
                     id="create-shell"
                     placeholder="例如 claude / codex"
@@ -381,7 +423,7 @@ export function CreateContainerDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="create-shell-suffix">
+                  <FieldLabel className="font-semibold" htmlFor="create-shell-suffix">
                     shellSuffix
                   </FieldLabel>
                   <Input
@@ -395,7 +437,7 @@ export function CreateContainerDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor="create-yolo">CLI</FieldLabel>
+                  <FieldLabel className="font-semibold" htmlFor="create-yolo">CLI</FieldLabel>
                   <Select value={form.yolo} onValueChange={handleCliChange}>
                     <SelectTrigger id="create-yolo" className="w-full">
                       <SelectValue placeholder="(不使用)" />
@@ -411,7 +453,7 @@ export function CreateContainerDialog({
                   </Select>
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="create-agent-prompt-command">
+                  <FieldLabel className="font-semibold" htmlFor="create-agent-prompt-command">
                     agentPromptCommand
                   </FieldLabel>
                   <Input
@@ -426,33 +468,7 @@ export function CreateContainerDialog({
               </div>
 
               <Field>
-                <FieldLabel htmlFor="create-env">
-                  env (KEY=VALUE，每行一项)
-                </FieldLabel>
-                <Textarea
-                  id="create-env"
-                  placeholder="KEY=value"
-                  className="min-h-16"
-                  value={form.env}
-                  onChange={(event) => setField("env", event.target.value)}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="create-env-file">
-                  envFile (绝对路径，每行一项)
-                </FieldLabel>
-                <Textarea
-                  id="create-env-file"
-                  placeholder="/abs/path/.env"
-                  className="min-h-16"
-                  value={form.envFile}
-                  onChange={(event) => setField("envFile", event.target.value)}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="create-volumes">
+                <FieldLabel className="font-semibold" htmlFor="create-volumes">
                   volumes (每行一项)
                 </FieldLabel>
                 <Textarea
@@ -463,6 +479,36 @@ export function CreateContainerDialog({
                   onChange={(event) => setField("volumes", event.target.value)}
                 />
               </Field>
+
+              <SectionToggle title="环境变量（含环境变量文件）">
+                <EnvEditor
+                  idPrefix="create"
+                  value={form.env}
+                  onChange={(text) => setField("env", text)}
+                  files={form.envFiles}
+                  onFilesChange={(files) => setField("envFiles", files)}
+                />
+              </SectionToggle>
+
+              <SectionToggle title="网络（默认收紧，含端口暴露）">
+                <NetworkEditor
+                  policy={form.network}
+                  onChange={(value) => setField("network", value)}
+                  peers={[]}
+                  showPeers={false}
+                  showAccess={false}
+                />
+              </SectionToggle>
+
+              <SectionToggle title="自启动命令">
+                <AutostartEditor
+                  idPrefix="create"
+                  script={form.autostart}
+                  onScriptChange={(value) => setField("autostart", value)}
+                  onServe={form.autostartOnServe}
+                  onServeChange={(value) => setField("autostartOnServe", value)}
+                />
+              </SectionToggle>
 
               {error ? (
                 <Alert variant="destructive">
@@ -488,6 +534,7 @@ export function CreateContainerDialog({
         </form>
       </DialogContent>
 
+      {confirmDialog}
       <DirectoryPickerDialog
         open={pickerOpen}
         onOpenChange={setPickerOpen}

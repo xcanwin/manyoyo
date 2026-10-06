@@ -67,7 +67,7 @@ manyoyo
 | `--in, --image-name <name>` | 镜像名称 |
 | `--iv, --image-ver <version>` | 镜像版本，格式必须为 `x.y.z-后缀`，如 `2.2.0-common` |
 | `-e, --env <env>` | 追加环境变量，可多次传入 |
-| `--ef, --env-file <file>` | 追加环境文件，仅支持绝对路径 |
+| `--ef, --env-file <file>` | 追加环境变量文件，仅支持绝对路径；新容器里实时读取（改了文件下一条命令生效） |
 | `-v, --volume <volume>` | 追加挂载卷，可多次传入 |
 | `-p, --port <port>` | 追加端口映射，可多次传入 |
 | `--worktrees` / `--wt` | 启用 Git worktrees 支持，自动挂载项目级 `worktrees/<project>/` 根目录 |

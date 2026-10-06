@@ -475,6 +475,32 @@ describe('MANYOYO CLI', () => {
             }
         });
 
+        test('config show 展示 autostart / network（runs 覆盖全局），非法 network 报错', () => {
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-run-manage-'));
+            writeGlobalConfig(tempHome, {
+                autostart: 'echo global',
+                network: { host: [{ ports: '1111' }] },
+                runs: {
+                    demo: { autostart: 'echo run', autostartOnServe: true, network: { preset: 'allowlist', egress: { domains: ['github.com'] } } },
+                    bad: { network: { host: [{ ports: '80; flush ruleset' }] } }
+                }
+            });
+            const env = { ...process.env, HOME: tempHome };
+            try {
+                const none = JSON.parse(execSync(`node ${BIN_PATH} config show`, { encoding: 'utf-8', env }));
+                expect(none.autostart).toBe('echo global');
+                expect(none.network.preset).toBe('restricted');
+                expect(none.network.host).toEqual([{ ports: '1111', proto: 'tcp' }]);
+                const demo = JSON.parse(execSync(`node ${BIN_PATH} config show -r demo`, { encoding: 'utf-8', env }));
+                expect(demo.autostart).toBe('echo run');
+                expect(demo.network).toEqual(expect.objectContaining({ preset: 'allowlist', autostartOnServe: true }));
+                expect(demo.network.egress.domains).toEqual(['github.com']);
+                expect(() => execSync(`node ${BIN_PATH} config show -r bad`, { encoding: 'utf-8', env, stdio: 'pipe' })).toThrow(/端口/);
+            } finally {
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
         test('should reject absolute path for --run', () => {
             expect(() => {
                 execSync(`node ${BIN_PATH} config show -r /tmp/myconfig.json`, {
@@ -1367,6 +1393,14 @@ if [ "$1" = "--version" ]; then
   echo "Docker version 26.0.0"
   exit 0
 fi
+if [ "$1" = "ps" ] && [ "$3" = "-q" ]; then
+  [ -f "$STATE_FILE.id" ] && echo "fakecontainer"
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "--format" ]; then
+  echo "{\\"Name\\":\\"/$(cat "$STATE_FILE")\\",\\"Config\\":{\\"Labels\\":{\\"manyoyo.id\\":\\"$(cat "$STATE_FILE.id")\\"},\\"Env\\":[]},\\"NetworkSettings\\":{\\"Networks\\":{}},\\"State\\":{\\"Running\\":true,\\"Status\\":\\"running\\"}}"
+  exit 0
+fi
 if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
   if [ -f "$STATE_FILE" ]; then
     cat "$STATE_FILE"
@@ -1376,10 +1410,11 @@ fi
 if [ "$1" = "run" ]; then
   shift
   while [ $# -gt 0 ]; do
+    if [ "$1" = "--label" ]; then
+      case "$2" in manyoyo.id=*) echo "\${2#manyoyo.id=}" > "$STATE_FILE.id";; esac
+    fi
     if [ "$1" = "--name" ]; then
-      shift
-      echo "$1" > "$STATE_FILE"
-      break
+      echo "$2" > "$STATE_FILE"
     fi
     shift
   done
@@ -1396,6 +1431,9 @@ if [ "$1" = "inspect" ] && [ "$2" = "-f" ]; then
   fi
 fi
 if [ "$1" = "exec" ]; then
+  if [ "$2" = "--env-file" ]; then
+    cp "$3" "$STATE_FILE.envcopy"
+  fi
   exit 0
 fi
 if [ "$1" = "rm" ]; then
@@ -1433,12 +1471,17 @@ exit 0
                 });
 
                 const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n').filter(Boolean);
+                // first.env 进 0600 临时 env 文件（不出现在参数里），exec 返回后删除
                 const firstExecIndex = dockerArgs.findIndex(line =>
-                    line.includes('exec --env FROM_FILE=file-first --env FIRST_ONLY=1 first-new-test /bin/bash -c first-cmd')
+                    /exec --env-file \S+ first-new-test \/bin\/bash -c first-cmd/.test(line)
                 );
                 const regularExecIndex = dockerArgs.findIndex(line =>
-                    line.includes('exec -it first-new-test /bin/bash -c regular-cmd')
+                    line.includes('exec -i -t first-new-test /bin/bash -c regular-cmd')
                 );
+                expect(dockerArgs.join('\n')).not.toContain('FIRST_ONLY=1');
+                const firstEnvCopy = fs.readFileSync(path.join(tempDir, 'state.txt.envcopy'), 'utf-8');
+                expect(firstEnvCopy).toContain('FIRST_ONLY=1');
+                expect(firstEnvCopy).toContain('FROM_FILE=file-first');
 
                 expect(firstExecIndex).toBeGreaterThan(-1);
                 expect(regularExecIndex).toBeGreaterThan(-1);
@@ -1463,6 +1506,14 @@ exit 0
 echo "$@" >> "${dockerLogPath}"
 if [ "$1" = "--version" ]; then
   echo "Docker version 26.0.0"
+  exit 0
+fi
+if [ "$1" = "ps" ] && [ "$3" = "-q" ]; then
+  [ -f "$STATE_FILE.id" ] && echo "fakecontainer"
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "--format" ]; then
+  echo "{\\"Name\\":\\"/$(cat "$STATE_FILE")\\",\\"Config\\":{\\"Labels\\":{\\"manyoyo.id\\":\\"$(cat "$STATE_FILE.id")\\"},\\"Env\\":[]},\\"NetworkSettings\\":{\\"Networks\\":{}},\\"State\\":{\\"Running\\":true,\\"Status\\":\\"running\\"}}"
   exit 0
 fi
 if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
@@ -1516,7 +1567,7 @@ exit 0
 
                 const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n').filter(Boolean);
                 expect(dockerArgs.some(line => line.includes('first-should-not-run'))).toBe(false);
-                expect(dockerArgs.some(line => line.includes('exec -it existing-test /bin/bash -c regular-existing-cmd'))).toBe(true);
+                expect(dockerArgs.some(line => line.includes('exec -i -t existing-test /bin/bash -c regular-existing-cmd'))).toBe(true);
             } finally {
                 fs.rmSync(tempDir, { recursive: true, force: true });
                 fs.rmSync(tempHome, { recursive: true, force: true });
@@ -1537,6 +1588,14 @@ if [ "$1" = "--version" ]; then
   echo "Docker version 26.0.0"
   exit 0
 fi
+if [ "$1" = "ps" ] && [ "$3" = "-q" ]; then
+  [ -f "$STATE_FILE.id" ] && echo "fakecontainer"
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "--format" ]; then
+  echo "{\\"Name\\":\\"/$(cat "$STATE_FILE")\\",\\"Config\\":{\\"Labels\\":{\\"manyoyo.id\\":\\"$(cat "$STATE_FILE.id")\\"},\\"Env\\":[]},\\"NetworkSettings\\":{\\"Networks\\":{}},\\"State\\":{\\"Running\\":true,\\"Status\\":\\"running\\"}}"
+  exit 0
+fi
 if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
   if [ -f "$STATE_FILE" ]; then
     cat "$STATE_FILE"
@@ -1546,10 +1605,11 @@ fi
 if [ "$1" = "run" ]; then
   shift
   while [ $# -gt 0 ]; do
+    if [ "$1" = "--label" ]; then
+      case "$2" in manyoyo.id=*) echo "\${2#manyoyo.id=}" > "$STATE_FILE.id";; esac
+    fi
     if [ "$1" = "--name" ]; then
-      shift
-      echo "$1" > "$STATE_FILE"
-      break
+      echo "$2" > "$STATE_FILE"
     fi
     shift
   done
@@ -1561,7 +1621,7 @@ if [ "$1" = "inspect" ] && [ "$2" = "-f" ] && [ "$3" = "{{.State.Status}}" ]; th
 fi
 if [ "$1" = "exec" ]; then
   case "$*" in
-    *"first-fail"*)
+    *"-c first-fail"*)
       exit 12
       ;;
   esac
@@ -1626,6 +1686,14 @@ exit 0
             writeExecutable(fakeDockerPath, `#!/bin/sh
 if [ "$1" = "--version" ]; then
   echo "docker version 5.8.0"
+  exit 0
+fi
+if [ "$1" = "ps" ] && [ "$3" = "-q" ]; then
+  [ -f "$STATE_FILE.id" ] && echo "fakecontainer"
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "--format" ]; then
+  echo "{\\"Name\\":\\"/$(cat "$STATE_FILE")\\",\\"Config\\":{\\"Labels\\":{\\"manyoyo.id\\":\\"$(cat "$STATE_FILE.id")\\"},\\"Env\\":[]},\\"NetworkSettings\\":{\\"Networks\\":{}},\\"State\\":{\\"Running\\":true,\\"Status\\":\\"running\\"}}"
   exit 0
 fi
 if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then

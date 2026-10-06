@@ -388,16 +388,24 @@ async function request(url: string, options: RequestInit = {}) {
   if (!response.ok) {
     const error = typeof data.error === "string" ? data.error : "请求失败"
     const detail = typeof data.detail === "string" ? data.detail : ""
-    throw new Error(detail ? `${error}: ${detail}` : error)
+    throw Object.assign(new Error(detail ? `${error}: ${detail}` : error), { status: response.status, data })
   }
   return data
+}
+
+// request 抛出的错误带 status 与服务端返回体（409 冲突要用最新内容、400 needsConfirm 要读 risks）
+export function apiErrorData(error: unknown): { status: number; data: Record<string, unknown> } {
+  const e = error as { status?: number; data?: Record<string, unknown> } | null
+  return { status: e?.status ?? 0, data: e?.data ?? {} }
 }
 
 export const apiGet = (url: string) => request(url)
 export const apiPost = (url: string, body?: unknown) =>
   request(url, { method: "POST", body: body === undefined ? "{}" : JSON.stringify(body) })
-export const apiPut = (url: string, body?: unknown) =>
-  request(url, { method: "PUT", body: body === undefined ? "{}" : JSON.stringify(body) })
+export const apiPut = (url: string, body?: unknown, headers?: Record<string, string>) =>
+  request(url, { method: "PUT", body: body === undefined ? "{}" : JSON.stringify(body), headers })
+export const apiDelete = (url: string, body?: unknown) =>
+  request(url, { method: "DELETE", body: body === undefined ? "{}" : JSON.stringify(body) })
 
 export type StreamEvent =
   | {

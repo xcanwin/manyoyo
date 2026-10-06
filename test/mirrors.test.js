@@ -58,7 +58,7 @@ describe('buildMirrorEnvArgs', () => {
 });
 
 describe('buildContainerRunArgs with mirrors', () => {
-    const base = { containerName: 'c', hostPath: '/h', containerPath: '/w', imageName: 'i', imageVersion: '1.0.0-common', containerEnvs: ['--env', 'A=1'] };
+    const base = { state: { id: '0123456789abcdef', box: '/s/box', sys: '/s/sys' }, containerName: 'c', hostPath: '/h', containerPath: '/w', imageName: 'i', imageVersion: '1.0.0-common', containerEnvs: ['--env', 'A=1'] };
     test('injects mirror env before the image and keeps user env', () => {
         const args = buildContainerRunArgs({ ...base, mirrors: { npm: 'https://n.com/' } });
         expect(args).toEqual(expect.arrayContaining(['--env', 'A=1', '--env', 'NPM_CONFIG_REGISTRY=https://n.com/']));

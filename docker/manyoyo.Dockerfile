@@ -114,7 +114,7 @@ RUN <<EOX
     # Python
     apt-get -o Acquire::https::Verify-Peer=false update -y
     apt-get -o Acquire::https::Verify-Peer=false install -y --no-install-recommends \
-        ca-certificates openssl curl wget net-tools iputils-ping dnsutils socat ncat ssh \
+        ca-certificates openssl curl wget net-tools iputils-ping dnsutils socat ncat ssh nftables \
         git gh g++ make sqlite3 \
         procps psmisc lsof supervisor \
         nano jq file tree ripgrep less bc xxd tar zip unzip gzip \

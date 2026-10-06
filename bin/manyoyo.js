@@ -9,7 +9,7 @@ const net = require('net');
 const readline = require('readline');
 const { Command, Help } = require('commander');
 const { startWebServer } = require('../lib/web/server');
-const { buildContainerRunArgs, buildContainerRunCommand, runWithEnvFile } = require('../lib/container-run');
+const { buildContainerRunArgs, buildContainerRunCommand, runWithEnvFile, hasNetworkArg } = require('../lib/container-run');
 const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = require('../lib/global-config');
 const { resolveUpdateImageVersion } = require('../lib/image-version-policy');
 const { selectContainerRuntime, mergeRuntimeEnv } = require('../lib/container-runtime');
@@ -44,6 +44,12 @@ const {
     normalizeMirrors
 } = require('../lib/runtime-normalizers');
 const { applyAptMirror } = require('../lib/mirrors');
+const containerState = require('../lib/container-state');
+const { buildExecArgs, resolveContainerId } = require('../lib/container-exec');
+const { createNetworkManager, NETWORK_NAME } = require('../lib/container-network');
+const { normalizePolicy } = require('../lib/network-policy');
+const { withEnvEndpoints } = require('../lib/network-endpoints');
+const { resolveManageOptions } = require('../lib/container-manage-options');
 const {
     sanitizeSensitiveData,
     sanitizeServeLogText,
@@ -131,6 +137,8 @@ let CONTAINER_RUNTIME = null;
 let UPDATE_CHECK_ENABLED = true;
 // 全局配置 mirrors（apt/npm/pip 软件源，空 = 官方默认）：容器创建时在容器层生效，镜像不变
 let MIRRORS = { apt: '', npm: '', pip: '' };
+let MANAGE_OPTIONS = { autostart: '', network: null };
+let ENV_FILES = [];
 // serve 的容器环境状态，供 GET /api/system/runtime 读取
 const RUNTIME_STATE = { status: 'ready', message: '' };
 const DOCKER_DAEMON_ERROR_CODES = new Set(['PODMAN_MACHINE_UNAVAILABLE', 'DOCKER_DAEMON_UNAVAILABLE', 'PORT_IN_USE']);
@@ -342,6 +350,9 @@ function installServeProcessDiagnostics(logger) {
  * @property {string} [yolo] - YOLO 模式
  * @property {string} [containerMode] - 容器模式
  * @property {string} [containerRuntime] - 容器运行时（auto/docker/podman，默认 auto；仅全局配置生效）
+ * @property {string} [autostart] - 容器每次启动时由容器内 init 执行的 bash 脚本（新建容器时写入状态目录）
+ * @property {boolean} [autostartOnServe] - serve 启动时自动拉起此容器
+ * @property {object} [network] - 网络策略（preset / host / egress / peers，见 lib/network-policy.js），不写为默认收紧
  * @property {{apt?: string, npm?: string, pip?: string}} [mirrors] - 容器内 apt/npm/pip 软件源（http/https URL，空/缺省为官方默认；仅全局配置生效）
  * @property {boolean} [updateCheck] - serve 是否每天检查一次新版本（默认 true；仅全局配置生效，请求不附带任何本机信息）
  * @property {number} [cacheTTL] - 缓存过期天数
@@ -567,41 +578,14 @@ function addEnvFileTo(targetEnvs, envFile) {
     }
 
     if (fs.existsSync(filePath)) {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const lines = content.split('\n');
-
-        for (let line of lines) {
-            // Match pattern: (export )?(KEY)=(VALUE)
-            const match = line.match(/^(?:export\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/);
-            if (match) {
-                let key = match[1];
-                let value = match[2].trim();
-
-                // Filter malicious characters
-                if (/[\r\n\0]/.test(value)) continue;
-                if (/[\$\(\)\`\|\&\*\{\};<>]/.test(value)) continue;
-                if (/^\(/.test(value)) continue;
-
-                // Remove quotes
-                if (/^"(.*)"$/.test(value)) {
-                    value = value.slice(1, -1);
-                } else if (/^'(.*)'$/.test(value)) {
-                    value = value.slice(1, -1);
-                }
-
-                if (key) {
-                    targetEnvs.push("--env", `${key}=${value}`);
-                }
-            }
-        }
+        // 与「环境变量」文本同一套语法（见 lib/env-text.js）；值里有被禁止的字符的行会被跳过并提示
+        const { entries, invalid } = containerState.parseEnvFileContent(fs.readFileSync(filePath, 'utf-8'));
+        entries.forEach(entry => targetEnvs.push('--env', `${entry.key}=${entry.value}`));
+        invalid.forEach(item => console.error(`${YELLOW}⚠️  ${filePath} 第 ${item.line} 行已跳过: ${item.reason}${NC}`));
         return {};
     }
     console.error(`${RED}⚠️  未找到环境文件: ${envFile}${NC}`);
     return {};
-}
-
-function addEnvFile(envFile) {
-    return addEnvFileTo(CONTAINER_ENVS, envFile);
 }
 
 // Playwright 浏览器模式的容器参数；在容器创建时（运行时已确定）才计算，失败只警告，不影响 run
@@ -768,7 +752,10 @@ function getContainerStatus(name) {
 
 function removeContainer(name) {
     if ( !(QUIET.crm || QUIET.full) ) console.log(`${YELLOW}🗑️ 正在删除容器: ${name}...${NC}`);
+    // 先读 id：容器删掉后就查不到了；同时删状态目录，同名重建不会继承旧 env / 规则
+    const stateId = resolveContainerId(dockerExecArgs, name);
     dockerExecArgs(['rm', '-f', name], { stdio: 'pipe' });
+    if (stateId) containerState.removeState(os.homedir(), stateId);
     if ( !(QUIET.crm || QUIET.full) ) console.log(`${GREEN}✅ 已彻底删除。${NC}`);
 }
 
@@ -1503,6 +1490,9 @@ https://github.com/xcanwin/manyoyo
     const runConfig = runNameToLoad ? loadRunConfig(runNameToLoad, config) : {};
     const globalFirstConfig = normalizeFirstConfig(config.first, '全局配置');
     const runFirstConfig = normalizeFirstConfig(runConfig.first, '运行配置');
+    // 自启动脚本与网络策略：runs.<name> > 全局配置（新建容器时写进状态目录，Web 上可随时改）
+    const manageOptions = resolveManageOptions({ runConfig, globalConfig: config });
+    MANAGE_OPTIONS = manageOptions;
 
     const resolvedRuntime = resolveRuntimeConfig({
         cliOptions: options,
@@ -1551,7 +1541,17 @@ https://github.com/xcanwin/manyoyo
 
     // Merge mode (array values): concatenate all sources
     const envFileList = resolvedRuntime.envFile;
-    envFileList.forEach(ef => addEnvFile(ef));
+    // 环境变量文件不再在创建时展开成 --env：登记路径，每次 exec 现读（改了文件下一条命令就生效）
+    ENV_FILES = [];
+    envFileList.forEach(ef => {
+        const filePath = String(ef || '').trim();
+        if (!path.isAbsolute(filePath)) {
+            console.error(`${RED}⚠️  错误: --env-file 仅支持绝对路径: ${ef}${NC}`);
+            process.exit(1);
+        }
+        if (!fs.existsSync(filePath)) console.error(`${YELLOW}⚠️  未找到环境文件（创建后放进去也会生效）: ${ef}${NC}`);
+        ENV_FILES.push(filePath);
+    });
 
     const envMap = resolvedRuntime.env;
     Object.entries(envMap).forEach(([key, value]) => addEnv(`${key}=${value}`));
@@ -1612,6 +1612,8 @@ https://github.com/xcanwin/manyoyo
             containerMode: contModeValue || "",
             containerRuntime: config.containerRuntime || "auto",
             mirrors: MIRRORS,
+            autostart: manageOptions.autostart,
+            network: manageOptions.network,
             shellPrefix: EXEC_COMMAND_PREFIX.trim(),
             shell: EXEC_COMMAND || "",
             shellSuffix: EXEC_COMMAND_SUFFIX || "",
@@ -1753,6 +1755,9 @@ function createRuntimeContext(modeState = {}) {
         containerExtraArgs: CONTAINER_EXTRA_ARGS,
         containerEnvs: CONTAINER_ENVS,
         mirrors: MIRRORS,
+        autostart: MANAGE_OPTIONS.autostart,
+        network: MANAGE_OPTIONS.network,
+        envFiles: ENV_FILES,
         firstContainerEnvs: FIRST_CONTAINER_ENVS,
         containerVolumes: CONTAINER_VOLUMES,
         containerPorts: CONTAINER_PORTS,
@@ -2047,15 +2052,16 @@ function executeFirstCommand(runtime) {
         console.log(`⚙️  首次预执行命令: ${YELLOW}${firstCommand}${NC}`);
     }
 
-    const firstExecArgs = [
-        'exec',
-        ...(runtime.firstContainerEnvs || []),
-        runtime.containerName,
-        '/bin/bash',
-        '-c',
-        firstCommand
-    ];
-    const firstExecResult = spawnSync(`${DOCKER_CMD}`, firstExecArgs, { stdio: 'inherit', env: DOCKER_ENV });
+    const firstExec = buildExecArgs({ homeDir: os.homedir(), dockerExecArgs }, runtime.containerName, {
+        extraEnv: containerState.envArgsToLines(runtime.firstContainerEnvs),
+        command: ['/bin/bash', '-c', firstCommand]
+    });
+    let firstExecResult;
+    try {
+        firstExecResult = spawnSync(`${DOCKER_CMD}`, firstExec.args, { stdio: 'inherit', env: DOCKER_ENV });
+    } finally {
+        firstExec.cleanup();
+    }
     if (firstExecResult.error) {
         throw firstExecResult.error;
     }
@@ -2083,14 +2089,37 @@ async function createNewContainer(runtime) {
     );
     const defaultCommand = runtime.execCommand;
 
+    // 用户 env 不进容器配置（podman inspect 看不到明文），改写进状态目录的 box/env，每次 exec 现读
+    const userEnvLines = containerState.userEnvLines(runtime.containerEnvs);
     await applyPlaywrightIntegration(runtime);
+    runtime.containerEnvs = containerState.stripEnvKeys(runtime.containerEnvs, new Set(userEnvLines.map(containerState.envLineKey)));
 
     if (runtime.showCommand) {
+        runtime.state = previewContainerState();
         console.log(buildDockerRunCmd(runtime));
         process.exit(0);
     }
 
     await ensureRunImage(runtime);
+
+    const networkPolicy = await withEnvEndpoints(normalizePolicy(runtime.network), userEnvLines);
+    const networkManager = createCliNetworkManager(runtime);
+    if (!hasNetworkArg([...(runtime.contModeArgs || []), ...(runtime.containerExtraArgs || [])])) {
+        try {
+            await networkManager.ensureBridgeNetwork();
+        } catch (e) {
+            throw new Error(`无法创建 ${NETWORK_NAME} 网络: ${e.message}`);
+        }
+    }
+    runtime.state = containerState.createState({
+        homeDir: os.homedir(),
+        envLines: userEnvLines,
+        envFiles: runtime.envFiles,
+        autostart: runtime.autostart,
+        network: networkPolicy,
+        netRequired: networkPolicy.preset !== 'open',
+        meta: { name: runtime.containerName }
+    });
 
     // 使用数组参数执行命令（安全方式）
     try {
@@ -2100,11 +2129,15 @@ async function createNewContainer(runtime) {
         showImagePullHint(e);
         // 失败的 run 可能留下 Created 状态的容器；这个名字创建前不存在，所以只清理本次留下的这一个
         try { dockerExecArgs(['rm', '-f', runtime.containerName], { stdio: 'pipe' }); } catch (cleanupError) { /* 尽力清理 */ }
+        containerState.removeState(os.homedir(), runtime.state.id);
         throw explainCreateFailure(e);
     }
 
     // Wait for container to be ready
     await waitForContainerReady(runtime.containerName);
+
+    // 先下发网络规则再做任何 exec；失败即关闭（容器留着，init 在等门闩，不会跑自启动）
+    await networkManager.apply(runtime.containerName, { expectId: runtime.state.id });
 
     applyAptMirror({
         dockerExecArgs,
@@ -2123,8 +2156,26 @@ async function createNewContainer(runtime) {
  * 构建 Docker run 命令参数数组（安全方式，避免命令注入）
  * @returns {string[]} 命令参数数组
  */
+// 容器网络规则的下发器：CLI 与 serve 各建一份，helper 容器用当前 imageVersion 的官方镜像
+function createCliNetworkManager(runtime) {
+    return createNetworkManager({
+        command: DOCKER_CMD,
+        env: DOCKER_ENV,
+        homeDir: os.homedir(),
+        imageRef: () => `${runtime.imageName}:${runtime.imageVersion}`,
+        getMirrorUrls: () => Object.values(runtime.mirrors || {}).filter(Boolean)
+    });
+}
+
+function previewContainerState() {
+    const dir = path.join(os.homedir(), '.manyoyo', 'containers', '<id>');
+    return { id: '<id>', box: path.join(dir, 'box'), sys: path.join(dir, 'sys') };
+}
+
 function buildDockerRunArgs(runtime) {
     return buildContainerRunArgs({
+        state: runtime.state,
+        defaultNetwork: NETWORK_NAME,
         containerName: runtime.containerName,
         hostPath: runtime.hostPath,
         containerPath: runtime.containerPath,
@@ -2159,6 +2210,7 @@ async function connectExistingContainer(runtime) {
     if (status !== 'running') {
         dockerExecArgs(['start', runtime.containerName], { stdio: 'pipe' });
     }
+    await createCliNetworkManager(runtime).ensureReady(runtime.containerName);
 
     // Get default command from label
     const defaultCommand = dockerExecArgs(['inspect', '-f', '{{index .Config.Labels "manyoyo.default_cmd"}}', runtime.containerName]).trim();
@@ -2183,6 +2235,8 @@ async function setupContainer(runtime) {
             process.exit(0);
         }
         runtime.execCommand = joinExecCommand(runtime.execCommandPrefix, runtime.execCommand, runtime.execCommandSuffix);
+        runtime.containerEnvs = containerState.stripEnvKeys(runtime.containerEnvs, new Set(containerState.userEnvLines(runtime.containerEnvs).map(containerState.envLineKey)));
+        runtime.state = previewContainerState();
         console.log(buildDockerRunCmd(runtime));
         process.exit(0);
     }
@@ -2193,7 +2247,7 @@ async function setupContainer(runtime) {
     }
 }
 
-function executeInContainer(runtime, defaultCommand) {
+async function executeInContainer(runtime, defaultCommand) {
     if (!containerExists(runtime.containerName)) {
         throw new Error(`未找到容器: ${runtime.containerName}`);
     }
@@ -2202,6 +2256,7 @@ function executeInContainer(runtime, defaultCommand) {
     if (status !== 'running') {
         dockerExecArgs(['start', runtime.containerName], { stdio: 'pipe' });
     }
+    await createCliNetworkManager(runtime).ensureReady(runtime.containerName);
 
     getHelloTip(runtime.containerName, defaultCommand, runtime.execCommand);
     if (!(runtime.quiet.cmd || runtime.quiet.full)) {
@@ -2210,10 +2265,15 @@ function executeInContainer(runtime, defaultCommand) {
     }
 
     // Execute command in container
-    if (runtime.execCommand) {
-        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash', '-c', runtime.execCommand], { stdio: 'inherit', env: DOCKER_ENV });
-    } else {
-        spawnSync(`${DOCKER_CMD}`, ['exec', '-it', runtime.containerName, '/bin/bash'], { stdio: 'inherit', env: DOCKER_ENV });
+    const exec = buildExecArgs({ homeDir: os.homedir(), dockerExecArgs }, runtime.containerName, {
+        interactive: true,
+        tty: true,
+        command: runtime.execCommand ? ['/bin/bash', '-c', runtime.execCommand] : ['/bin/bash']
+    });
+    try {
+        spawnSync(`${DOCKER_CMD}`, exec.args, { stdio: 'inherit', env: DOCKER_ENV });
+    } finally {
+        exec.cleanup();
     }
 }
 
@@ -2458,6 +2518,7 @@ async function runWebServerMode(runtime) {
         contModeArgs: runtime.contModeArgs,
         containerExtraArgs: runtime.containerExtraArgs,
         containerEnvs: runtime.containerEnvs,
+        envFiles: runtime.envFiles,
         containerVolumes: runtime.containerVolumes,
         containerPorts: runtime.containerPorts,
         validateHostPath: value => validateHostPathOrThrow(value),
@@ -2574,7 +2635,7 @@ async function main() {
         // 7-8. Execute command and handle post-exit interactions
         let shouldContinue = true;
         while (shouldContinue) {
-            executeInContainer(runtime, defaultCommand);
+            await executeInContainer(runtime, defaultCommand);
             shouldContinue = await handlePostExit(runtime, defaultCommand);
         }
 

@@ -95,6 +95,15 @@ async function requestNdjsonStream(url, options = {}, onEvent) {
     return { response, events };
 }
 
+// 容器网络规则下发需要真实运行时，Web 单测里用替身
+function fakeNetworkManager() {
+    return {
+        ensureBridgeNetwork: async () => {},
+        apply: async () => ({ status: 'applied' }),
+        ensureReady: async () => ({ status: 'applied' })
+    };
+}
+
 function buildServerOptions(tempHost, port, overrides = {}) {
     return {
         serverHost: '127.0.0.1',
@@ -103,6 +112,7 @@ function buildServerOptions(tempHost, port, overrides = {}) {
         authPass: 'topsecret',
         authPassAuto: false,
         dockerCmd: 'docker',
+        networkManager: fakeNetworkManager(),
         hostPath: tempHost,
         homeDir: tempHost,
         containerPath: '/workspace',
@@ -1741,12 +1751,6 @@ process.exit(2);
                 'my-run-0330-1234',
                 '--workdir',
                 '/workspace/run',
-                '--env',
-                'OPENAI_API_KEY=secret-key',
-                '--env',
-                'OPENAI_MODEL=gpt-5.4',
-                '--env',
-                'JINA_TOKEN=secret-jina',
                 '--publish',
                 '8080:80',
                 '--volume',
@@ -1754,6 +1758,12 @@ process.exit(2);
                 '--volume',
                 `${tempHost}:/workspace/run`
             ]));
+            // 用户 env 不进容器配置（inspect 看不到明文），而是写进状态目录的 box/env
+            expect(runArgs.join('\n')).not.toContain('secret-key');
+            const stateId = runArgs.find(arg => arg.startsWith('manyoyo.id=')).slice('manyoyo.id='.length);
+            const boxEnv = fs.readFileSync(path.join(tempHost, '.manyoyo', 'containers', stateId, 'box', 'env'), 'utf-8');
+            expect(boxEnv).toContain('OPENAI_API_KEY=secret-key');
+            expect(boxEnv).toContain('JINA_TOKEN=secret-jina');
 
             const configRes = await request(`${baseUrl}/api/config`, {
                 headers: { Cookie: authCookie }

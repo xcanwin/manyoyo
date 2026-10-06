@@ -50,13 +50,15 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { TraceBlock } from "@/components/trace-block"
+import { ContainerManagePanel } from "@/components/container-manage/container-manage-panel"
 
-type View = "activity" | "terminal" | "files" | "detail" | "config" | "check"
+type View = "activity" | "terminal" | "files" | "container" | "detail" | "config" | "check"
 
 const VIEW_LABELS: Record<View, string> = {
   activity: "聊天",
   terminal: "终端",
   files: "文件",
+  container: "容器",
   detail: "详情",
   config: "配置",
   check: "检查",
@@ -1249,6 +1251,13 @@ export function WorkspacePanel({
             confirmLeaveIfDirty={confirmLeaveIfDirty}
             onPreviewHtml={(title, code) => setHtmlPreview({ title, code })}
           />
+        ) : null}
+        {view === "container" ? (
+          activeSession ? (
+            <ContainerManagePanel key={activeSession.containerName} containerName={activeSession.containerName} />
+          ) : (
+            <EmptyPane text="请先选择左侧的容器 / AGENT" />
+          )
         ) : null}
         {view === "detail" ? <DetailView detail={sessionDetail} /> : null}
         {view === "config" ? <ConfigView detail={sessionDetail} /> : null}
