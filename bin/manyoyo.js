@@ -9,6 +9,7 @@ const net = require('net');
 const readline = require('readline');
 const { Command, Help } = require('commander');
 const { startWebServer } = require('../lib/web/server');
+const { isSidecarName } = require('../lib/egress-sidecar');
 const { buildContainerRunArgs, buildContainerRunCommand, runWithEnvFile, hasNetworkArg } = require('../lib/container-run');
 const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = require('../lib/global-config');
 const { resolveUpdateImageVersion } = require('../lib/image-version-policy');
@@ -994,6 +995,7 @@ function getContList() {
                 const image = cols[4] || '';
                 // include manyoyo runtime containers (image match)
                 // and plugin containers (both legacy manyoyo-* and new my-* prefixes)
+                if (isSidecarName(name)) return false; // 域名白名单的过滤代理容器不是用户的会话容器
                 return image.includes('manyoyo') || name.startsWith('manyoyo-') || name.startsWith('my-');
             });
 

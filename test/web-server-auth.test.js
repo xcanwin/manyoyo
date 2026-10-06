@@ -4630,6 +4630,29 @@ process.exit(0);
         }
     });
 
+    test('GET /api/sessions 不列出域名白名单的过滤代理 sidecar 容器', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-sidecar-'));
+        const port = await getFreePort();
+        let handle = null;
+        const dockerExecArgs = args => {
+            if (args[0] === 'ps') {
+                return ['my-c1\tUp 2 hours\tlocalhost/xcanwin/manyoyo:1.0.0', 'manyoyo-egress-0123abcd\tUp 2 hours\tlocalhost/xcanwin/manyoyo:1.0.0'].join('\n');
+            }
+            if (args[0] === 'inspect') return args.slice(3).map(name => `/${name}\tclaude -p {prompt}`).join('\n');
+            return '';
+        };
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, { dockerExecArgs }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const listRes = await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } });
+            expect(listRes.json.sessions.map(s => s.containerName)).toEqual(['my-c1']);
+        } finally {
+            if (handle && typeof handle.close === 'function') await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     // 回归用例：listWebManyoyoContainers 曾经对每个容器单独同步跑一次 docker
     // inspect（N+1），容器一多就把整个事件循环阻塞住，表现为 serve 所有接口
     // （包括正在流式输出的 agent/stream）严重超时。修复为单次批量 inspect。

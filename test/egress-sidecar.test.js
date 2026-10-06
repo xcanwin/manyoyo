@@ -39,6 +39,11 @@ describe('egress-sidecar 纯函数', () => {
         expect(sidecar.containerSideUpstream('', 'h')).toBe('');
     });
 
+    test('isSidecarName：只认 manyoyo-egress-<8 位十六进制>', () => {
+        expect(sidecar.isSidecarName(sidecar.sidecarName('/a'))).toBe(true);
+        ['manyoyo-egress', 'manyoyo-egress-xyz12345', 'my-easy-1', 'manyoyo-egress-0123456789'].forEach(n => expect(sidecar.isSidecarName(n)).toBe(false));
+    });
+
     test('sidecarName 随 HOME 变化，且只含合法字符', () => {
         expect(sidecar.sidecarName('/a')).toMatch(/^manyoyo-egress-[0-9a-f]{8}$/);
         expect(sidecar.sidecarName('/a')).not.toBe(sidecar.sidecarName('/b'));
