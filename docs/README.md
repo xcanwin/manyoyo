@@ -40,7 +40,7 @@ features:
 ## 一条命令安装
 
 ```bash
-curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
+curl -fsSL https://xcanwin.github.io/manyoyo/install.sh | sh
 ```
 
 装完按屏幕提示完成配置。macOS 不需要预装任何东西。Linux：缺少容器环境时，安装器会说明原因，征得你同意后用 sudo 自动安装。已有 Node.js 和 Docker/Podman 的用户，也可以 `npm install -g @xcanwin/manyoyo`。

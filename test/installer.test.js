@@ -646,7 +646,7 @@ describe('scripts/install.sh (the curl | sh bootstrap)', () => {
     const { spawn } = require('child_process');
     const BOOTSTRAP = path.join(__dirname, '../scripts/install.sh');
     const sha = buf => crypto.createHash('sha256').update(buf).digest('hex');
-    const FAKE_RUN = '#!/bin/sh\n{ echo "name=$(basename "$0")"; for a in "$@"; do echo "arg=$a"; done; echo "bootstrap=${MANYOYO_FROM_BOOTSTRAP:-}"; if [ -t 0 ]; then echo stdin=tty; else echo stdin=notty; fi; } > "$RECORD"\n';
+    const FAKE_RUN = '#!/bin/sh\n{ echo "name=$(basename "$0")"; for a in "$@"; do echo "arg=$a"; done; echo "bootstrap=${MANYOYO_FROM_BOOTSTRAP:-}"; echo "proxy=${https_proxy:-}"; if [ -t 0 ]; then echo stdin=tty; else echo stdin=notty; fi; } > "$RECORD"\n';
 
     let server;
     let baseUrl;
@@ -696,7 +696,7 @@ describe('scripts/install.sh (the curl | sh bootstrap)', () => {
         return new Promise(resolve => {
             const merged = {
                 PATH: safeBin, HOME: home, RECORD: record(), NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1',
-                MANYOYO_DOWNLOAD_BASE: `${baseUrl}/dl`, MANYOYO_LATEST_URL: `${baseUrl}/latest`,
+                MANYOYO_DOWNLOAD_BASE: `${baseUrl}/dl`, MANYOYO_SUMS_BASE: `${baseUrl}/dl`, MANYOYO_LATEST_URL: `${baseUrl}/latest`,
                 MANYOYO_TEST_UNAME_S: 'Darwin', MANYOYO_TEST_UNAME_M: 'arm64', ...env
             };
             const [command, ...shellArgs] = shell;
@@ -827,7 +827,7 @@ describe('scripts/install.sh (the curl | sh bootstrap)', () => {
             const child = spawn('script', ['-qec', `sh -c 'cat "${BOOTSTRAP}" | sh'`, '/dev/null'], {
                 env: {
                     PATH: safeBin, HOME: home, RECORD: record(), NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1',
-                    MANYOYO_DOWNLOAD_BASE: `${baseUrl}/dl`, MANYOYO_LATEST_URL: `${baseUrl}/latest`,
+                    MANYOYO_DOWNLOAD_BASE: `${baseUrl}/dl`, MANYOYO_SUMS_BASE: `${baseUrl}/dl`, MANYOYO_LATEST_URL: `${baseUrl}/latest`,
                     MANYOYO_TEST_UNAME_S: 'Darwin', MANYOYO_TEST_UNAME_M: 'arm64'
                 },
                 stdio: ['pipe', 'pipe', 'pipe']
@@ -860,6 +860,74 @@ describe('scripts/install.sh (the curl | sh bootstrap)', () => {
         const bad = await run();
         expect(bad.status).toBe(7);
         expect(fs.readdirSync(downloads())).toEqual(['manyoyo-9.9.9-macos-arm64.run']);
+    });
+
+    test('MANYOYO_DOWNLOAD_BASE 只换安装包来源：校验清单仍取官方，镜像连清单一起篡改也过不了校验', async () => {
+        const evil = Buffer.from('#!/bin/sh\necho pwned\n');
+        const mirrorHits = [];
+        const mirror = http.createServer((req, res) => {
+            mirrorHits.push(req.url);
+            // 镜像把安装包换成恶意内容，并提供与之匹配的 SHA256SUMS
+            if (req.url.endsWith('/SHA256SUMS')) return res.end(`${sha(evil)}  manyoyo-9.9.9-macos-arm64.run\n`);
+            res.end(evil);
+        });
+        await new Promise(resolve => mirror.listen(0, '127.0.0.1', resolve));
+        const result = await run({ env: { MANYOYO_DOWNLOAD_BASE: `http://127.0.0.1:${mirror.address().port}/dl` } });
+        await new Promise(resolve => mirror.close(resolve));
+        expect(result.status).not.toBe(0);
+        expect(result.stdout).toContain('校验清单仍取自 GitHub 官方');
+        expect(result.stderr).toContain('校验失败');
+        expect(mirrorHits.some(url => url.endsWith('/SHA256SUMS'))).toBe(false);
+        expect(mirrorHits.length).toBeGreaterThan(0);
+        expect(fs.readdirSync(downloads()).filter(name => name.endsWith('.run'))).toEqual([]);
+        expect(fs.existsSync(record())).toBe(false);
+    });
+
+    test('下载失败的提示含完整地址、代理办法和 sh 用法', async () => {
+        const dead = http.createServer((req, res) => (req.url.endsWith('/SHA256SUMS') ? res.end(sums) : (res.writeHead(500), res.end())));
+        await new Promise(resolve => dead.listen(0, '127.0.0.1', resolve));
+        const url = `http://127.0.0.1:${dead.address().port}/dl`;
+        const result = await run({ env: { MANYOYO_DOWNLOAD_BASE: url } });
+        await new Promise(resolve => dead.close(resolve));
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain(`${url}/v9.9.9/manyoyo-9.9.9-macos-arm64.run`);
+        expect(result.stderr).toContain('export https_proxy=');
+        expect(result.stderr).toContain('sh <第一个文件>');
+    });
+
+    test('查询版本、取校验清单失败时也打印完整地址', async () => {
+        const latest = await run({ env: { MANYOYO_LATEST_URL: `${baseUrl}/nope` } });
+        expect(latest.status).not.toBe(0);
+        expect(latest.stderr).toContain(`${baseUrl}/nope`);
+        expect(latest.stderr).toContain('MANYOYO_VERSION=<版本号>');
+        const sumsFail = await run({ env: { MANYOYO_SUMS_BASE: `${baseUrl}/missing` } });
+        expect(sumsFail.status).not.toBe(0);
+        expect(sumsFail.stderr).toContain(`${baseUrl}/missing/v9.9.9/SHA256SUMS`);
+        expect(sumsFail.stderr).toContain('sh <下载的文件>');
+    });
+
+    test('设了代理就打印（去掉账号密码），失败提示改成“请确认代理可用”', async () => {
+        const ok = await run({ env: { https_proxy: 'http://user:secret@127.0.0.1:9' } });
+        expect(ok.status).toBe(0);
+        expect(ok.stdout).toContain('使用代理: http://127.0.0.1:9');
+        expect(ok.stdout + ok.stderr).not.toContain('secret');
+        const bad = await run({ env: { https_proxy: 'http://user:secret@127.0.0.1:9', MANYOYO_SUMS_BASE: `${baseUrl}/missing` } });
+        expect(bad.stderr).toContain('当前代理: http://127.0.0.1:9，请确认代理可用');
+        expect(bad.stderr).not.toContain('secret');
+    });
+
+    test('macOS 没设代理变量时读系统代理并导出给安装包；Linux 不读', async () => {
+        const fake = path.join(root, 'fake-scutil');
+        fs.writeFileSync(fake, '#!/bin/sh\ncat <<EOF\n<dictionary> {\n  HTTPEnable : 1\n  HTTPPort : 8888\n  HTTPProxy : 127.0.0.1\n  HTTPSEnable : 1\n  HTTPSPort : 7890\n  HTTPSProxy : 127.0.0.1\n}\nEOF\n', { mode: 0o755 });
+        const mac = await run({ env: { MANYOYO_TEST_SCUTIL: fake } });
+        expect(mac.status).toBe(0);
+        expect(mac.stdout).toContain('使用系统代理: http://127.0.0.1:7890');
+        expect(readRecord()).toContain('proxy=http://127.0.0.1:7890');
+        const linux = await run({ env: { MANYOYO_TEST_SCUTIL: fake, MANYOYO_TEST_UNAME_S: 'Linux', MANYOYO_TEST_UNAME_M: 'aarch64' } });
+        expect(linux.stdout).not.toContain('代理');
+        const off = path.join(root, 'off-scutil');
+        fs.writeFileSync(off, '#!/bin/sh\necho "HTTPSEnable : 0"\n', { mode: 0o755 });
+        expect((await run({ env: { MANYOYO_TEST_SCUTIL: off } })).stdout).not.toContain('代理');
     });
 
     test('the whole script lives in main() and is only invoked on the last line (a truncated curl | sh stream runs nothing)', () => {

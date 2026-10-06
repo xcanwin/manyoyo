@@ -19,7 +19,7 @@ manyoyo
 
 | 命令 | 说明 | 示例 |
 | --- | --- | --- |
-| `update` | 升级到最新版本；`--rollback` 回到上一版本 | `manyoyo update` |
+| `update` | 升级到最新版本；`--rollback` 回到上一版本；`--file <升级包>` 安装手动下载的升级包（同目录需有 `SHA256SUMS`，仅离线包安装） | `manyoyo update` |
 | `uninstall` | 卸载 MANYOYO（配置和数据默认保留）；`--yes` 只确认卸载程序本身 | `manyoyo uninstall` |
 | `setup` | 命令行配置向导（无图形界面时使用） | `manyoyo setup` |
 | `doctor` | 诊断容器运行时、镜像、配置和端口；`--json` 输出 JSON，`--fix` 自动修复 | `manyoyo doctor` |

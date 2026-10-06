@@ -211,7 +211,7 @@ rm -rf ~/.manyoyo/                # 删除配置、历史与日志（可选，�
 
 给维护者和想了解安装包内部的用户。一键安装脚本 `scripts/install.sh` 只负责下载、校验并启动 `.run`；真正的安装逻辑在 `.run` 解开后的 `install/install.sh`。
 
-- **Release 里的资产**：每个平台（`macos` / `linux`）× 芯片（`arm64` / `x64`）各有一个安装包 `manyoyo-<版本>-<系统>-<芯片>.run` 和一个升级包 `manyoyo-<版本>-<系统>-<芯片>-app.tar.gz`，外加一个校验清单 `SHA256SUMS`，共 9 个文件。`-app.tar.gz` 是 `manyoyo update` 自动下载的（只含 Node.js 与 manyoyo，几十 MB），不需要手动下载。
+- **Release 里的资产**：每个平台（`macos` / `linux`）× 芯片（`arm64` / `x64`）各有一个安装包 `manyoyo-<版本>-<系统>-<芯片>.run` 和一个升级包 `manyoyo-<版本>-<系统>-<芯片>-app.tar.gz`，外加一个校验清单 `SHA256SUMS`，共 9 个文件。`-app.tar.gz` 是 `manyoyo update` 自动下载的（只含 Node.js 与 manyoyo，几十 MB），一般不需要手动下载；连不上 GitHub 时可下载它与 `SHA256SUMS` 到同一目录，用 `manyoyo update --file <升级包>` 安装。
 - **安装包自校验**：`.run` 在安装前会校验自身。想只校验、不安装：`sh manyoyo-*.run --check`；列出内容：`--list`；只解开到某个目录：`--extract <目录>`。
 - **手动对照校验值**：`grep "$(shasum -a 256 manyoyo-*-macos-arm64.run | cut -d' ' -f1)" SHA256SUMS`，有输出（带文件名的一行）就是一致。
 - **先看脚本再执行**：`sed -n '1,/^__MANYOYO_PAYLOAD_BELOW__$/p' manyoyo-*.run`。

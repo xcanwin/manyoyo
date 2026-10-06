@@ -40,7 +40,7 @@ features:
 ## Install with one command
 
 ```bash
-curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
+curl -fsSL https://xcanwin.github.io/manyoyo/install.sh | sh
 ```
 
 When it finishes, follow the on-screen prompts to finish setup. macOS needs nothing installed first. Linux: if the container runtime is missing, the installer explains why and, with your consent, installs it with sudo. If you already have Node.js and Docker/Podman, `npm install -g @xcanwin/manyoyo` works too.

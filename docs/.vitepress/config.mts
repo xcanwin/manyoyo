@@ -101,6 +101,8 @@ export default defineConfig({
   },
   // 旧地址（/zh/** 与移动过的页面）：构建结束时生成纯静态的 meta refresh 页，不依赖 JS（GitHub Pages 做不了 301）
   buildEnd: async (siteConfig) => {
+    // 一键安装脚本随站点发布（https://xcanwin.github.io/manyoyo/install.sh），直连 GitHub raw 被拦的用户也能取到；不放第二份手维护的副本
+    fs.copyFileSync(path.resolve(siteConfig.srcDir, '../scripts/install.sh'), path.join(siteConfig.outDir, 'install.sh'))
     const routes = siteConfig.pages.map((page) => toRoutePath(page))
     const base = siteConfig.site.base.replace(/\/$/, '')
     for (const [from, to] of buildRedirects(routes)) {

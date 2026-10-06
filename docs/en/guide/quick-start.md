@@ -8,7 +8,7 @@ description: Install MANYOYO and its container runtime with one command; follow 
 Run this one command in a terminal; follow the on-screen prompts when it finishes:
 
 ```bash
-curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
+curl -fsSL https://xcanwin.github.io/manyoyo/install.sh | sh
 ```
 
 ## macOS / Linux (recommended)
@@ -30,28 +30,26 @@ manyoyo
 
 More ways to install (low-privilege npm, from source) are in [Installation Details](../advanced/installation.md).
 
-::: details Manual download
-Open [Releases](https://github.com/xcanwin/manyoyo/releases/latest), download `manyoyo-<version>-<os>-<arch>.run` (Apple silicon: `macos-arm64`, Intel Mac: `macos-x64`), then run `sh manyoyo-*.run`.
-:::
-
-::: details Slow or blocked download?
-Point the download at a mirror you trust:
+::: details Slow or cannot reach GitHub?
+- **Set a proxy**: run `export https_proxy=http://127.0.0.1:7890` (use your own proxy address) in the terminal before installing; with the macOS system proxy on, it is detected automatically, and `manyoyo update` uses the proxy too.
+- **Download manually**: open [Releases](https://github.com/xcanwin/manyoyo/releases/latest), download `manyoyo-<version>-<os>-<arch>.run` (Apple silicon: `macos-arm64`, Intel Mac: `macos-x64`, Linux: `linux-arm64` / `linux-x64`), then run `sh manyoyo-*.run`.
+- **Use a mirror**: `MANYOYO_DOWNLOAD_BASE=<mirror URL prefix>` only replaces where the installer package comes from; the checksum list is still fetched from the official GitHub, so a mirror cannot change the content (a tampered package fails verification).
 
 ```bash
-curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | MANYOYO_DOWNLOAD_BASE=<mirror URL prefix> sh
+curl -fsSL https://xcanwin.github.io/manyoyo/install.sh | MANYOYO_DOWNLOAD_BASE=<mirror URL prefix> sh
 ```
 
-If `raw.githubusercontent.com` is blocked too, use "Manual download" above.
+If an upgrade cannot reach GitHub: download `manyoyo-<version>-<os>-<arch>-app.tar.gz` and `SHA256SUMS` into the same directory, then run `manyoyo update --file <path to the upgrade package>`; or download the full installer and run `sh manyoyo-*.run` to install over it. On failure the screen lists the full URLs of these files.
 :::
 
 ::: details Advanced options
 ```bash
 # pin a version
-curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | MANYOYO_VERSION=8.1.0 sh
+curl -fsSL https://xcanwin.github.io/manyoyo/install.sh | MANYOYO_VERSION=8.1.0 sh
 # force headless (--headless) or graphical (--gui) handling
-curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh -s -- --headless
+curl -fsSL https://xcanwin.github.io/manyoyo/install.sh | sh -s -- --headless
 # install only: no service, no browser, no question about how to configure (run manyoyo or manyoyo setup yourself afterwards)
-curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh -s -- --install-only
+curl -fsSL https://xcanwin.github.io/manyoyo/install.sh | sh -s -- --install-only
 ```
 
 By default it is detected automatically: an SSH session, or Linux without `DISPLAY` / `WAYLAND_DISPLAY`, counts as headless. On a headless machine with a terminal the installer asks whether to configure in the terminal or start the web UI, see [First Run](./first-run.md).

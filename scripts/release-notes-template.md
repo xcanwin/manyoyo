@@ -1,7 +1,7 @@
 ## 安装
 
 ```bash
-curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
+curl -fsSL https://xcanwin.github.io/manyoyo/install.sh | sh
 ```
 
 已安装的用户：`manyoyo update`。
@@ -16,7 +16,7 @@ curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
 ## Install
 
 ```bash
-curl -fsSL https://github.com/xcanwin/manyoyo/raw/main/scripts/install.sh | sh
+curl -fsSL https://xcanwin.github.io/manyoyo/install.sh | sh
 ```
 
 Already installed: `manyoyo update`.
