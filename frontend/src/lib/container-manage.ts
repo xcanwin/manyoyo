@@ -274,7 +274,7 @@ export const PRESET_LABELS: Record<Preset, string> = {
 
 export const PRESET_HINTS: Record<Preset, string> = {
   restricted: "可以上公网；访问其他容器、宿主机和内网需要在上面放行。",
-  allowlist: "只能访问上面允许的目标，其余一律拒绝。",
+  allowlist: "只能访问上面允许的目标，其余（含宿主机、其他容器）一律拒绝。",
   custom: "完全按你的规则，没有匹配的一律允许。",
 }
 
