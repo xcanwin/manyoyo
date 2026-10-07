@@ -72,7 +72,7 @@ For mount and `sock` mode risks, see [Security](../guide/security.md).
 | `shellSuffix` | string | Appended after `shell`, e.g. `resume --last`; overridable by `--ss` or `-- ...` (the latter wins) |
 | `first` | object | Runs once **after a new container is created**, not when reusing one; has `shellPrefix` / `shell` / `shellSuffix` (override), `env` (merge by key), `envFile` (append) |
 | `network` | object | Network policy written at creation: `preset` (`restricted` default / `allowlist` / `custom`), `outbound` / `inbound` (rule arrays, each `{ "action": "allow", "target": "@host", "ports": "11434", "proto": "tcp" }`, inbound uses `source`; variables and rules in [Manage a container](../guide/container-manage.md#network)), `expose`; omitted = restricted by default |
-| `autostart` | string | bash script run by the in-container init on every container start; written when a container is created, then edited on the web "Container" tab, see [Manage containers](../guide/container-manage.md) |
+| `autostart` | string | bash script run by the in-container init on every container start; written when a container is created, then edited on the web "Set container" tab, see [Manage containers](../guide/container-manage.md) |
 | `autostartOnServe` | boolean | Start this container when `serve` starts |
 | `agentPromptCommand` | string | Prompt command template for web AGENT mode, must contain `{prompt}`; inferred from `shell` / `yolo` when empty |
 | `quiet` | string array | Suppress output: `tip` / `cmd` / `full` |

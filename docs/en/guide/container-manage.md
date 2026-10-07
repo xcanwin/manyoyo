@@ -1,17 +1,17 @@
 ---
 title: Manage a container's environment, network and autostart | MANYOYO
-description: Change a container's environment variables, network rules and autostart script (outbound / inbound rule tables, domain rules, exposed ports) from the web "Container" tab at any time, without rebuilding or restarting it.
+description: Change a container's environment variables, network rules and autostart script (outbound / inbound rule tables, domain rules, exposed ports) from the web "Set container" tab at any time, without rebuilding or restarting it.
 ---
 
 # Manage a container's environment, network and autostart
 
-Set environment variables, an autostart script and the network when you create a container; once it is running, change them any time under **More tabs → Container** in the web workbench — **no restart or rebuild needed**. Risks and boundaries are in [Security Notes](./security.md).
+Set environment variables, an autostart script and the network when you create a container; once it is running, change them any time under **More tabs → Set container** in the web workbench — **no restart or rebuild needed**. Risks and boundaries are in [Security Notes](./security.md).
 
 ::: tip Old containers
-Containers created before this feature do not have it; the Container tab says "created by an older version, recreate to use". Their behavior is unchanged and they are not migrated.
+Containers created before this feature do not have it; the Set container tab says "created by an older version, recreate to use". Their behavior is unchanged and they are not migrated.
 :::
 
-The entry is **Container** in the top bar's "…" (More tabs) menu. The page shows, from top to bottom: environment variables, autostart, network (including port exposure). Environment, autostart and network each have their **own Save button**; port exposure takes effect when you click "Add".
+The entry is **Set container** in the top bar's "…" (More tabs) menu. The page shows, from top to bottom: environment variables, autostart, network (including port exposure). Environment, autostart and network each have their **own Save button**; port exposure takes effect when you click "Add".
 
 ## When changes take effect
 
@@ -85,7 +85,7 @@ As long as an enabled domain rule exists, in any mode, the container's HTTP(S) t
 - Domain rules do not cover programs that connect to an IP directly; those are judged by the IP rules. So a "deny domain" under Restricted or Custom only blocks HTTP(S) that goes through the proxy; use "Allowlist only" to enforce it.
 - When going out through an upstream proxy, the domain is resolved by the upstream, which cannot stop DNS rebinding by a malicious domain; don't allow domains you don't trust.
 - **The agent's model service domain must be allowed too**: domains of URLs in the environment are added when a container is created; for an existing container switched to "Allowlist only", the page lists them as buttons, one click adds each.
-- **A page won't load or a click does nothing?** Open **Recently blocked** on the "Container" tab and click "Allow": it takes effect immediately (inserted at the top of your rules). Other domains the page references may still be blocked; allow them the same way. The browser's own background requests can be ignored. If a new site is blocked while the agent runs, the chat shows a notice once.
+- **A page won't load or a click does nothing?** Open **Recently blocked** on the "Set container" tab and click "Allow": it takes effect immediately (inserted at the top of your rules). Other domains the page references may still be blocked; allow them the same way. The browser's own background requests can be ignored. If a new site is blocked while the agent runs, the chat shows a notice once.
 - Blocked requests get a `403`: `ERR_TUNNEL_CONNECTION_FAILED` in the browser, `CONNECT tunnel failed, response 403` in `curl`.
 - The proxy container is created by manyoyo, named like `manyoyo-egress-xxxxxxxx`; do not delete it by hand. It does not depend on `serve`.
 
@@ -107,7 +107,7 @@ These ports listen on `0.0.0.0`, which on a public server means open to the whol
 
 Write a bash script under "Autostart". Every time the container starts (creation, restart, start after a `podman machine` restart) the in-container init runs it once and appends output to `/run/manyoyo/autostart.log` ("View log"). With "start this container when serve starts" on, `manyoyo serve` also starts the container.
 
-The script runs as root in the container's default directory; write paths as **in-container** paths (the container path of your mounted host directory is the containerPath on the "Config" tab). The output of "Run now" is not shown automatically: click "View log"; script failures are written to that log too, so check it first when debugging.
+The script runs as root in the container's default directory; write paths as **in-container** paths (the container path of your mounted host directory is the containerPath on the "Container details" tab). The output of "Run now" is not shown automatically: click "View log"; script failures are written to that log too, so check it first when debugging.
 
 The container's PID 1 is manyoyo's own init: it reaps zombies and reacts to stop signals (`stop` no longer waits 10 seconds). The autostart script and the agent do not run until the network rules have been applied.
 

@@ -97,9 +97,6 @@ export type AppliedConfig = {
   agentProgram: string
   resumeSupported: boolean
   yolo: string
-  envCount: number
-  volumeCount: number
-  portCount: number
 }
 
 export type SessionDetail = SessionSummary & {

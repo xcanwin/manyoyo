@@ -1738,9 +1738,6 @@ process.exit(2);
                     containerName: 'my-run-0330-1234',
                     containerPath: '/workspace/run',
                     imageVersion: '1.8.8-common',
-                    envCount: 3,
-                    volumeCount: 2,
-                    portCount: 1,
                     agentEnabled: true
                 })
             }));
@@ -1854,7 +1851,7 @@ process.exit(2);
             expect(created.response.status).toBe(200);
             expect(created.json).toEqual(expect.objectContaining({
                 name: 'my-web-create',
-                applied: expect.objectContaining({ portCount: 2, agentEnabled: true })
+                applied: expect.objectContaining({ agentEnabled: true })
             }));
             expect(waitForContainerReady).toHaveBeenCalledWith('my-web-create', { throwOnFailure: true });
             expect(dockerExecArgs).toHaveBeenCalled();
@@ -1899,10 +1896,7 @@ process.exit(2);
                         hostPath: tempHost,
                         containerPath: '/workspace/custom',
                         imageVersion: '1.7.4-common',
-                        agentEnabled: true,
-                        envCount: 1,
-                        volumeCount: 1,
-                        portCount: 2
+                        agentEnabled: true
                     })
                 })
             }));

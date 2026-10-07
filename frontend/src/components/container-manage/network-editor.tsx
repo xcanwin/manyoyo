@@ -136,7 +136,7 @@ export function NetworkEditor({
         ) : null}
       </Field>
 
-      <div className="border-t border-border/60" />
+      <div className="border-t border-foreground/25" />
 
       <Field>
         <FieldLabel>

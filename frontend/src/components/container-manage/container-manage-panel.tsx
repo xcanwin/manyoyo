@@ -301,7 +301,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto flex max-w-3xl flex-col gap-4 p-3 sm:p-4">
+      <div className="mx-auto flex max-w-5xl flex-col gap-4 p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">管理容器 {containerName} 的环境变量、网络与自启动，改动不需要重建容器。</p>
           <Button variant="ghost" size="icon-sm" aria-label="重新加载" onClick={() => void load()}>
