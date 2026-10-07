@@ -49,7 +49,7 @@ const { applyAptMirror } = require('../lib/mirrors');
 const containerState = require('../lib/container-state');
 const { buildExecArgs, resolveContainerId } = require('../lib/container-exec');
 const { createNetworkManager, NETWORK_NAME } = require('../lib/container-network');
-const { normalizePolicy } = require('../lib/network-policy');
+const { normalizePolicy, isUnrestricted: isUnrestrictedPolicy } = require('../lib/network-policy');
 const { withEnvEndpoints } = require('../lib/network-endpoints');
 const { resolveManageOptions } = require('../lib/container-manage-options');
 const {
@@ -354,7 +354,7 @@ function installServeProcessDiagnostics(logger) {
  * @property {string} [containerRuntime] - 容器运行时（auto/docker/podman，默认 auto；仅全局配置生效）
  * @property {string} [autostart] - 容器每次启动时由容器内 init 执行的 bash 脚本（新建容器时写入状态目录）
  * @property {boolean} [autostartOnServe] - serve 启动时自动拉起此容器
- * @property {object} [network] - 网络策略（preset / host / egress / peers，见 lib/network-policy.js），不写为默认收紧
+ * @property {object} [network] - 网络策略（preset / outbound / inbound / expose，见 lib/network-policy.js），不写为默认收紧
  * @property {{apt?: string, npm?: string, pip?: string}} [mirrors] - 容器内 apt/npm/pip 软件源（http/https URL，空/缺省为官方默认；仅全局配置生效）
  * @property {boolean} [updateCheck] - serve 是否每天检查一次新版本（默认 true；仅全局配置生效，请求不附带任何本机信息）
  * @property {number} [cacheTTL] - 缓存过期天数
@@ -2141,8 +2141,8 @@ async function createNewContainer(runtime) {
 
     await ensureRunImage(runtime);
 
-    const networkPolicy = await withEnvEndpoints(normalizePolicy(runtime.network), [...userEnvLines, ...containerState.readEnvFilePaths(runtime.envFiles || []).flatMap(file => file.entries.map(entry => `${entry.key}=${entry.value}`))]);
     const networkManager = createCliNetworkManager(runtime);
+    const networkPolicy = await withEnvEndpoints(await networkManager.resolveRefs(normalizePolicy(runtime.network)), [...userEnvLines, ...containerState.readEnvFilePaths(runtime.envFiles || []).flatMap(file => file.entries.map(entry => `${entry.key}=${entry.value}`))]);
     if (!hasNetworkArg([...(runtime.contModeArgs || []), ...(runtime.containerExtraArgs || [])])) {
         try {
             await networkManager.ensureBridgeNetwork();
@@ -2156,7 +2156,7 @@ async function createNewContainer(runtime) {
         envFiles: runtime.envFiles,
         autostart: runtime.autostart,
         network: networkPolicy,
-        netRequired: networkPolicy.preset !== 'open',
+        netRequired: !isUnrestrictedPolicy(networkPolicy),
         meta: { name: runtime.containerName }
     });
 

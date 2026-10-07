@@ -89,7 +89,7 @@ maybe('指纹一致性：allowlist 预设下浏览器走过滤代理，指纹不
         const home = env.makeHome();
         const name = env.randomName('pw-fp');
         try {
-            await env.createContainer(runtime, home, name, { network: { preset: 'allowlist', egress: { domains: ['example.com'] } } });
+            await env.createContainer(runtime, home, name, { network: { preset: 'allowlist', outbound: [{ action: 'allow', target: 'example.com', ports: '', proto: 'all' }] } });
             const data = await inContainerFixture(name);
             expectSelfConsistent(data);
             expect(data.report.screen.width).toBe(1920);

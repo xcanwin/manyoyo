@@ -12,7 +12,7 @@ const { imageVersion } = require('../../../package.json');
 const { buildContainerIntegration, mergeIntegration } = require('../../../lib/plugin');
 const { buildContainerRunArgs } = require('../../../lib/container-run');
 const { createNetworkManager, NETWORK_NAME } = require('../../../lib/container-network');
-const { normalizePolicy } = require('../../../lib/network-policy');
+const { normalizePolicy, isUnrestricted } = require('../../../lib/network-policy');
 const { sidecarName } = require('../../../lib/egress-sidecar');
 const containerState = require('../../../lib/container-state');
 const { buildExecArgs } = require('../../../lib/container-exec');
@@ -108,12 +108,12 @@ async function createContainer(runtime, home, name, { env = [], hostPorts = [], 
         containerVolumes: [],
         containerExtraArgs: []
     }, integration);
-    const policy = normalizePolicy({ ...network, host: [...(network.host || []), ...hostPorts.map(port => ({ ports: String(port) }))] });
+    const policy = normalizePolicy({ ...network, outbound: [...(network.outbound || []), ...hostPorts.map(port => ({ action: 'allow', target: '@host', ports: String(port), proto: 'tcp' }))] });
     const st = containerState.createState({
         homeDir: home,
         envLines: env,
         network: policy,
-        netRequired: policy.preset !== 'open',
+        netRequired: !isUnrestricted(policy),
         meta: { name }
     });
     const manager = createNetworkManager({ command: runtime, homeDir: home, imageRef: () => IMAGE });

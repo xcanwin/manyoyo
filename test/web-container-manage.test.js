@@ -7,6 +7,7 @@ const path = require('path');
 const { startWebServer } = require('../lib/web/server');
 const state = require('../lib/container-state');
 const { normalizePolicy } = require('../lib/network-policy');
+const allowRow = (target, extra = {}) => ({ action: 'allow', target, ports: '', proto: 'all', enabled: true, ...extra });
 
 function getFreePort() {
     return new Promise((resolve, reject) => {
@@ -46,6 +47,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
     let boxA;
     let boxB;
     let applied;
+    let relatedQueue;
     let applyError;
     let managed;
     let fakeDocker;
@@ -53,6 +55,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
     async function start(overrides = {}) {
         const port = await getFreePort();
         applied = [];
+        relatedQueue = [];
         applyError = '';
         managed = [
             { id: boxA.id, name: 'boxa', running: true },
@@ -78,9 +81,10 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             },
             networkManager: {
                 ensureBridgeNetwork: async () => {},
+                resolveRefs: async policy => policy,
                 apply: async (name, opts) => { applied.push([name, opts && opts.expectId]); if (applyError) throw new Error(applyError); return { status: 'applied' }; },
                 ensureReady: async () => ({ status: 'applied' }),
-                relatedContainers: async () => [],
+                relatedContainers: async () => relatedQueue.length ? relatedQueue.shift() : [],
                 listManaged: async () => managed
             },
             showImagePullHint: () => {}, removeContainer: () => {},
@@ -200,7 +204,9 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
         test('读：策略、下发状态、可选的其他容器', async () => {
             const r = await request(`${baseUrl}/api/containers/boxa/network`, { headers: { Cookie: cookie } });
             expect(r.json.policy.preset).toBe('restricted');
-            expect(r.json.peers).toEqual([{ id: boxB.id, name: 'boxb', running: true }]);
+            expect(r.json.peers).toEqual([{ id: boxB.id, name: 'boxb', running: true, ip: '' }]);
+            expect(r.json.derived).toEqual([]);
+            expect(r.json.unrestricted).toBe(false);
             expect(r.json.running).toBe(true);
         });
 
@@ -212,15 +218,15 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             const rec = denied.createRecorder({ dir });
             ['pss.bdstatic.com', 'pss.bdstatic.com', 'www.google.com', 'open.bigmodel.cn'].forEach(host => rec.record({ id: boxA.id, host, port: 443, reason: 'domain' }));
             rec.flush();
-            await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { preset: 'allowlist', egress: { domains: ['open.bigmodel.cn'] } } }));
+            await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { preset: 'allowlist', outbound: [allowRow('open.bigmodel.cn')] } }));
             const r = await request(`${baseUrl}/api/containers/boxa/network`, { headers: { Cookie: cookie } });
             expect(r.json.denied.map(d => [d.host, d.count, d.background]).sort()).toEqual([['pss.bdstatic.com', 2, false], ['www.google.com', 1, true]]);
 
             const allow = await request(`${baseUrl}/api/containers/boxa/network/allow`, json(cookie, 'POST', { domain: 'pss.bdstatic.com' }));
             expect(allow.response.status).toBe(200);
-            expect(allow.json.policy.egress.domains).toEqual(['open.bigmodel.cn', 'pss.bdstatic.com']);
+            expect(allow.json.policy.outbound.map(r => r.target)).toEqual(['pss.bdstatic.com', 'open.bigmodel.cn']);
             expect(allow.json.denied.map(d => d.host)).toEqual(['www.google.com']);
-            expect(JSON.parse(fs.readFileSync(boxA.network, 'utf-8')).egress.domains).toContain('pss.bdstatic.com');
+            expect(JSON.parse(fs.readFileSync(boxA.network, 'utf-8')).outbound.map(r => r.target)).toContain('pss.bdstatic.com');
             // 重复允许：不报错；非法域名 400
             expect((await request(`${baseUrl}/api/containers/boxa/network/allow`, json(cookie, 'POST', { domain: 'pss.bdstatic.com' }))).response.status).toBe(200);
             expect((await request(`${baseUrl}/api/containers/boxa/network/allow`, json(cookie, 'POST', { domain: 'bad domain;' }))).response.status).toBe(400);
@@ -229,52 +235,98 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(cleared.json.denied).toEqual([]);
         });
 
-        test('不是 allowlist 的容器不能一键允许', async () => {
+        test('任何模式都能一键允许：收紧下插到出站规则最前面', async () => {
+            await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { outbound: [allowRow('192.168.1.5', { ports: '80' })] } }));
             const r = await request(`${baseUrl}/api/containers/boxa/network/allow`, json(cookie, 'POST', { domain: 'a.example.com' }));
-            expect(r.response.status).toBe(400);
+            expect(r.response.status).toBe(200);
+            expect(r.json.policy.preset).toBe('restricted');
+            expect(r.json.policy.outbound.map(row => row.target)).toEqual(['a.example.com', '192.168.1.5']);
+        });
+
+        test('一键允许一个已被拒绝规则盖住的域名，仍然插到最前面（第一条命中的生效）', async () => {
+            await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { outbound: [{ action: 'deny', target: '*.example.com' }] } }));
+            const r = await request(`${baseUrl}/api/containers/boxa/network/allow`, json(cookie, 'POST', { domain: 'a.example.com' }));
+            expect(r.json.policy.outbound.map(row => `${row.action} ${row.target}`)).toEqual(['allow a.example.com', 'deny *.example.com']);
         });
 
         test('建议放行的域名来自当前 env 里的 URL（含容器里改过的），已在列表里的不再建议', async () => {
             fs.appendFileSync(boxA.env, 'ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api\nHTTPS_PROXY=http://proxy.corp.example:3128\nLAN=http://192.168.1.5:80\n');
             const r = await request(`${baseUrl}/api/containers/boxa/network`, { headers: { Cookie: cookie } });
             expect(r.json.suggestedDomains).toEqual(['open.bigmodel.cn']);
-            await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { preset: 'allowlist', egress: { domains: ['open.bigmodel.cn'] } } }));
+            await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { preset: 'allowlist', outbound: [allowRow('open.bigmodel.cn')] } }));
             const after = await request(`${baseUrl}/api/containers/boxa/network`, { headers: { Cookie: cookie } });
             expect(after.json.suggestedDomains).toEqual([]);
         });
 
-        test('保存即下发；放开成 open 需要二次确认（服务端也校验）', async () => {
-            const hostRule = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { host: [{ ports: '18601' }] } }));
+        test('保存即下发；切到自定义需要二次确认（服务端也校验）；只有“允许 @any”时不再要求网络规则', async () => {
+            const hostRule = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { outbound: [allowRow('@host', { ports: '18601', proto: 'tcp' })] } }));
             expect(hostRule.response.status).toBe(200);
             expect(applied).toEqual([['boxa', boxA.id]]);
-            expect(state.readNetworkRaw(tempHost, boxA.id).host).toEqual([{ ports: '18601', proto: 'tcp' }]);
+            expect(state.readNetworkRaw(tempHost, boxA.id).outbound).toEqual([allowRow('@host', { ports: '18601', proto: 'tcp' })]);
 
-            const open = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { preset: 'open' } }));
-            expect(open.response.status).toBe(400);
-            expect(open.json).toEqual(expect.objectContaining({ needsConfirm: true, risks: ['open'] }));
+            const custom = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { preset: 'custom', outbound: [allowRow('@any')], inbound: [{ action: 'allow', source: '@any', ports: '', proto: 'all', enabled: true }] } }));
+            expect(custom.response.status).toBe(400);
+            expect(custom.json).toEqual(expect.objectContaining({ needsConfirm: true, risks: ['custom'] }));
             expect(state.readNetworkRaw(tempHost, boxA.id).preset).toBe('restricted');
 
-            const confirmed = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { preset: 'open' }, confirmRisk: true }));
+            const confirmed = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { preset: 'custom', outbound: [allowRow('@any')], inbound: [] }, confirmRisk: true }));
             expect(confirmed.response.status).toBe(200);
+            expect(confirmed.json.unrestricted).toBe(true);
             expect(fs.existsSync(boxA.netRequired)).toBe(false);
         });
 
-        test('下发失败显式报错（502 + 原因），策略已保存；非法策略与不存在的 peer 400', async () => {
+        test('收紧里新增很宽的允许行需要确认；窄规则、暂停行、拒绝行不需要', async () => {
+            const put = (outbound, extra = {}) => request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { outbound }, ...extra }));
+            expect((await put([allowRow('@private')])).json.risks).toEqual(['wide']);
+            expect((await put([allowRow('@host')])).json.risks).toEqual(['wide']);
+            expect((await put([allowRow('@host', { ports: '11434' })])).response.status).toBe(200);
+            expect((await put([allowRow('@private', { enabled: false })])).response.status).toBe(200);
+            expect((await put([{ action: 'deny', target: '@any', ports: '', proto: 'all', enabled: true }])).response.status).toBe(200);
+            expect((await put([allowRow('@private')], { confirmRisk: true })).response.status).toBe(200);
+        });
+
+        test('保存时旧规则关联的容器也重算（撤掉“允许 @container:Y”后，Y 出站里的派生行要去掉）', async () => {
+            relatedQueue = [['boxb'], []]; // 保存前（旧规则）关联 boxb，保存后（新规则）不再关联
+            const r = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: {} }));
+            expect(r.response.status).toBe(200);
+            expect(applied.map(([name]) => name)).toEqual(['boxa', 'boxb']);
+        });
+
+        test('入站里的 @container:<名称> 保存时换成 id；找不到容器 400；容器已删的 id 保留', async () => {
+            const byName = await request(`${baseUrl}/api/containers/boxb/network`, json(cookie, 'PUT', { policy: { inbound: [{ action: 'allow', source: '@container:boxa', ports: '7000', proto: 'tcp' }] } }));
+            expect(byName.response.status).toBe(200);
+            expect(byName.json.policy.inbound[0].source).toBe(`@container:${boxA.id}`);
+            const ghost = await request(`${baseUrl}/api/containers/boxb/network`, json(cookie, 'PUT', { policy: { inbound: [{ action: 'allow', source: '@container:nobody', ports: '7000' }] } }));
+            expect(ghost.response.status).toBe(400);
+            expect(ghost.json.error).toContain('找不到容器');
+            const gone = await request(`${baseUrl}/api/containers/boxb/network`, json(cookie, 'PUT', { policy: { inbound: [{ action: 'allow', source: '@container:ffffffffffffffff', ports: '7000' }] } }));
+            expect(gone.response.status).toBe(200);
+        });
+
+        test('旧格式（v1）的 network.json 读出来是 v2，保存后写成 v2', async () => {
+            state.writeNetworkRaw(tempHost, boxA.id, { version: 1, preset: 'restricted', host: [{ ports: '11434', proto: 'tcp' }], egress: { domains: [], rules: [] }, peers: { inbound: [] }, deny: [], expose: [], autostartOnServe: false });
+            const r = await request(`${baseUrl}/api/containers/boxa/network`, { headers: { Cookie: cookie } });
+            expect(r.json.policy.version).toBe(2);
+            expect(r.json.policy.outbound).toEqual([allowRow('@host', { ports: '11434', proto: 'tcp' })]);
+            await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: r.json.policy }));
+            expect(state.readNetworkRaw(tempHost, boxA.id).version).toBe(2);
+        });
+
+        test('下发失败显式报错（502 + 原因），策略已保存；非法策略 400', async () => {
             applyError = '网络规则下发失败: boom';
-            const r = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { host: [{ ports: '80' }] } }));
+            const r = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { outbound: [allowRow('@host', { ports: '80' })] } }));
             expect(r.response.status).toBe(502);
             expect(r.json.error).toContain('boom');
-            expect(r.json.policy.host).toEqual([{ ports: '80', proto: 'tcp' }]);
+            expect(r.json.policy.outbound).toEqual([allowRow('@host', { ports: '80' })]);
             applyError = '';
 
-            const bad = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { host: [{ ports: '80; flush ruleset' }] } }));
+            const bad = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { outbound: [allowRow('@host', { ports: '80; flush ruleset' })] } }));
             expect(bad.response.status).toBe(400);
-            const ghost = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { peers: { inbound: [{ from: 'ffffffffffffffff', ports: '7000' }] } } }));
-            expect(ghost.response.status).toBe(400);
+            const cont = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { outbound: [allowRow('@manyoyo')] } }));
+            expect(cont.response.status).toBe(400);
+            expect(cont.json.error).toContain('始终允许');
             const noBody = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', {}));
             expect(noBody.response.status).toBe(400);
-            const ok = await request(`${baseUrl}/api/containers/boxb/network`, json(cookie, 'PUT', { policy: { peers: { inbound: [{ from: boxA.id, ports: '7000' }] } } }));
-            expect(ok.response.status).toBe(200);
         });
     });
 
@@ -326,23 +378,23 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
     });
 
     describe('新建会话带自启动与网络', () => {
-        test('autostart / network 写进状态目录；open 或非本机绑定没有 confirmRisk 时 400', async () => {
+        test('autostart / network 写进状态目录；自定义或非本机绑定没有 confirmRisk 时 400', async () => {
             const create = body => request(`${baseUrl}/api/sessions`, json(cookie, 'POST', { createOptions: { hostPath: tempHost, imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.0.0-common', ...body } }));
-            const risky = await create({ containerName: 'newbox1', network: { preset: 'open' } });
+            const risky = await create({ containerName: 'newbox1', network: { preset: 'custom', outbound: [allowRow('@any')] } });
             expect(risky.response.status).toBe(400);
             expect(risky.text).toContain('confirmRisk');
 
-            const ok = await create({ containerName: 'newbox2', autostart: 'echo boot\n', autostartOnServe: true, network: { host: [{ ports: '18601' }] } });
+            const ok = await create({ containerName: 'newbox2', autostart: 'echo boot\n', autostartOnServe: true, network: { outbound: [allowRow('@host', { ports: '18601', proto: 'tcp' })] } });
             expect(ok.response.status).toBe(200);
             expect(ok.json.applied).toEqual(expect.objectContaining({ autostartEnabled: true, networkPreset: 'restricted' }));
             const ids = state.listStateIds(tempHost).filter(id => ![boxA.id, boxB.id].includes(id));
             expect(ids).toHaveLength(1);
             expect(fs.readFileSync(state.paths(tempHost, ids[0]).autostart, 'utf-8')).toBe('echo boot\n');
             const policy = state.readNetworkRaw(tempHost, ids[0]);
-            expect(policy).toEqual(expect.objectContaining({ preset: 'restricted', autostartOnServe: true, host: [{ ports: '18601', proto: 'tcp' }] }));
+            expect(policy).toEqual(expect.objectContaining({ version: 2, preset: 'restricted', autostartOnServe: true, outbound: [allowRow('@host', { ports: '18601', proto: 'tcp' })] }));
             expect(applied.some(([name]) => name === 'newbox2')).toBe(true);
 
-            const confirmed = await create({ containerName: 'newbox3', network: { preset: 'open' }, confirmRisk: true });
+            const confirmed = await create({ containerName: 'newbox3', network: { preset: 'custom', outbound: [allowRow('@any')] }, confirmRisk: true });
             expect(confirmed.response.status).toBe(200);
 
             // 创建时填的端口暴露：容器就绪、规则下发后立即监听
@@ -356,13 +408,26 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
 
 describe('容器管理接口：不可信的 box/ 文件与风险判定', () => {
     const { pendingRisks } = require('../lib/web/container-manage');
-    test('pendingRisks：open、非本机绑定、极宽出站规则需要确认；窄规则不需要', () => {
+    test('pendingRisks：自定义、非本机绑定、极宽的允许规则需要确认；窄规则、拒绝行、暂停行不需要', () => {
         const base = normalizePolicy({});
-        expect(pendingRisks(base, normalizePolicy({ preset: 'allowlist', egress: { rules: [{ cidr: '0.0.0.0/0' }] } }))).toEqual(['wide']);
-        expect(pendingRisks(base, normalizePolicy({ egress: { rules: [{ cidr: '10.0.0.0/8', ports: '80' }] } }))).toEqual(['wide']);
-        expect(pendingRisks(base, normalizePolicy({ preset: 'allowlist', egress: { domains: ['*.co.uk'] } }))).toEqual(['wide']);
-        expect(pendingRisks(base, normalizePolicy({ egress: { rules: [{ cidr: '192.168.1.50', ports: '8000' }], domains: ['*.example.com'] } }))).toEqual([]);
-        const wide = normalizePolicy({ egress: { rules: [{ cidr: '10.0.0.0/8' }] } });
+        const out = (target, extra = {}) => normalizePolicy({ outbound: [{ action: 'allow', target, ports: '', proto: 'all', ...extra }] });
+        expect(pendingRisks(base, out('0.0.0.0/0'))).toEqual(['wide']);
+        expect(pendingRisks(base, out('10.0.0.0/8', { ports: '80' }))).toEqual(['wide']);
+        expect(pendingRisks(base, out('*.co.uk'))).toEqual(['wide']);
+        expect(pendingRisks(base, out('@any'))).toEqual(['wide']);
+        expect(pendingRisks(base, out('@metadata'))).toEqual(['wide']);
+        expect(pendingRisks(base, out('@host'))).toEqual(['wide']);
+        expect(pendingRisks(base, normalizePolicy({ inbound: [{ action: 'allow', source: '@containers' }] }))).toEqual(['wide']);
+        expect(pendingRisks(base, normalizePolicy({ inbound: [{ action: 'allow', source: '@host' }] }))).toEqual([]);
+        expect(pendingRisks(base, out('@host', { ports: '11434' }))).toEqual([]);
+        expect(pendingRisks(base, out('192.168.1.50', { ports: '8000' }))).toEqual([]);
+        expect(pendingRisks(base, out('@any', { enabled: false }))).toEqual([]);
+        expect(pendingRisks(base, normalizePolicy({ outbound: [{ action: 'deny', target: '@any' }] }))).toEqual([]);
+        expect(pendingRisks(base, normalizePolicy({ preset: 'custom' }))).toEqual(['custom']);
+        // 已经是自定义时不再逐条问
+        const custom = normalizePolicy({ preset: 'custom' });
+        expect(pendingRisks(custom, normalizePolicy({ preset: 'custom', outbound: [{ action: 'allow', target: '@private' }] }))).toEqual([]);
+        const wide = out('10.0.0.0/8');
         expect(pendingRisks(wide, wide)).toEqual([]);
     });
 });
@@ -382,7 +447,7 @@ describe('网络策略里的端口暴露随「保存网络规则」一起生效'
             isValidContainerName: value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value),
             containerExists: name => name === 'boxa', getContainerStatus: () => 'running', waitForContainerReady: async () => {},
             dockerExecArgs: args => (args[0] === 'inspect' && String(args[2]).includes('manyoyo.id') ? st.id : ''),
-            networkManager: { ensureBridgeNetwork: async () => {}, apply: async () => ({ status: 'applied' }), ensureReady: async () => ({}), relatedContainers: async () => [], listManaged: async () => [{ id: st.id, name: 'boxa', running: true }] },
+            networkManager: { ensureBridgeNetwork: async () => {}, resolveRefs: async policy => policy, apply: async () => ({ status: 'applied' }), ensureReady: async () => ({}), relatedContainers: async () => [], listManaged: async () => [{ id: st.id, name: 'boxa', running: true }] },
             showImagePullHint: () => {}, removeContainer: () => {},
             webHistoryDir: path.join(tempHost, 'web-history'), webConfigPath: path.join(tempHost, 'manyoyo.json'),
             colors: { GREEN: '', CYAN: '', YELLOW: '', NC: '' }
@@ -435,7 +500,7 @@ describe('环境变量文件接口', () => {
             isValidContainerName: value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value),
             containerExists: name => name === 'boxa', getContainerStatus: () => 'running', waitForContainerReady: async () => {},
             dockerExecArgs: args => (args[0] === 'inspect' && String(args[2]).includes('manyoyo.id') ? st.id : ''),
-            networkManager: { ensureBridgeNetwork: async () => {}, apply: async () => ({}), ensureReady: async () => ({}), relatedContainers: async () => [], listManaged: async () => [] },
+            networkManager: { ensureBridgeNetwork: async () => {}, resolveRefs: async policy => policy, apply: async () => ({}), ensureReady: async () => ({}), relatedContainers: async () => [], listManaged: async () => [] },
             showImagePullHint: () => {}, removeContainer: () => {},
             webHistoryDir: path.join(tmpHome, 'web-history'), webConfigPath: path.join(tmpHome, 'manyoyo.json'),
             colors: { GREEN: '', CYAN: '', YELLOW: '', NC: '' }

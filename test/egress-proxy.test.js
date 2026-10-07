@@ -2,7 +2,8 @@
 
 const http = require('http');
 const net = require('net');
-const { createEgressProxy, isRestrictedAddress, ruleCovers } = require('../lib/egress-proxy');
+const { createEgressProxy, isRestrictedAddress, decide } = require('../lib/egress-proxy');
+const { normalizePolicy, compileProxyPolicy } = require('../lib/network-policy');
 
 const A = 'aaaaaaaaaaaaaaaa';
 const B = 'bbbbbbbbbbbbbbbb';
@@ -31,6 +32,10 @@ function connect(proxyPort, target, from = SRC.A) {
     });
 }
 
+const ENDPOINTS = { hostIps: ['172.16.99.1'], bridge: { subnet: '10.89.0.0/24', gateway: '10.89.0.1' }, containers: {} };
+const rule = (action, target, extra = {}) => ({ action, target, ports: '', proto: 'all', enabled: true, ...extra });
+const compile = (preset, outbound, endpoints = ENDPOINTS) => compileProxyPolicy(normalizePolicy({ preset, outbound }), endpoints);
+
 describe('egress-proxy', () => {
     let echo;
     let echoPort;
@@ -56,14 +61,24 @@ describe('egress-proxy', () => {
     beforeEach(async () => {
         denied = [];
         policies = {
-            [A]: { preset: 'allowlist', domains: ['ok.example.com', '*.wild.example.com'], rules: [{ cidr: '127.0.0.1/32', ports: String(echoPort), proto: 'tcp' }] },
-            [B]: { preset: 'allowlist', domains: ['other.example.com'], rules: [] }
+            [A]: compile('allowlist', [
+                rule('allow', 'ok.example.com'), rule('allow', '*.wild.example.com'),
+                rule('allow', 'lan.example.com'), rule('allow', 'mixed.example.com'), rule('allow', '*.mixed.example.com'),
+                rule('allow', '93.184.216.34', { ports: String(echoPort), proto: 'tcp' })
+            ]),
+            [B]: compile('allowlist', [rule('allow', 'other.example.com')])
         };
-        lookups = { 'ok.example.com': ['127.0.0.1'], 'a.wild.example.com': ['127.0.0.1'], 'other.example.com': ['127.0.0.1'], 'meta.example.com': ['169.254.169.254'], 'lan.example.com': ['10.1.2.3'], 'mixed.example.com': ['10.1.2.3', '127.0.0.1'] };
-        policies[A].domains.push('meta.example.com', 'lan.example.com', 'mixed.example.com');
+        // 虚构的公网地址 93.184.216.34 实际拨到本机回显服务（mapAddress）
+        lookups = {
+            'ok.example.com': ['93.184.216.34'], 'a.wild.example.com': ['93.184.216.34'], 'other.example.com': ['93.184.216.34'],
+            'meta.wild.example.com': ['169.254.169.254'], 'priv.wild.example.com': ['10.1.2.3'], 'lan.example.com': ['10.1.2.3'],
+            'mixed.example.com': ['10.1.2.3', '93.184.216.34'], 'a.mixed.example.com': ['10.1.2.3', '93.184.216.34'],
+            'loop.example.com': ['127.0.0.1']
+        };
         proxy = createEgressProxy({
             getClient: ip => clientOf(ip),
             onDenied: event => denied.push(event),
+            mapAddress: () => '127.0.0.1',
             lookup: async host => { if (!lookups[host]) throw new Error('nx'); return lookups[host]; }
         });
         proxyPort = await proxy.start({ host: '127.0.0.1', port: 0 });
@@ -91,60 +106,89 @@ describe('egress-proxy', () => {
     test('拒绝响应：403 + Proxy-Status，不带正文，不带 Via / X-Forwarded-For 等头，不出现 manyoyo', async () => {
         const domain = await connect(proxyPort, `evil.example.org:${echoPort}`);
         expect(domain.buf).toBe('HTTP/1.1 403 Forbidden\r\nProxy-Status: proxy; error=http_request_denied\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
-        const address = await connect(proxyPort, 'lan.example.com:80');
+        const address = await connect(proxyPort, 'priv.wild.example.com:80');
         expect(address.buf).toContain('Proxy-Status: proxy; error=destination_ip_prohibited');
         expect(`${domain.buf}${address.buf}`.toLowerCase()).not.toMatch(/manyoyo|via:|x-forwarded/);
     });
 
     test('被拒绝的访问通过 onDenied 记录（容器 id、域名、端口、原因）', async () => {
         await connect(proxyPort, `evil.example.org:${echoPort}`);
-        await connect(proxyPort, 'lan.example.com:80');
+        await connect(proxyPort, 'priv.wild.example.com:80');
         expect(denied).toEqual([
             { id: A, host: 'evil.example.org', port: echoPort, reason: 'domain' },
-            { id: A, host: 'lan.example.com', port: 80, reason: 'address' }
+            { id: A, host: 'priv.wild.example.com', port: 80, reason: 'address' }
         ]);
     });
 
-    test('白名单域名（精确与通配）经显式放行的 IP 可通；其他域名 403；别的容器的凭据只按它自己的策略', async () => {
+    test('允许的域名（精确与通配）可通；其他域名 403；别的容器只按它自己的规则', async () => {
         expect((await connect(proxyPort, `ok.example.com:${echoPort}`, SRC.A)).status).toBe(200);
         expect((await connect(proxyPort, `a.wild.example.com:${echoPort}`, SRC.A)).status).toBe(200);
         expect((await connect(proxyPort, `evil.example.org:${echoPort}`, SRC.A)).status).toBe(403);
         expect((await connect(proxyPort, `wild.example.com:${echoPort}`, SRC.A)).status).toBe(403);
-        // B 访问只在 A 白名单里的域名：403
         expect((await connect(proxyPort, `ok.example.com:${echoPort}`, SRC.B)).status).toBe(403);
     });
 
-    test('SSRF：域名解析到私有 / 元数据 / 环回地址一律拒绝（除非该容器显式放行 IP:端口）', async () => {
-        // 169.254.169.254 与 10.x 没有显式放行
-        expect((await connect(proxyPort, 'meta.example.com:80', SRC.A)).status).toBe(403);
-        expect((await connect(proxyPort, 'lan.example.com:80', SRC.A)).status).toBe(403);
-        // B 没有任何显式放行：解析到 127.0.0.1 的白名单域名也被拒
-        policies[B].domains.push('ok.example.com');
-        expect((await connect(proxyPort, `ok.example.com:${echoPort}`, SRC.B)).status).toBe(403);
-        // 混合记录：只用可用的那条（127.0.0.1 被 A 显式放行）
-        expect((await connect(proxyPort, `mixed.example.com:${echoPort}`, SRC.A)).status).toBe(200);
-        // A 的显式放行只对那个端口有效
+    test('精确域名命中即放行（写了它就是信任它，哪怕解析到内网）；通配域名解析到内网 / 元数据要另有允许该地址的规则', async () => {
+        expect((await connect(proxyPort, `lan.example.com:${echoPort}`, SRC.A)).status).toBe(200);
+        expect((await connect(proxyPort, 'priv.wild.example.com:80', SRC.A)).status).toBe(403);
+        expect((await connect(proxyPort, 'meta.wild.example.com:80', SRC.A)).status).toBe(403);
+        // 通配 + 混合记录：只拨可用的那条（公网），不拨内网
+        expect((await connect(proxyPort, `a.mixed.example.com:${echoPort}`, SRC.A)).status).toBe(200);
+        // 给内网地址加一行允许后，通配域名才放行
+        policies[A] = compile('allowlist', [rule('allow', '*.wild.example.com'), rule('allow', '10.1.2.3', { ports: String(echoPort), proto: 'tcp' })]);
+        expect((await connect(proxyPort, `priv.wild.example.com:${echoPort}`, SRC.A)).status).toBe(200);
+        expect((await connect(proxyPort, `priv.wild.example.com:${echoPort + 1}`, SRC.A)).status).toBe(403);
+    });
+
+    test('环回地址永远拒绝（即使有允许 @any / 显式允许行）', async () => {
+        policies[A] = compile('custom', [rule('allow', '@any'), rule('allow', '127.0.0.1')]);
+        expect((await connect(proxyPort, `127.0.0.1:${echoPort}`, SRC.A)).status).toBe(403);
+        expect((await connect(proxyPort, `loop.example.com:${echoPort}`, SRC.A)).status).toBe(403);
+        expect((await connect(proxyPort, '[::1]:80', SRC.A)).status).toBe(403);
+        expect((await connect(proxyPort, '[::ffff:127.0.0.1]:80', SRC.A)).status).toBe(403);
+    });
+
+    test('规则从上往下第一条命中：上面的拒绝盖过下面的允许，反之亦然', async () => {
+        policies[A] = compile('allowlist', [rule('deny', 'a.wild.example.com'), rule('allow', '*.wild.example.com')]);
+        expect((await connect(proxyPort, `a.wild.example.com:${echoPort}`, SRC.A)).status).toBe(403);
+        policies[A] = compile('allowlist', [rule('allow', 'a.wild.example.com'), rule('deny', '*.wild.example.com')]);
+        expect((await connect(proxyPort, `a.wild.example.com:${echoPort}`, SRC.A)).status).toBe(200);
+    });
+
+    test('收紧：默认放行公网，域名拒绝行生效；内网解析 / 内网字面量被默认行拒绝，允许行排在上面才放行', async () => {
+        policies[A] = compile('restricted', [rule('deny', 'ok.example.com'), rule('allow', '10.1.2.3', { ports: '8000', proto: 'tcp' })]);
+        expect((await connect(proxyPort, `ok.example.com:${echoPort}`, SRC.A)).status).toBe(403);
+        expect((await connect(proxyPort, `other.example.com:${echoPort}`, SRC.A)).status).toBe(200);
+        expect((await connect(proxyPort, `93.184.216.34:${echoPort}`, SRC.A)).status).toBe(200);
+        expect((await connect(proxyPort, `lan.example.com:${echoPort}`, SRC.A)).status).toBe(403); // 解析到内网，没有允许行
+        expect((await connect(proxyPort, '10.1.2.4:8000', SRC.A)).status).toBe(403);
+        expect((await connect(proxyPort, '172.16.99.1:80', SRC.A)).status).toBe(403); // @host
+        expect((await connect(proxyPort, '169.254.169.254:80', SRC.A)).status).toBe(403);
+    });
+
+    test('端口与协议：规则只在端口命中时生效；udp 行对代理无效', async () => {
+        policies[A] = compile('allowlist', [rule('allow', 'ok.example.com', { ports: String(echoPort) })]);
+        expect((await connect(proxyPort, `ok.example.com:${echoPort}`, SRC.A)).status).toBe(200);
         expect((await connect(proxyPort, `ok.example.com:${echoPort + 1}`, SRC.A)).status).toBe(403);
     });
 
-    test('IP 字面量：只有显式放行才可达；私有 / 环回字面量默认 403', async () => {
-        expect((await connect(proxyPort, `127.0.0.1:${echoPort}`, SRC.A)).status).toBe(200);
-        expect((await connect(proxyPort, `127.0.0.1:${echoPort}`, SRC.B)).status).toBe(403);
+    test('IP 字面量（allowlist）：只有允许行才可达', async () => {
+        expect((await connect(proxyPort, `93.184.216.34:${echoPort}`, SRC.A)).status).toBe(200);
+        expect((await connect(proxyPort, `93.184.216.34:${echoPort}`, SRC.B)).status).toBe(403);
+        expect((await connect(proxyPort, '8.8.8.8:443', SRC.A)).status).toBe(403);
         expect((await connect(proxyPort, '169.254.169.254:80', SRC.A)).status).toBe(403);
-        expect((await connect(proxyPort, '8.8.8.8:443', SRC.A)).status).toBe(403); // 公网 IP 字面量不在白名单规则里
-        expect((await connect(proxyPort, '[::1]:80', SRC.A)).status).toBe(403);
         expect((await connect(proxyPort, '[::ffff:10.0.0.1]:80', SRC.A)).status).toBe(403);
     });
 
-    test('策略不是 allowlist（含已切回 restricted）：403', async () => {
-        policies[A].preset = 'restricted';
+    test('客户端项没有 rules（损坏 / 旧格式）：全部 403', async () => {
+        policies[A] = { preset: 'allowlist' };
         expect((await connect(proxyPort, `ok.example.com:${echoPort}`, SRC.A)).status).toBe(403);
     });
 
     test('普通 HTTP 请求同样按来源识别与按域名放行；代理不加任何头', async () => {
         const target = http.createServer((req, res) => res.end(`got ${req.url} host=${req.headers.host} headers=${Object.keys(req.headers).sort().join(',')}`));
         const targetPort = await listen(target);
-        policies[A].rules = [{ cidr: '127.0.0.1/32', ports: String(targetPort), proto: 'tcp' }];
+        policies[A] = compile('allowlist', [rule('allow', 'ok.example.com')]);
         const get = (urlPath, from) => new Promise(resolve => {
             http.get({ host: '127.0.0.1', port: proxyPort, localAddress: from, path: urlPath, headers: { Host: 'ok.example.com' } }, res => {
                 let body = '';
@@ -191,8 +235,8 @@ describe('egress-proxy', () => {
         const upstreamPort = await listen(upstream);
         const chained = createEgressProxy({
             getClient: ip => clientOf(ip),
-            // 宿主机解析不了 ok.example.com（交给上游）；meta / lan 能解析出私有地址
-            lookup: async host => { if (!['meta.example.com', 'lan.example.com'].includes(host)) throw new Error('nx'); return lookups[host]; },
+            // 宿主机解析不了 ok.example.com（交给上游）；priv.wild / meta.wild 能解析出私有地址
+            lookup: async host => { if (!['meta.wild.example.com', 'priv.wild.example.com'].includes(host)) throw new Error('nx'); return lookups[host]; },
             upstream: `http://user:pw@127.0.0.1:${upstreamPort}`
         });
         const port = await chained.start({ host: '127.0.0.1', port: 0 });
@@ -201,9 +245,9 @@ describe('egress-proxy', () => {
             expect(seen).toEqual([{ url: 'ok.example.com:443', auth: `Basic ${Buffer.from('user:pw').toString('base64')}` }]);
             expect((await connect(port, 'evil.example.org:443', SRC.A)).status).toBe(403);
             expect((await connect(port, '127.0.0.1:80', SRC.B)).status).toBe(403);
-            // 本地能解析出来且全是私有 / 元数据地址：即使经上游也拒绝；本地解析失败（宿主机解析不了）才交给上游
-            expect((await connect(port, 'meta.example.com:443', SRC.A)).status).toBe(403);
-            expect((await connect(port, 'lan.example.com:443', SRC.A)).status).toBe(403);
+            // 通配域名本地能解析出来且是内网 / 元数据地址：即使经上游也拒绝；本地解析失败（宿主机解析不了）才交给上游
+            expect((await connect(port, 'meta.wild.example.com:443', SRC.A)).status).toBe(403);
+            expect((await connect(port, 'priv.wild.example.com:443', SRC.A)).status).toBe(403);
             expect(seen.length).toBe(1);
         } finally {
             await chained.stop();
@@ -221,11 +265,22 @@ describe('地址判断', () => {
         expect(isRestrictedAddress('not-an-ip')).toBe(true);
     });
 
-    test('ruleCovers：CIDR、端口区间、协议', () => {
-        expect(ruleCovers({ cidr: '140.82.112.0/20', ports: '22,443', proto: 'tcp' }, '140.82.113.4', 443)).toBe(true);
-        expect(ruleCovers({ cidr: '140.82.112.0/20', ports: '22', proto: 'tcp' }, '140.82.113.4', 443)).toBe(false);
-        expect(ruleCovers({ cidr: '10.0.0.0/8', ports: '8000-8100', proto: 'tcp' }, '10.9.9.9', 8050)).toBe(true);
-        expect(ruleCovers({ cidr: '10.0.0.0/8', ports: '', proto: 'udp' }, '10.9.9.9', 53)).toBe(false);
-        expect(ruleCovers({ cidr: '10.0.0.1', ports: '', proto: 'tcp' }, '10.0.0.1', 1)).toBe(true);
+    test('decide：地址集合（any / inc / exc）、端口、默认行；规则没看地址时不触发解析', async () => {
+        const policy = compile('restricted', [rule('allow', '@host', { ports: '11434', proto: 'tcp' }), rule('deny', '@public', { ports: '25' })]);
+        expect((await decide(policy, '172.16.99.1', 11434, ['172.16.99.1'])).ok).toBe(true);
+        expect((await decide(policy, '172.16.99.1', 80, ['172.16.99.1'])).ok).toBe(false); // 默认行拒绝 @host
+        expect((await decide(policy, '8.8.8.8', 25, ['8.8.8.8'])).ok).toBe(false);
+        expect((await decide(policy, '8.8.8.8', 443, ['8.8.8.8'])).ok).toBe(true);
+        expect((await decide(policy, '10.89.0.5', 80, ['10.89.0.5'])).ok).toBe(false); // @containers
+        expect((await decide(policy, '10.89.0.1', 80, ['10.89.0.1'])).ok).toBe(false); // 网关在 @host / @private 里
+        expect((await decide(compile('custom', []), '10.89.0.5', 80, ['10.89.0.5'])).ok).toBe(true);
+        expect((await decide(compile('custom', []), 'x.com', 80, [])).ok).toBe(true); // 本地解析不出来：自定义放行，交给上游
+        expect((await decide(compile('allowlist', []), 'x.com', 80, [])).ok).toBe(false);
+        const resolve = jest.fn(async () => ['93.184.216.34']);
+        expect((await decide(compile('allowlist', [rule('allow', 'x.com')]), 'x.com', 80, resolve)).ok).toBe(true);
+        expect((await decide(compile('allowlist', [rule('allow', 'x.com')]), 'y.com', 80, resolve)).ok).toBe(false);
+        expect(resolve).not.toHaveBeenCalled(); // 域名规则就能判断：不等 DNS
+        expect((await decide(compile('restricted', []), 'y.com', 80, resolve)).ok).toBe(true);
+        expect(resolve).toHaveBeenCalledTimes(1);
     });
 });

@@ -30,14 +30,17 @@
     "ports": ["8888:8888"],
 
     // 网络策略（新建容器时写入，Web「容器」页随时改，不需要重启容器）。不写 = 默认收紧：允许公网，
-    // 禁止宿主机其他端口、局域网 / 私有网段、云元数据与其他容器。
-    // preset：restricted（默认）/ allowlist（域名白名单，需要 serve 运行）/ open（不加规则）
+    // 禁止宿主机、局域网 / 私有网段、云元数据与其他容器。
+    // preset：restricted（默认）/ allowlist（只放行你写的允许规则）/ custom（没匹配的就允许）
+    // outbound / inbound：规则从上往下，第一条命中的生效。action：allow / deny；target（入站为 source）：
+    // IP / 网段 / 域名（仅出站）/ @containers @container:<名称> @host @private @public @metadata @any；ports 空 = 全部；proto：all / tcp / udp
     "network": {
+        "version": 2,
         "preset": "restricted",
-        // 允许容器访问的宿主机端口（宿主机上监听 0.0.0.0 的服务）
-        "host": [],
-        // 直连放行的 IP 规则，例如局域网里的模型网关：{ "cidr": "192.168.1.50", "ports": "8000", "proto": "tcp" }
-        "egress": { "domains": [], "rules": [] },
+        // 例：允许容器访问宿主机的 Ollama：{ "action": "allow", "target": "@host", "ports": "11434", "proto": "tcp" }
+        "outbound": [],
+        // 例：允许容器 B 访问我的 7000 端口：{ "action": "allow", "source": "@container:B", "ports": "7000", "proto": "tcp" }
+        "inbound": [],
         // 端口暴露（需要 serve 运行）：监听地址默认 127.0.0.1；绑 0.0.0.0 等于局域网 / 公网可见
         "expose": []
     },

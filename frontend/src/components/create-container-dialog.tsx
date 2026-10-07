@@ -28,7 +28,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { AutostartEditor } from "@/components/container-manage/autostart-editor"
 import { EnvEditor } from "@/components/container-manage/env-editor"
 import { NetworkEditor } from "@/components/container-manage/network-editor"
-import { defaultPolicy, networkForCreate, parseEnvText, policyRisks, type NetworkPolicy } from "@/lib/container-manage"
+import { cleanPolicy, defaultPolicy, networkForCreate, parseEnvText, policyProblems, policyRisks, type NetworkPolicy } from "@/lib/container-manage"
 import { ChevronDownIcon } from "lucide-react"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 
@@ -120,7 +120,7 @@ function buildCreateOptions(form: CreateContainerForm) {
   if (volumes.length) options.volumes = volumes
   if (form.autostart.trim()) options.autostart = form.autostart
   if (form.autostartOnServe) options.autostartOnServe = true
-  // 放开类的改动（open）已在编辑器里确认过，这里带上 confirmRisk
+  // 放开类的改动（自定义）已在编辑器里确认过，这里带上 confirmRisk
   const network = networkForCreate(form.network)
   if (network) {
     options.network = network
@@ -241,11 +241,15 @@ export function CreateContainerDialog({
       setError("hostPath 不能为空")
       return
     }
-    // 放开类的改动（open 已在编辑器里确认过）：范围很大的出站规则、绑定 0.0.0.0 的端口暴露在这里确认
-    const risks = policyRisks(defaultPolicy(), form.network)
+    if (policyProblems(form.network).length) {
+      setError("网络规则里有写法不对的地方，请先改正")
+      return
+    }
+    // 放开类的改动（自定义模式已在编辑器里确认过）：范围很大的出站规则、绑定 0.0.0.0 的端口暴露在这里确认
+    const risks = policyRisks(defaultPolicy(), cleanPolicy(form.network))
     if (risks.includes("wide") && !(await confirm({
-      title: "放开范围很大的出站规则？",
-      message: "这条规则覆盖的地址范围很大（整个 /8 以上的网段，或类似 *.co.uk 的公共后缀通配），效果接近完全放开出站限制。",
+      title: "放开范围很大的规则？",
+      message: "新增的允许规则覆盖范围很大（任何地址、内网、云元数据、整个 /8 以上的网段，或类似 *.co.uk 的公共后缀通配），可能让容器越过原有的网络限制。",
       confirmLabel: "确认放开",
     }))) return
     if (risks.includes("publicBind") && !(await confirm({
@@ -494,8 +498,6 @@ export function CreateContainerDialog({
                 <NetworkEditor
                   policy={form.network}
                   onChange={(value) => setField("network", value)}
-                  peers={[]}
-                  showPeers={false}
                   showAccess={false}
                 />
               </SectionToggle>

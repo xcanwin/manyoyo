@@ -23,7 +23,7 @@
 
 ## 容器管理接口
 
-`lib/web/container-manage.js`（路由工厂，由 `handleWebApi` 追加进路由表）：`/api/containers/:name/{env,autostart,autostart/run,autostart/log,network,network/allow,network/denied,expose}` 与 `/api/containers/orphans`。旧容器（无 `manyoyo.id`）GET 返回 `{legacy:true}`、写返回 409。`PUT env` 用 `If-Match`（etag）防止覆盖容器内的修改；放开类改动（`open`、非 loopback 暴露）服务端也要求 `confirmRisk:true`。serve 运行时就绪后 `startContainerServices` 订阅 `<runtime> events`（start / die）补下发规则、拉起 `autostartOnServe` 容器、恢复端口暴露；事件流断开重连（运行时重启）后 `reconcileContainerServices` 再对账一次；过滤代理是 sidecar 容器（`lib/egress-sidecar.js`），由网络管理器 `ensure()` 保证在运行，不在 serve 进程里。`GET network` 带 `denied`（最近被拦截，已放行的不列）；`/agent/stream` 进行中 `createWebDeniedNotifier` 每 2 秒读一次拦截记录，有新域名就推一条 `trace`（只有 `text`，同一域名同一轮一次）。所有 exec 经 `spawnContainerExec`（env 临时文件在子进程 close 时删）。
+`lib/web/container-manage.js`（路由工厂，由 `handleWebApi` 追加进路由表）：`/api/containers/:name/{env,autostart,autostart/run,autostart/log,network,network/allow,network/denied,expose}` 与 `/api/containers/orphans`。旧容器（无 `manyoyo.id`）GET 返回 `{legacy:true}`、写返回 409。`PUT env` 用 `If-Match`（etag）防止覆盖容器内的修改；放开类改动（切到 `custom`、新增很宽的允许规则、非 loopback 暴露）服务端也要求 `confirmRisk:true`；`network` 是 v2 规则表（`outbound` / `inbound`，旧 v1 读取时自动转换，`@container:<名称>` 保存时换成 id）。serve 运行时就绪后 `startContainerServices` 订阅 `<runtime> events`（start / die）补下发规则、拉起 `autostartOnServe` 容器、恢复端口暴露；事件流断开重连（运行时重启）后 `reconcileContainerServices` 再对账一次；过滤代理是 sidecar 容器（`lib/egress-sidecar.js`），由网络管理器 `ensure()` 保证在运行，不在 serve 进程里。`GET network` 带 `denied`（最近被拦截，已放行的不列）、`derived`（别的容器入站放行本容器产生的出站派生行）与 `peers[].ip`；`network/allow` 在出站用户规则最前插入允许域名行；`/agent/stream` 进行中 `createWebDeniedNotifier` 每 2 秒读一次拦截记录，有新域名就推一条 `trace`（只有 `text`，同一域名同一轮一次）。所有 exec 经 `spawnContainerExec`（env 临时文件在子进程 close 时删）。
 
 ## lib/web/index.html
 
