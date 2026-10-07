@@ -286,9 +286,6 @@ export function RuleTable({
           onRemove={() => onChange(removeRule(rules, index))}
         />
       ))}
-      <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground before:flex-1 before:border-t before:border-dashed after:flex-1 after:border-t after:border-dashed">
-        {preset === "custom" ? "没有匹配的：允许" : "模式默认"}
-      </div>
       {defaults.map((rule) => (
         <LockedRow key={rule.target + rule.action} rule={rule} containers={containers} tip="模式默认" mobile={mobile} />
       ))}

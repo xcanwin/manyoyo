@@ -60,9 +60,9 @@ describe("RuleTable", () => {
     expect(container.querySelectorAll("input").length).toBe(0)
   })
 
-  test("自定义模式：没有模式默认行，分隔线写“没有匹配的：允许”", async () => {
+  test("自定义模式：没有模式默认行", async () => {
     await act(async () => root.render(<Harness initial={[]} onRules={() => {}} preset="custom" />))
-    expect(container.textContent).toContain("没有匹配的：允许")
+    expect(container.textContent).not.toContain("模式默认")
     expect(container.textContent).not.toContain("@public")
   })
 

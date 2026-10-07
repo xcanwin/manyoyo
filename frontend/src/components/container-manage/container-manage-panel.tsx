@@ -335,7 +335,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
             {envState?.mtime ? (
               <p className="text-xs text-muted-foreground">文件最后修改：{formatDateTime(envState.mtime)}</p>
             ) : null}
-            {envMessage ? (
+            {envMessage && !(envMessage.tone === "ok" && envDirty) ? (
               <Alert variant={envMessage.tone === "ok" ? "default" : "destructive"}>
                 <AlertDescription className="flex flex-wrap items-center gap-2">
                   {envMessage.text}
@@ -384,7 +384,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
                   <AlertDescription>{net.status.warning}</AlertDescription>
                 </Alert>
               ) : null}
-              {netMessage ? (
+              {netMessage && !(netMessage.tone === "ok" && netDirty) ? (
                 <Alert variant={netMessage.tone === "ok" ? "default" : "destructive"}>
                   <AlertDescription>{netMessage.text}</AlertDescription>
                 </Alert>
@@ -437,7 +437,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
               onServe={autostart.autostartOnServe}
               onServeChange={(autostartOnServe) => setAutostart((prev) => ({ ...prev, autostartOnServe }))}
             />
-            {autostartMessage ? (
+            {autostartMessage && !(autostartMessage.tone === "ok" && autostartDirty) ? (
               <Alert variant={autostartMessage.tone === "ok" ? "default" : "destructive"}>
                 <AlertDescription>{autostartMessage.text}</AlertDescription>
               </Alert>

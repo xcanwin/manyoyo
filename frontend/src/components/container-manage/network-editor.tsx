@@ -136,6 +136,8 @@ export function NetworkEditor({
         ) : null}
       </Field>
 
+      <div className="border-t border-border/60" />
+
       <Field>
         <FieldLabel>
           入站 <span className="font-normal text-muted-foreground">外部访问容器</span>
