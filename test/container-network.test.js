@@ -1,6 +1,6 @@
 'use strict';
 
-const { subnetOf, bridgeOf, parseHostsAndResolv, parseUrlHostPort } = require('../lib/container-network');
+const { subnetOf, bridgeOf, parseHostsAndResolv, parseUrlHostPort, isHostTarget } = require('../lib/container-network');
 
 describe('container-network 纯函数', () => {
     test('subnetOf：按前缀算网段；前缀非法返回空', () => {
@@ -39,5 +39,10 @@ describe('container-network 纯函数', () => {
         expect(parseUrlHostPort('proxy.local:3128')).toEqual({ host: 'proxy.local', port: 3128 });
         expect(parseUrlHostPort('http://[fd00::1]:8080')).toEqual({ host: 'fd00::1', port: 8080 });
         expect(parseUrlHostPort('')).toBeNull();
+    });
+
+    test('isHostTarget：host.*.internal 与 loopback 视为宿主机代理', () => {
+        ['host.containers.internal', 'host.docker.internal', 'localhost', '127.0.0.1', '::1'].forEach(h => expect(isHostTarget(h)).toBe(true));
+        ['proxy.local', '172.16.99.1', 'mirrors.aliyun.com'].forEach(h => expect(isHostTarget(h)).toBe(false));
     });
 });
