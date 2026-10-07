@@ -48,6 +48,7 @@ async function request(url, options = {}) {
 function fakeNetworkManager() {
     return {
         ensureBridgeNetwork: async () => {},
+        resolveRefs: async policy => policy,
         apply: async () => ({ status: 'applied' }),
         ensureReady: async () => ({ status: 'applied' })
     };

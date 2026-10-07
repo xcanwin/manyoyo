@@ -479,10 +479,11 @@ describe('MANYOYO CLI', () => {
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-run-manage-'));
             writeGlobalConfig(tempHome, {
                 autostart: 'echo global',
-                network: { host: [{ ports: '1111' }] },
+                network: { outbound: [{ action: 'allow', target: '@host', ports: '1111' }] },
                 runs: {
-                    demo: { autostart: 'echo run', autostartOnServe: true, network: { preset: 'allowlist', egress: { domains: ['github.com'] } } },
-                    bad: { network: { host: [{ ports: '80; flush ruleset' }] } }
+                    demo: { autostart: 'echo run', autostartOnServe: true, network: { preset: 'allowlist', outbound: [{ action: 'allow', target: 'github.com' }] } },
+                    old: { network: { host: [{ ports: '2222' }] } },
+                    bad: { network: { outbound: [{ action: 'allow', target: '@host', ports: '80; flush ruleset' }] } }
                 }
             });
             const env = { ...process.env, HOME: tempHome };
@@ -490,11 +491,15 @@ describe('MANYOYO CLI', () => {
                 const none = JSON.parse(execSync(`node ${BIN_PATH} config show`, { encoding: 'utf-8', env }));
                 expect(none.autostart).toBe('echo global');
                 expect(none.network.preset).toBe('restricted');
-                expect(none.network.host).toEqual([{ ports: '1111', proto: 'tcp' }]);
+                expect(none.network.outbound).toEqual([{ action: 'allow', target: '@host', ports: '1111', proto: 'all', enabled: true }]);
                 const demo = JSON.parse(execSync(`node ${BIN_PATH} config show -r demo`, { encoding: 'utf-8', env }));
                 expect(demo.autostart).toBe('echo run');
                 expect(demo.network).toEqual(expect.objectContaining({ preset: 'allowlist', autostartOnServe: true }));
-                expect(demo.network.egress.domains).toEqual(['github.com']);
+                expect(demo.network.outbound.map(r => r.target)).toEqual(['github.com']);
+                // 旧格式（v1）读取时自动转成 v2
+                const old = JSON.parse(execSync(`node ${BIN_PATH} config show -r old`, { encoding: 'utf-8', env }));
+                expect(old.network.version).toBe(2);
+                expect(old.network.outbound).toEqual([{ action: 'allow', target: '@host', ports: '2222', proto: 'tcp', enabled: true }]);
                 expect(() => execSync(`node ${BIN_PATH} config show -r bad`, { encoding: 'utf-8', env, stdio: 'pipe' })).toThrow(/端口/);
             } finally {
                 fs.rmSync(tempHome, { recursive: true, force: true });

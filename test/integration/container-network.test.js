@@ -13,9 +13,13 @@ const { selectContainerRuntime } = require('../../lib/container-runtime');
 const { buildContainerRunArgs } = require('../../lib/container-run');
 const { buildExecArgs } = require('../../lib/container-exec');
 const { createNetworkManager, NETWORK_NAME } = require('../../lib/container-network');
-const { normalizePolicy } = require('../../lib/network-policy');
+const { normalizePolicy, isUnrestricted } = require('../../lib/network-policy');
 const state = require('../../lib/container-state');
 const { createPortForwarder } = require('../../lib/port-forward');
+
+const allow = (target, extra = {}) => ({ action: 'allow', target, ports: '', proto: 'all', ...extra });
+// 不限制：自定义 + 出入站各一行“允许 @any”
+const OPEN = { preset: 'custom', outbound: [allow('@any')], inbound: [{ action: 'allow', source: '@any', ports: '', proto: 'all' }] };
 
 const IMAGE_NAME = 'ghcr.io/xcanwin/manyoyo';
 const IMAGE = `${IMAGE_NAME}:${imageVersion}`;
@@ -80,7 +84,7 @@ maybe('container-network（真实容器）', () => {
         const name = `cm-net-${crypto.randomBytes(3).toString('hex')}`;
         names.push(name);
         const network = normalizePolicy(policy);
-        const st = state.createState({ homeDir: home, autostart, network, netRequired: network.preset !== 'open', meta: { name } });
+        const st = state.createState({ homeDir: home, autostart, network, netRequired: !isUnrestricted(network), meta: { name } });
         const args = buildContainerRunArgs({
             state: st, containerName: name, hostPath: work, containerPath: '/workspace', imageName: IMAGE_NAME, imageVersion,
             defaultNetwork: NETWORK_NAME, defaultCommand: '/bin/bash',
@@ -149,7 +153,7 @@ maybe('container-network（真实容器）', () => {
             expect(viaProxy === '200' || direct === '200').toBe(true);
         }
 
-        setPolicy(st, { host: [{ ports: String(serverPort) }] });
+        setPolicy(st, { outbound: [allow('@host', { ports: String(serverPort), proto: 'tcp' })] });
         await manager.apply(name);
         expect(await code(name, `http://${ip}:${serverPort}/`)).toBe('200');
         expect(await code(name, 'http://169.254.169.254/')).toBe('000');
@@ -158,12 +162,12 @@ maybe('container-network（真实容器）', () => {
         await manager.apply(name);
         expect(await code(name, `http://${ip}:${serverPort}/`)).toBe('000');
 
-        setPolicy(st, { preset: 'open' });
+        setPolicy(st, OPEN);
         await manager.apply(name);
         expect(await code(name, `http://${ip}:${serverPort}/`)).toBe('200');
     }, 120000);
 
-    test('容器间：默认 A→B 不通；B 的 peers.inbound 列了 A 后通；B 重启（IP 变化）后重算仍通', async () => {
+    test('容器间：默认 A→B 不通；B 的入站允许 @container:A 后通；B 重启（IP 变化）后重算仍通', async () => {
         const a = await create();
         const b = await create();
         await manager.apply(a.name);
@@ -173,13 +177,13 @@ maybe('container-network（真实容器）', () => {
         const ipOf = async name => rtSync(['inspect', name, '-f', `{{(index .NetworkSettings.Networks "${NETWORK_NAME}").IPAddress}}`]).stdout.trim();
         expect(await code(a.name, `http://${await ipOf(b.name)}:7000/`)).toBe('000');
 
-        setPolicy(b.st, { peers: { inbound: [{ from: a.st.id, ports: '7000' }] } });
+        setPolicy(b.st, { inbound: [{ action: 'allow', source: `@container:${a.st.id}`, ports: '7000', proto: 'tcp' }] });
         await manager.apply(b.name);
         await manager.apply(a.name);
         expect(await code(a.name, `http://${await ipOf(b.name)}:7000/`)).toBe('200');
 
         // 占住地址，让 B 重启后拿到不同的 IP
-        const filler = await create({ policy: { preset: 'open' } });
+        const filler = await create({ policy: OPEN });
         rtSync(['restart', '-t', '1', b.name]);
         rtSync(['restart', '-t', '1', filler.name]);
         await manager.apply(b.name);
@@ -235,7 +239,7 @@ maybe('container-network（真实容器）', () => {
     }, 120000);
 
     test('allowlist + sidecar 过滤代理：白名单域名可达、其他 403、直连被挡、按来源 IP 识别（未知来源 403、不能伪造）、宿主机无监听、记录被拦截、sidecar 被杀失败即关闭并自愈、重启后 IP 不变', async () => {
-        const { name, st } = await create({ policy: { preset: 'allowlist', egress: { domains: ['example.com'] } } });
+        const { name, st } = await create({ policy: { preset: 'allowlist', outbound: [allow('example.com')] } });
         const sidecarName = manager.sidecar.name;
         const denied = require('../../lib/egress-denied');
         await manager.apply(name);
@@ -270,7 +274,7 @@ maybe('container-network（真实容器）', () => {
         expect(hit && hit.count).toBe(2);
 
         // 来源识别：不在映射里的容器（open 预设）连 sidecar → 403
-        const other = await create({ policy: { preset: 'open' } });
+        const other = await create({ policy: OPEN });
         await manager.apply(other.name);
         expect((await exec(other.name, `env -u NO_PROXY -u no_proxy -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY curl -s -m 8 -o /dev/null -w '%{http_code}' -x http://${proxyIp}:3128 http://example.com/; true`)).stdout.trim()).toBe('403');
 
@@ -309,7 +313,7 @@ EOF`)).stdout;
         // 一键放行：加入白名单并下发后 2 秒内可访问
         if (online) {
             expect(await viaProxy('http://example.org/')).toBe('403');
-            setPolicy(st, { preset: 'allowlist', egress: { domains: ['example.com', 'example.org'] } });
+            setPolicy(st, { preset: 'allowlist', outbound: [allow('example.com'), allow('example.org')] });
             const t0 = Date.now();
             await manager.apply(name);
             await sleep(700);
@@ -317,7 +321,7 @@ EOF`)).stdout;
             console.log(`[L3] 放行 → 可访问耗时 ${Date.now() - t0} ms`);
         }
 
-        // 切回 restricted：代理地址不再注入，clients 里不再有它
+        // 切回 restricted（没有域名规则）：代理地址不再注入，clients 里不再有它
         setPolicy(st, {});
         await manager.apply(name);
         expect((await execWithEnv(name, 'env | grep -c "^HTTPS_PROXY=http://' + proxyIp + '" || true')).stdout.trim()).toBe('0');
@@ -329,7 +333,7 @@ EOF`)).stdout;
             console.warn('[跳过] 宿主机访问不了 example.com');
             return;
         }
-        const { name } = await create({ policy: { preset: 'allowlist', egress: { domains: ['example.com'] } } });
+        const { name } = await create({ policy: { preset: 'allowlist', outbound: [allow('example.com')] } });
         await manager.apply(name);
         const sum = async () => (await execWithEnv(name, 'md5sum /run/manyoyo-playwright/config.json')).stdout.trim();
         const before = await sum();
@@ -346,7 +350,7 @@ EOF`)).stdout;
     }, 240000);
 
     test('端口暴露：运行中加 127.0.0.1:P→8080 立即可访问；删除后被拒；端口被占时明确报错；容器停止后连接断开而不是崩', async () => {
-        const { name, st } = await create({ policy: { preset: 'open' } });
+        const { name, st } = await create({ policy: OPEN });
         await manager.apply(name);
         await exec(name, 'nohup python3 -m http.server 8080 --bind 0.0.0.0 >/tmp/h.log 2>&1 & sleep 1', 10000);
         const forwarder = createPortForwarder({ command: runtime.command, env: runtime.env, homeDir: home, resolveName: id => (id === st.id ? name : null) });

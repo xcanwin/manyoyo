@@ -99,6 +99,7 @@ async function requestNdjsonStream(url, options = {}, onEvent) {
 function fakeNetworkManager() {
     return {
         ensureBridgeNetwork: async () => {},
+        resolveRefs: async policy => policy,
         apply: async () => ({ status: 'applied' }),
         ensureReady: async () => ({ status: 'applied' })
     };
