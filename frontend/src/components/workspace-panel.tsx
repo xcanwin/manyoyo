@@ -52,16 +52,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { TraceBlock } from "@/components/trace-block"
 import { ContainerManagePanel } from "@/components/container-manage/container-manage-panel"
 
-type View = "activity" | "terminal" | "files" | "container" | "detail" | "config" | "check"
+type View = "activity" | "files" | "terminal" | "container" | "config" | "detail"
 
 const VIEW_LABELS: Record<View, string> = {
   activity: "聊天",
-  terminal: "终端",
   files: "文件",
-  container: "容器",
-  detail: "详情",
-  config: "配置",
-  check: "检查",
+  terminal: "终端",
+  container: "设置容器",
+  config: "容器详情",
+  detail: "Agent详情",
 }
 
 const PERSISTENT_VIEWS: View[] = ["activity", "files"]
@@ -351,14 +350,13 @@ function EmptyPane({ text }: { text: string }) {
   )
 }
 
-// "检查"标签页：容器状态 / Agent 输入 /
-// Resume 健康 / 镜像版本 / 工作目录映射 + 最近问题（仅在有 resume 错误时展示）
-function CheckView({ detail }: { detail: SessionDetail | null }) {
+// "容器详情"标签页：基础信息 / 路径
+function ConfigView({ detail }: { detail: SessionDetail | null }) {
   if (!detail) return <EmptyPane text="请先选择左侧的容器 / AGENT" />
 
+  const applied = detail.applied
   const status = statusInfo(detail.status)
-  const resume = resumeStatus(detail)
-  const workdirConfigured = Boolean(detail.applied.hostPath && detail.applied.containerPath)
+  const workdirConfigured = Boolean(applied.hostPath && applied.containerPath)
 
   return (
     // 子项必须 shrink-0：flex 子项默认可压缩，卡片会被压扁到刚好塞满容器，
@@ -366,48 +364,50 @@ function CheckView({ detail }: { detail: SessionDetail | null }) {
     // （移动端高度有限时尤其明显）
     <div className="flex h-full flex-col gap-3 overflow-auto p-4 [&>*]:shrink-0">
       <InfoCard
-        title="运行检查"
+        title="基础信息"
         rows={[
+          { label: "containerName", value: applied.containerName || detail.containerName || "—" },
           {
-            label: "容器状态",
+            label: "状态",
             value: status.label,
             tone: status.tone,
-            detail:
-              status.tone === "ok" ? "容器处于可交互状态。" : "当前不是活跃运行态，部分功能可能受限。",
+            detail: status.tone === "ok" ? undefined : "当前不是活跃运行态，部分功能可能受限。",
           },
-          {
-            label: "Agent 输入",
-            value: detail.agentEnabled ? "已配置" : "未配置",
-            tone: detail.agentEnabled ? "ok" : "warn",
-            detail: detail.agentEnabled ? "活动页可直接发送 Agent 提示词。" : "当前会话不支持 Agent 模式。",
-          },
-          { label: "Resume 健康", value: resume.value, tone: resume.tone, detail: resume.detail },
-          {
-            label: "工作目录映射",
-            value: workdirConfigured ? "已配置" : "缺失",
-            tone: workdirConfigured ? "ok" : "danger",
-            detail: workdirConfigured
-              ? "宿主目录与容器目录都已配置。"
-              : "hostPath / containerPath 是容器会话最关键的上下文。",
-          },
+          { label: "imageName", value: applied.imageName || detail.image || "—" },
+          { label: "imageVersion", value: applied.imageVersion || "—" },
+          { label: "containerMode", value: applied.containerMode || "default" },
         ]}
       />
-      {detail.lastResumeError ? (
-        <InfoCard
-          title="最近问题"
-          rows={[{ label: "Resume 错误", value: "有错误输出", tone: "danger", detail: detail.lastResumeError }]}
-        />
-      ) : null}
+      <InfoCard
+        title="路径"
+        rows={[
+          { label: "hostPath", value: applied.hostPath || "—" },
+          { label: "containerPath", value: applied.containerPath || "—" },
+          ...(workdirConfigured
+            ? []
+            : [
+                {
+                  label: "工作目录映射",
+                  value: "缺失",
+                  tone: "danger" as const,
+                  detail: "hostPath / containerPath 是容器会话最关键的上下文。",
+                },
+              ]),
+        ]}
+      />
     </div>
   )
 }
 
-// "配置"标签页：基础配置 / 路径与资源 / 命令与 Agent
-function ConfigView({ detail }: { detail: SessionDetail | null }) {
+// "Agent详情"标签页：会话概览 / Agent 运行 / 命令与 Agent / 用量统计 / 最近活动
+function DetailView({ detail }: { detail: SessionDetail | null }) {
   if (!detail) return <EmptyPane text="请先选择左侧的容器 / AGENT" />
 
   const applied = detail.applied
+  const resume = resumeStatus(detail)
   const templateSourceLabel = TEMPLATE_SOURCE_LABELS[detail.agentPromptSource] || "未配置"
+  const latestRoleLabel = ROLE_LABELS[detail.latestRole] || "暂无"
+  const latestTimestampText = detail.latestTimestamp ? formatTime(detail.latestTimestamp) : "暂无"
   const commandRows: InfoRow[] = []
   if (applied.shellPrefix) commandRows.push({ label: "shellPrefix", value: applied.shellPrefix })
   if (applied.shell) commandRows.push({ label: "shell", value: applied.shell })
@@ -418,47 +418,7 @@ function ConfigView({ detail }: { detail: SessionDetail | null }) {
     commandRows.push({ label: "启动命令", value: applied.defaultCommand || "—" })
   }
   commandRows.push({ label: "Agent 模板", value: detail.agentPromptCommand || "—" })
-  commandRows.push({ label: "模板来源", value: templateSourceLabel })
   commandRows.push({ label: "yolo", value: applied.yolo || "—" })
-
-  return (
-    // 子项必须 shrink-0：flex 子项默认可压缩，卡片会被压扁到刚好塞满容器，
-    // 容器因此认为"没有溢出"而不出滚动条，卡片内部内容却被裁掉看不见
-    // （移动端高度有限时尤其明显）
-    <div className="flex h-full flex-col gap-3 overflow-auto p-4 [&>*]:shrink-0">
-      <InfoCard
-        title="基础配置"
-        rows={[
-          { label: "AGENT", value: detail.agentName || detail.name || "—" },
-          { label: "containerName", value: applied.containerName || detail.containerName || "—" },
-          { label: "imageName", value: applied.imageName || detail.image || "—" },
-          { label: "containerMode", value: applied.containerMode || "default" },
-        ]}
-      />
-      <InfoCard
-        title="路径与资源"
-        rows={[
-          { label: "hostPath", value: applied.hostPath || "—" },
-          { label: "containerPath", value: applied.containerPath || "—" },
-          { label: "env 数量", value: String(applied.envCount || 0) },
-          { label: "volume 数量", value: String(applied.volumeCount || 0) },
-          { label: "port 数量", value: String(applied.portCount || 0) },
-        ]}
-      />
-      <InfoCard title="命令与 Agent" rows={commandRows} />
-    </div>
-  )
-}
-
-// "详情"标签页：会话概览 / Agent 运行 / 用量统计 / 最近活动
-function DetailView({ detail }: { detail: SessionDetail | null }) {
-  if (!detail) return <EmptyPane text="请先选择左侧的容器 / AGENT" />
-
-  const status = statusInfo(detail.status)
-  const resume = resumeStatus(detail)
-  const templateSourceLabel = TEMPLATE_SOURCE_LABELS[detail.agentPromptSource] || "未配置"
-  const latestRoleLabel = ROLE_LABELS[detail.latestRole] || "暂无"
-  const latestTimestampText = detail.latestTimestamp ? formatTime(detail.latestTimestamp) : "暂无"
 
   return (
     // 子项必须 shrink-0：flex 子项默认可压缩，卡片会被压扁到刚好塞满容器，
@@ -469,9 +429,6 @@ function DetailView({ detail }: { detail: SessionDetail | null }) {
         title="会话概览"
         rows={[
           { label: "AGENT", value: detail.agentName || detail.name },
-          { label: "容器", value: detail.containerName || "—" },
-          { label: "状态", value: status.label, tone: status.tone },
-          { label: "镜像", value: detail.image || detail.applied.imageName || "—" },
           { label: "最近更新", value: detail.updatedAt ? formatTime(detail.updatedAt) : "—" },
           { label: "消息数", value: String(detail.messageCount || 0) },
         ]}
@@ -495,6 +452,7 @@ function DetailView({ detail }: { detail: SessionDetail | null }) {
           },
         ]}
       />
+      <InfoCard title="命令与 Agent" rows={commandRows} />
       <InfoCard
         title="用量统计"
         rows={
@@ -528,6 +486,12 @@ function DetailView({ detail }: { detail: SessionDetail | null }) {
           { label: "resume 状态", value: resume.value, tone: resume.tone },
         ]}
       />
+      {detail.lastResumeError ? (
+        <InfoCard
+          title="最近问题"
+          rows={[{ label: "Resume 错误", value: "有错误输出", tone: "danger", detail: detail.lastResumeError }]}
+        />
+      ) : null}
     </div>
   )
 }
@@ -1261,7 +1225,6 @@ export function WorkspacePanel({
         ) : null}
         {view === "detail" ? <DetailView detail={sessionDetail} /> : null}
         {view === "config" ? <ConfigView detail={sessionDetail} /> : null}
-        {view === "check" ? <CheckView detail={sessionDetail} /> : null}
       </div>
 
       {view === "activity" && loadError ? (

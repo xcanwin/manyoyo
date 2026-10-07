@@ -7,7 +7,7 @@ description: Covers starting the manyoyo serve web service, the auth gateway, lo
 
 This page covers the `manyoyo serve` web service: how to start it, sign in and reach it remotely. Risks and boundaries are in [Security Notes](./security.md); `ssh -L` access on SSH machines is in [First Run](./first-run.md).
 
-Once a container is running, change its environment variables, network rules and autostart script any time on the "Container" tab, see [Manage env, network and autostart](./container-manage.md).
+Once a container is running, change its environment variables, network rules and autostart script any time on the "Set container" tab, see [Manage env, network and autostart](./container-manage.md).
 
 The web UI provides three interaction modes: `Command`, `AGENT`, and `Interactive Terminal`. `AGENT` mode requires `agentPromptCommand` to be configured on the session (template must include `{prompt}`).
 

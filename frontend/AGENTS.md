@@ -14,7 +14,7 @@
 先按这张表定位，别从 `find src` 开始列文件：
 
 - `App.tsx`：整体布局与跨面板状态（会话选择、未保存修改拦截 `confirmLeaveIfDirty`、主题）。
-- `workspace-panel.tsx`（1300+ 行，中枢）：顶部标签页（活动/终端/文件/详情/配置/检查）切换与各视图挂载、消息流与 Composer、`/agent/stream` 事件分支、各类弹窗编排。中间工作台的改动基本都落在这里。
+- `workspace-panel.tsx`（1300+ 行，中枢）：顶部标签页（聊天/文件/终端/设置容器/容器详情/Agent详情）切换与各视图挂载、消息流与 Composer、`/agent/stream` 事件分支、各类弹窗编排。中间工作台的改动基本都落在这里。
 - `app-sidebar.tsx`（800+ 行）：容器 / AGENT 列表与增删改克隆，移动端形态是 `Sheet` 侧栏。
 - `files-panel.tsx` + `code-mirror-editor.tsx`：文件浏览与编辑，切走标签前经 `confirmLeaveIfDirty` 拦一次未保存修改。
 - `terminal-view.tsx`：xterm 终端面板，含按键条与移动端输入条。

@@ -193,10 +193,7 @@ describe('Web Server Session Clone/Duplicate/Cascade Delete', () => {
                 shell: '',
                 shellSuffix: '',
                 defaultCommand: '/bin/bash',
-                yolo: '',
-                envCount: 1,
-                volumeCount: 0,
-                portCount: 0
+                yolo: ''
             },
             runtimeSnapshot: {
                 hostPath: tempHost,

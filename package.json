@@ -1,6 +1,6 @@
 {
     "name": "@xcanwin/manyoyo",
-    "version": "8.5.1",
+    "version": "8.6.0",
     "imageVersion": "2.2.0-common",
     "playwrightCliVersion": "0.1.19",
     "patchrightCoreVersion": "1.63.0",

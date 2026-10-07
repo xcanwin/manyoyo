@@ -17,7 +17,7 @@ manyoyo run -e "ANTHROPIC_BASE_URL=https://xxxx" -e "ANTHROPIC_AUTH_TOKEN=your-k
 manyoyo run --ef /abs/path/anthropic.env -x claude
 ```
 
-`--ef` (and `envFile` in config) **accepts absolute paths only**. Env files are **read live** in a new container: they are re-read every time a command runs, so editing the file takes effect for the next command (running processes excepted); you can also add or remove them under "Environment variable files" on the web "Container" tab. `-e` can be repeated.
+`--ef` (and `envFile` in config) **accepts absolute paths only**. Env files are **read live** in a new container: they are re-read every time a command runs, so editing the file takes effect for the next command (running processes excepted); you can also add or remove them under "Environment variable files" on the web "Set container" tab. `-e` can be repeated.
 
 ## Env file format
 
