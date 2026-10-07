@@ -4,88 +4,63 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { RowList, type RowColumn } from "@/components/container-manage/row-list"
+import { RuleTable } from "@/components/container-manage/rule-table"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import {
+  type DerivedRule,
   type NetworkPolicy,
   type PeerOption,
   type Preset,
   PRESET_HINTS,
   PRESET_LABELS,
+  newRule,
+  ruleValue,
+  switchPreset,
 } from "@/lib/container-manage"
 
-const PRESETS: Preset[] = ["restricted", "allowlist", "open"]
-const PROTO_OPTIONS = [
-  { value: "tcp", label: "tcp" },
-  { value: "udp", label: "udp" },
-]
+const PRESETS: Preset[] = ["restricted", "allowlist", "custom"]
 const BIND_OPTIONS = [
   { value: "127.0.0.1", label: "127.0.0.1（仅本机）" },
   { value: "0.0.0.0", label: "0.0.0.0（局域网 / 公网）" },
 ]
 
-type DomainRow = { domain: string }
-type RuleRow = { cidr: string; ports: string; proto: string }
-type HostRow = { ports: string; proto: string }
-type PeerRow = { from: string; ports: string; proto: string }
 type ExposeRow = { bind: string; hostPort: string; port: string }
 
-const proto = (value: string) => (value === "udp" ? "udp" : "tcp")
 const filled = (...values: string[]) => values.every((value) => value.trim() !== "")
 
-// 网络策略编辑：所有“一行一项”的规则统一用 RowList（列名 → 输入框 → 删除 → 添加）。
-// 行状态在本组件内（允许暂时空着的新行），只把填完整的行写回策略；父组件重新加载策略时用 key 重建本组件。
+// 网络策略编辑：出站 / 入站是同一种规则表（RuleTable），端口暴露沿用 RowList。
+// 暴露行状态在本组件内（允许暂时空着的新行），只把填完整的行写回策略；父组件重新加载策略时用 key 重建本组件。
 export function NetworkEditor({
   policy,
   onChange,
   peers,
-  showPeers = true,
+  derived = [],
   forwards = [],
   showAccess = true,
   suggestedDomains = [],
 }: {
   policy: NetworkPolicy
   onChange: (policy: NetworkPolicy) => void
-  peers: PeerOption[]
-  showPeers?: boolean
+  /** 其他容器；不传表示容器列表未知（新建容器），规则里的 @container:<名称> 不校验是否存在 */
+  peers?: PeerOption[]
+  /** 本容器出站里由别的容器入站规则派生出的只读放行行 */
+  derived?: DerivedRule[]
   /** 当前真正在监听的端口暴露（用来显示「打开」链接） */
   forwards?: Array<{ bind: string; hostPort: number; port: number }>
   /** 是否显示「访问」列（新建容器时还没有在监听，不需要） */
   showAccess?: boolean
-  /** 来自环境变量里 URL 的域名（如模型服务），白名单模式下可一键加入 */
+  /** 来自环境变量里 URL 的域名（如模型服务），仅白名单模式下可一键加入 */
   suggestedDomains?: string[]
 }) {
   const { confirm, dialog } = useConfirmDialog()
-  const [domains, setDomains] = React.useState<DomainRow[]>(() => policy.egress.domains.map((domain) => ({ domain })))
-  const [rules, setRules] = React.useState<RuleRow[]>(() => policy.egress.rules.map((rule) => ({ ...rule })))
-  const [host, setHost] = React.useState<HostRow[]>(() => policy.host.map((rule) => ({ ...rule })))
-  const [inbound, setInbound] = React.useState<PeerRow[]>(() => policy.peers.inbound.map((entry) => ({ ...entry })))
   const [expose, setExpose] = React.useState<ExposeRow[]>(() =>
     policy.expose.map((entry) => ({ bind: entry.bind, hostPort: String(entry.hostPort), port: String(entry.port) }))
   )
 
-  function emit(next: {
-    domains?: DomainRow[]
-    rules?: RuleRow[]
-    host?: HostRow[]
-    inbound?: PeerRow[]
-    expose?: ExposeRow[]
-  }) {
-    const d = next.domains ?? domains
-    const r = next.rules ?? rules
-    const h = next.host ?? host
-    const i = next.inbound ?? inbound
-    const e = next.expose ?? expose
+  function emitExpose(next: ExposeRow[]) {
     onChange({
       ...policy,
-      egress: {
-        domains: d.filter((row) => filled(row.domain)).map((row) => row.domain.trim().toLowerCase()),
-        rules: r.filter((row) => filled(row.cidr)).map((row) => ({ cidr: row.cidr.trim(), ports: row.ports.replace(/\s+/g, ""), proto: proto(row.proto) })),
-      },
-      host: h.filter((row) => filled(row.ports)).map((row) => ({ ports: row.ports.replace(/\s+/g, ""), proto: proto(row.proto) })),
-      peers: {
-        inbound: i.filter((row) => filled(row.from, row.ports)).map((row) => ({ from: row.from, ports: row.ports.replace(/\s+/g, ""), proto: proto(row.proto) })),
-      },
-      expose: e
+      expose: next
         .filter((row) => filled(row.hostPort, row.port) && Number.isInteger(Number(row.hostPort)) && Number.isInteger(Number(row.port)))
         .map((row) => ({ bind: row.bind, hostPort: Number(row.hostPort), port: Number(row.port) })),
     })
@@ -93,31 +68,20 @@ export function NetworkEditor({
 
   async function choosePreset(next: Preset) {
     if (next === policy.preset) return
-    if (next === "open") {
+    if (next === "custom") {
       const ok = await confirm({
-        title: "放开网络限制？",
-        message: "「开放」不加任何网络规则：容器里的 Agent 能访问宿主机的所有端口、局域网和云元数据地址。只在你确实需要时使用。",
-        confirmLabel: "确认放开",
+        title: "改成自定义？",
+        message: "「自定义」初始只有一行“允许 @any”：容器能访问宿主机、内网和云元数据，之后可以自己改。",
+        confirmLabel: "确认",
       })
       if (!ok) return
     }
-    onChange({ ...policy, preset: next })
+    onChange(switchPreset(policy, next))
   }
 
-  const ruleColumns: RowColumn<RuleRow>[] = [
-    { key: "cidr", label: "IP / CIDR", placeholder: "192.168.1.50", className: "flex-[2]" },
-    { key: "ports", label: "端口（可留空）", placeholder: "8000", className: "w-24 sm:w-32" },
-    { key: "proto", label: "协议", options: PROTO_OPTIONS, className: "w-[4.5rem]" },
-  ]
-  const hostColumns: RowColumn<HostRow>[] = [
-    { key: "ports", label: "端口", placeholder: "11434", className: "flex-1" },
-    { key: "proto", label: "协议", options: PROTO_OPTIONS, className: "w-[4.5rem]" },
-  ]
-  const peerColumns: RowColumn<PeerRow>[] = [
-    { key: "from", label: "来源容器", placeholder: "选择容器", options: peers.map((peer) => ({ value: peer.id, label: peer.name })), className: "flex-[2]" },
-    { key: "ports", label: "端口", placeholder: "7000", className: "w-24 sm:w-32" },
-    { key: "proto", label: "协议", options: PROTO_OPTIONS, className: "w-[4.5rem]" },
-  ]
+  const outboundDomains = new Set(policy.outbound.map((rule) => ruleValue(rule, "outbound").trim().toLowerCase()))
+  const suggestions = policy.preset === "allowlist" ? suggestedDomains.filter((domain) => !outboundDomains.has(domain)) : []
+
   const exposeColumns: RowColumn<ExposeRow>[] = [
     { key: "bind", label: "宿主机监听地址", options: BIND_OPTIONS, className: "flex-[2]" },
     { key: "hostPort", label: "宿主机监听端口", placeholder: "18080", inputMode: "numeric", className: "w-28 sm:w-32" },
@@ -127,7 +91,9 @@ export function NetworkEditor({
   return (
     <div className="flex flex-col gap-5">
       <Field>
-        <FieldLabel>出站</FieldLabel>
+        <FieldLabel>
+          出站 <span className="font-normal text-muted-foreground">容器访问外部</span>
+        </FieldLabel>
         <ToggleGroup
           variant="outline"
           size="sm"
@@ -143,113 +109,45 @@ export function NetworkEditor({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        <FieldDescription className="whitespace-pre-line">{PRESET_HINTS[policy.preset]}</FieldDescription>
+        <FieldDescription>{PRESET_HINTS[policy.preset]}</FieldDescription>
+        <RuleTable
+          direction="outbound"
+          preset={policy.preset}
+          rules={policy.outbound}
+          containers={peers}
+          derived={derived}
+          onChange={(outbound) => onChange({ ...policy, outbound })}
+        />
+        {suggestions.length ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>环境变量里出现的域名（如 Agent 的模型服务，不放行就无法对话）：</span>
+            {suggestions.map((domain) => (
+              <Button
+                key={domain}
+                type="button"
+                variant="outline"
+                size="xs"
+                onClick={() => onChange({ ...policy, outbound: [...policy.outbound.filter((rule) => ruleValue(rule, "outbound").trim()), newRule("outbound", domain)] })}
+              >
+                + {domain}
+              </Button>
+            ))}
+          </div>
+        ) : null}
       </Field>
 
-      {policy.preset === "allowlist" ? (
-        <Field>
-          <FieldLabel>允许的域名</FieldLabel>
-          <RowList
-            ariaPrefix="域名"
-            rows={domains}
-            columns={[{ key: "domain", label: "域名（支持 *.example.com）", placeholder: "github.com" }]}
-            newRow={() => ({ domain: "" })}
-            addLabel="添加域名"
-            onChange={(next) => {
-              setDomains(next)
-              emit({ domains: next })
-            }}
-          />
-          {suggestedDomains.filter((domain) => !domains.some((row) => row.domain.trim().toLowerCase() === domain)).length ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>环境变量里出现的域名（如 Agent 的模型服务，不放行 Agent 就无法对话）：</span>
-              {suggestedDomains
-                .filter((domain) => !domains.some((row) => row.domain.trim().toLowerCase() === domain))
-                .map((domain) => (
-                  <Button
-                    key={domain}
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={() => {
-                      const next = [...domains.filter((row) => row.domain.trim()), { domain }]
-                      setDomains(next)
-                      emit({ domains: next })
-                    }}
-                  >
-                    + {domain}
-                  </Button>
-                ))}
-            </div>
-          ) : null}
-          <FieldDescription>
-            只能访问这里列出的网站（HTTP/HTTPS）。Agent 的模型服务域名必须在这里，否则无法对话。网页里被拦的其他域名（图片、CDN 等）会出现在下方「最近被拦截」，点一下就能放行。
-          </FieldDescription>
-        </Field>
-      ) : null}
-
-      {policy.preset !== "open" ? (
-        <>
-          <Field>
-            <FieldLabel>额外放行的 IP 规则</FieldLabel>
-            <RowList
-              ariaPrefix="IP 规则"
-              rows={rules}
-              columns={ruleColumns}
-              newRow={() => ({ cidr: "", ports: "", proto: "tcp" })}
-              addLabel="添加 IP 规则"
-              onChange={(next) => {
-                setRules(next)
-                emit({ rules: next })
-              }}
-            />
-            <FieldDescription>
-              直连放行：收紧模式下用来放开私有网段里的指定服务（例如局域网里的模型网关），仅白名单模式下用于 ssh、数据库等非 HTTP 协议。新建容器时 env 里填的 *_BASE_URL 指向私有地址会自动写进这里。
-            </FieldDescription>
-          </Field>
-
-          <Field>
-            <FieldLabel>允许访问的宿主机端口</FieldLabel>
-            <RowList
-              ariaPrefix="宿主机端口"
-              rows={host}
-              columns={hostColumns}
-              newRow={() => ({ ports: "", proto: "tcp" })}
-              addLabel="添加宿主机端口"
-              onChange={(next) => {
-                setHost(next)
-                emit({ host: next })
-              }}
-            />
-            <FieldDescription>宿主机上监听 0.0.0.0 的服务；只绑 127.0.0.1 的服务容器访问不到。端口可写 80、80-90 或 80,443。</FieldDescription>
-          </Field>
-
-          {showPeers ? (
-            <Field>
-              <FieldLabel>允许其他容器访问我</FieldLabel>
-              <RowList
-                ariaPrefix="来源容器"
-                rows={inbound}
-                columns={peerColumns}
-                newRow={() => ({
-                  from: peers.find((peer) => !inbound.some((row) => row.from === peer.id))?.id ?? "",
-                  ports: "",
-                  proto: "tcp",
-                })}
-                addLabel="添加来源容器"
-                disableAdd={peers.length === 0 || inbound.length >= peers.length}
-                onChange={(next) => {
-                  setInbound(next)
-                  emit({ inbound: next })
-                }}
-              />
-              <FieldDescription>
-                {peers.length === 0 ? "没有其他容器可选。" : "默认容器之间互相不通；在这里放行后，对方也能出站访问到本容器。"}
-              </FieldDescription>
-            </Field>
-          ) : null}
-        </>
-      ) : null}
+      <Field>
+        <FieldLabel>
+          入站 <span className="font-normal text-muted-foreground">外部访问容器</span>
+        </FieldLabel>
+        <RuleTable
+          direction="inbound"
+          preset={policy.preset}
+          rules={policy.inbound}
+          containers={peers}
+          onChange={(inbound) => onChange({ ...policy, inbound })}
+        />
+      </Field>
 
       <Field>
         <FieldLabel>端口暴露</FieldLabel>
@@ -275,12 +173,10 @@ export function NetworkEditor({
           } : undefined}
           onChange={(next) => {
             setExpose(next)
-            emit({ expose: next })
+            emitExpose(next)
           }}
         />
-        <FieldDescription>
-          把容器端口映射到宿主机，保存后生效、无需重启，serve 重启后自动恢复。绑定 0.0.0.0 等于局域网 / 公网可见（取决于宿主机的网络与防火墙），保存时会二次确认。
-        </FieldDescription>
+        <FieldDescription>把容器端口映射到宿主机，保存后立即生效。绑定 0.0.0.0 会让局域网 / 公网可见，保存时会二次确认。</FieldDescription>
       </Field>
       {dialog}
     </div>

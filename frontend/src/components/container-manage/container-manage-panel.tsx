@@ -18,6 +18,9 @@ import {
   type NetworkState,
   describeNetStatus,
   parseEnvText,
+  cleanPolicy,
+  samePolicy,
+  policyProblems,
   policyRisks,
 } from "@/lib/container-manage"
 import { formatDateTime } from "@/lib/format"
@@ -109,7 +112,8 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
     envState !== null &&
     (envText !== envState.text || JSON.stringify(envFiles) !== JSON.stringify(envState.files.map((file) => file.path)))
   const envInvalid = React.useMemo(() => parseEnvText(envText).invalid, [envText])
-  const netDirty = net !== null && policy !== null && JSON.stringify(policy) !== JSON.stringify(net.policy)
+  const netDirty = net !== null && policy !== null && !samePolicy(cleanPolicy(policy), net.policy)
+  const netProblems = net !== null && policy !== null ? policyProblems(policy, net.peers) : []
   const autostartDirty =
     autostart.script !== autostartSaved.script || autostart.autostartOnServe !== autostartSaved.autostartOnServe
 
@@ -186,11 +190,12 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
     setNetSaving(true)
     setNetMessage(null)
     try {
-      const risks = policyRisks(net.policy, policy)
+      const toSave = cleanPolicy(policy)
+      const risks = policyRisks(net.policy, toSave)
       const prompts: Record<string, { title: string; message: string; confirmLabel: string }> = {
         wide: {
-          title: "放开范围很大的出站规则？",
-          message: "这条规则覆盖的地址范围很大（整个 /8 以上的网段，或类似 *.co.uk 的公共后缀通配），效果接近完全放开出站限制。",
+          title: "放开范围很大的规则？",
+          message: "新增的允许规则覆盖范围很大（任何地址、内网、云元数据、整个 /8 以上的网段，或类似 *.co.uk 的公共后缀通配），可能让容器越过原有的网络限制。",
           confirmLabel: "确认放开",
         },
         publicBind: {
@@ -200,13 +205,29 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
         },
       }
       for (const risk of risks) {
-        if (risk === "open") continue // 选择「开放」时已经确认过
+        if (risk === "custom") continue // 选择「自定义」时已经确认过
         if (!(await confirm(prompts[risk]))) {
           setNetSaving(false)
           return
         }
       }
-      const data = await putNetwork(policy, risks.length > 0)
+      let data: Record<string, unknown>
+      try {
+        data = await putNetwork(toSave, risks.length > 0)
+      } catch (error) {
+        // 服务端认为还有需要确认的风险（与本地判断不一致时的兜底）：确认后带 confirmRisk 重发
+        if (!apiErrorData(error).data.needsConfirm || risks.length > 0) throw error
+        const ok = await confirm({
+          title: "放开网络限制？",
+          message: "这次改动会放开网络限制，确认后才会保存。",
+          confirmLabel: "确认放开",
+        })
+        if (!ok) {
+          setNetSaving(false)
+          return
+        }
+        data = await putNetwork(toSave, true)
+      }
       applyNetwork(data as unknown as NetworkState)
       setNetMessage({ tone: "ok", text: "已保存并生效（不需要重启容器）。" })
     } catch (error) {
@@ -346,7 +367,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
                   </Badge>
                 ) : null}
               </CardTitle>
-              <CardDescription>规则与端口暴露保存后 2 秒内生效，容器不需要重启。</CardDescription>
+              <CardDescription>规则从上往下匹配，第一条命中的生效；保存后马上生效，不需要重启容器。</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <NetworkEditor
@@ -354,6 +375,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
                 policy={policy}
                 onChange={setPolicy}
                 peers={net.peers}
+                derived={net.derived}
                 forwards={net.forwards}
                 suggestedDomains={net.suggestedDomains}
               />
@@ -369,7 +391,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
               ) : null}
             </CardContent>
             <CardFooter>
-              <Button size="sm" disabled={!netDirty || netSaving} onClick={() => void saveNetwork()}>
+              <Button size="sm" disabled={!netDirty || netSaving || netProblems.length > 0} onClick={() => void saveNetwork()}>
                 {netSaving ? <Spinner data-icon="inline-start" /> : null}
                 保存网络规则
               </Button>
@@ -377,11 +399,11 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
           </Card>
         ) : null}
 
-        {net && net.policy.preset === "allowlist" ? (
+        {net && (net.policy.preset === "allowlist" || (net.denied ?? []).length > 0) ? (
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">最近被拦截</CardTitle>
-              <CardDescription>容器想访问但不在白名单里的网站。网页打不开、点了没反应时先看这里，点「允许」马上生效。</CardDescription>
+              <CardDescription>容器想访问但被拦下的网站。网页打不开、点了没反应时先看这里，点「允许」马上生效。</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <DeniedList denied={net.denied ?? []} disabled={netDirty} onAllow={(host) => void allowDenied(host)} />
