@@ -161,6 +161,17 @@ describe('createSidecarManager（假运行时）', () => {
         expect(fs.statSync(file).mtimeMs).toBe(mtime);
         expect(fs.readdirSync(mgr.paths().data).filter(f => f.endsWith('.tmp'))).toEqual([]);
     });
+
+    test('writeClients 与磁盘内容比较：别的进程改过文件后，写回同样的内容不会被当成“没变”而跳过', () => {
+        const mgr = make();
+        const clients = { '10.89.0.7': { id: 'aaaaaaaaaaaaaaaa', default: 'allow', sensitive: [], rules: [] } };
+        mgr.writeClients(clients);
+        const file = path.join(mgr.paths().data, 'clients.json');
+        fs.writeFileSync(file, JSON.stringify({ clients: {} }));
+        mgr.writeClients(clients);
+        expect(JSON.parse(fs.readFileSync(file, 'utf-8')).clients['10.89.0.7'].id).toBe('aaaaaaaaaaaaaaaa');
+        expect(mgr.readClients()['10.89.0.7'].id).toBe('aaaaaaaaaaaaaaaa');
+    });
 });
 
 function APP_FILES_PRESENT(appDir) {

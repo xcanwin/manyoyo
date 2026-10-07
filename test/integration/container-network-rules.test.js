@@ -12,7 +12,7 @@ const { selectContainerRuntime } = require('../../lib/container-runtime');
 const { buildContainerRunArgs } = require('../../lib/container-run');
 const { buildExecArgs } = require('../../lib/container-exec');
 const { createNetworkManager, NETWORK_NAME } = require('../../lib/container-network');
-const { normalizePolicy, isUnrestricted } = require('../../lib/network-policy');
+const { normalizePolicy, isUnrestricted, buildNftRuleset } = require('../../lib/network-policy');
 const state = require('../../lib/container-state');
 
 const IMAGE_NAME = 'ghcr.io/xcanwin/manyoyo';
@@ -129,6 +129,22 @@ maybe('统一网络规则（真实容器）', () => {
     const viaProxy = async (c, url) => (await exec(c.name, `curl -s -m 12 -o /dev/null -w '%{http_code}' ${url}; true`, { withEnv: true, homeDir: c.homeDir })).stdout.trim();
     const setPolicy = (c, policy) => state.writeNetworkRaw(c.homeDir || home, c.st.id, normalizePolicy(policy));
     const listen = async (c, port) => exec(c.name, `nohup python3 -m http.server ${port} >/tmp/h${port}.log 2>&1 & sleep 1`, { timeout: 10000 });
+
+    test('生成的 nft 规则文本都能被镜像里的 nft 接受（nft -c）：各模式、各种变量、端口与协议组合', () => {
+        const endpoints = { dns: ['172.16.99.2'], allow: [{ ip: '172.16.99.1', ports: '10808' }], hostIps: ['172.16.99.1', 'fd00::1'], containers: { aaaaaaaaaaaaaaaa: '10.89.0.9' }, bridge: { subnet: '10.89.0.0/24', gateway: '10.89.0.1' }, antiSpoof: [{ daddr: '10.89.0.250', saddr: '10.89.0.7' }] };
+        const everything = ['@containers', '@host', '@private', '@public', '@metadata', '@any', '@container:aaaaaaaaaaaaaaaa', '8.8.8.0/24', 'fd00::/8'];
+        const policies = [
+            {},
+            { preset: 'allowlist', outbound: [allow('github.com'), allow('@host', { ports: '11434', proto: 'tcp' })] },
+            { preset: 'custom', outbound: [deny('@private'), allow('@any')], inbound: [{ action: 'deny', source: '10.0.0.0/8' }, { action: 'allow', source: '@any', ports: '80,443', proto: 'tcp' }] },
+            { outbound: everything.flatMap(t => [allow(t, { ports: '53,5353', proto: 'udp' }), deny(t, { ports: '1-1024' }), deny(t, { proto: 'tcp' }), allow(t)]), inbound: ['@containers', '@host', '@any', '@container:aaaaaaaaaaaaaaaa', '10.0.0.0/8', 'fd00::/8'].flatMap(t => [{ action: 'allow', source: t, ports: '7000-7100', proto: 'all' }, { action: 'deny', source: t, ports: '', proto: 'tcp' }]) }
+        ];
+        for (const policy of policies) {
+            const text = buildNftRuleset(normalizePolicy(policy), endpoints);
+            const r = spawnSync(runtime.command, ['run', '--rm', '-i', '--pull=never', '--cap-add', 'NET_ADMIN', '--entrypoint', 'nft', IMAGE, '-c', '-f', '-'], { input: text, encoding: 'utf-8', env: cleanEnv(), timeout: 60000 });
+            expect({ status: r.status, stderr: r.stderr }).toEqual({ status: 0, stderr: '' });
+        }
+    }, 120000);
 
     test('P1：运行时把宿主机代理（host.*.internal）注入容器后，收紧模式下仍能经代理出网', async () => {
         const c = await create({ runEnv: { http_proxy: `http://${alias}:${proxyPort}`, https_proxy: `http://${alias}:${proxyPort}` } });

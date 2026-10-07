@@ -119,6 +119,15 @@ describe('v1 → v2 迁移', () => {
         expect(p.isUnrestricted(n)).toBe(true);
     });
 
+    test('旧版四个列表合起来超过 200 条也能迁移（不因新上限读不出来）', () => {
+        const n = p.normalizePolicy({
+            host: Array.from({ length: 50 }, (_v, i) => ({ ports: String(1000 + i) })),
+            egress: { domains: Array.from({ length: 200 }, (_v, i) => `a${i}.example.com`), rules: Array.from({ length: 100 }, (_v, i) => ({ cidr: `10.0.${i}.1`, ports: '80' })) }
+        });
+        expect(n.outbound).toHaveLength(350);
+        expect(() => p.normalizePolicy({ outbound: Array.from({ length: 201 }, () => rule('allow', '@host')) })).toThrow();
+    });
+
     test('迁移结果再规范化是幂等的', () => {
         const once = p.normalizePolicy({ host: [{ ports: '80' }], peers: { inbound: [{ from: ID, ports: '1' }] } });
         expect(p.normalizePolicy(once)).toEqual(once);
@@ -190,7 +199,8 @@ describe('buildNftRuleset', () => {
         expect(user).toBeLessThan(containers);
         expect(containers).toBeLessThan(lineIndex(text, 'ip daddr { 172.16.99.1 } reject'));
         expect(lineIndex(text, 'ip daddr { 172.16.99.1 } reject')).toBeLessThan(lineIndex(text, 'ip daddr { 0.0.0.0/8'));
-        expect(text).toContain('ip6 daddr { fc00::/7, 64:ff9b::/96, fe80::/10 } reject');
+        expect(text).toContain('ip6 daddr { fc00::/7, 64:ff9b::/96 } reject');
+        expect(text).toContain('meta l4proto { tcp, udp } ip6 daddr fe80::/10 reject'); // 邻居发现（ICMPv6）不拒绝
         expect(text).toContain('ip daddr { 169.254.169.254, 100.100.100.200 } reject');
         expect(text).toContain('ip6 daddr { fd00:ec2::254 } reject');
         expect(text).toContain('ip saddr { 10.89.0.0/24 } ip saddr != { 10.89.0.1/32 } ct state new reject');
@@ -241,6 +251,15 @@ describe('buildNftRuleset', () => {
         expect(text).toContain('ip daddr { 192.168.1.5 } meta l4proto { tcp, udp } th dport { 53, 5353 } accept');
         expect(text).toContain('ip6 daddr { fd00::/8 } meta l4proto udp accept');
         expect(text).toMatch(/\n {4}meta l4proto \{ tcp, udp \} th dport 9 reject/);
+    });
+
+    test('拒绝 @private 时发往 fe80::/10 的 ICMPv6（邻居发现）不被拒绝，只拒 tcp / udp；有端口 / 协议条件的规则本来就只管 tcp / udp', () => {
+        const text = p.buildNftRuleset(p.normalizePolicy({ outbound: [rule('deny', '@private')] }), endpoints);
+        const allProto = text.split('\n').filter(l => /ip6 daddr \{.*\} reject$/.test(l) && !l.includes('l4proto'));
+        expect(allProto.every(l => !l.includes('fe80::/10'))).toBe(true);
+        expect(text.match(/meta l4proto \{ tcp, udp \} ip6 daddr fe80::\/10 reject/g)).toHaveLength(2); // 用户规则一条 + 收紧默认行一条
+        const withPort = p.buildNftRuleset(p.normalizePolicy({ outbound: [rule('deny', '@private', { ports: '80' })] }), endpoints);
+        expect(withPort).toContain('ip6 daddr { fc00::/7, 64:ff9b::/96, fe80::/10 } meta l4proto { tcp, udp } th dport 80 reject');
     });
 
     test('@container:<id> 展开成对方当前 IP；对方没在运行则该行不生成', () => {

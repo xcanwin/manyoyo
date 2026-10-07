@@ -47,6 +47,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
     let boxA;
     let boxB;
     let applied;
+    let relatedQueue;
     let applyError;
     let managed;
     let fakeDocker;
@@ -54,6 +55,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
     async function start(overrides = {}) {
         const port = await getFreePort();
         applied = [];
+        relatedQueue = [];
         applyError = '';
         managed = [
             { id: boxA.id, name: 'boxa', running: true },
@@ -82,7 +84,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
                 resolveRefs: async policy => policy,
                 apply: async (name, opts) => { applied.push([name, opts && opts.expectId]); if (applyError) throw new Error(applyError); return { status: 'applied' }; },
                 ensureReady: async () => ({ status: 'applied' }),
-                relatedContainers: async () => [],
+                relatedContainers: async () => relatedQueue.length ? relatedQueue.shift() : [],
                 listManaged: async () => managed
             },
             showImagePullHint: () => {}, removeContainer: () => {},
@@ -281,6 +283,13 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect((await put([allowRow('@private', { enabled: false })])).response.status).toBe(200);
             expect((await put([{ action: 'deny', target: '@any', ports: '', proto: 'all', enabled: true }])).response.status).toBe(200);
             expect((await put([allowRow('@private')], { confirmRisk: true })).response.status).toBe(200);
+        });
+
+        test('保存时旧规则关联的容器也重算（撤掉“允许 @container:Y”后，Y 出站里的派生行要去掉）', async () => {
+            relatedQueue = [['boxb'], []]; // 保存前（旧规则）关联 boxb，保存后（新规则）不再关联
+            const r = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: {} }));
+            expect(r.response.status).toBe(200);
+            expect(applied.map(([name]) => name)).toEqual(['boxa', 'boxb']);
         });
 
         test('入站里的 @container:<名称> 保存时换成 id；找不到容器 400；容器已删的 id 保留', async () => {
