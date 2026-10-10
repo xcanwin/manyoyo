@@ -1,5 +1,4 @@
 import * as React from "react"
-import { ChevronDownIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -16,7 +15,6 @@ import {
 import { PromptDialog } from "@/components/prompt-dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { apiGet, apiPost, type SessionSummary } from "@/lib/api"
-import { cn } from "@/lib/utils"
 
 type ModelOption = { value: string; label: string; description?: string }
 type EnvOptions = { defaultModel: string; options: ModelOption[] }
@@ -26,10 +24,8 @@ const CATALOG_TTL_MS = 10 * 60 * 1000
 const catalogCache = new Map<string, { at: number; models: ModelOption[] }>()
 
 // 模型名原样显示（包括 [1m] 之类的后缀），不做任何改写
-function ModelName({ value, muted = false }: { value: string; muted?: boolean }) {
-  return (
-    <span className={cn("min-w-0 truncate", muted && "text-xs text-muted-foreground")}>{value}</span>
-  )
+function ModelName({ value }: { value: string }) {
+  return <span className="min-w-0 truncate">{value}</span>
 }
 
 export function ModelMenu({
@@ -122,27 +118,26 @@ export function ModelMenu({
           }
         >
           <ModelName value={shown} />
-          <ChevronDownIcon data-icon="inline-end" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="top" className="w-72 max-w-[calc(100vw-2rem)]">
+        <DropdownMenuContent align="start" side="top" className="max-h-80 w-96 max-w-[calc(100vw-2rem)]">
           <DropdownMenuGroup>
             <DropdownMenuLabel>模型</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={current} onValueChange={(value) => void select(String(value))}>
               <DropdownMenuRadioItem closeOnClick value="">
                 <ModelName value={env.defaultModel || "默认模型"} />
-                <span className="ml-auto shrink-0 text-xs text-muted-foreground">跟随默认</span>
+                <span className="ml-auto shrink-0 text-muted-foreground">跟随默认</span>
               </DropdownMenuRadioItem>
               {extraCurrent ? (
                 <DropdownMenuRadioItem closeOnClick value={extraCurrent}>
                   <ModelName value={extraCurrent} />
-                  <span className="ml-auto text-xs text-muted-foreground">自定义</span>
+                  <span className="ml-auto text-muted-foreground">自定义</span>
                 </DropdownMenuRadioItem>
               ) : null}
               {env.options.map((option) => (
                 <DropdownMenuRadioItem closeOnClick key={option.value} value={option.value}>
                   <ModelName value={option.label} />
                   {option.description ? (
-                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">{option.description}</span>
+                    <span className="ml-auto shrink-0 text-muted-foreground">{option.description}</span>
                   ) : null}
                 </DropdownMenuRadioItem>
               ))}
@@ -158,7 +153,7 @@ export function ModelMenu({
                     <DropdownMenuRadioItem closeOnClick key={model.value} value={model.value}>
                       <span className="truncate">{model.label || model.value}</span>
                       {model.label && model.label !== model.value ? (
-                        <span className="ml-auto truncate text-xs text-muted-foreground">{model.value}</span>
+                        <span className="ml-auto truncate text-muted-foreground">{model.value}</span>
                       ) : null}
                     </DropdownMenuRadioItem>
                   ))}
