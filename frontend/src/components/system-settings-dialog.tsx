@@ -19,7 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -34,6 +35,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { apiGet, apiPut } from "@/lib/api"
+import { configLabel } from "@/lib/config-labels"
 import { applyTextReplacements, findValueRangeByPath } from "@/lib/json5-path-edit"
 
 // 与后端 SENSITIVE_CONFIG_KEY_PATTERN（lib/web/server.js）保持一致，
@@ -131,6 +133,22 @@ function leafEditTextToValue(kind: LeafKind, text: string): unknown {
 
 type LeafCommit = (path: string[], valueText: string, jsValue: unknown) => void
 
+// 字段标签：中文名加粗，键名跟在后面用灰色等宽小字，对照 JSON 视图时能一眼对上
+function ConfigFieldLabel({ path, htmlFor }: { path: string[]; htmlFor?: string }) {
+  const label = configLabel(path)
+  return (
+    <FieldLabel htmlFor={htmlFor} className="items-baseline gap-2">
+      <span className={cn("font-semibold", label.mono && "font-mono text-xs")}>{label.title}</span>
+      {!label.mono ? <span className="font-mono text-xs font-normal text-muted-foreground">{label.key}</span> : null}
+    </FieldLabel>
+  )
+}
+
+function ConfigFieldDescription({ path }: { path: string[] }) {
+  const desc = configLabel(path).desc
+  return desc ? <FieldDescription>{desc}</FieldDescription> : null
+}
+
 function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unknown; onCommit: LeafCommit }) {
   const label = path[path.length - 1]
   const fieldId = `config-field-${path.join(".")}`
@@ -144,7 +162,7 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
   if (kind === "boolean") {
     return (
       <Field orientation="horizontal" className="justify-between">
-        <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
+        <ConfigFieldLabel path={path} htmlFor={fieldId} />
         <Switch
           id={fieldId}
           checked={text === "true"}
@@ -161,7 +179,7 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
   if (kind === "array") {
     return (
       <Field>
-        <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
+        <ConfigFieldLabel path={path} htmlFor={fieldId} />
         <Textarea
           id={fieldId}
           value={text}
@@ -174,6 +192,7 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
           wrap="off"
           className="min-h-16 overflow-x-auto font-mono text-xs whitespace-pre"
         />
+        <ConfigFieldDescription path={path} />
       </Field>
     )
   }
@@ -181,7 +200,7 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
   if (kind === "secret") {
     return (
       <Field>
-        <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
+        <ConfigFieldLabel path={path} htmlFor={fieldId} />
         <Input
           id={fieldId}
           // 不用 type=password：浏览器会把它当登录表单，弹“要保存密码吗”
@@ -197,6 +216,7 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
           placeholder="敏感值已隐藏，留空则保留原值"
           autoComplete="off"
         />
+        <ConfigFieldDescription path={path} />
       </Field>
     )
   }
@@ -204,15 +224,16 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
   if (kind === "number") {
     return (
       <Field>
-        <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
+        <ConfigFieldLabel path={path} htmlFor={fieldId} />
         <Input id={fieldId} value={text} onChange={(event) => setText(event.target.value)} onBlur={() => commit(text)} inputMode="decimal" />
+        <ConfigFieldDescription path={path} />
       </Field>
     )
   }
 
   return (
     <Field>
-      <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
+      <ConfigFieldLabel path={path} htmlFor={fieldId} />
       <Input
         id={fieldId}
         value={text}
@@ -221,6 +242,7 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
           commit(event.target.value)
         }}
       />
+      <ConfigFieldDescription path={path} />
     </Field>
   )
 }
@@ -238,26 +260,45 @@ function ConfigValueGroup({
 }) {
   if (isPlainObject(value)) {
     const entries = Object.entries(value)
+    const label = configLabel(path)
+    const children =
+      entries.length === 0 ? (
+        <p className="text-xs text-muted-foreground">空</p>
+      ) : (
+        entries.map(([key, item]) => (
+          <ConfigValueGroup key={key} path={[...path, key]} value={item} onCommit={onCommit} depth={depth + 1} />
+        ))
+      )
+    // 一级对象：一张卡片，标题 + 说明在卡片头
+    if (depth === 0) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-baseline gap-2 text-base font-semibold">
+              <span className={cn(label.mono && "font-mono")}>{label.title}</span>
+              {!label.mono ? <span className="font-mono text-xs font-normal text-muted-foreground">{label.key}</span> : null}
+            </CardTitle>
+            {label.desc ? <CardDescription>{label.desc}</CardDescription> : null}
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">{children}</CardContent>
+        </Card>
+      )
+    }
+    // 二级及以下：不再套框，用“小标题 + 下划线”分节，子字段整体左缩进并带一条竖线
     return (
-      <FieldSet className="gap-3 rounded-lg border bg-muted/30 p-3">
-        <FieldLegend variant="legend" className="text-sm font-semibold text-foreground">
-          {path[path.length - 1]}
-        </FieldLegend>
-        {entries.length === 0 ? (
-          <p className="text-xs text-muted-foreground">空</p>
-        ) : (
-          entries.map(([key, item]) => (
-            <ConfigValueGroup key={key} path={[...path, key]} value={item} onCommit={onCommit} depth={depth + 1} />
-          ))
-        )}
-      </FieldSet>
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-col gap-0.5 border-b pb-1.5">
+          <div className="flex items-baseline gap-2">
+            <h4 className={cn("text-sm font-semibold", label.mono && "font-mono")}>{label.title}</h4>
+            {!label.mono ? <span className="font-mono text-xs text-muted-foreground">{label.key}</span> : null}
+          </div>
+          {label.desc ? <p className="text-xs text-muted-foreground">{label.desc}</p> : null}
+        </div>
+        <div className="flex flex-col gap-4 border-l-2 pl-3">{children}</div>
+      </section>
     )
   }
-  return (
-    <div className={cn(depth > 0 && "pl-1")}>
-      <ConfigLeafField path={path} value={value} onCommit={onCommit} />
-    </div>
-  )
+  return <ConfigLeafField path={path} value={value} onCommit={onCommit} />
 }
 
 function CategoryFields({
@@ -273,12 +314,25 @@ function CategoryFields({
   if (presentKeys.length === 0) {
     return <p className="p-4 text-sm text-muted-foreground">当前配置中该分类暂无内容，如需新增字段请切换到 JSON 视图编辑。</p>
   }
+  const leafKeys = presentKeys.filter((key) => !isPlainObject(liveParsed[key]))
+  const objectKeys = presentKeys.filter((key) => isPlainObject(liveParsed[key]))
   return (
-    <FieldGroup>
-      {presentKeys.map((key) => (
+    <div className="flex flex-col gap-4">
+      {leafKeys.length > 0 ? (
+        <Card>
+          <CardContent>
+            <FieldGroup>
+              {leafKeys.map((key) => (
+                <ConfigValueGroup key={key} path={[key]} value={liveParsed[key]} onCommit={onCommit} />
+              ))}
+            </FieldGroup>
+          </CardContent>
+        </Card>
+      ) : null}
+      {objectKeys.map((key) => (
         <ConfigValueGroup key={key} path={[key]} value={liveParsed[key]} onCommit={onCommit} />
       ))}
-    </FieldGroup>
+    </div>
   )
 }
 
@@ -438,7 +492,7 @@ export function SystemSettingsDialog({
                   </TabsTrigger>
                 ))}
               </TabsList>
-              <div className="min-h-0 flex-1 overflow-y-auto pl-4">
+              <div className="min-h-0 flex-1 overflow-y-auto py-1 pr-1 pl-4">
                 {CATEGORIES.map((category) => (
                   <TabsContent key={category.id} value={category.id} className="mt-0">
                     {category.id === "page" ? (
