@@ -101,12 +101,12 @@ export function App() {
     setActiveSessionName(recent ? recent.name : null)
   }, [loading, error, sessions, hasActiveSession])
   React.useEffect(() => {
-    const target = buildSessionHash(activeSessionName)
+    const target = buildSessionHash(activeSession)
     if (!reconciledRef.current && !activeSession) return
     if (window.location.hash !== target) {
       history.replaceState(null, "", `${window.location.pathname}${window.location.search}${target}`)
     }
-  }, [activeSessionName, activeSession])
+  }, [activeSession])
   // 手动改地址栏的 #（或前进后退）时跟随切换；指向不存在的 AGENT 就忽略
   const sessionsRef = React.useRef(sessions)
   React.useEffect(() => {

@@ -1,18 +1,32 @@
 import type { SessionSummary } from "@/lib/api"
 
-// 浏览器地址栏用 #<会话名> 记住当前 AGENT，刷新或分享链接后能直接回到同一个聊天
+// 浏览器地址栏用 #<容器>~<agentId> 记住当前 AGENT（默认 AGENT 也写成 ~default，格式统一），
+// 刷新或分享链接后能直接回到同一个聊天
+const HASH_SEPARATOR = "~"
+const DEFAULT_AGENT_ID = "default"
+
+// 返回会话名（与 SessionSummary.name 一致：默认 AGENT 就是容器名）
 export function parseSessionHash(hash: string): string | null {
   const raw = hash.replace(/^#/, "")
   if (!raw) return null
+  let text: string
   try {
-    return decodeURIComponent(raw) || null
+    text = decodeURIComponent(raw)
   } catch {
     return null
   }
+  const index = text.indexOf(HASH_SEPARATOR)
+  if (index < 0) return text || null
+  const container = text.slice(0, index)
+  const agentId = text.slice(index + 1)
+  if (!container) return null
+  return !agentId || agentId === DEFAULT_AGENT_ID ? container : text
 }
 
-export function buildSessionHash(name: string | null): string {
-  return name ? `#${encodeURIComponent(name)}` : ""
+export function buildSessionHash(session: Pick<SessionSummary, "containerName" | "agentId"> | null): string {
+  if (!session) return ""
+  const agentId = session.agentId || DEFAULT_AGENT_ID
+  return `#${encodeURIComponent(`${session.containerName}${HASH_SEPARATOR}${agentId}`)}`
 }
 
 // 最近一次有更新的真实 AGENT；占位用的 synthetic 和已停止的排在后面
