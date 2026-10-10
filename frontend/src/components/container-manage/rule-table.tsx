@@ -39,7 +39,7 @@ const ACTIONS: Array<{ value: Action; label: string }> = [
 const PROTOS: Proto[] = ["all", "tcp", "udp"]
 const actionTone = (action: Action) => (action === "allow" ? "text-emerald-600 dark:text-emerald-500" : "text-destructive")
 
-const DESKTOP_GRID = "grid grid-cols-[4.75rem_minmax(0,1fr)_7rem_4.5rem_7.5rem] items-center gap-2"
+const DESKTOP_GRID = "grid grid-cols-[4.25rem_minmax(0,1fr)_5.5rem_4rem_6.25rem] items-center gap-2"
 
 function LockedRow({ rule, containers, tip, mobile, ports = "全部", proto = "all" }: { rule: LockedRule; containers?: PeerOption[]; tip: string; mobile: boolean; ports?: string; proto?: string }) {
   const fixed = "flex h-8 items-center gap-2 rounded-lg bg-muted/60 px-2 text-sm text-muted-foreground"
@@ -151,7 +151,7 @@ function UserRow({
       aria-label={`${label}第 ${n} 行${direction === "outbound" ? "目标端口" : "容器端口"}`}
       aria-invalid={!!portsError || undefined}
       className={cn("min-w-0 font-mono text-xs", off && "opacity-45")}
-      placeholder="留空表示全部端口"
+      placeholder="留空即全部"
       value={rule.ports}
       onChange={(event) => onChange({ ...rule, ports: event.target.value })}
       onBlur={() => setPortsTouched(true)}
@@ -212,9 +212,9 @@ function UserRow({
           {ops}
         </div>
       )}
-      {error ? <p className={cn("text-xs text-destructive", !mobile && "pl-[5.25rem]")}>{error}</p> : null}
+      {error ? <p className={cn("text-xs text-destructive", !mobile && "pl-[4.75rem]")}>{error}</p> : null}
       {isShadowingRule(rule, direction, preset) ? (
-        <p className={cn("text-xs text-muted-foreground", !mobile && "pl-[5.25rem]")}>下面的规则不会生效</p>
+        <p className={cn("text-xs text-muted-foreground", !mobile && "pl-[4.75rem]")}>下面的规则不会生效</p>
       ) : null}
     </div>
   )

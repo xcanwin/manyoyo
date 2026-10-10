@@ -184,7 +184,7 @@ export function NetworkEditor({
                     访问
                     <ChevronDownIcon data-icon="inline-end" />
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
+                  <DropdownMenuContent align="end" className="w-auto whitespace-nowrap">
                     <DropdownMenuGroup>
                       {hosts.map((host) => {
                         const url = `http://${host}:${row.hostPort}/`
