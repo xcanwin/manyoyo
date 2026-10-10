@@ -142,7 +142,7 @@ export function AgentTemplateDialog({
               <Select value={cli} onValueChange={handleCliChange}>
                 <SelectTrigger id="agent-template-cli" className="w-full">
                   {/* base-ui 的 Select.Value 不会自动回填对应 SelectItem 的文案，
-                      只会显示原始 value 字面量，这里跟 model-dialog.tsx 一样用 children 函数手动映射 */}
+                      只会显示原始 value 字面量，这里用 children 函数手动映射 */}
                   <SelectValue>
                     {(value: string) => {
                       if (value === INHERIT_CLI) return "继承容器默认"

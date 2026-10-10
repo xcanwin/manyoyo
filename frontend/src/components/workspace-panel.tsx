@@ -38,7 +38,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FilesPanel, type FilesEditorState } from "@/components/files-panel"
 import { HtmlPreviewPanel, type HtmlPreviewState } from "@/components/html-preview-panel"
 import { MarkdownContent } from "@/components/markdown-content"
-import { ModelDialog } from "@/components/model-dialog"
+import { ModelMenu } from "@/components/model-menu"
 import { TerminalView } from "@/components/terminal-view"
 import {
   DropdownMenu,
@@ -506,7 +506,7 @@ function Composer({
   sending,
   session,
   onOpenCliTemplate,
-  onOpenModel,
+  onModelChanged,
 }: {
   draft: string
   onDraftChange: (value: string) => void
@@ -518,7 +518,7 @@ function Composer({
   sending: boolean
   session: SessionSummary | null
   onOpenCliTemplate: () => void
-  onOpenModel: () => void
+  onModelChanged: () => void
 }) {
   const isMobile = useIsMobile()
   // 拦截理由集中在 resolveComposerBlockReason 里算（含容器级运行锁：同容器别的
@@ -569,46 +569,51 @@ function Composer({
         }}
       />
       <div className="mt-2 flex items-center justify-between gap-2">
-        <DropdownMenu>
-          {/* 模式必须常驻可见：只靠输入框 placeholder 提示的话，一打字就看不见了，
-              很容易在"系统命令"模式下把整段话当 shell 命令发出去 */}
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant={mode === "command" ? "secondary" : "outline"}
-                className="px-4"
-                disabled={disabled}
-              />
-            }
-          >
-            {formatComposerModeLabel(mode)}
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-44">
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                className={mode === "agent" ? "bg-accent" : undefined}
-                onClick={() => onModeChange("agent")}
-              >
-                Agent对话
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className={mode === "command" ? "bg-accent" : undefined}
-                onClick={() => onModeChange("command")}
-              >
-                系统命令
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator className="mx-1 bg-border/50" />
-            <DropdownMenuGroup>
-              <DropdownMenuItem disabled={!session || archived} onClick={() => onOpenCliTemplate()}>
-                CLI · {session?.agentProgram || "未设置"}
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={!session || archived} onClick={() => onOpenModel()}>
-                模型 · {session?.model || "跟随默认"}
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex min-w-0 items-center gap-2">
+          {/* 模型按钮在模式按钮左边：切模型不用再开弹窗；系统命令模式不涉及模型，置灰 */}
+          <ModelMenu
+            session={session}
+            disabled={disabled || archived || !session || mode === "command"}
+            onChanged={onModelChanged}
+          />
+          <DropdownMenu>
+            {/* 模式必须常驻可见：只靠输入框 placeholder 提示的话，一打字就看不见了，
+                很容易在"系统命令"模式下把整段话当 shell 命令发出去 */}
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant={mode === "command" ? "secondary" : "outline"}
+                  className="px-4"
+                  disabled={disabled}
+                />
+              }
+            >
+              {formatComposerModeLabel(mode)}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-44">
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  className={mode === "agent" ? "bg-accent" : undefined}
+                  onClick={() => onModeChange("agent")}
+                >
+                  Agent对话
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className={mode === "command" ? "bg-accent" : undefined}
+                  onClick={() => onModeChange("command")}
+                >
+                  系统命令
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator className="mx-1 bg-border/50" />
+              <DropdownMenuGroup>
+                <DropdownMenuItem disabled={!session || archived} onClick={() => onOpenCliTemplate()}>
+                  CLI · {session?.agentProgram || "未设置"}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         {sending ? (
           <Button variant="destructive" className="px-4" onClick={onStop}>
             停止
@@ -686,7 +691,6 @@ export function WorkspacePanel({
   const messagesSyncTickRef = React.useRef(0)
   const recoverableErrorSyncTickRef = React.useRef(-1)
   const [cliDialogOpen, setCliDialogOpen] = React.useState(false)
-  const [modelDialogOpen, setModelDialogOpen] = React.useState(false)
   const [sessionDetail, setSessionDetail] = React.useState<SessionDetail | null>(null)
   const [htmlPreview, setHtmlPreview] = React.useState<HtmlPreviewState>(null)
 
@@ -1234,22 +1238,16 @@ export function WorkspacePanel({
           sending={activeAgentRunning}
           session={activeSession}
           onOpenCliTemplate={() => setCliDialogOpen(true)}
-          onOpenModel={() => setModelDialogOpen(true)}
+          onModelChanged={() => {
+            onAfterSend()
+            loadDetail()
+          }}
         />
       ) : null}
 
       <AgentTemplateDialog
         open={cliDialogOpen}
         onOpenChange={setCliDialogOpen}
-        session={activeSession}
-        onSaved={() => {
-          onAfterSend()
-          loadDetail()
-        }}
-      />
-      <ModelDialog
-        open={modelDialogOpen}
-        onOpenChange={setModelDialogOpen}
         session={activeSession}
         onSaved={() => {
           onAfterSend()
