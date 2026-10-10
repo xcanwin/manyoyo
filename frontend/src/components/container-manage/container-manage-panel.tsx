@@ -65,8 +65,10 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
   const { confirm, dialog } = useConfirmDialog()
   const base = `/api/containers/${enc(containerName)}`
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (manual = false) => {
     setLoading(true)
+    // 手动刷新时让转圈至少显示一会儿，请求太快会让人以为按钮没反应
+    const minSpin = manual ? new Promise((resolve) => setTimeout(resolve, 600)) : null
     setLoadError("")
     try {
       const [env, auto, network] = await Promise.all([
@@ -100,6 +102,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "加载失败")
     } finally {
+      await minSpin
       setLoading(false)
     }
   }, [base])
@@ -304,8 +307,8 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
       <div className="mx-auto flex max-w-5xl flex-col gap-4 p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">管理容器 {containerName} 的环境变量、网络与自启动，改动不需要重建容器。</p>
-          <Button variant="ghost" size="icon-sm" aria-label="重新加载" onClick={() => void load()}>
-            <RefreshCwIcon />
+          <Button variant="ghost" size="icon-sm" aria-label="重新加载" disabled={loading} onClick={() => void load(true)}>
+            <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
           </Button>
         </div>
 

@@ -243,6 +243,18 @@ export function AppSidebar({
     )
   }, [containers, activeSessionName])
 
+  // 当前会话换到另一个容器时（打开带 #agent 的链接、自动选中最近的 AGENT 等），
+  // 侧栏跟着进入该容器的 AGENT 列表；只在会话所属容器变化时触发，
+  // 用户手动点“全部容器”返回不会被弹回去
+  const [prevActiveContainerName, setPrevActiveContainerName] = React.useState(activeContainerName)
+  if (activeContainerName !== prevActiveContainerName) {
+    setPrevActiveContainerName(activeContainerName)
+    if (activeContainerName && activeContainerName !== navContainer) {
+      setNavLevel("agents")
+      setNavContainer(activeContainerName)
+    }
+  }
+
   function goToContainers() {
     setNavLevel("containers")
     setNavContainer("")
@@ -471,25 +483,27 @@ export function AppSidebar({
             MANYOYO Web
           </span>
         </div>
-        <Button
-          className="w-full"
-          size="lg"
-          disabled={navLevel === "agents" && creatingAgentContainer === navContainer}
-          onClick={() =>
-            navLevel === "agents" ? createAgent(navContainer) : setCreateOpen(true)
-          }
-        >
-          {navLevel === "agents" && creatingAgentContainer === navContainer ? (
-            <Spinner data-icon="inline-start" />
-          ) : (
+        <div className="flex gap-2">
+          <Button className="flex-1" size="lg" onClick={() => setCreateOpen(true)}>
             <PlusIcon data-icon="inline-start" />
-          )}
-          {navLevel === "agents"
-            ? creatingAgentContainer === navContainer
-              ? "创建中..."
-              : "新建AGENT"
-            : "新建容器"}
-        </Button>
+            新建容器
+          </Button>
+          {navLevel === "agents" ? (
+            <Button
+              className="flex-1"
+              size="lg"
+              disabled={creatingAgentContainer === navContainer}
+              onClick={() => createAgent(navContainer)}
+            >
+              {creatingAgentContainer === navContainer ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <PlusIcon data-icon="inline-start" />
+              )}
+              {creatingAgentContainer === navContainer ? "创建中..." : "新建AGENT"}
+            </Button>
+          ) : null}
+        </div>
         <Button className="w-full" variant="outline" disabled={quickChatBusy} onClick={startQuickChat}>
           {quickChatBusy ? <Spinner data-icon="inline-start" /> : <MessageCircleIcon data-icon="inline-start" />}
           {quickChatBusy ? "创建中..." : "快捷对话"}

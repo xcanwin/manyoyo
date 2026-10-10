@@ -65,9 +65,11 @@ export function AgentTemplateDialog({
     }
   }
 
+  // 只依赖会话名：会话列表轮询会不断换新 session 对象，依赖对象会让弹窗里的选择被重新拉取覆盖
+  const sessionName = session?.name ?? null
   React.useEffect(() => {
-    if (!open || !session) return
-    apiGet(`/api/sessions/${encodeURIComponent(session.name)}/detail`)
+    if (!open || !sessionName) return
+    apiGet(`/api/sessions/${encodeURIComponent(sessionName)}/detail`)
       .then((data) => {
         const detail = (data.detail || {}) as Record<string, unknown>
         detailRef.current = detail
@@ -86,7 +88,7 @@ export function AgentTemplateDialog({
       })
       .catch((err) => setError(err instanceof Error ? err.message : "加载模板失败"))
       .finally(() => setLoading(false))
-  }, [open, session, isDefaultAgent])
+  }, [open, sessionName, isDefaultAgent])
 
   function handleCliChange(value: string | null) {
     const next = value ?? CUSTOM_CLI

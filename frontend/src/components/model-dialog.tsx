@@ -56,13 +56,16 @@ export function ModelDialog({
     }
   }
 
+  // 只依赖会话名与模型值：会话列表轮询会不断换新 session 对象，依赖对象会让弹窗里的选择被重新拉取覆盖
+  const sessionName = session?.name ?? null
+  const sessionModel = session?.model || ""
   React.useEffect(() => {
-    if (!open || !session) return
-    apiGet(`/api/sessions/${encodeURIComponent(session.name)}/models`)
+    if (!open || !sessionName) return
+    apiGet(`/api/sessions/${encodeURIComponent(sessionName)}/models`)
       .then((data) => {
         const list = Array.isArray(data.models) ? (data.models as ModelOption[]) : []
         setModels(list)
-        const current = session.model || ""
+        const current = sessionModel
         if (!current) {
           setSelected(DEFAULT_VALUE)
           setCustomModel("")
@@ -75,7 +78,7 @@ export function ModelDialog({
       })
       .catch((err) => setError(err instanceof Error ? err.message : "获取模型列表失败"))
       .finally(() => setLoading(false))
-  }, [open, session])
+  }, [open, sessionName, sessionModel])
 
   async function handleSave() {
     if (!session) return

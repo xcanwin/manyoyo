@@ -75,6 +75,33 @@ function PathBar({ value, className }: { value: string; className?: string }) {
   )
 }
 
+function EditablePathBar({ value, onSubmit, className }: { value: string; onSubmit: (path: string) => void; className?: string }) {
+  const [draft, setDraft] = React.useState(value)
+  return (
+    <input
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          const next = draft.trim()
+          if (next) onSubmit(next)
+        } else if (event.key === "Escape") {
+          setDraft(value)
+        }
+      }}
+      onBlur={() => setDraft(value)}
+      spellCheck={false}
+      autoCapitalize="off"
+      autoCorrect="off"
+      aria-label="当前路径，回车跳转"
+      className={cn(
+        "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 font-mono text-xs text-muted-foreground outline-none focus:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30",
+        className
+      )}
+    />
+  )
+}
+
 // 有未保存修改时暴露给外层守卫（切换 agent / 新建 agent / 切换顶部标签）：
 // 文件名用于弹窗提示，save 触发真正的保存并返回是否成功
 export type FilesEditorState = {
@@ -154,9 +181,11 @@ export function FilesPanel({
   }, [mode])
 
   const loadList = React.useCallback(
-    (path: string) => {
+    (path: string, manual = false) => {
       if (!activeSession || historyOnly) return
       setLoading(true)
+      // 手动刷新时让转圈至少显示一会儿，请求太快会让人以为按钮没反应
+      const minSpin = manual ? new Promise((resolve) => setTimeout(resolve, 600)) : null
       setListError("")
       apiGet(
         `/api/sessions/${encodeURIComponent(activeSession.name)}/fs/list?path=${encodeURIComponent(path)}`
@@ -169,7 +198,7 @@ export function FilesPanel({
         .catch((err) => {
           setListError(err instanceof Error ? err.message : "加载目录失败")
         })
-        .finally(() => setLoading(false))
+        .finally(() => (minSpin ?? Promise.resolve()).then(() => setLoading(false)))
     },
     [activeSession, historyOnly]
   )
@@ -377,9 +406,9 @@ export function FilesPanel({
           >
             <ArrowUpIcon />
           </Button>
-          <PathBar value={sanitizeDisplayText(currentPath)} />
-          <Button variant="outline" size="icon-sm" onClick={() => loadList(currentPath)} title="刷新" aria-label="刷新">
-            <RefreshCwIcon />
+          <EditablePathBar key={currentPath} value={currentPath} onSubmit={(path) => loadList(path)} />
+          <Button variant="outline" size="icon-sm" disabled={loading} onClick={() => loadList(currentPath, true)} title="刷新" aria-label="刷新">
+            <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
           </Button>
           <Button variant="outline" size="icon-sm" onClick={() => setNewDialog("file")} title="新建文件" aria-label="新建文件">
             <FilePlusIcon />

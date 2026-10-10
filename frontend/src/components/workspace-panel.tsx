@@ -682,6 +682,12 @@ export function WorkspacePanel({
       return prev === activeSessionName ? prev : null
     })
   }, [view, activeSessionName])
+  // 文件 / 设置容器标签打开过就常驻（隐藏而不卸载）：它们自带刷新按钮，
+  // 切回来不该每次重新加载，也不该丢掉没保存的编辑
+  const [filesMounted, setFilesMounted] = React.useState(false)
+  const [containerMounted, setContainerMounted] = React.useState(false)
+  if (view === "files" && !filesMounted) setFilesMounted(true)
+  if (view === "container" && !containerMounted) setContainerMounted(true)
   // 消息按会话名隔离，而不是单一全局数组：流式回调各自更新自己会话的 key，
   // 用户在 A 会话跑长任务时切到 B 再切回 A，A 的实时流式状态（用户消息、执行
   // 过程、增量回复）原样还在——单一数组在切换时会被加载响应覆盖，本地流式
@@ -1204,24 +1210,28 @@ export function WorkspacePanel({
           )
         ) : null}
         {terminalSessionName && terminalSessionName === activeSessionName ? (
-          <div className={cn("h-full", view !== "terminal" && "hidden")}>
+          <div className={cn("h-full overflow-hidden", view !== "terminal" && "hidden")}>
             <TerminalView key={terminalSessionName} session={activeSession} />
           </div>
         ) : null}
-        {view === "files" ? (
-          <FilesPanel
-            activeSession={activeSession}
-            editorStateRef={filesEditorRef}
-            confirmLeaveIfDirty={confirmLeaveIfDirty}
-            onPreviewHtml={(title, code) => setHtmlPreview({ title, code })}
-          />
+        {filesMounted ? (
+          <div className={cn("h-full", view !== "files" && "hidden")}>
+            <FilesPanel
+              activeSession={activeSession}
+              editorStateRef={filesEditorRef}
+              confirmLeaveIfDirty={confirmLeaveIfDirty}
+              onPreviewHtml={(title, code) => setHtmlPreview({ title, code })}
+            />
+          </div>
         ) : null}
-        {view === "container" ? (
-          activeSession ? (
-            <ContainerManagePanel key={activeSession.containerName} containerName={activeSession.containerName} />
-          ) : (
-            <EmptyPane text="请先选择左侧的容器 / AGENT" />
-          )
+        {containerMounted ? (
+          <div className={cn("h-full", view !== "container" && "hidden")}>
+            {activeSession ? (
+              <ContainerManagePanel key={activeSession.containerName} containerName={activeSession.containerName} />
+            ) : (
+              <EmptyPane text="请先选择左侧的容器 / AGENT" />
+            )}
+          </div>
         ) : null}
         {view === "detail" ? <DetailView detail={sessionDetail} /> : null}
         {view === "config" ? <ConfigView detail={sessionDetail} /> : null}

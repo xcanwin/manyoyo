@@ -13,6 +13,7 @@ import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sideb
 import type { FilesEditorState } from "@/components/files-panel"
 import type { SessionSummary } from "@/lib/api"
 import { fetchSetupStatus } from "@/lib/setup"
+import { buildSessionHash, parseSessionHash, pickMostRecentSession } from "@/lib/session-url"
 
 // 侧边栏收起（offcanvas）后 Sidebar 本身平移出屏幕，但这根拖拽线之前是按 sidebarWidth
 // 独立定位的，跟收起状态无关——收起后线还留在原地、也还能拖，这里收起时直接不渲染
@@ -60,7 +61,10 @@ export function App() {
     min: 224,
     max: 512,
   })
-  const [activeSessionName, setActiveSessionName] = React.useState<string | null>(null)
+  // 初始值取自地址栏 #<会话名>；列表加载后再校验是否还存在
+  const [activeSessionName, setActiveSessionName] = React.useState<string | null>(() =>
+    parseSessionHash(window.location.hash)
+  )
   // 提到 App 一级，容器列表下拉里的「新建 AGENT」和 agent 列表头部按钮共用同一个状态，
   // 右侧工作台也据此展示加载态，不只是侧栏按钮自己转圈
   const [creatingAgentContainer, setCreatingAgentContainer] = React.useState<string | null>(null)
@@ -83,6 +87,39 @@ export function App() {
     const result = await askUnsavedChanges(state.fileName, state.save)
     return result === "proceed"
   }, [askUnsavedChanges])
+
+  // 地址栏 #<会话名> 与当前 AGENT 同步：没有或指向已不存在的 AGENT 时，
+  // 首次加载完列表后改成最近的 AGENT 并进入它的聊天
+  const reconciledRef = React.useRef(false)
+  const hasActiveSession = activeSession !== null
+  React.useEffect(() => {
+    if (reconciledRef.current || loading || error) return
+    reconciledRef.current = true
+    if (hasActiveSession) return
+    const recent = pickMostRecentSession(sessions)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveSessionName(recent ? recent.name : null)
+  }, [loading, error, sessions, hasActiveSession])
+  React.useEffect(() => {
+    const target = buildSessionHash(activeSessionName)
+    if (!reconciledRef.current && !activeSession) return
+    if (window.location.hash !== target) {
+      history.replaceState(null, "", `${window.location.pathname}${window.location.search}${target}`)
+    }
+  }, [activeSessionName, activeSession])
+  // 手动改地址栏的 #（或前进后退）时跟随切换；指向不存在的 AGENT 就忽略
+  const sessionsRef = React.useRef(sessions)
+  React.useEffect(() => {
+    sessionsRef.current = sessions
+  }, [sessions])
+  React.useEffect(() => {
+    function onHashChange() {
+      const name = parseSessionHash(window.location.hash)
+      if (name && sessionsRef.current.some((s) => s.name === name)) setActiveSessionName(name)
+    }
+    window.addEventListener("hashchange", onHashChange)
+    return () => window.removeEventListener("hashchange", onHashChange)
+  }, [])
 
   function handleSelectSession(session: SessionSummary | null) {
     setActiveSessionName(session ? session.name : null)

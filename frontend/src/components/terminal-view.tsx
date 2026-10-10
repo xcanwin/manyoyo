@@ -246,7 +246,7 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
   }
 
   return (
-    <div className="flex h-full flex-col bg-zinc-950">
+    <div className="flex h-full flex-col overflow-hidden bg-zinc-950">
       <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-2 py-1.5">
         {/* 按钮组自己横向滚动，避免窄屏下被裁切导致 ctrl/alt 无法点击；
             状态文案放在同一行的右侧，省掉单独一行 */}
@@ -301,7 +301,7 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
       </div>
       <div
         ref={containerRef}
-        className="min-h-0 flex-1 p-2"
+        className="min-h-0 flex-1 overflow-hidden p-2"
         onClick={isMobile ? () => mobileInputRef.current?.focus() : undefined}
       />
       {isMobile ? (
