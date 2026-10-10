@@ -483,6 +483,10 @@ export function AppSidebar({
             MANYOYO Web
           </span>
         </div>
+        <Button className="w-full" variant="outline" disabled={quickChatBusy} onClick={startQuickChat}>
+          {quickChatBusy ? <Spinner data-icon="inline-start" /> : <MessageCircleIcon data-icon="inline-start" />}
+          {quickChatBusy ? "创建中..." : "快捷对话"}
+        </Button>
         <div className="flex gap-2">
           <Button className="flex-1" size="lg" onClick={() => setCreateOpen(true)}>
             <PlusIcon data-icon="inline-start" />
@@ -504,10 +508,6 @@ export function AppSidebar({
             </Button>
           ) : null}
         </div>
-        <Button className="w-full" variant="outline" disabled={quickChatBusy} onClick={startQuickChat}>
-          {quickChatBusy ? <Spinner data-icon="inline-start" /> : <MessageCircleIcon data-icon="inline-start" />}
-          {quickChatBusy ? "创建中..." : "快捷对话"}
-        </Button>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>工作台</span>
           <span>
@@ -518,6 +518,15 @@ export function AppSidebar({
                 : `${containers.length} 个容器 / ${agentCount} 个 AGENT`}
           </span>
         </div>
+        <Button
+          variant="outline"
+          className="w-full justify-start bg-background text-muted-foreground shadow-none"
+          onClick={() => setSearchOpen(true)}
+        >
+          <SearchIcon data-icon="inline-start" />
+          搜索容器 / AGENT
+          <kbd className="ml-auto font-mono text-xs text-muted-foreground">⌘K</kbd>
+        </Button>
         <Breadcrumb>
           <BreadcrumbList className="flex-nowrap gap-1 text-xs">
             <BreadcrumbItem className="shrink-0">
@@ -554,15 +563,6 @@ export function AppSidebar({
             ) : null}
           </BreadcrumbList>
         </Breadcrumb>
-        <Button
-          variant="outline"
-          className="w-full justify-start bg-background text-muted-foreground shadow-none"
-          onClick={() => setSearchOpen(true)}
-        >
-          <SearchIcon data-icon="inline-start" />
-          搜索容器 / AGENT
-          <kbd className="ml-auto font-mono text-xs text-muted-foreground">⌘K</kbd>
-        </Button>
         {error || actionError ? (
           <p className="text-xs text-destructive">{error || actionError}</p>
         ) : null}
