@@ -119,58 +119,61 @@ export function ModelMenu({
         >
           <ModelName value={shown} />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="top" className="max-h-80 w-96 max-w-[calc(100vw-2rem)]">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>模型</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={current} onValueChange={(value) => void select(String(value))}>
-              <DropdownMenuRadioItem closeOnClick value="">
-                <ModelName value={env.defaultModel || "默认模型"} />
-                <span className="ml-auto shrink-0 text-muted-foreground">跟随默认</span>
-              </DropdownMenuRadioItem>
-              {extraCurrent ? (
-                <DropdownMenuRadioItem closeOnClick value={extraCurrent}>
-                  <ModelName value={extraCurrent} />
-                  <span className="ml-auto text-muted-foreground">自定义</span>
+        <DropdownMenuContent align="start" side="top" className="w-96 max-w-[calc(100vw-2rem)] overflow-y-hidden">
+          {/* 滚动放在内层：菜单外壳是圆角，滚动条直接贴在外壳边缘会露出直角 */}
+          <div className="max-h-80 overflow-y-auto [scrollbar-width:thin]">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>模型</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={current} onValueChange={(value) => void select(String(value))}>
+                <DropdownMenuRadioItem closeOnClick value="">
+                  <ModelName value={env.defaultModel || "默认模型"} />
+                  <span className="ml-auto shrink-0 text-muted-foreground">跟随默认</span>
                 </DropdownMenuRadioItem>
-              ) : null}
-              {env.options.map((option) => (
-                <DropdownMenuRadioItem closeOnClick key={option.value} value={option.value}>
-                  <ModelName value={option.label} />
-                  {option.description ? (
-                    <span className="ml-auto shrink-0 text-muted-foreground">{option.description}</span>
-                  ) : null}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuGroup>
-          {extras.length || catalogLoading ? (
-            <>
-              <DropdownMenuSeparator className="mx-1 bg-border/50" />
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>CLI 内置</DropdownMenuLabel>
-                <DropdownMenuRadioGroup value={current} onValueChange={(value) => void select(String(value))}>
-                  {extras.map((model) => (
-                    <DropdownMenuRadioItem closeOnClick key={model.value} value={model.value}>
-                      <span className="truncate">{model.label || model.value}</span>
-                      {model.label && model.label !== model.value ? (
-                        <span className="ml-auto truncate text-muted-foreground">{model.value}</span>
-                      ) : null}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-                {catalogLoading ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1 text-xs text-muted-foreground">
-                    <Spinner className="size-3" />
-                    正在加载 CLI 内置模型…
-                  </div>
+                {extraCurrent ? (
+                  <DropdownMenuRadioItem closeOnClick value={extraCurrent}>
+                    <ModelName value={extraCurrent} />
+                    <span className="ml-auto text-muted-foreground">自定义</span>
+                  </DropdownMenuRadioItem>
                 ) : null}
-              </DropdownMenuGroup>
-            </>
-          ) : null}
-          <DropdownMenuSeparator className="mx-1 bg-border/50" />
-          <DropdownMenuGroup>
-            <DropdownMenuItem onClick={() => setCustomOpen(true)}>自定义模型名称…</DropdownMenuItem>
-          </DropdownMenuGroup>
+                {env.options.map((option) => (
+                  <DropdownMenuRadioItem closeOnClick key={option.value} value={option.value}>
+                    <ModelName value={option.label} />
+                    {option.description ? (
+                      <span className="ml-auto shrink-0 text-muted-foreground">{option.description}</span>
+                    ) : null}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuGroup>
+            {extras.length || catalogLoading ? (
+              <>
+                <DropdownMenuSeparator className="mx-1 bg-border/50" />
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>CLI 内置</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={current} onValueChange={(value) => void select(String(value))}>
+                    {extras.map((model) => (
+                      <DropdownMenuRadioItem closeOnClick key={model.value} value={model.value}>
+                        <span className="truncate">{model.label || model.value}</span>
+                        {model.label && model.label !== model.value ? (
+                          <span className="ml-auto truncate text-muted-foreground">{model.value}</span>
+                        ) : null}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                  {catalogLoading ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1 text-xs text-muted-foreground">
+                      <Spinner className="size-3" />
+                      正在加载 CLI 内置模型…
+                    </div>
+                  ) : null}
+                </DropdownMenuGroup>
+              </>
+            ) : null}
+            <DropdownMenuSeparator className="mx-1 bg-border/50" />
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={() => setCustomOpen(true)}>自定义模型名称…</DropdownMenuItem>
+            </DropdownMenuGroup>
+          </div>
         </DropdownMenuContent>
       </DropdownMenu>
       <PromptDialog
