@@ -4229,7 +4229,7 @@ process.exit(0);
                 body: JSON.stringify({ prompt: 'hi' })
             });
             expect(runRes.response.status).toBe(200);
-            expect(String(runRes.json.output || '')).toContain('--model opus[1m]');
+            expect(String(runRes.json.output || '')).toContain("--model 'opus[1m]'");
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
