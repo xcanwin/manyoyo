@@ -336,6 +336,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             const added = await request(`${baseUrl}/api/containers/boxa/expose`, json(cookie, 'POST', { bind: '127.0.0.1', hostPort, port: 8080 }));
             expect(added.response.status).toBe(200);
             expect(added.json.forwards).toEqual([{ bind: '127.0.0.1', hostPort, port: 8080 }]);
+            expect(added.json.hostIps[0]).toBe('127.0.0.1');
             expect(state.readNetworkRaw(tempHost, boxA.id).expose).toEqual([{ bind: '127.0.0.1', hostPort, port: 8080 }]);
             await new Promise((resolve, reject) => { const s = net.connect(hostPort, '127.0.0.1', () => { s.destroy(); resolve(); }); s.on('error', reject); });
 

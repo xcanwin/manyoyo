@@ -26,7 +26,7 @@ export function RowList<T extends Record<string, string>>({
   addLabel,
   ariaPrefix,
   disableAdd = false,
-  renderExtra,
+  renderAction,
 }: {
   rows: T[]
   columns: RowColumn<T>[]
@@ -35,8 +35,8 @@ export function RowList<T extends Record<string, string>>({
   addLabel: string
   ariaPrefix: string
   disableAdd?: boolean
-  /** 删除按钮左侧的额外内容（例如端口暴露的「打开」链接），宽度固定 */
-  renderExtra?: { label: string; width: string; render: (row: T, index: number) => React.ReactNode }
+  /** 放在「操作」列里、删除按钮左侧的额外操作（例如端口暴露的「访问」），宽度固定 */
+  renderAction?: { width: string; render: (row: T, index: number) => React.ReactNode }
 }) {
   const update = (index: number, patch: Partial<T>) =>
     onChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)))
@@ -50,8 +50,7 @@ export function RowList<T extends Record<string, string>>({
               {column.label}
             </span>
           ))}
-          {renderExtra ? <span className={cn("shrink-0 px-1", renderExtra.width)}>{renderExtra.label}</span> : null}
-          <span className="w-8 shrink-0 text-center">操作</span>
+          <span className={cn("shrink-0 text-center", renderAction ? "w-24" : "w-8")}>操作</span>
         </div>
       ) : null}
       {rows.map((row, index) => (
@@ -88,19 +87,21 @@ export function RowList<T extends Record<string, string>>({
               />
             )
           )}
-          {renderExtra ? (
-            <span className={cn("flex shrink-0 items-center px-1 text-xs", renderExtra.width)}>{renderExtra.render(row, index)}</span>
-          ) : null}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="shrink-0"
-            aria-label={`删除${ariaPrefix}第 ${index + 1} 行`}
-            onClick={() => onChange(rows.filter((_, i) => i !== index))}
-          >
-            <Trash2Icon />
-          </Button>
+          <div className={cn("flex shrink-0 items-center justify-end gap-1", renderAction ? "w-24" : "w-8")}>
+            {renderAction ? (
+              <span className={cn("flex items-center justify-center", renderAction.width)}>{renderAction.render(row, index)}</span>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0"
+              aria-label={`删除${ariaPrefix}第 ${index + 1} 行`}
+              onClick={() => onChange(rows.filter((_, i) => i !== index))}
+            >
+              <Trash2Icon />
+            </Button>
+          </div>
         </div>
       ))}
       <div>

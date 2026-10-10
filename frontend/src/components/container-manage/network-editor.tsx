@@ -1,6 +1,14 @@
 import * as React from "react"
+import { ChevronDownIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { RowList, type RowColumn } from "@/components/container-manage/row-list"
@@ -36,6 +44,7 @@ export function NetworkEditor({
   peers,
   derived = [],
   forwards = [],
+  hostIps = [],
   showAccess = true,
   suggestedDomains = [],
 }: {
@@ -45,9 +54,11 @@ export function NetworkEditor({
   peers?: PeerOption[]
   /** 本容器出站里由别的容器入站规则派生出的只读放行行 */
   derived?: DerivedRule[]
-  /** 当前真正在监听的端口暴露（用来显示「打开」链接） */
+  /** 当前真正在监听的端口暴露（用来显示「访问」链接） */
   forwards?: Array<{ bind: string; hostPort: number; port: number }>
-  /** 是否显示「访问」列（新建容器时还没有在监听，不需要） */
+  /** 本机 IPv4 地址；绑定 0.0.0.0 时「访问」菜单列出每个地址的链接 */
+  hostIps?: string[]
+  /** 是否显示「访问」按钮（新建容器时还没有在监听，不需要） */
   showAccess?: boolean
   /** 来自环境变量里 URL 的域名（如模型服务），仅白名单模式下可一键加入 */
   suggestedDomains?: string[]
@@ -159,17 +170,33 @@ export function NetworkEditor({
           columns={exposeColumns}
           newRow={() => ({ bind: "127.0.0.1", hostPort: "", port: "" })}
           addLabel="添加端口暴露"
-          renderExtra={showAccess ? {
-            label: "访问",
-            width: "w-12",
+          renderAction={showAccess ? {
+            width: "w-14",
             render: (row) => {
               const active = forwards.some((f) => f.bind === row.bind && String(f.hostPort) === row.hostPort && String(f.port) === row.port)
-              if (!active) return <span className="text-muted-foreground">—</span>
-              const target = row.bind === "0.0.0.0" ? window.location.hostname : row.bind
+              if (!active) return <span className="text-xs text-muted-foreground">—</span>
+              const hosts = row.bind === "0.0.0.0"
+                ? Array.from(new Set([...hostIps, window.location.hostname]))
+                : [row.bind]
               return (
-                <a className="text-primary underline-offset-2 hover:underline" href={`http://${target}:${row.hostPort}/`} target="_blank" rel="noreferrer">
-                  打开
-                </a>
+                <DropdownMenu>
+                  <DropdownMenuTrigger render={<Button type="button" variant="outline" size="xs" />}>
+                    访问
+                    <ChevronDownIcon data-icon="inline-end" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuGroup>
+                      {hosts.map((host) => {
+                        const url = `http://${host}:${row.hostPort}/`
+                        return (
+                          <DropdownMenuItem key={host} render={<a href={url} target="_blank" rel="noreferrer" />}>
+                            {url}
+                          </DropdownMenuItem>
+                        )
+                      })}
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )
             },
           } : undefined}

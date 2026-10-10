@@ -380,6 +380,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
                 peers={net.peers}
                 derived={net.derived}
                 forwards={net.forwards}
+                hostIps={net.hostIps}
                 suggestedDomains={net.suggestedDomains}
               />
               {net.status?.warning ? (

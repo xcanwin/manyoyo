@@ -464,6 +464,8 @@ export type NetworkState = {
   policy: NetworkPolicy
   status: NetStatus
   forwards: Array<{ bind: string; hostPort: number; port: number }>
+  /** 本机可访问的 IPv4 地址，绑定 0.0.0.0 时用来列出全部访问链接 */
+  hostIps?: string[]
   suggestedDomains?: string[]
   denied?: DeniedRecord[]
   peers: PeerOption[]
