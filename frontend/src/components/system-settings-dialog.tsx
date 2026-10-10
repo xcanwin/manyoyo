@@ -138,8 +138,8 @@ function ConfigFieldLabel({ path, htmlFor }: { path: string[]; htmlFor?: string 
   const label = configLabel(path)
   return (
     <FieldLabel htmlFor={htmlFor} className="items-baseline gap-2">
-      <span className={cn("font-semibold", label.mono && "font-mono text-xs")}>{label.title}</span>
-      {!label.mono ? <span className="font-mono text-xs font-normal text-muted-foreground">{label.key}</span> : null}
+      <span className={cn("font-medium", label.mono && "font-mono")}>{label.title}</span>
+      {!label.mono ? <span className="font-mono font-normal text-muted-foreground">{label.key}</span> : null}
     </FieldLabel>
   )
 }
@@ -190,7 +190,7 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
           // 卷挂载/端口这类值经常是一整行长路径，自动换行会把路径拆断不好对齐检查——
           // 关掉自动换行，改成横向滚动
           wrap="off"
-          className="min-h-16 overflow-x-auto font-mono text-xs whitespace-pre"
+          className="min-h-16 overflow-x-auto font-mono whitespace-pre"
         />
         <ConfigFieldDescription path={path} />
       </Field>
@@ -263,7 +263,7 @@ function ConfigValueGroup({
     const label = configLabel(path)
     const children =
       entries.length === 0 ? (
-        <p className="text-xs text-muted-foreground">空</p>
+        <p className="text-sm text-muted-foreground">空</p>
       ) : (
         entries.map(([key, item]) => (
           <ConfigValueGroup key={key} path={[...path, key]} value={item} onCommit={onCommit} depth={depth + 1} />
@@ -274,9 +274,9 @@ function ConfigValueGroup({
       return (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-baseline gap-2 text-base font-semibold">
+            <CardTitle className="flex items-baseline gap-2 text-sm font-semibold">
               <span className={cn(label.mono && "font-mono")}>{label.title}</span>
-              {!label.mono ? <span className="font-mono text-xs font-normal text-muted-foreground">{label.key}</span> : null}
+              {!label.mono ? <span className="font-mono font-normal text-muted-foreground">{label.key}</span> : null}
             </CardTitle>
             {label.desc ? <CardDescription>{label.desc}</CardDescription> : null}
           </CardHeader>
@@ -284,15 +284,16 @@ function ConfigValueGroup({
         </Card>
       )
     }
-    // 二级及以下：不再套框，用“小标题 + 下划线”分节，子字段整体左缩进并带一条竖线
+    // 二级及以下：不再套框，小标题加说明，子字段整体左缩进并带一条竖线；
+    // 标题和子字段之间不画分割线（子字段本来就属于它）
     return (
       <section className="flex flex-col gap-3">
-        <div className="flex flex-col gap-0.5 border-b pb-1.5">
+        <div className="flex flex-col gap-0.5">
           <div className="flex items-baseline gap-2">
             <h4 className={cn("text-sm font-semibold", label.mono && "font-mono")}>{label.title}</h4>
-            {!label.mono ? <span className="font-mono text-xs text-muted-foreground">{label.key}</span> : null}
+            {!label.mono ? <span className="font-mono text-sm text-muted-foreground">{label.key}</span> : null}
           </div>
-          {label.desc ? <p className="text-xs text-muted-foreground">{label.desc}</p> : null}
+          {label.desc ? <p className="text-sm text-muted-foreground">{label.desc}</p> : null}
         </div>
         <div className="flex flex-col gap-4 border-l-2 pl-3">{children}</div>
       </section>
