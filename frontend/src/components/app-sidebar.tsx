@@ -248,7 +248,9 @@ export function AppSidebar({
   // 当前会话换到另一个容器时（打开带 #agent 的链接、自动选中最近的 AGENT 等），
   // 侧栏跟着进入该容器的 AGENT 列表；只在会话所属容器变化时触发，
   // 用户手动点“全部容器”返回不会被弹回去
-  const [prevActiveContainerName, setPrevActiveContainerName] = React.useState(activeContainerName)
+  // 初值用空串而不是当前值：侧栏挂载时会话列表可能已经加载好（带 # 的链接直接进入某个 AGENT），
+  // 也要在首次渲染就跟过去
+  const [prevActiveContainerName, setPrevActiveContainerName] = React.useState("")
   if (activeContainerName !== prevActiveContainerName) {
     setPrevActiveContainerName(activeContainerName)
     if (activeContainerName && activeContainerName !== navContainer) {

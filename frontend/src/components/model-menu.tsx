@@ -17,6 +17,7 @@ import {
 import { PromptDialog } from "@/components/prompt-dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { apiGet, apiPost, type SessionSummary } from "@/lib/api"
+import { cn } from "@/lib/utils"
 
 type ModelOption = { value: string; label: string; description?: string }
 type EnvOptions = { defaultModel: string; options: ModelOption[] }
@@ -30,10 +31,10 @@ function splitContextSuffix(value: string): { name: string; oneM: boolean } {
   return value.endsWith("[1m]") ? { name: value.slice(0, -4), oneM: true } : { name: value, oneM: false }
 }
 
-function ModelName({ value }: { value: string }) {
+function ModelName({ value, muted = false }: { value: string; muted?: boolean }) {
   const { name, oneM } = splitContextSuffix(value)
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
+    <span className={cn("flex min-w-0 items-center gap-1.5", muted && "text-xs text-muted-foreground")}>
       <span className="truncate">{name}</span>
       {oneM ? <Badge variant="outline">1M</Badge> : null}
     </span>
@@ -77,7 +78,9 @@ export function ModelMenu({
   }, [sessionName])
 
   function handleOpenChange(open: boolean) {
-    if (!open || !sessionName) return
+    // 环境变量里已经配了档位模型时，列表以它为准，不再去容器里探测 CLI 内置目录
+    //（又慢，列出来的还是同一批模型，菜单还会跟着跳动）
+    if (!open || !sessionName || env.options.length > 0) return
     const hit = catalogCache.get(sessionName)
     if (hit && Date.now() - hit.at < CATALOG_TTL_MS) {
       setCatalog(hit.models)
@@ -111,7 +114,8 @@ export function ModelMenu({
   const extras = catalog.filter(
     (model) => model.value !== "default" && !known.has(model.value) && model.value !== extraCurrent
   )
-  const shown = current || env.defaultModel || "默认模型"
+  // 当前值是档位别名（opus 等）时，按钮上显示它对应的真实模型名
+  const shown = env.options.find((option) => option.value === current)?.label || current || env.defaultModel || "默认模型"
 
   return (
     <>
@@ -126,28 +130,30 @@ export function ModelMenu({
             />
           }
         >
-          <span className="truncate">{shown}</span>
+          <ModelName value={shown} />
           <ChevronDownIcon data-icon="inline-end" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="w-72 max-w-[calc(100vw-2rem)]">
           <DropdownMenuGroup>
             <DropdownMenuLabel>模型</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={current} onValueChange={(value) => void select(String(value))}>
-              <DropdownMenuRadioItem value="">
+              <DropdownMenuRadioItem closeOnClick value="">
                 <span className="truncate">跟随默认</span>
                 {env.defaultModel ? (
-                  <span className="ml-auto truncate text-xs text-muted-foreground">{env.defaultModel}</span>
+                  <span className="ml-auto min-w-0">
+                    <ModelName value={env.defaultModel} muted />
+                  </span>
                 ) : null}
               </DropdownMenuRadioItem>
               {extraCurrent ? (
-                <DropdownMenuRadioItem value={extraCurrent}>
+                <DropdownMenuRadioItem closeOnClick value={extraCurrent}>
                   <ModelName value={extraCurrent} />
                   <span className="ml-auto text-xs text-muted-foreground">自定义</span>
                 </DropdownMenuRadioItem>
               ) : null}
               {env.options.map((option) => (
-                <DropdownMenuRadioItem key={option.value} value={option.value}>
-                  <ModelName value={option.value} />
+                <DropdownMenuRadioItem closeOnClick key={option.value} value={option.value}>
+                  <ModelName value={option.label} />
                   {option.description ? (
                     <span className="ml-auto shrink-0 text-xs text-muted-foreground">{option.description}</span>
                   ) : null}
@@ -162,7 +168,7 @@ export function ModelMenu({
                 <DropdownMenuLabel>CLI 内置</DropdownMenuLabel>
                 <DropdownMenuRadioGroup value={current} onValueChange={(value) => void select(String(value))}>
                   {extras.map((model) => (
-                    <DropdownMenuRadioItem key={model.value} value={model.value}>
+                    <DropdownMenuRadioItem closeOnClick key={model.value} value={model.value}>
                       <span className="truncate">{model.label || model.value}</span>
                       {model.label && model.label !== model.value ? (
                         <span className="ml-auto truncate text-xs text-muted-foreground">{model.value}</span>
