@@ -1,7 +1,6 @@
 import * as React from "react"
 import { ChevronDownIcon } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -26,18 +25,10 @@ type EnvOptions = { defaultModel: string; options: ModelOption[] }
 const CATALOG_TTL_MS = 10 * 60 * 1000
 const catalogCache = new Map<string, { at: number; models: ModelOption[] }>()
 
-// 名字末尾的 [1m] 表示 1M 上下文，不是另一个模型：显示成徽标，提交时仍原样保留
-function splitContextSuffix(value: string): { name: string; oneM: boolean } {
-  return value.endsWith("[1m]") ? { name: value.slice(0, -4), oneM: true } : { name: value, oneM: false }
-}
-
+// 模型名原样显示（包括 [1m] 之类的后缀），不做任何改写
 function ModelName({ value, muted = false }: { value: string; muted?: boolean }) {
-  const { name, oneM } = splitContextSuffix(value)
   return (
-    <span className={cn("flex min-w-0 items-center gap-1.5", muted && "text-xs text-muted-foreground")}>
-      <span className="truncate">{name}</span>
-      {oneM ? <Badge variant="outline">1M</Badge> : null}
-    </span>
+    <span className={cn("min-w-0 truncate", muted && "text-xs text-muted-foreground")}>{value}</span>
   )
 }
 
@@ -124,7 +115,7 @@ export function ModelMenu({
           render={
             <Button
               variant="outline"
-              className="w-28 justify-between sm:w-44"
+              className="w-28 shrink-0 justify-between sm:w-44"
               disabled={disabled}
               title={`模型：${shown}`}
             />
