@@ -67,10 +67,10 @@ const VIEW_LABELS: Record<View, string> = {
   detail: "Agent详情",
 }
 
-// ⋯ 面板里按作用对象分两组：AGENT 自己的 / 所属容器的
+// ⋯ 面板里按作用对象分两组：所属容器的 / AGENT 自己的
 const OTHER_VIEW_GROUPS: { title: string; views: View[] }[] = [
-  { title: "AGENT", views: ["detail"] },
   { title: "容器", views: ["terminal", "container", "config"] },
+  { title: "AGENT", views: ["detail"] },
 ]
 
 // 页面可见时的多设备/多标签页同步轮询：间隔与空闲超时，见下方 reconcile 相关 effect
