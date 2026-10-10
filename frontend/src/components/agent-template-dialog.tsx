@@ -76,11 +76,13 @@ export function AgentTemplateDialog({
         const value = isDefaultAgent
           ? String(detail.containerAgentPromptCommand || "")
           : String(detail.agentPromptCommandOverride || "")
-        setTemplate(value)
         if (!isDefaultAgent && !value) {
+          // 没有覆盖时按“继承容器默认”展示继承来的模板，与手动选它的效果一致
+          setTemplate(getInheritedTemplateText(detail))
           setCli(INHERIT_CLI)
           return
         }
+        setTemplate(value)
         const matchedCli = Object.entries(CLI_PROMPT_TEMPLATES).find(
           ([, tpl]) => tpl === value
         )?.[0]
