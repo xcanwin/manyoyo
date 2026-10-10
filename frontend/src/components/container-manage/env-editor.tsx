@@ -86,7 +86,7 @@ export function EnvEditor({
           <RowList
             ariaPrefix="环境变量文件"
             rows={fileRows}
-            columns={[{ key: "path", label: "文件路径（宿主机上的绝对路径）", placeholder: "/abs/path/.env" }]}
+            columns={[{ key: "path", label: "文件路径（宿主机上的绝对路径）", placeholder: "例如 /home/me/project/.env" }]}
             newRow={() => ({ path: "" })}
             addLabel="添加环境变量文件"
             onChange={(next) => {
@@ -130,7 +130,7 @@ export function EnvEditor({
           id={`${idPrefix}-env-text`}
           aria-label="环境变量文本"
           className="min-h-32 font-mono text-xs"
-          placeholder="KEY=value"
+          placeholder="例如 KEY=value，每行一项"
           value={value}
           onChange={(event) => onChange(event.target.value)}
         />

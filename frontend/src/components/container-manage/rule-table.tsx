@@ -151,7 +151,7 @@ function UserRow({
       aria-label={`${label}第 ${n} 行${direction === "outbound" ? "目标端口" : "容器端口"}`}
       aria-invalid={!!portsError || undefined}
       className={cn("min-w-0 font-mono text-xs", off && "opacity-45")}
-      placeholder="全部"
+      placeholder="留空表示全部端口"
       value={rule.ports}
       onChange={(event) => onChange({ ...rule, ports: event.target.value })}
       onBlur={() => setPortsTouched(true)}

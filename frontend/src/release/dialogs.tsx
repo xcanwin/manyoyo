@@ -102,7 +102,7 @@ export function RunAllDialog({
             <Alert>
               <AlertDescription>一次确认后不再询问，会连续推送、触发构建、创建 Release 草稿并公开、发布 npm。输入 publish 以确认。</AlertDescription>
             </Alert>
-            <Input value={phrase} onChange={(event) => setPhrase(event.target.value)} placeholder="publish" />
+            <Input value={phrase} onChange={(event) => setPhrase(event.target.value)} placeholder="输入 publish" />
           </div>
         )}
         <DialogFooter>
@@ -266,7 +266,7 @@ export function CommitDialog({
           </Button>
         </div>
         {note && <p className="text-sm text-muted-foreground">{note}</p>}
-        <Textarea rows={6} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="feat: …" />
+        <Textarea rows={6} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="例如 feat: 新增功能" />
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>

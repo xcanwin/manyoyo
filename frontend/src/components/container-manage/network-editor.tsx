@@ -84,8 +84,8 @@ export function NetworkEditor({
 
   const exposeColumns: RowColumn<ExposeRow>[] = [
     { key: "bind", label: "宿主机监听地址", options: BIND_OPTIONS, className: "flex-[2]" },
-    { key: "hostPort", label: "宿主机监听端口", placeholder: "18080", inputMode: "numeric", className: "w-28 sm:w-32" },
-    { key: "port", label: "容器端口", placeholder: "8080", inputMode: "numeric", className: "w-24 sm:w-28" },
+    { key: "hostPort", label: "宿主机监听端口", placeholder: "例如 18080", inputMode: "numeric", className: "w-28 sm:w-32" },
+    { key: "port", label: "容器端口", placeholder: "例如 8080", inputMode: "numeric", className: "w-24 sm:w-28" },
   ]
 
   return (

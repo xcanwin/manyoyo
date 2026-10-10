@@ -107,7 +107,7 @@ export function QuickChatSetupDialog({
             <div className="flex gap-2">
               <Input
                 id="quick-chat-path"
-                placeholder={DEFAULT_QUICK_CHAT_PATH}
+                placeholder="例如 /home/me/work"
                 value={path}
                 onChange={(event) => setPath(event.target.value)}
               />

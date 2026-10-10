@@ -314,7 +314,7 @@ export function CreateContainerDialog({
                   </FieldLabel>
                   <Input
                     id="create-container-name"
-                    placeholder="my-dev 或 my-{now}"
+                    placeholder="例如 my-dev 或 my-{now}"
                     value={form.containerName}
                     onChange={(event) =>
                       setField("containerName", event.target.value)
@@ -327,7 +327,7 @@ export function CreateContainerDialog({
                   <div className="flex gap-2">
                     <Input
                       id="create-host-path"
-                      placeholder="/abs/path/project"
+                      placeholder="例如 /home/me/project"
                       value={form.hostPath}
                       onChange={(event) =>
                         setField("hostPath", event.target.value)
@@ -348,7 +348,7 @@ export function CreateContainerDialog({
                   </FieldLabel>
                   <Input
                     id="create-container-path"
-                    placeholder="/workspace"
+                    placeholder="例如 /workspace"
                     value={form.containerPath}
                     onChange={(event) =>
                       setField("containerPath", event.target.value)
@@ -360,7 +360,7 @@ export function CreateContainerDialog({
                   <FieldLabel className="font-semibold" htmlFor="create-image-name">imageName</FieldLabel>
                   <Input
                     id="create-image-name"
-                    placeholder="ghcr.io/xcanwin/manyoyo"
+                    placeholder="例如 ghcr.io/xcanwin/manyoyo"
                     value={form.imageName}
                     onChange={(event) =>
                       setField("imageName", event.target.value)
@@ -373,7 +373,7 @@ export function CreateContainerDialog({
                   </FieldLabel>
                   <Input
                     id="create-image-version"
-                    placeholder="1.9.1-common"
+                    placeholder="例如 2.2.0-common"
                     value={form.imageVersion}
                     onChange={(event) =>
                       setField("imageVersion", event.target.value)
@@ -477,7 +477,7 @@ export function CreateContainerDialog({
                 </FieldLabel>
                 <Textarea
                   id="create-volumes"
-                  placeholder="/host/path:/container/path"
+                  placeholder="例如 /home/me/data:/data"
                   className="min-h-16"
                   value={form.volumes}
                   onChange={(event) => setField("volumes", event.target.value)}

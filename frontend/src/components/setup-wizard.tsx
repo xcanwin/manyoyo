@@ -338,7 +338,7 @@ export function SetupWizard({
                     <Input
                       id="setup-base-url"
                       inputMode="url"
-                      placeholder="https://your-service.example.com/v1"
+                      placeholder="例如 https://your-service.example.com/v1"
                       value={form.baseUrl}
                       onChange={(event) => setField("baseUrl", event.target.value)}
                     />
