@@ -128,7 +128,7 @@ export function FilesPanel({
   const isMobile = useIsMobile()
   // 移动端主从视图：先看目录列表，点开文件后再切到内容页
   const [mobilePane, setMobilePane] = React.useState<"list" | "detail">("list")
-  const { width: listWidth, dragging: listDragging, onHandlePointerDown } = useResizableWidth({
+  const { width: listWidth, onHandlePointerDown } = useResizableWidth({
     storageKey: "manyoyo:files-list-width",
     defaultWidth: 256,
     min: 180,
@@ -501,7 +501,7 @@ export function FilesPanel({
         </div>
 
         {isMobile ? null : (
-          <ResizeHandle onPointerDown={onHandlePointerDown} dragging={listDragging} />
+          <ResizeHandle onPointerDown={onHandlePointerDown} />
         )}
 
         <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", !showDetailPane && "hidden")}>

@@ -19,11 +19,9 @@ import { buildSessionHash, parseSessionHash, pickMostRecentSession } from "@/lib
 // 独立定位的，跟收起状态无关——收起后线还留在原地、也还能拖，这里收起时直接不渲染
 function SidebarResizeHandle({
   width,
-  dragging,
   onPointerDown,
 }: {
   width: number
-  dragging: boolean
   onPointerDown: (event: React.PointerEvent) => void
 }) {
   const { isMobile, state } = useSidebar()
@@ -31,7 +29,6 @@ function SidebarResizeHandle({
   return (
     <ResizeHandle
       onPointerDown={onPointerDown}
-      dragging={dragging}
       className="absolute inset-y-0 z-20 -ml-1"
       style={{ left: width }}
     />
@@ -55,7 +52,7 @@ export function App() {
       cancelled = true
     }
   }, [])
-  const { width: sidebarWidth, dragging: sidebarDragging, onHandlePointerDown } = useResizableWidth({
+  const { width: sidebarWidth, onHandlePointerDown } = useResizableWidth({
     storageKey: "manyoyo:sidebar-width",
     defaultWidth: 288,
     min: 224,
@@ -163,7 +160,6 @@ export function App() {
       />
       <SidebarResizeHandle
         width={sidebarWidth}
-        dragging={sidebarDragging}
         onPointerDown={onHandlePointerDown}
       />
       <SidebarInset className="min-h-0 min-w-0">
