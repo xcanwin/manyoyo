@@ -1,9 +1,10 @@
 import type { SessionSummary } from "@/lib/api"
 
-// 浏览器地址栏用 #<容器>~<agentId> 记住当前 AGENT（默认 AGENT 也写成 ~default，格式统一），
+// 浏览器地址栏用 #<容器>~agent-N 记住当前 AGENT（默认 AGENT 写成 ~agent-1，与其它 AGENT 格式统一），
 // 刷新或分享链接后能直接回到同一个聊天
 const HASH_SEPARATOR = "~"
 const DEFAULT_AGENT_ID = "default"
+const DEFAULT_AGENT_URL_ID = "agent-1"
 
 // 返回会话名（与 SessionSummary.name 一致：默认 AGENT 就是容器名）
 export function parseSessionHash(hash: string): string | null {
@@ -20,12 +21,12 @@ export function parseSessionHash(hash: string): string | null {
   const container = text.slice(0, index)
   const agentId = text.slice(index + 1)
   if (!container) return null
-  return !agentId || agentId === DEFAULT_AGENT_ID ? container : text
+  return !agentId || agentId === DEFAULT_AGENT_ID || agentId === DEFAULT_AGENT_URL_ID ? container : text
 }
 
 export function buildSessionHash(session: Pick<SessionSummary, "containerName" | "agentId"> | null): string {
   if (!session) return ""
-  const agentId = session.agentId || DEFAULT_AGENT_ID
+  const agentId = !session.agentId || session.agentId === DEFAULT_AGENT_ID ? DEFAULT_AGENT_URL_ID : session.agentId
   return `#${encodeURIComponent(`${session.containerName}${HASH_SEPARATOR}${agentId}`)}`
 }
 

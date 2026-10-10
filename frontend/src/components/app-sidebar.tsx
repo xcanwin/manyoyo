@@ -483,12 +483,12 @@ export function AppSidebar({
             MANYOYO Web
           </span>
         </div>
-        <Button className="w-full" variant="outline" disabled={quickChatBusy} onClick={startQuickChat}>
+        <Button className="w-full" size="lg" disabled={quickChatBusy} onClick={startQuickChat}>
           {quickChatBusy ? <Spinner data-icon="inline-start" /> : <MessageCircleIcon data-icon="inline-start" />}
           {quickChatBusy ? "创建中..." : "快捷对话"}
         </Button>
         <div className="flex gap-2">
-          <Button className="flex-1" size="lg" onClick={() => setCreateOpen(true)}>
+          <Button className="flex-1" size="lg" variant="outline" onClick={() => setCreateOpen(true)}>
             <PlusIcon data-icon="inline-start" />
             新建容器
           </Button>
@@ -496,6 +496,7 @@ export function AppSidebar({
             <Button
               className="flex-1"
               size="lg"
+              variant="outline"
               disabled={creatingAgentContainer === navContainer}
               onClick={() => createAgent(navContainer)}
             >

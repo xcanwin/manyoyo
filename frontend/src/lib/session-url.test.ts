@@ -10,8 +10,9 @@ function make(name: string, extra: Partial<SessionSummary> = {}): SessionSummary
 describe("session-url", () => {
   it("hash 往返", () => {
     const hash = buildSessionHash({ containerName: "box", agentId: "default" })
-    expect(hash).toBe("#box~default")
+    expect(hash).toBe("#box~agent-1")
     expect(parseSessionHash(hash)).toBe("box")
+    expect(parseSessionHash("#box~default")).toBe("box")
     expect(parseSessionHash(buildSessionHash({ containerName: "box", agentId: "x1" }))).toBe("box~x1")
     expect(parseSessionHash("")).toBeNull()
     expect(parseSessionHash("#%E0%A4%A")).toBeNull()
