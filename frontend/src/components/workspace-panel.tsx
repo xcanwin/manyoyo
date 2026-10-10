@@ -63,11 +63,11 @@ const VIEW_LABELS: Record<View, string> = {
   detail: "Agent详情",
 }
 
-const PERSISTENT_VIEWS: View[] = ["activity", "files"]
-
-const OTHER_VIEWS = (Object.keys(VIEW_LABELS) as View[]).filter(
-  (key) => !PERSISTENT_VIEWS.includes(key)
-)
+// ⋯ 面板里按作用对象分两组：AGENT 自己的 / 所属容器的
+const OTHER_VIEW_GROUPS: { title: string; views: View[] }[] = [
+  { title: "AGENT", views: ["detail"] },
+  { title: "容器", views: ["terminal", "container", "config"] },
+]
 
 // 页面可见时的多设备/多标签页同步轮询：间隔与空闲超时，见下方 reconcile 相关 effect
 const SYNC_POLL_INTERVAL_MS = 6000
@@ -1152,20 +1152,26 @@ export function WorkspacePanel({
             </PopoverTrigger>
             <PopoverContent align="start" className="w-36 p-1">
               <div className="flex flex-col gap-1">
-                {OTHER_VIEWS.map((key) => (
-                  <Button
-                    key={key}
-                    variant={view === key ? "secondary" : "ghost"}
-                    size="sm"
-                    className="justify-start"
-                    aria-current={view === key}
-                    onClick={() => {
-                      changeView(key)
-                      setSwitcherOpen(false)
-                    }}
-                  >
-                    {VIEW_LABELS[key]}
-                  </Button>
+                {OTHER_VIEW_GROUPS.map((group, index) => (
+                  <React.Fragment key={group.title}>
+                    {index > 0 ? <Separator /> : null}
+                    <div className="px-2 pt-1 text-xs text-muted-foreground">{group.title}</div>
+                    {group.views.map((key) => (
+                      <Button
+                        key={key}
+                        variant={view === key ? "secondary" : "ghost"}
+                        size="sm"
+                        className="justify-start"
+                        aria-current={view === key}
+                        onClick={() => {
+                          changeView(key)
+                          setSwitcherOpen(false)
+                        }}
+                      >
+                        {VIEW_LABELS[key]}
+                      </Button>
+                    ))}
+                  </React.Fragment>
                 ))}
               </div>
             </PopoverContent>

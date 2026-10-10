@@ -48,6 +48,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -263,6 +264,50 @@ export function AppSidebar({
   function goToAgents(containerName: string) {
     setNavLevel("agents")
     setNavContainer(containerName)
+  }
+
+  // 容器行的 ⋯ 与面包屑上的 ⋯ 共用同一份菜单，按作用对象分组：备注 / 子 AGENT / 容器复制 / 删除
+  function renderContainerMenuContent(containerName: string, remark: string, side: "right" | "bottom") {
+    return (
+      <DropdownMenuContent side={side} align="start" className="w-56">
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => editContainerRemark(containerName, remark)}>
+            编辑备注
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem
+            disabled={creatingAgentContainer === containerName}
+            onClick={() => createAgent(containerName)}
+          >
+            {creatingAgentContainer === containerName ? (
+              <>
+                <Spinner data-icon="inline-start" />
+                创建中...
+              </>
+            ) : (
+              "新建 AGENT"
+            )}
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => openCloneDialog("clone-config", containerName)}>
+            创建相同配置容器
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => openCloneDialog("duplicate", containerName)}>
+            复制容器
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem variant="destructive" onClick={() => removeContainer(containerName)}>
+            删除容器
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    )
   }
 
   // 移动端选中 AGENT 后自动收起侧边栏 Sheet，露出右侧聊天内容
@@ -505,7 +550,7 @@ export function AppSidebar({
               ) : (
                 <PlusIcon data-icon="inline-start" />
               )}
-              {creatingAgentContainer === navContainer ? "创建中..." : "新建AGENT"}
+              {creatingAgentContainer === navContainer ? "创建中..." : "新建 AGENT"}
             </Button>
           ) : null}
         </div>
@@ -559,6 +604,16 @@ export function AppSidebar({
                   <BreadcrumbPage className="block truncate">
                     {activeGroup.containerRemark || activeGroup.containerName}
                   </BreadcrumbPage>
+                </BreadcrumbItem>
+                <BreadcrumbItem className="shrink-0">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={<Button variant="ghost" size="icon-xs" title="容器操作" aria-label="容器操作" />}
+                    >
+                      <MoreHorizontalIcon />
+                    </DropdownMenuTrigger>
+                    {renderContainerMenuContent(activeGroup.containerName, activeGroup.containerRemark, "bottom")}
+                  </DropdownMenu>
                 </BreadcrumbItem>
               </>
             ) : null}
@@ -622,55 +677,7 @@ export function AppSidebar({
                             </SidebarMenuAction>
                           }
                         />
-                        <DropdownMenuContent side="right" align="start" className="w-56">
-                          <DropdownMenuGroup className="flex flex-col gap-1">
-                            <DropdownMenuItem
-                              onClick={() =>
-                                editContainerRemark(
-                                  group.containerName,
-                                  group.containerRemark
-                                )
-                              }
-                            >
-                              编辑备注
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              disabled={creatingAgentContainer === group.containerName}
-                              onClick={() => createAgent(group.containerName)}
-                            >
-                              {creatingAgentContainer === group.containerName ? (
-                                <>
-                                  <Spinner data-icon="inline-start" />
-                                  创建中...
-                                </>
-                              ) : (
-                                "新建 AGENT"
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                openCloneDialog("clone-config", group.containerName)
-                              }
-                            >
-                              创建相同配置容器
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                openCloneDialog("duplicate", group.containerName)
-                              }
-                            >
-                              复制容器
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() =>
-                                removeContainer(group.containerName)
-                              }
-                            >
-                              删除容器
-                            </DropdownMenuItem>
-                          </DropdownMenuGroup>
-                        </DropdownMenuContent>
+                        {renderContainerMenuContent(group.containerName, group.containerRemark, "right")}
                       </DropdownMenu>
                     </SidebarMenuItem>
                   ))
@@ -706,16 +713,14 @@ export function AppSidebar({
                           }
                         />
                         <DropdownMenuContent side="right" align="start" className="w-56">
-                          <DropdownMenuGroup className="flex flex-col gap-1">
-                            <DropdownMenuItem
-                              onClick={() => editAgentRemark(session)}
-                            >
+                          <DropdownMenuGroup>
+                            <DropdownMenuItem onClick={() => editAgentRemark(session)}>
                               编辑备注
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() => removeAgent(session)}
-                            >
+                          </DropdownMenuGroup>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuGroup>
+                            <DropdownMenuItem variant="destructive" onClick={() => removeAgent(session)}>
                               删除 AGENT
                             </DropdownMenuItem>
                           </DropdownMenuGroup>
