@@ -299,11 +299,15 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
           </button>
         ) : null}
       </div>
-      <div
-        ref={containerRef}
-        className="min-h-0 flex-1 overflow-hidden p-2"
-        onClick={isMobile ? () => mobileInputRef.current?.focus() : undefined}
-      />
+      {/* 内边距放在外层，终端容器自身不留内边距：fit 按容器实际高度取整行数，
+          上下的黑边才稳定，不会因为取整把底部余量吃掉 */}
+      <div className="min-h-0 flex-1 overflow-hidden p-2">
+        <div
+          ref={containerRef}
+          className="h-full w-full overflow-hidden"
+          onClick={isMobile ? () => mobileInputRef.current?.focus() : undefined}
+        />
+      </div>
       {isMobile ? (
         <form
           className="flex shrink-0 items-center gap-2 border-t border-zinc-800 bg-zinc-900 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]"
