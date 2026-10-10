@@ -182,3 +182,11 @@
     display: none;
   }
 }
+/* iOS Safari 聚焦字号小于 16px 的输入框会自动放大页面。其它平台输入框与下拉等统一 14px，
+   只有 iOS 保留 16px 防止放大（-webkit-touch-callout 仅 iOS Safari 支持）。 */
+@supports (-webkit-touch-callout: none) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea {
+    font-size: 16px;
+  }
+}
