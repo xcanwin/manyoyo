@@ -138,12 +138,8 @@ export function ModelMenu({
             <DropdownMenuLabel>模型</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={current} onValueChange={(value) => void select(String(value))}>
               <DropdownMenuRadioItem closeOnClick value="">
-                <span className="truncate">跟随默认</span>
-                {env.defaultModel ? (
-                  <span className="ml-auto min-w-0">
-                    <ModelName value={env.defaultModel} muted />
-                  </span>
-                ) : null}
+                <ModelName value={env.defaultModel || "默认模型"} />
+                <span className="ml-auto shrink-0 text-xs text-muted-foreground">跟随默认</span>
               </DropdownMenuRadioItem>
               {extraCurrent ? (
                 <DropdownMenuRadioItem closeOnClick value={extraCurrent}>
