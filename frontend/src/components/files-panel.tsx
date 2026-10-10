@@ -1,6 +1,5 @@
 import * as React from "react"
 import {
-  ArrowLeftIcon,
   ArrowUpIcon,
   FileIcon,
   FilePlusIcon,
@@ -447,7 +446,7 @@ export function FilesPanel({
         <div
           ref={listScrollRef}
           style={isMobile ? undefined : { width: listWidth }}
-          className={cn("h-full shrink-0 overflow-y-auto border-r", isMobile && "w-full", !showListPane && "hidden")}
+          className={cn("@container h-full shrink-0 overflow-y-auto border-r", isMobile && "w-full", !showListPane && "hidden")}
         >
           <div className="flex flex-col gap-0.5 p-2">
             {loading ? (
@@ -466,7 +465,7 @@ export function FilesPanel({
                     data-entry-path={entry.path}
                     onClick={() => openEntry(entry)}
                     className={cn(
-                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/8",
+                      "flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/8 @xs:flex-row @xs:items-center @xs:gap-2",
                       selectedPath === entry.path && "bg-foreground/12 font-medium"
                     )}
                     title={
@@ -475,17 +474,20 @@ export function FilesPanel({
                         : sanitizeDisplayText(entry.name)
                     }
                   >
-                    {entry.kind === "directory" ? (
-                      <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
-                    ) : entry.kind === "symlink" ? (
-                      <Link2Icon className="size-4 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <FileIcon className="size-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="truncate">{sanitizeDisplayText(entry.name)}</span>
+                    {/* 名字是主角：窄列表里体积 / 时间折到名字下面一行（小号灰字），名字独占整行 */}
+                    <span className="flex min-w-0 items-center gap-2">
+                      {entry.kind === "directory" ? (
+                        <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
+                      ) : entry.kind === "symlink" ? (
+                        <Link2Icon className="size-4 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <FileIcon className="size-4 shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="truncate">{sanitizeDisplayText(entry.name)}</span>
+                    </span>
                     {/* 体积/修改时间靠右显示：挑日志、找刚改过的文件时全靠这两个值，
                         只有文件名的列表等于每个都得点开看。空间不够时优先保名字 */}
-                    <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
+                    <span className="shrink-0 pl-6 text-xs text-muted-foreground tabular-nums @xs:ml-auto @xs:pl-0">
                       {[
                         entry.kind === "file" ? formatBytes(entry.size, "") : "",
                         formatDateTime(entry.mtimeMs),
@@ -509,8 +511,8 @@ export function FilesPanel({
             <div className="flex shrink-0 items-center justify-between gap-2 border-b p-2">
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 {isMobile ? (
-                  <Button variant="ghost" size="icon-sm" onClick={handleMobileBackToList} title="返回列表" aria-label="返回列表">
-                    <ArrowLeftIcon />
+                  <Button variant="outline" size="sm" onClick={handleMobileBackToList} title="返回目录列表">
+                    目录
                   </Button>
                 ) : null}
                 <PathBar value={sanitizeDisplayText(selectedPath)} />

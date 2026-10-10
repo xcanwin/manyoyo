@@ -55,7 +55,7 @@ export function App() {
   const { width: sidebarWidth, onHandlePointerDown } = useResizableWidth({
     storageKey: "manyoyo:sidebar-width",
     defaultWidth: 288,
-    min: 224,
+    min: 260,
     max: 512,
   })
   // 初始值取自地址栏 #<会话名>；列表加载后再校验是否还存在
