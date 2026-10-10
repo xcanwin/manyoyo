@@ -17,11 +17,10 @@ export function parseSessionHash(hash: string): string | null {
     return null
   }
   const index = text.indexOf(HASH_SEPARATOR)
-  if (index < 0) return text || null
+  if (index < 1) return null
   const container = text.slice(0, index)
   const agentId = text.slice(index + 1)
-  if (!container) return null
-  return !agentId || agentId === DEFAULT_AGENT_ID || agentId === DEFAULT_AGENT_URL_ID ? container : text
+  return agentId === DEFAULT_AGENT_URL_ID ? container : text
 }
 
 export function buildSessionHash(session: Pick<SessionSummary, "containerName" | "agentId"> | null): string {
