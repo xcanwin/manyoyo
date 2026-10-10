@@ -1154,8 +1154,9 @@ export function WorkspacePanel({
               <div className="flex flex-col gap-1">
                 {OTHER_VIEW_GROUPS.map((group, index) => (
                   <React.Fragment key={group.title}>
-                    {index > 0 ? <Separator /> : null}
-                    <div className="px-2 pt-1 text-xs text-muted-foreground">{group.title}</div>
+                    {/* 这里分隔的是“作用对象”（AGENT / 容器），比侧栏菜单里按功能分类的分割线颜色更深 */}
+                    {index > 0 ? <Separator className="my-1 bg-foreground/25" /> : null}
+                    <div className="px-1.5 py-1 text-xs font-medium text-muted-foreground">{group.title}</div>
                     {group.views.map((key) => (
                       <Button
                         key={key}
