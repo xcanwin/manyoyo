@@ -91,6 +91,9 @@ function EditablePathBar({ value, onSubmit, className }: { value: string; onSubm
       }}
       onBlur={() => setDraft(value)}
       spellCheck={false}
+      autoComplete="off"
+      data-1p-ignore
+      data-lpignore="true"
       autoCapitalize="off"
       autoCorrect="off"
       aria-label="当前路径，回车跳转"

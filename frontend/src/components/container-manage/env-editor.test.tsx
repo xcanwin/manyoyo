@@ -45,10 +45,12 @@ describe("EnvEditor", () => {
   test("表格默认遮罩敏感值，点眼睛才显示；普通值直接显示", async () => {
     await act(async () => root.render(<Harness initial={"PATH=/bin\nOPENAI_API_KEY=sk-1\n"} onText={() => {}} />))
     const values = [...container.querySelectorAll<HTMLInputElement>('input[aria-label$="的值"]')]
-    expect(values.map((input) => input.type)).toEqual(["text", "password"])
+    // 不用 type=password，避免浏览器弹“要保存密码吗”；遮罩靠 CSS
+    expect(values.map((input) => input.type)).toEqual(["text", "text"])
+    expect(values.map((input) => input.className.includes("text-security"))).toEqual([false, true])
     const eye = container.querySelector<HTMLButtonElement>('button[aria-label="显示值"]')!
     await act(async () => eye.click())
-    expect(container.querySelector<HTMLInputElement>('input[aria-label="第 2 项的值"]')!.type).toBe("text")
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="第 2 项的值"]')!.className).not.toContain("text-security")
   })
 
   test("编辑表格回写成文本；添加变量后空名字的行不会消失；删除一行", async () => {

@@ -4,6 +4,7 @@ import { EyeIcon, EyeOffIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { RowList } from "@/components/container-manage/row-list"
@@ -155,9 +156,12 @@ export function EnvEditor({
                 />
                 <Input
                   aria-label={`第 ${index + 1} 项的值`}
-                  className="flex-1 font-mono text-xs"
-                  type={hidden ? "password" : "text"}
+                  className={cn("flex-1 font-mono text-xs", hidden && "[-webkit-text-security:disc]")}
+                  // 不用 type=password：浏览器会把它当登录表单，回车后弹“要保存密码吗”
+                  type="text"
                   autoComplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
                   value={entry.value}
                   onChange={(event) => updateEntry(index, { value: event.target.value })}
                 />

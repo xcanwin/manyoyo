@@ -184,7 +184,11 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
         <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
         <Input
           id={fieldId}
-          type="password"
+          // 不用 type=password：浏览器会把它当登录表单，弹“要保存密码吗”
+          type="text"
+          className="[-webkit-text-security:disc]"
+          data-1p-ignore
+          data-lpignore="true"
           value={text}
           onChange={(event) => setText(event.target.value)}
           onBlur={() => {
