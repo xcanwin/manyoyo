@@ -277,7 +277,7 @@ export function AppSidebar({
             编辑备注
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        <DropdownMenuSeparator className="mx-1" />
+        <DropdownMenuSeparator className="mx-1 bg-border/50" />
         <DropdownMenuGroup>
           <DropdownMenuItem
             disabled={creatingAgentContainer === containerName}
@@ -293,7 +293,7 @@ export function AppSidebar({
             )}
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        <DropdownMenuSeparator className="mx-1" />
+        <DropdownMenuSeparator className="mx-1 bg-border/50" />
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={() => openCloneDialog("clone-config", containerName)}>
             创建相同配置容器
@@ -302,7 +302,7 @@ export function AppSidebar({
             复制容器
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        <DropdownMenuSeparator className="mx-1" />
+        <DropdownMenuSeparator className="mx-1 bg-border/50" />
         <DropdownMenuGroup>
           <DropdownMenuItem variant="destructive" onClick={() => removeContainer(containerName)}>
             删除容器
@@ -721,7 +721,7 @@ export function AppSidebar({
                               编辑备注
                             </DropdownMenuItem>
                           </DropdownMenuGroup>
-                          <DropdownMenuSeparator className="mx-1" />
+                          <DropdownMenuSeparator className="mx-1 bg-border/50" />
                           <DropdownMenuGroup>
                             <DropdownMenuItem variant="destructive" onClick={() => removeAgent(session)}>
                               删除 AGENT

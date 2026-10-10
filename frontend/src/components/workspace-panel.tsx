@@ -41,10 +41,14 @@ import { MarkdownContent } from "@/components/markdown-content"
 import { ModelDialog } from "@/components/model-dialog"
 import { TerminalView } from "@/components/terminal-view"
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
@@ -157,7 +161,6 @@ function formatTime(value: string): string {
 // 复制方式；assistant 的 markdown 回复额外提供"复制文本"/"复制 Markdown"两个
 // 选项，前者是渲染后的纯文本，后者是原始 markdown
 function CopyMessageButton({ text, markdown }: { text: string; markdown?: string }) {
-  const [open, setOpen] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
 
   async function copy(value: string) {
@@ -168,7 +171,6 @@ function CopyMessageButton({ text, markdown }: { text: string; markdown?: string
     } catch {
       // 剪贴板权限被拒绝时静默失败，不打断阅读
     }
-    setOpen(false)
   }
 
   if (markdown === undefined) {
@@ -186,8 +188,8 @@ function CopyMessageButton({ text, markdown }: { text: string; markdown?: string
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
+    <DropdownMenu>
+      <DropdownMenuTrigger
         render={
           <button
             type="button"
@@ -198,18 +200,14 @@ function CopyMessageButton({ text, markdown }: { text: string; markdown?: string
         }
       >
         {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-32 p-1">
-        <div className="flex flex-col gap-1">
-          <Button variant="ghost" size="sm" className="justify-start" onClick={() => copy(text)}>
-            复制文本
-          </Button>
-          <Button variant="ghost" size="sm" className="justify-start" onClick={() => copy(markdown)}>
-            复制 Markdown
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-36">
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => copy(text)}>复制文本</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => copy(markdown)}>复制 Markdown</DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -522,7 +520,6 @@ function Composer({
   onOpenModel: () => void
 }) {
   const isMobile = useIsMobile()
-  const [optionsOpen, setOptionsOpen] = React.useState(false)
   // 拦截理由集中在 resolveComposerBlockReason 里算（含容器级运行锁：同容器别的
   // AGENT 在跑时这个 AGENT 也发不出去，提前禁用而不是点了才吃 409）
   const blockReason = session ? resolveComposerBlockReason(session, mode) : ""
@@ -571,10 +568,10 @@ function Composer({
         }}
       />
       <div className="mt-2 flex items-center justify-between gap-2">
-        <Popover open={optionsOpen} onOpenChange={setOptionsOpen}>
+        <DropdownMenu>
           {/* 模式必须常驻可见：只靠输入框 placeholder 提示的话，一打字就看不见了，
               很容易在"系统命令"模式下把整段话当 shell 命令发出去 */}
-          <PopoverTrigger
+          <DropdownMenuTrigger
             render={
               <Button
                 variant={mode === "command" ? "secondary" : "outline"}
@@ -584,59 +581,33 @@ function Composer({
             }
           >
             {formatComposerModeLabel(mode)}
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-44 p-1">
-            <div className="flex flex-col gap-1">
-              <Button
-                variant={mode === "agent" ? "secondary" : "ghost"}
-                size="sm"
-                className="justify-start"
-                onClick={() => {
-                  onModeChange("agent")
-                  setOptionsOpen(false)
-                }}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-44">
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                className={mode === "agent" ? "bg-accent" : undefined}
+                onClick={() => onModeChange("agent")}
               >
                 Agent对话
-              </Button>
-              <Button
-                variant={mode === "command" ? "secondary" : "ghost"}
-                size="sm"
-                className="justify-start"
-                onClick={() => {
-                  onModeChange("command")
-                  setOptionsOpen(false)
-                }}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className={mode === "command" ? "bg-accent" : undefined}
+                onClick={() => onModeChange("command")}
               >
                 系统命令
-              </Button>
-              <Separator className="my-1" />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="justify-start"
-                disabled={!session || archived}
-                onClick={() => {
-                  onOpenCliTemplate()
-                  setOptionsOpen(false)
-                }}
-              >
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator className="mx-1 bg-border/50" />
+            <DropdownMenuGroup>
+              <DropdownMenuItem disabled={!session || archived} onClick={() => onOpenCliTemplate()}>
                 CLI · {session?.agentProgram || "未设置"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="justify-start"
-                disabled={!session || archived}
-                onClick={() => {
-                  onOpenModel()
-                  setOptionsOpen(false)
-                }}
-              >
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!session || archived} onClick={() => onOpenModel()}>
                 模型 · {session?.model || "跟随默认"}
-              </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {sending ? (
           <Button variant="destructive" className="px-4" onClick={onStop}>
             停止
@@ -696,7 +667,6 @@ export function WorkspacePanel({
   const [messagesLoading, setMessagesLoading] = React.useState(false)
   const [draft, setDraft] = React.useState("")
   const [mode, setMode] = React.useState<"agent" | "command">("agent")
-  const [switcherOpen, setSwitcherOpen] = React.useState(false)
   // 按会话名记录"本标签页正在为哪些会话跑 stream"，而不是单个全局布尔值——
   // 否则切到另一个 agent 时，输入框/发送按钮会继续显示上一个 agent 的状态
   const [sendingNames, setSendingNames] = React.useState<Set<string>>(() => new Set())
@@ -1144,39 +1114,34 @@ export function WorkspacePanel({
           >
             文件
           </Button>
-          <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
-            <PopoverTrigger
+          <DropdownMenu>
+            <DropdownMenuTrigger
               render={<Button variant="ghost" size="icon-sm" title="更多标签页" aria-label="更多标签页" />}
             >
               <EllipsisIcon />
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-36 p-1">
-              <div className="flex flex-col gap-1">
-                {OTHER_VIEW_GROUPS.map((group, index) => (
-                  <React.Fragment key={group.title}>
-                    {/* 这里分隔的是“作用对象”（AGENT / 容器），比侧栏菜单里按功能分类的分割线颜色更深 */}
-                    {index > 0 ? <Separator className="my-1 bg-foreground/25" /> : null}
-                    <div className="px-1.5 py-1 text-xs font-medium text-muted-foreground">{group.title}</div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-36">
+              {OTHER_VIEW_GROUPS.map((group, index) => (
+                <React.Fragment key={group.title}>
+                  {/* 这里分隔的是“作用对象”（AGENT / 容器），比侧栏菜单里按功能分类的分割线颜色更深 */}
+                  {index > 0 ? <DropdownMenuSeparator className="mx-1" /> : null}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{group.title}</DropdownMenuLabel>
                     {group.views.map((key) => (
-                      <Button
+                      <DropdownMenuItem
                         key={key}
-                        variant={view === key ? "secondary" : "ghost"}
-                        size="sm"
-                        className="justify-start"
                         aria-current={view === key}
-                        onClick={() => {
-                          changeView(key)
-                          setSwitcherOpen(false)
-                        }}
+                        className={view === key ? "bg-accent" : undefined}
+                        onClick={() => changeView(key)}
                       >
                         {VIEW_LABELS[key]}
-                      </Button>
+                      </DropdownMenuItem>
                     ))}
-                  </React.Fragment>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
+                  </DropdownMenuGroup>
+                </React.Fragment>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <Separator orientation="vertical" className="h-4! shrink-0" />
         <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm font-medium">
