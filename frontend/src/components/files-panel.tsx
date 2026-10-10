@@ -183,9 +183,24 @@ export function FilesPanel({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [mode])
 
+  // 返回上一层后要把刚离开的子目录滚到列表顶部，加载完成后在下面的 effect 里处理
+  const revealPathRef = React.useRef("")
+  const listScrollRef = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    const target = revealPathRef.current
+    const box = listScrollRef.current
+    if (loading || !target || !box) return
+    revealPathRef.current = ""
+    const item = Array.from(box.querySelectorAll<HTMLElement>("[data-entry-path]")).find(
+      (node) => node.dataset.entryPath === target
+    )
+    if (item) box.scrollTop += item.getBoundingClientRect().top - box.getBoundingClientRect().top - 8
+  }, [loading, entries])
+
   const loadList = React.useCallback(
-    (path: string, manual = false) => {
+    (path: string, manual = false, revealPath = "") => {
       if (!activeSession || historyOnly) return
+      revealPathRef.current = revealPath
       setLoading(true)
       // 手动刷新时让转圈至少显示一会儿，请求太快会让人以为按钮没反应
       const minSpin = manual ? new Promise((resolve) => setTimeout(resolve, 600)) : null
@@ -403,7 +418,7 @@ export function FilesPanel({
             variant="outline"
             size="icon-sm"
             disabled={!parentPath}
-            onClick={() => loadList(parentPath)}
+            onClick={() => loadList(parentPath, false, currentPath)}
             title="返回上一层目录"
             aria-label="返回上一层目录"
           >
@@ -430,6 +445,7 @@ export function FilesPanel({
 
       <div className="flex min-h-0 min-w-0 flex-1">
         <div
+          ref={listScrollRef}
           style={isMobile ? undefined : { width: listWidth }}
           className={cn("h-full shrink-0 overflow-y-auto border-r", isMobile && "w-full", !showListPane && "hidden")}
         >
@@ -447,6 +463,7 @@ export function FilesPanel({
                   <button
                     key={entry.path}
                     type="button"
+                    data-entry-path={entry.path}
                     onClick={() => openEntry(entry)}
                     className={cn(
                       "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/8",
