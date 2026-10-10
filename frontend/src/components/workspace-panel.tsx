@@ -262,7 +262,8 @@ function ActivityView({
       onScroll={handleScroll}
       className="h-full overflow-x-hidden overflow-y-auto overscroll-y-contain"
     >
-      <div className="flex flex-col gap-3 p-4">
+      {/* 按聊天区自身宽度（而不是屏幕宽度）切档：侧栏占掉一部分宽度后，稍窄时气泡应接近铺满，只有宽屏才收成 75% */}
+      <div className="@container flex flex-col gap-3 p-4">
         {displayMessages.map((message) => {
           // 切换发送模式时，历史里"另一种模式"产生的消息整体变淡，突出当前模式的上下文
           const origin = message.mode === "agent" || message.mode === "command" ? message.mode : ""
@@ -287,9 +288,9 @@ function ActivityView({
                 <>
                   <div
                     className={cn(
-                      "max-w-full rounded-xl px-3 py-2 text-sm sm:max-w-[75%]",
+                      "max-w-full rounded-xl px-3 py-2 text-sm @3xl:max-w-[75%]",
                       message.role === "user"
-                        ? "max-w-[88%] bg-muted/80 text-foreground whitespace-pre-wrap sm:max-w-[75%]"
+                        ? "max-w-[88%] bg-muted/80 text-foreground whitespace-pre-wrap @3xl:max-w-[75%]"
                         : message.mode === "command"
                           // 命令模式的回复是原始命令输出，不是被动的系统提示——
                           // 走跟 assistant 一样的正常气泡，只是下面不做 markdown 渲染
