@@ -13,6 +13,7 @@ import {
 
 import { cn } from "@/lib/utils"
 import {
+  buildToolArgumentParts,
   mergeToolTraceEvents,
   summarizeTraceFlow,
   type ChatMessage,
@@ -65,15 +66,13 @@ function buildBodyParts(event: TraceEvent): BodyPart[] {
   }
   if (event.kind === "mcp") {
     push("工具", [event.server, event.toolName].filter(Boolean).join("."))
-    push("参数摘要", event.argumentSummary)
-    push("参数", event.arguments)
+    buildToolArgumentParts(event).forEach((part) => push(part.label, part.value))
     push("结果", event.result)
     push("错误", event.error)
   }
   if (event.kind === "tool") {
     push("工具", event.toolName)
-    push("参数摘要", event.argumentSummary)
-    push("参数", event.arguments)
+    buildToolArgumentParts(event).forEach((part) => push(part.label, part.value))
     push("结果", event.result)
     push("错误", event.error)
   }

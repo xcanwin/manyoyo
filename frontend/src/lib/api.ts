@@ -301,6 +301,29 @@ export function buildStreamMetaTraceEvents(meta: {
 const MERGEABLE_TRACE_KINDS = new Set(["tool", "command", "mcp"])
 
 // 与 mergeToolTraceEvents 对齐：同一个工具调用的 started/completed 事件合并成一行
+// 工具调用的参数展示：不再给“参数摘要”（它只是把同样的内容压成一行，纯属重复）。
+// 有 command（如 Bash）就直接显示命令原文（真实换行、不带转义）和描述，
+// 其余参数照常给 JSON；没有结构化参数时才退回摘要。
+export function buildToolArgumentParts(event: Pick<TraceEvent, "arguments" | "argumentSummary">): Array<{ label: string; value: unknown }> {
+  const args = event.arguments
+  if (args && typeof args === "object" && !Array.isArray(args)) {
+    const { command, description, ...rest } = args as Record<string, unknown>
+    const parts: Array<{ label: string; value: unknown }> = []
+    const hasCommand = typeof command === "string" && command.trim() !== ""
+    const hasDescription = typeof description === "string" && description.trim() !== ""
+    if (hasCommand) parts.push({ label: "命令", value: command })
+    else if (command !== undefined) (rest as Record<string, unknown>).command = command
+    if (hasDescription) parts.push({ label: "描述", value: description })
+    else if (description !== undefined) (rest as Record<string, unknown>).description = description
+    if (Object.keys(rest).length > 0) {
+      parts.push({ label: hasCommand || hasDescription ? "其他参数" : "参数", value: rest })
+    }
+    return parts
+  }
+  if (args !== undefined && args !== null && args !== "") return [{ label: "参数", value: args }]
+  return event.argumentSummary ? [{ label: "参数摘要", value: event.argumentSummary }] : []
+}
+
 export function mergeToolTraceEvents(events: TraceEvent[]): TraceEvent[] {
   const result: TraceEvent[] = []
   const indexByKey = new Map<string, number>()

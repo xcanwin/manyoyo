@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  buildToolArgumentParts,
   applyServerMessageIds,
   applyTraceEventUpdate,
   buildStreamMetaTraceEvents,
@@ -628,5 +629,34 @@ describe("buildStreamMetaTraceEvents", () => {
   test("合成的 status 不会把整轮判成有错误", () => {
     const events = buildStreamMetaTraceEvents({ contextMode: "resume" })
     expect(summarizeTraceFlow(events, false)).toBe("1 步 · 已完成")
+  })
+})
+
+describe("buildToolArgumentParts", () => {
+  test("Bash：命令原文 + 描述，没有多余参数就不再给参数块", () => {
+    const parts = buildToolArgumentParts({
+      arguments: { command: "ls -al /\nid", description: "list" },
+      argumentSummary: "command=ls -al / id, description=list",
+    })
+    expect(parts).toEqual([
+      { label: "命令", value: "ls -al /\nid" },
+      { label: "描述", value: "list" },
+    ])
+  })
+
+  test("还有其它参数时单列“其他参数”", () => {
+    const parts = buildToolArgumentParts({ arguments: { command: "sleep 1", timeout: 5000 } })
+    expect(parts).toEqual([
+      { label: "命令", value: "sleep 1" },
+      { label: "其他参数", value: { timeout: 5000 } },
+    ])
+  })
+
+  test("没有 command 的工具给“参数”，不给摘要；没有结构化参数才退回摘要", () => {
+    expect(buildToolArgumentParts({ arguments: { file_path: "/a" }, argumentSummary: "file_path=/a" })).toEqual([
+      { label: "参数", value: { file_path: "/a" } },
+    ])
+    expect(buildToolArgumentParts({ argumentSummary: "x=1" })).toEqual([{ label: "参数摘要", value: "x=1" }])
+    expect(buildToolArgumentParts({})).toEqual([])
   })
 })
