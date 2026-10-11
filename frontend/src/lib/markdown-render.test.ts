@@ -66,3 +66,16 @@ describe("renderMarkdownToHtml", () => {
     expect(htmlBlocks).toEqual([])
   })
 })
+
+describe("裸网址不自动成链接", () => {
+  test("纯文本网址（含紧跟的括号）保持纯文本", () => {
+    const { html } = renderMarkdownToHtml("https://www.baidu.com(baidu)", false)
+    expect(html).not.toContain("<a")
+    expect(html).toContain("https://www.baidu.com(baidu)")
+  })
+
+  test("显式 markdown 链接与尖括号链接仍渲染成链接", () => {
+    expect(renderMarkdownToHtml("[百度](https://www.baidu.com)", false).html).toContain('href="https://www.baidu.com"')
+    expect(renderMarkdownToHtml("<https://www.baidu.com>", false).html).toContain('href="https://www.baidu.com"')
+  })
+})

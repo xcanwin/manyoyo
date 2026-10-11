@@ -299,6 +299,9 @@ function ActivityView({
                           : message.role === "system"
                             ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
                             : "bg-muted/40 text-foreground",
+                      // AGENT 回复固定占满可用宽度（与上面的执行过程框等宽），
+                      // 不随内容长短忽宽忽窄
+                      message.role === "assistant" && "w-full",
                       message.pending && "opacity-70"
                     )}
                   >

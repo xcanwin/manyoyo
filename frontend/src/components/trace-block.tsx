@@ -222,9 +222,15 @@ export function TraceBlock({ trace }: { trace: ChatMessage }) {
   }
 
   return (
-    <div ref={wrapperRef} className="flex w-full max-w-[75%] items-stretch gap-1">
+    <div ref={wrapperRef} className="flex w-full max-w-full items-stretch gap-1 @3xl:max-w-[75%]">
       <Collapsible open={open} onOpenChange={setUserOpen} className="min-w-0 flex-1">
-      <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted">
+      {/* 展开后标题行吸顶：过程很长时也能随时点它收起；用不透明底色，否则下面的内容会从半透明背景里透出来 */}
+      <CollapsibleTrigger
+        className={cn(
+          "flex w-full items-center gap-1.5 rounded-lg border bg-[color-mix(in_oklab,var(--muted)_40%,var(--background))] px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted",
+          open && "sticky top-0 z-10"
+        )}
+      >
         <ChevronRightIcon
           className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")}
         />
@@ -238,7 +244,7 @@ export function TraceBlock({ trace }: { trace: ChatMessage }) {
       </Collapsible>
       {open ? (
         // sticky：过程很长时，滚到框中间这两个按钮也一直在视野里
-        <div className="sticky top-2 flex shrink-0 flex-col gap-1 self-start">
+        <div className="sticky top-0 flex shrink-0 flex-col gap-1 self-start">
           <button
             type="button"
             onClick={() => alignInChat("top")}

@@ -3,6 +3,20 @@ import { marked, Renderer } from "marked"
 
 marked.setOptions({ breaks: true, gfm: true })
 
+// 不自动把正文里的裸网址变成链接：自动识别会把紧跟的括号、标点一起吞进去
+// （如 https://a.com(b) 的 href 带上 "(b)"），而且用户给的纯文本就该保持纯文本。
+// 显式写的 [文字](网址) 和 <网址> 仍然渲染成链接。裸网址的 link 令牌特征是 raw 与 text 相同。
+marked.use({
+  walkTokens(token) {
+    if (token.type === "link" && token.raw === token.text) {
+      const plain = token as unknown as { type: string; escaped?: boolean; tokens?: unknown }
+      plain.type = "text"
+      plain.escaped = true
+      delete plain.tokens
+    }
+  },
+})
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
