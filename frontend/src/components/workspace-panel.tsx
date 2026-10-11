@@ -260,6 +260,7 @@ function ActivityView({
     <div
       ref={scrollRef}
       onScroll={handleScroll}
+      data-chat-scroll
       className="h-full overflow-x-hidden overflow-y-auto overscroll-y-contain"
     >
       {/* 按聊天区自身宽度（而不是屏幕宽度）切档：侧栏占掉一部分宽度后，稍窄时气泡应接近铺满，只有宽屏才收成 75% */}

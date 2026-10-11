@@ -1,6 +1,8 @@
 import * as React from "react"
 import {
   CheckIcon,
+  ArrowDownToLineIcon,
+  ArrowUpToLineIcon,
   ChevronRightIcon,
   CopyIcon,
   MessageSquareIcon,
@@ -65,14 +67,19 @@ function buildBodyParts(event: TraceEvent): BodyPart[] {
     push("错误", event.error)
   }
   if (event.kind === "mcp") {
+    // 描述放最前：紧跟在命令后面会被误当成命令的输出
+    const argParts = buildToolArgumentParts(event)
+    argParts.filter((part) => part.label === "描述").forEach((part) => push(part.label, part.value))
     push("工具", [event.server, event.toolName].filter(Boolean).join("."))
-    buildToolArgumentParts(event).forEach((part) => push(part.label, part.value))
+    argParts.filter((part) => part.label !== "描述").forEach((part) => push(part.label, part.value))
     push("结果", event.result)
     push("错误", event.error)
   }
   if (event.kind === "tool") {
+    const argParts = buildToolArgumentParts(event)
+    argParts.filter((part) => part.label === "描述").forEach((part) => push(part.label, part.value))
     push("工具", event.toolName)
-    buildToolArgumentParts(event).forEach((part) => push(part.label, part.value))
+    argParts.filter((part) => part.label !== "描述").forEach((part) => push(part.label, part.value))
     push("结果", event.result)
     push("错误", event.error)
   }
@@ -192,6 +199,7 @@ export function TraceBlock({ trace }: { trace: ChatMessage }) {
   // 不该把错误藏在折叠面板里。用户手动点过之后以用户的选择为准，
   // 不会因为后续又来一条 error 事件把面板重新掰开
   const [userOpen, setUserOpen] = React.useState<boolean | null>(null)
+  const wrapperRef = React.useRef<HTMLDivElement>(null)
   const merged = React.useMemo(
     () => mergeToolTraceEvents(trace.traceEvents || []),
     [trace.traceEvents]
@@ -201,12 +209,21 @@ export function TraceBlock({ trace }: { trace: ChatMessage }) {
   const hasError = merged.some((event) => event.kind === "error")
   const open = userOpen ?? hasError
 
+  // 过程很长时，滚动条要拖很久才能离开它：展开后右侧给两个按钮，
+  // 把整个过程框直接对齐到聊天区的顶部 / 底部
+  function alignInChat(edge: "top" | "bottom") {
+    const el = wrapperRef.current
+    const box = el?.closest<HTMLElement>("[data-chat-scroll]")
+    if (!el || !box) return
+    const rect = el.getBoundingClientRect()
+    const boxRect = box.getBoundingClientRect()
+    const delta = edge === "top" ? rect.top - boxRect.top : rect.bottom - boxRect.bottom
+    box.scrollTo({ top: box.scrollTop + delta, behavior: "smooth" })
+  }
+
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setUserOpen}
-      className="w-full max-w-[75%]"
-    >
+    <div ref={wrapperRef} className="flex w-full max-w-[75%] items-stretch gap-1">
+      <Collapsible open={open} onOpenChange={setUserOpen} className="min-w-0 flex-1">
       <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted">
         <ChevronRightIcon
           className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")}
@@ -218,6 +235,30 @@ export function TraceBlock({ trace }: { trace: ChatMessage }) {
           <TraceEventRow key={`${event.kind}-${index}`} event={event} />
         ))}
       </CollapsibleContent>
-    </Collapsible>
+      </Collapsible>
+      {open ? (
+        // sticky：过程很长时，滚到框中间这两个按钮也一直在视野里
+        <div className="sticky top-2 flex shrink-0 flex-col gap-1 self-start">
+          <button
+            type="button"
+            onClick={() => alignInChat("top")}
+            title="让这段执行过程顶部贴着聊天窗口顶部"
+            aria-label="执行过程对齐到顶部"
+            className="rounded-md border bg-muted/40 p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <ArrowUpToLineIcon className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => alignInChat("bottom")}
+            title="让这段执行过程底部贴着聊天窗口底部"
+            aria-label="执行过程对齐到底部"
+            className="rounded-md border bg-muted/40 p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <ArrowDownToLineIcon className="size-3.5" />
+          </button>
+        </div>
+      ) : null}
+    </div>
   )
 }
