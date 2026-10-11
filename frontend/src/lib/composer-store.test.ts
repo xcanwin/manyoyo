@@ -59,6 +59,7 @@ describe("草稿", () => {
   })
   test("草稿清空且没有待发箱：删除这个键", () => {
     saveDraft("s", "x", storage)
+    expect(storage.data.size).toBe(1)
     saveDraft("s", "", storage)
     expect(storage.data.size).toBe(0)
   })
@@ -100,6 +101,12 @@ describe("decideOutboxRestore", () => {
   test("消息里已有同一个 clientId：说明已发出，清掉", () => {
     expect(decideOutboxRestore({ ...base, outbox: outbox(), messages: [{ clientMessageId: "cid-12345678" }] })).toBe("clear")
   })
+  // 审查 #2：对账看到它时服务端还在准备阶段，准备失败会把这条消息删掉——还在 pending 就不能清待发箱
+  test("已有同一个 clientId 但还在 pending：先等，不清待发箱", () => {
+    expect(
+      decideOutboxRestore({ ...base, outbox: outbox(), messages: [{ clientMessageId: "cid-12345678", pending: true }] })
+    ).toBe("wait")
+  })
   test("找不到且没有任务在跑：放回", () => {
     expect(decideOutboxRestore({ ...base, outbox: outbox(), messages: [{ clientMessageId: "x" }] })).toBe("restore")
   })
@@ -139,6 +146,7 @@ describe("清理与降级", () => {
     saveDraft("a", "1", storage)
     setOutbox("b", outbox(), storage)
     storage.setItem("other", "keep")
+    expect(storage.data.size).toBe(3)
     clearAllComposerData(storage)
     expect(Array.from(storage.data.keys())).toEqual(["other"])
   })

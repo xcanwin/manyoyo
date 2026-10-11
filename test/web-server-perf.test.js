@@ -4,7 +4,9 @@ const path = require('path');
 const net = require('net');
 const zlib = require('zlib');
 const http = require('http');
-const { startWebServer } = require('../lib/web/server');
+const { startWebServer, __testing } = require('../lib/web/server');
+const { FileEventStore } = require('../lib/core/event-store');
+const { createControlEvent } = require('../lib/core/events');
 const messagesView = require('../lib/web/messages-view');
 
 function getFreePort() {
@@ -268,6 +270,8 @@ describe('Web messages sync, conditional requests and compression', () => {
                 body: JSON.stringify({ remark })
             });
             expect(saved.status).toBe(200);
+            // 把 mtime 固定成同一个值：只看 mtime 的实现会在“同一毫秒、大小相同”的写入后误回 304
+            fs.utimesSync(historyFile, 1700000000, 1700000000);
             const next = await get('/api/sessions/demo/messages');
             expect(etags.has(next.headers.etag)).toBe(false);
             etags.add(next.headers.etag);
@@ -347,6 +351,7 @@ process.exit(0);
         writeHistory(buildMessages(1));
         await startServer();
         const epoch = (await get('/api/sessions/demo/messages')).json.epoch;
+        expect(epoch).toMatch(/^[0-9a-f]{8,32}$/);
         await handle.close();
         handle = null;
         await startServer();
@@ -372,6 +377,104 @@ process.exit(0);
         const user = list.json.messages.find(m => m.role === 'user');
         expect(user.clientMessageId).toBe(clientId);
         expect(list.json.messages.some(m => m.pending === true)).toBe(false);
+    });
+
+    function slowNetworkManager() {
+        const sleep = () => new Promise(resolve => setTimeout(resolve, 300));
+        return {
+            ensureBridgeNetwork: async () => {},
+            resolveRefs: async policy => policy,
+            apply: async () => ({ status: 'applied' }),
+            ensureReady: async () => { await sleep(); return { status: 'applied' }; }
+        };
+    }
+
+    function writeCountingDocker() {
+        const fake = path.join(tempHost, 'fake-docker-count.js');
+        const countFile = path.join(tempHost, 'exec-count.log');
+        fs.writeFileSync(fake, `#!/usr/bin/env node
+const fs = require('fs');
+const args = process.argv.slice(2);
+if (args[0] === 'exec') {
+  const command = String(args[4] || args.join(' '));
+  if (command.includes('claude ')) {
+    fs.appendFileSync(${JSON.stringify(countFile)}, 'agent\\n');
+    process.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"ok"}]}}\\n');
+    process.stdout.write('{"type":"result","subtype":"success","session_id":"s1"}\\n');
+  } else if (command.includes('echo run-marker')) {
+    fs.appendFileSync(${JSON.stringify(countFile)}, 'run\\n');
+    process.stdout.write('run-marker\\n');
+  }
+}
+process.exit(0);
+`, { mode: 0o755 });
+        const count = kind => (fs.existsSync(countFile) ? fs.readFileSync(countFile, 'utf-8').split('\n').filter(line => line === kind).length : 0);
+        return { fake, count };
+    }
+
+    test('同一个 clientMessageId 的 agent 请求只执行一次，第二次返回 409 duplicate', async () => {
+        writeHistory([], { agentPromptCommand: 'claude --dangerously-skip-permissions -p {prompt}' });
+        const { fake, count } = writeCountingDocker();
+        await startServer({ dockerCmd: fake });
+        const clientId = 'dup-client-id-001';
+        const first = await postJson('/api/sessions/demo/agent/stream', { prompt: 'hi', clientMessageId: clientId });
+        expect(first.status).toBe(200);
+        const second = await postJson('/api/sessions/demo/agent/stream', { prompt: 'hi', clientMessageId: clientId });
+        expect(second.status).toBe(409);
+        expect(second.json.duplicate).toBe(true);
+        expect(typeof second.json.error).toBe('string');
+        expect(count('agent')).toBe(1);
+        const other = await postJson('/api/sessions/demo/agent/stream', { prompt: 'hi', clientMessageId: 'dup-client-id-002' });
+        expect(other.status).toBe(200);
+        expect(count('agent')).toBe(2);
+        const noId = await postJson('/api/sessions/demo/agent/stream', { prompt: 'hi' });
+        expect(noId.status).toBe(200);
+        expect(count('agent')).toBe(3);
+        const list = await get('/api/sessions/demo/messages?limit=200');
+        expect(list.json.messages.filter(m => m.role === 'user' && m.clientMessageId === clientId)).toHaveLength(1);
+    });
+
+    test('命令模式同样按 clientMessageId 去重', async () => {
+        writeHistory([]);
+        const { fake, count } = writeCountingDocker();
+        await startServer({ dockerCmd: fake });
+        const clientId = 'dup-run-id-0001';
+        const first = await postJson('/api/sessions/demo/run', { command: 'echo run-marker', clientMessageId: clientId });
+        expect(first.status).toBe(200);
+        const second = await postJson('/api/sessions/demo/run', { command: 'echo run-marker', clientMessageId: clientId });
+        expect(second.status).toBe(409);
+        expect(second.json.duplicate).toBe(true);
+        expect(count('run')).toBe(1);
+    });
+
+    // 审查 #4：检查重复和落盘之间有 await，并发的同一条请求不能都通过
+    test('并发发来的同一个 clientMessageId（命令模式）只执行一次', async () => {
+        writeHistory([]);
+        const { fake, count } = writeCountingDocker();
+        await startServer({
+            dockerCmd: fake,
+            // 网络规则就绪要等一会儿：检查重复和落盘之间有真正的 await，并发的请求才能暴露窗口
+            networkManager: slowNetworkManager()
+        });
+        const clientId = 'dup-concurrent-01';
+        const results = await Promise.all([1, 2, 3].map(() => postJson('/api/sessions/demo/run', { command: 'echo run-marker', clientMessageId: clientId })));
+        expect(results.map(r => r.status).sort()).toEqual([200, 409, 409]);
+        expect(results.filter(r => r.status === 409).every(r => r.json.duplicate === true)).toBe(true);
+        expect(count('run')).toBe(1);
+    });
+
+    test('并发发来的同一个 clientMessageId（agent 非流式）只执行一次', async () => {
+        writeHistory([], { agentPromptCommand: 'claude --dangerously-skip-permissions -p {prompt}' });
+        const { fake, count } = writeCountingDocker();
+        await startServer({
+            dockerCmd: fake,
+            // 网络规则就绪要等一会儿：检查重复和落盘之间有真正的 await，并发的请求才能暴露窗口
+            networkManager: slowNetworkManager()
+        });
+        const clientId = 'dup-concurrent-02';
+        const results = await Promise.all([1, 2, 3].map(() => postJson('/api/sessions/demo/agent', { prompt: 'hi', clientMessageId: clientId })));
+        expect(results.map(r => r.status).sort()).toEqual([200, 409, 409]);
+        expect(count('agent')).toBe(1);
     });
 
     test('流结束后历史已落盘（结束类事件立即写盘）', async () => {
@@ -400,11 +503,12 @@ process.exit(0);
 `, { mode: 0o755 });
         writeHistory([], { agentPromptCommand: 'claude --dangerously-skip-permissions -p {prompt}' });
         await startServer({ dockerCmd: fake });
-        const realRename = fs.renameSync;
+        // 新实现是“临时文件 + rename”，旧实现直接 writeFileSync 目标文件：两种写法都按“写了一次历史文件”计数
+        const realWrite = fs.writeFileSync;
         let historyWrites = 0;
-        const spy = jest.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
-            if (String(to) === historyFile) historyWrites += 1;
-            return realRename(from, to);
+        const spy = jest.spyOn(fs, 'writeFileSync').mockImplementation((file, ...rest) => {
+            if (String(file) === historyFile || (String(file).startsWith(`${historyFile}.`) && String(file).endsWith('.tmp'))) historyWrites += 1;
+            return realWrite(file, ...rest);
         });
         try {
             const stream = await postJson('/api/sessions/demo/agent/stream', { prompt: 'hi' });
@@ -452,6 +556,87 @@ process.exit(0);
         expect(persisted.messages).toBeUndefined();
         expect(persisted.agents.default.messages).toHaveLength(legacy.length);
         expect(persisted.agents.default.epoch).toMatch(/^[0-9a-f]+$/);
+    });
+});
+
+describe('历史读写层：epoch 与关闭时落盘', () => {
+    let dir;
+    beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-history-layer-')); });
+    afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+    test('删除非 pending 消息会换 epoch，删除 pending 消息（流式占位）不会', () => {
+        const ref = { containerName: 'demo', agentId: 'default' };
+        const stable = __testing.appendWebSessionMessage(dir, ref, 'user', 'hello', { mode: 'agent' });
+        const pending = __testing.appendWebSessionMessage(dir, ref, 'assistant', 'streaming', { pending: true });
+        const epochOf = () => __testing.loadWebSessionHistory(dir, 'demo').agents.default.epoch;
+        const before = epochOf();
+        expect(before).toMatch(/^[0-9a-f]{8,32}$/);
+        __testing.removeWebSessionMessage(dir, ref, pending.id);
+        expect(epochOf()).toBe(before);
+        __testing.removeWebSessionMessage(dir, ref, stable.id);
+        expect(epochOf()).not.toBe(before);
+    });
+
+    test('克隆历史时每个 agent 换新的 epoch', () => {
+        const source = { agents: { default: { epoch: 'aaaaaaaaaaaa', messages: [{ id: '1-a' }] }, 'agent-2': { epoch: 'bbbbbbbbbbbb', messages: [] } } };
+        const cloned = __testing.cloneWebAgentSessionsDeep(source);
+        expect(cloned.default.messages).toEqual([{ id: '1-a' }]);
+        expect(cloned.default.epoch).not.toBe('aaaaaaaaaaaa');
+        expect(cloned['agent-2'].epoch).not.toBe('bbbbbbbbbbbb');
+        expect(cloned.default.epoch).toMatch(/^[0-9a-f]{8,32}$/);
+    });
+
+    // kill -9 之后：事件日志（每条立即追加）比历史快照（合并写盘，最迟落后 1 秒）新，下一轮对话不能因此失败
+    test('事件日志比历史快照新（进程被强杀后重启）：下一条控制事件按日志续 seq，不报错', () => {
+        const ref = { containerName: 'demo', agentId: 'default' };
+        const aggregateId = 'demo';
+        const store = new FileEventStore(dir);
+        const events = [];
+        for (let seq = 1; seq <= 5; seq += 1) {
+            const event = createControlEvent({ type: 'process.stdout', aggregateId, seq, data: { text: `e${seq}` } });
+            store.append(event);
+            events.push(event);
+        }
+        // 历史快照只落到了 seq 3
+        fs.writeFileSync(path.join(dir, 'demo.json'), JSON.stringify({
+            containerName: 'demo',
+            agents: { default: { agentId: 'default', messages: [], events: events.slice(0, 3) } }
+        }));
+        const next = __testing.appendWebSessionControlEvent(dir, ref, 'session.ready');
+        expect(next.seq).toBe(6);
+        expect(store.read(aggregateId).map(event => event.seq)).toEqual([1, 2, 3, 4, 5, 6]);
+        const again = __testing.appendWebSessionControlEvent(dir, ref, 'session.ready');
+        expect(again.seq).toBe(7);
+    });
+
+    // 审查 #7：seq 缓存与日志对不上（日志被别的进程追加过）时，丢掉缓存按日志重算，不报错
+    test('事件日志被别的进程追加后，seq 缓存失效并按日志续上', () => {
+        const ref = { containerName: 'demo', agentId: 'default' };
+        const mine = __testing.appendWebSessionControlEvent(dir, ref, 'session.ready');
+        const other = new FileEventStore(dir);
+        other.append(createControlEvent({ type: 'process.stdout', aggregateId: 'demo', seq: mine.seq + 1, data: { text: 'other' } }));
+        const next = __testing.appendWebSessionControlEvent(dir, ref, 'session.ready');
+        expect(next.seq).toBe(mine.seq + 2);
+    });
+
+    test('serve 关闭时把攒着的（defer）历史写出来', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-close-flush-'));
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        const port = await getFreePort();
+        const handle = await startWebServer(buildServerOptions(tempHost, port));
+        try {
+            const ref = { containerName: 'demo', agentId: 'default' };
+            __testing.appendWebSessionMessage(webHistoryDir, ref, 'user', 'first', { mode: 'agent' });
+            const history = __testing.loadWebSessionHistory(webHistoryDir, 'demo');
+            history.agents.default.messages.push({ id: '1700000000001-aaaaaa', role: 'assistant', content: 'only in memory', timestamp: 'x' });
+            __testing.saveWebSessionHistory(webHistoryDir, 'demo', history, { defer: true });
+            const file = path.join(webHistoryDir, 'demo.json');
+            expect(fs.readFileSync(file, 'utf-8')).not.toContain('only in memory');
+            await handle.close();
+            expect(fs.readFileSync(file, 'utf-8')).toContain('only in memory');
+        } finally {
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
     });
 });
 

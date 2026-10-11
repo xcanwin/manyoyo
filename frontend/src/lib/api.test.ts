@@ -1,7 +1,8 @@
-import { describe, expect, test } from "vitest"
+import { afterEach, describe, expect, test, vi } from "vitest"
 
 import {
   buildToolArgumentParts,
+  apiStream,
   applyServerMessageIds,
   applyTraceEventUpdate,
   buildStreamMetaTraceEvents,
@@ -658,5 +659,27 @@ describe("buildToolArgumentParts", () => {
     ])
     expect(buildToolArgumentParts({ argumentSummary: "x=1" })).toEqual([{ label: "参数摘要", value: "x=1" }])
     expect(buildToolArgumentParts({})).toEqual([])
+  })
+})
+
+describe("apiStream 的 HTTP 错误", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+  test("错误带上 status 和服务端返回体，调用方才能区分“明确拒绝”和“网络中断”", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: "这条消息已经发出过", duplicate: true }), { status: 409 }))
+    )
+    const error = await apiStream("/x", {}, () => {}).catch((e) => e)
+    expect(error).toBeInstanceOf(Error)
+    expect(error.message).toBe("这条消息已经发出过")
+    expect(error.status).toBe(409)
+    expect(error.data).toEqual({ error: "这条消息已经发出过", duplicate: true })
+  })
+  test("网络失败（fetch 抛错）不带 status", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch") }))
+    const error = await apiStream("/x", {}, () => {}).catch((e) => e)
+    expect(error.status).toBeUndefined()
   })
 })

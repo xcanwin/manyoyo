@@ -149,9 +149,17 @@ export function traceCacheKey(sessionName: string, messageId: string | number, e
 // 用“最近一页”对账本地列表（流结束、停止、命令执行后）：
 // 这一页的开头在本地能找到时，保留它之前更早加载的页，用这一页覆盖其后的部分；
 // 找不到（本地占位、服务端裁掉了开头）或 reset 时整体替换
-export function reconcileWithPage(local: ChatMessage[], res: MessagesResponse, prevHasMore: boolean): AppliedMessages {
+export function reconcileWithPage(
+  local: ChatMessage[],
+  res: MessagesResponse,
+  prevHasMore: boolean,
+  prevEpoch: string | null
+): AppliedMessages {
   const first = res.messages[0]
-  const index = res.mode === "reset" || !first ? -1 : local.findIndex((message) => message.id === first.id)
+  // 本地记录的 epoch 与服务端不同、或不知道本地的 epoch（首次、400 重置、切走期间流结束）：
+  // 历史的稳定前缀可能被改动过（别的标签页删了消息），本地更早的页不可信
+  const epochChanged = prevEpoch === null || prevEpoch !== res.epoch
+  const index = res.mode === "reset" || epochChanged || !first ? -1 : local.findIndex((message) => message.id === first.id)
   if (index > 0) {
     return {
       messages: reuseUnchanged(local, local.slice(0, index).concat(res.messages)),
@@ -178,4 +186,10 @@ export function createLruCache<T>(max: number) {
       while (map.size > max) map.delete(map.keys().next().value as string)
     },
   }
+}
+
+// 带 after 的增量请求被服务端以 400 拒绝（anchor 不合法）：不重置的话每次轮询都带着同一个坏 anchor，永远同步不上
+export function shouldResetAfterSyncError(error: unknown, query: MessagesQuery): boolean {
+  const status = (error as { status?: unknown } | null)?.status
+  return status === 400 && query.after !== undefined
 }

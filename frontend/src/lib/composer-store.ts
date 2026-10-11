@@ -151,14 +151,16 @@ export type OutboxDecision = "none" | "clear" | "wait" | "restore"
 
 export function decideOutboxRestore(params: {
   outbox: Outbox | undefined
-  messages: Array<{ clientMessageId?: string }>
+  messages: Array<{ clientMessageId?: string; pending?: boolean }>
   sessionRunning: boolean
   currentTabId: string
   now: number
 }): OutboxDecision {
   const { outbox } = params
   if (!outbox) return "none"
-  if (params.messages.some((m) => m.clientMessageId === outbox.clientId)) return "clear"
+  const found = params.messages.find((m) => m.clientMessageId === outbox.clientId)
+  // 服务端在准备阶段（可能几十秒）就存了这条 pending 消息，准备失败会把它删掉：还在 pending 先不清
+  if (found) return found.pending === true ? "wait" : "clear"
   if (params.sessionRunning) return "wait"
   if (outbox.tabId !== params.currentTabId && params.now - outbox.createdAt < OTHER_TAB_GRACE_MS) return "wait"
   return "restore"

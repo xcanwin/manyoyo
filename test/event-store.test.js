@@ -44,6 +44,27 @@ describe('FileEventStore', () => {
         }));
     });
 
+    // 进程在追加一行的中途被强杀：最后一行没有换行；之后继续追加不能把新事件拼到残缺行后面
+    test('appending after a truncated final line keeps the log readable', () => {
+        const aggregateId = 'demo';
+        store.append(createControlEvent({ type: 'session.ready', aggregateId, seq: 1 }));
+        fs.appendFileSync(store.getEventFilePath(aggregateId), '{"broken"');
+
+        store.append(createControlEvent({ type: 'process.stdout', aggregateId, seq: 2, data: { text: 'x' } }));
+        store.append(createControlEvent({ type: 'process.exited', aggregateId, seq: 3, data: { exitCode: 0 } }));
+
+        expect(store.read(aggregateId).map(event => event.seq)).toEqual([1, 2, 3]);
+    });
+
+    test('a complete final line that only lacks the newline is kept', () => {
+        const aggregateId = 'demo';
+        const first = createControlEvent({ type: 'session.ready', aggregateId, seq: 1 });
+        fs.mkdirSync(store.eventsDir, { recursive: true });
+        fs.writeFileSync(store.getEventFilePath(aggregateId), JSON.stringify(first));
+        store.append(createControlEvent({ type: 'process.stdout', aggregateId, seq: 2, data: { text: 'x' } }));
+        expect(store.read(aggregateId).map(event => event.seq)).toEqual([1, 2]);
+    });
+
     test('rejects duplicate or out-of-order aggregate sequences', () => {
         const aggregateId = 'demo';
         store.append(createControlEvent({ type: 'session.ready', aggregateId, seq: 1 }));

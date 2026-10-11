@@ -609,7 +609,11 @@ export async function apiStream(
   }
   if (!response.ok || !response.body) {
     const data = await response.json().catch(() => ({}))
-    throw new Error((data as { error?: string }).error || "请求失败")
+    // 带上 status 和返回体：调用方要区分“服务端明确拒绝”和“网络中断，不知道收到没有”
+    throw Object.assign(new Error((data as { error?: string }).error || "请求失败"), {
+      status: response.status,
+      data,
+    })
   }
 
   // result/error 是后端真正跑完（成功或明确失败）才会发的终态事件；HTTP 流

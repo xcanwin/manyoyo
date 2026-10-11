@@ -11,6 +11,7 @@ import {
   getSyncAnchor,
   prependEarlierMessages,
   reconcileWithPage,
+  shouldResetAfterSyncError,
   traceCacheKey,
   type MessagesResponse,
 } from "./message-sync"
@@ -178,13 +179,13 @@ describe("reconcileWithPage（流结束、停止、命令执行后的对账）",
     res(messages, { mode: "page", firstId: messages[0]?.id ?? null, ...extra })
 
   test("本地为空：就是这一页", () => {
-    const out = reconcileWithPage([], page([msg("a"), msg("b")], { hasMore: true }), false)
+    const out = reconcileWithPage([], page([msg("a"), msg("b")], { hasMore: true }), false, null)
     expect(out.messages.map((m) => m.id)).toEqual(["a", "b"])
     expect(out.hasMore).toBe(true)
   })
   test("本地多出更早的页：保留更早的，用这一页覆盖重叠部分，hasMore 沿用本地", () => {
     const local = [msg("a"), msg("b"), msg("c", { content: "旧" })]
-    const out = reconcileWithPage(local, page([msg("c", { content: "新" }), msg("d")], { hasMore: true }), false)
+    const out = reconcileWithPage(local, page([msg("c", { content: "新" }), msg("d")], { hasMore: true }), false, "e1")
     expect(out.messages.map((m) => [m.id, m.content])).toEqual([
       ["a", "c-a"],
       ["b", "c-b"],
@@ -195,20 +196,52 @@ describe("reconcileWithPage（流结束、停止、命令执行后的对账）",
   })
   test("这一页的开头本地没有：整体替换（含本地占位被服务端真实消息取代）", () => {
     const local = [msg("local-1"), msg("result-2", { role: "system" })]
-    const out = reconcileWithPage(local, page([msg("x"), msg("y")], { hasMore: true }), false)
+    const out = reconcileWithPage(local, page([msg("x"), msg("y")], { hasMore: true }), false, null)
     expect(out.messages.map((m) => m.id)).toEqual(["x", "y"])
     expect(out.hasMore).toBe(true)
   })
   test("reset 模式：整体替换，不保留更早的", () => {
     const local = [msg("a"), msg("b")]
-    const out = reconcileWithPage(local, res([msg("b"), msg("c")], { mode: "reset", epoch: "e2" }), false)
+    const out = reconcileWithPage(local, res([msg("b"), msg("c")], { mode: "reset", epoch: "e2" }), false, null)
     expect(out.messages.map((m) => m.id)).toEqual(["b", "c"])
     expect(out.epoch).toBe("e2")
   })
   test("内容没变化：返回原数组引用", () => {
     const local = [msg("a"), msg("b")]
-    const out = reconcileWithPage(local, page([msg("a"), msg("b")]), false)
+    const out = reconcileWithPage(local, page([msg("a"), msg("b")]), false, "e1")
     expect(out.messages).toBe(local)
+  })
+  // G3 #9：另一个标签页让历史换了 epoch（稳定前缀被改动），本地更早的页可能含已被删掉的消息
+  test("本地记录的 epoch 与服务端不同：不保留更早的页，整体替换", () => {
+    const local = [msg("a"), msg("b"), msg("c")]
+    const out = reconcileWithPage(local, page([msg("c"), msg("d")], { epoch: "e2", hasMore: true }), false, "e1")
+    expect(out.messages.map((m) => m.id)).toEqual(["c", "d"])
+    expect(out.epoch).toBe("e2")
+    expect(out.hasMore).toBe(true)
+  })
+  // 审查 #8：epoch 未知（首次、400 重置、切走期间流结束）恰好是本地缓存可能陈旧的时候
+  test("本地不知道 epoch（null）：同样不保留更早的页", () => {
+    const local = [msg("a"), msg("b"), msg("c")]
+    const out = reconcileWithPage(local, page([msg("c"), msg("d")], { hasMore: true }), false, null)
+    expect(out.messages.map((m) => m.id)).toEqual(["c", "d"])
+    expect(out.hasMore).toBe(true)
+  })
+  test("epoch 相同：照常保留更早的页", () => {
+    const local = [msg("a"), msg("b"), msg("c")]
+    const out = reconcileWithPage(local, page([msg("c"), msg("d")], { hasMore: true }), false, "e1")
+    expect(out.messages.map((m) => m.id)).toEqual(["a", "b", "c", "d"])
+  })
+})
+
+// G3：增量请求（带 after）被服务端以 400 拒绝时，下一次必须改拉最近一页，否则每次轮询都带着同一个坏 anchor
+describe("shouldResetAfterSyncError", () => {
+  test("带 after 的请求收到 400：重置增量状态", () => {
+    expect(shouldResetAfterSyncError(Object.assign(new Error("x"), { status: 400 }), { after: "1-ab", epoch: "e1" })).toBe(true)
+  })
+  test("最近一页的请求收到 400 / 带 after 但是别的错误：不重置", () => {
+    expect(shouldResetAfterSyncError(Object.assign(new Error("x"), { status: 400 }), { limit: 60 })).toBe(false)
+    expect(shouldResetAfterSyncError(Object.assign(new Error("x"), { status: 500 }), { after: "1-ab", epoch: "e1" })).toBe(false)
+    expect(shouldResetAfterSyncError(new TypeError("Failed to fetch"), { after: "1-ab", epoch: "e1" })).toBe(false)
   })
 })
 

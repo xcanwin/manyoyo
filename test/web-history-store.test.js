@@ -27,11 +27,17 @@ describe('web history store', () => {
 
     test('文件被别的进程改写（原子替换）后读取到新内容', () => {
         const file = path.join(dir, 'a.json');
+        const FIXED = 1700000000;
         store.write(file, { n: 1 }, ser);
+        fs.utimesSync(file, FIXED, FIXED);
         const before = store.read(file, identity);
+        expect(before.value).toEqual({ n: 1 });
         const tmp = `${file}.x`;
         fs.writeFileSync(tmp, '{"n":2}');
+        // 大小、mtime 都与原文件相同，只有 inode 不同：原子替换也必须被认出来
+        fs.utimesSync(tmp, FIXED, FIXED);
         fs.renameSync(tmp, file);
+        expect(fs.statSync(file).mtimeMs).toBe(FIXED * 1000);
         const after = store.read(file, identity);
         expect(after.value).toEqual({ n: 2 });
         expect(after.version).not.toBe(before.version);
@@ -45,13 +51,25 @@ describe('web history store', () => {
         expect(store.getVersion(file)).toBe(v2);
     });
 
-    test('写到一半失败时原文件保持完整', () => {
+    test('写到一半失败时原文件保持完整（原子替换）', () => {
+        const file = path.join(dir, 'a.json');
+        store.write(file, { n: 1 }, ser);
+        const spy = jest.spyOn(fs, 'renameSync').mockImplementation(() => { throw new Error('rename boom'); });
+        try {
+            expect(() => store.write(file, { n: 2 }, ser)).toThrow('rename boom');
+        } finally {
+            spy.mockRestore();
+        }
+        expect(JSON.parse(fs.readFileSync(file, 'utf-8'))).toEqual({ n: 1 });
+        expect(fs.readdirSync(dir).filter(name => name.endsWith('.tmp'))).toEqual([]);
+        expect(store.read(file, identity).value).toEqual({ n: 1 });
+    });
+
+    test('序列化失败时原文件保持完整', () => {
         const file = path.join(dir, 'a.json');
         store.write(file, { n: 1 }, ser);
         expect(() => store.write(file, { n: 2 }, () => { throw new Error('boom'); })).toThrow('boom');
         expect(JSON.parse(fs.readFileSync(file, 'utf-8'))).toEqual({ n: 1 });
-        expect(fs.readdirSync(dir).filter(name => name.endsWith('.tmp'))).toEqual([]);
-        expect(store.read(file, identity).value).toEqual({ n: 1 });
     });
 
     test('defer 写入只改内存，最迟 1 秒后落盘；读取看到的是最新内容', () => {
