@@ -27,7 +27,30 @@ import {
 } from "@/lib/api"
 import { useAgentRecoveryPoll } from "@/hooks/use-agent-recovery-poll"
 import { formatDateTime } from "@/lib/format"
-import { isNearBottom } from "@/lib/chat-behavior"
+import { computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier } from "@/lib/chat-behavior"
+import {
+  clearOutbox,
+  createClientMessageId,
+  decideOutboxRestore,
+  getTabId,
+  loadComposer,
+  planRestore,
+  purgeExpiredComposerData,
+  saveDraft,
+  setOutbox,
+  type Outbox,
+} from "@/lib/composer-store"
+import {
+  applyMessagesResponse,
+  buildMessagesUrl,
+  buildSyncQuery,
+  firstServerMessageId,
+  MESSAGES_PAGE_LIMIT,
+  prependEarlierMessages,
+  reconcileWithPage,
+  type MessagesResponse,
+} from "@/lib/message-sync"
+import { createCoalescer, createSingleFlight, decideSyncDelay, type SingleFlight } from "@/lib/sync-scheduler"
 import { markdownToPlainText } from "@/lib/markdown-text"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -73,10 +96,11 @@ const OTHER_VIEW_GROUPS: { title: string; views: View[] }[] = [
   { title: "AGENT", views: ["detail"] },
 ]
 
-// 页面可见时的多设备/多标签页同步轮询：间隔与空闲超时，见下方 reconcile 相关 effect
-const SYNC_POLL_INTERVAL_MS = 6000
-const SYNC_POLL_IDLE_TIMEOUT_MS = 10 * 60 * 1000
+// visibilitychange 与 focus 几乎同时触发，窗口内只同步一次
+const SYNC_EVENT_COALESCE_MS = 300
+const RESTORE_NOTICE_TEXT = "上次没发出去的内容已放回输入框"
 
+type RestoreNotice = { kind: "info" } | { kind: "banner"; outbox: Outbox }
 
 type Tone = "ok" | "warn" | "danger" | "info"
 
@@ -216,11 +240,17 @@ function ActivityView({
   messages,
   mode,
   onPreviewHtml,
+  hasMore,
+  loadingEarlier,
+  onLoadEarlier,
 }: {
   session: SessionSummary | null
   messages: ChatMessage[]
   mode: "agent" | "command"
   onPreviewHtml: (title: string, code: string) => void
+  hasMore: boolean
+  loadingEarlier: boolean
+  onLoadEarlier: () => void
 }) {
   const displayMessages = React.useMemo(() => mergeTraceIntoReply(messages), [messages])
   const scrollRef = React.useRef<HTMLDivElement>(null)
@@ -228,17 +258,57 @@ function ActivityView({
   // 一旦用户往上翻看历史，这里会记为 false，后续更新不再打断阅读
   const stickToBottomRef = React.useRef(true)
 
+  // 加载更早的消息会在列表前面插入内容：记下插入前的内容高度，插入后把滚动位置补上
+  // 新增的高度，视野停在原来的内容上不跳动。高度由 ResizeObserver 持续记录
+  // （它在布局之后才回调，所以 layout effect 里读到的仍是插入前的值）
+  const contentRef = React.useRef<HTMLDivElement>(null)
+  const hasContent = displayMessages.length > 0
+  const lastHeightRef = React.useRef(0)
+  const firstIdRef = React.useRef<string | number | null>(null)
+  const earlierRequestedRef = React.useRef(false)
+
   function handleScroll() {
     const el = scrollRef.current
     if (!el) return
     stickToBottomRef.current = isNearBottom(el.scrollTop, el.scrollHeight, el.clientHeight)
+    if (shouldLoadEarlier({ scrollTop: el.scrollTop, hasMore, loading: loadingEarlier })) {
+      earlierRequestedRef.current = true
+      onLoadEarlier()
+    }
   }
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const el = scrollRef.current
-    if (!el || !stickToBottomRef.current) return
+    if (!el) return
+    const firstId = displayMessages[0]?.id ?? null
+    const prepended =
+      earlierRequestedRef.current && firstIdRef.current !== null && firstId !== null && firstId !== firstIdRef.current
+    firstIdRef.current = firstId
+    if (prepended) {
+      earlierRequestedRef.current = false
+      el.scrollTop = computeScrollRestore({
+        prevScrollHeight: lastHeightRef.current,
+        nextScrollHeight: el.scrollHeight,
+        scrollTop: el.scrollTop,
+      })
+      lastHeightRef.current = el.scrollHeight
+      return
+    }
+    if (!stickToBottomRef.current) return
     el.scrollTop = el.scrollHeight
   }, [displayMessages])
+
+  React.useEffect(() => {
+    const content = contentRef.current
+    const el = scrollRef.current
+    if (!content || !el || typeof ResizeObserver === "undefined") return
+    lastHeightRef.current = el.scrollHeight
+    const observer = new ResizeObserver(() => {
+      lastHeightRef.current = el.scrollHeight
+    })
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [session?.name, hasContent])
 
   if (!session) {
     return (
@@ -264,8 +334,24 @@ function ActivityView({
       className="h-full overflow-x-hidden overflow-y-auto overscroll-y-contain"
     >
       {/* 按聊天区自身宽度（而不是屏幕宽度）切档：侧栏占掉一部分宽度后，稍窄时气泡应接近铺满，只有宽屏才收成 75% */}
-      <div className="@container flex flex-col gap-3 p-4">
+      <div ref={contentRef} className="@container flex flex-col gap-3 p-4">
+        {hasMore ? (
+          <div className="flex justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loadingEarlier}
+              onClick={() => {
+                earlierRequestedRef.current = true
+                onLoadEarlier()
+              }}
+            >
+              {loadingEarlier ? "加载中…" : "加载更早的消息"}
+            </Button>
+          </div>
+        ) : null}
         {displayMessages.map((message) => {
+          const bubble = getBubbleState(message)
           // 切换发送模式时，历史里"另一种模式"产生的消息整体变淡，突出当前模式的上下文
           const origin = message.mode === "agent" || message.mode === "command" ? message.mode : ""
           const dimmed = origin !== "" && origin !== mode
@@ -282,9 +368,9 @@ function ActivityView({
                 dimmed && "opacity-25"
               )}
             >
-              {message.pairedTrace ? <TraceBlock trace={message.pairedTrace} /> : null}
+              {message.pairedTrace ? <TraceBlock trace={message.pairedTrace} sessionName={session.name} /> : null}
               {standaloneTrace ? (
-                <TraceBlock trace={message} />
+                <TraceBlock trace={message} sessionName={session.name} />
               ) : (
                 <>
                   <div
@@ -308,7 +394,7 @@ function ActivityView({
                       // AGENT 回复固定占满可用宽度（与上面的执行过程框等宽），
                       // 不随内容长短忽宽忽窄
                       message.role === "assistant" && "w-full",
-                      message.pending && "opacity-70"
+                      bubble.faded && "opacity-70"
                     )}
                   >
                     {message.role === "assistant" ? (
@@ -330,7 +416,7 @@ function ActivityView({
                   <span className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
                     {formatTime(message.timestamp)}
                     {message.interrupted ? " · 已停止" : ""}
-                    {message.content && !message.pending ? (
+                    {bubble.copyable ? (
                       message.role === "assistant" ? (
                         <CopyMessageButton
                           text={markdownToPlainText(message.content)}
@@ -647,7 +733,7 @@ export function WorkspacePanel({
   creatingAgent,
 }: {
   activeSession: SessionSummary | null
-  onAfterSend: () => void
+  onAfterSend: () => void | Promise<unknown>
   filesEditorRef: React.RefObject<FilesEditorState | null>
   confirmLeaveIfDirty: () => Promise<boolean>
   creatingAgent: boolean
@@ -680,8 +766,16 @@ export function WorkspacePanel({
   // 过程、增量回复）原样还在——单一数组在切换时会被加载响应覆盖，本地流式
   // 占位随之丢失，表现为"切回来界面空白，直到任务跑完才恢复"
   const [messagesBySession, setMessagesBySession] = React.useState<Record<string, ChatMessage[]>>({})
+  const messagesBySessionRef = React.useRef<Record<string, ChatMessage[]>>({})
+  // 每个会话的增量同步状态：epoch（服务端换了就整体重拉）与是否还有更早的消息
+  const syncMetaRef = React.useRef<Record<string, { epoch: string | null; hasMore: boolean }>>({})
+  const [hasMoreBySession, setHasMoreBySession] = React.useState<Record<string, boolean>>({})
+  const [loadingEarlier, setLoadingEarlier] = React.useState(false)
+  const loadingEarlierRef = React.useRef(false)
   const [messagesLoading, setMessagesLoading] = React.useState(false)
   const [draft, setDraft] = React.useState("")
+  const draftRef = React.useRef("")
+  const [restoreNotice, setRestoreNotice] = React.useState<RestoreNotice | null>(null)
   const [mode, setMode] = React.useState<"agent" | "command">("agent")
   // 按会话名记录"本标签页正在为哪些会话跑 stream"，而不是单个全局布尔值——
   // 否则切到另一个 agent 时，输入框/发送按钮会继续显示上一个 agent 的状态
@@ -717,13 +811,47 @@ export function WorkspacePanel({
     sendingNamesRef.current = sendingNames
   }, [sendingNames])
 
-  // 切换 AGENT 时清空未发送的草稿——否则在 A 会话里打的字会原样留在输入框，
-  // 切到 B 会话后如果没注意到就直接点发送，会把 A 的草稿当成 B 的消息发出去。
+  // 草稿按会话隔离保存在浏览器本地：切换 AGENT 时加载目标会话自己的草稿（而不是沿用输入框里
+  // 上一个会话的字——否则会把 A 的草稿当成 B 的消息发出去）。
   // 发送模式同理必须一起重置：在 A 里切到"系统命令"后切到 B，B 也会停在系统命令，
   // 用户以为在跟 agent 说话，实际整段文字被当 shell 命令丢进容器执行
+  const pendingSaveRef = React.useRef<{ name: string; value: string; timer: number } | null>(null)
+  const flushDraftSave = React.useCallback(() => {
+    const pending = pendingSaveRef.current
+    if (!pending) return
+    window.clearTimeout(pending.timer)
+    pendingSaveRef.current = null
+    saveDraft(pending.name, pending.value)
+  }, [])
+  const updateDraft = React.useCallback(
+    (value: string) => {
+      draftRef.current = value
+      setDraft(value)
+      const name = activeSessionNameRef.current
+      if (!name) return
+      if (pendingSaveRef.current && pendingSaveRef.current.name !== name) flushDraftSave()
+      if (pendingSaveRef.current) window.clearTimeout(pendingSaveRef.current.timer)
+      const timer = window.setTimeout(flushDraftSave, 300)
+      pendingSaveRef.current = { name, value, timer }
+    },
+    [flushDraftSave]
+  )
   React.useEffect(() => {
-    setDraft("")
+    purgeExpiredComposerData()
+    window.addEventListener("pagehide", flushDraftSave)
+    return () => {
+      window.removeEventListener("pagehide", flushDraftSave)
+      flushDraftSave()
+    }
+  }, [flushDraftSave])
+  React.useEffect(() => {
+    flushDraftSave()
+    const saved = activeSession ? loadComposer(activeSession.name).draft : ""
+    draftRef.current = saved
+    setDraft(saved)
+    setRestoreNotice(null)
     setMode("agent")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession?.name])
 
   const activeSessionMessages = activeSession ? messagesBySession[activeSession.name] : undefined
@@ -735,11 +863,11 @@ export function WorkspacePanel({
   // 所以这里按 name 定位，而不是操作"当前活动会话"
   const setSessionMessages = React.useCallback(
     (name: string, updater: (prev: ChatMessage[]) => ChatMessage[]) => {
-      setMessagesBySession((prev) => {
-        const next = updater(prev[name] ?? [])
-        if (next === prev[name]) return prev
-        return { ...prev, [name]: next }
-      })
+      const prev = messagesBySessionRef.current
+      const next = updater(prev[name] ?? [])
+      if (next === prev[name]) return
+      messagesBySessionRef.current = { ...prev, [name]: next }
+      setMessagesBySession(messagesBySessionRef.current)
     },
     []
   )
@@ -769,70 +897,190 @@ export function WorkspacePanel({
     })
   }
 
-  const loadMessages = React.useCallback(
-    (silent?: boolean) => {
-      if (!activeSession) {
-        setMessagesLoading(false)
-        return Promise.resolve()
+  // 发送到服务端之前的草稿检查：已发出（同步结果里有同一个 clientId）就清掉；
+  // 没发出去而且没有任务在跑，就放回输入框。别的标签页刚写入的先等下一轮
+  const checkOutbox = React.useCallback(
+    (name: string, messages: ChatMessage[]) => {
+      const outbox = loadComposer(name).outbox
+      const decision = decideOutboxRestore({
+        outbox,
+        messages,
+        sessionRunning:
+          sendingNamesRef.current.has(name) ||
+          messages.some((message) => message.mode === "agent" && message.pending === true),
+        currentTabId: getTabId(),
+        now: Date.now(),
+      })
+      if (!outbox || decision === "none" || decision === "wait") return
+      if (decision === "clear") {
+        clearOutbox(name, outbox.clientId)
+        return
       }
+      const plan = planRestore(draftRef.current, outbox)
+      if (plan.kind === "fill") {
+        clearOutbox(name, outbox.clientId)
+        updateDraft(plan.text)
+        setMode(outbox.mode)
+        setRestoreNotice({ kind: "info" })
+      } else {
+        setRestoreNotice((prev) =>
+          prev?.kind === "banner" && prev.outbox.clientId === outbox.clientId ? prev : { kind: "banner", outbox }
+        )
+      }
+    },
+    [updateDraft]
+  )
+
+  const setHasMore = React.useCallback((name: string, hasMore: boolean) => {
+    const meta = syncMetaRef.current[name] ?? { epoch: null, hasMore: false }
+    syncMetaRef.current[name] = { ...meta, hasMore }
+    setHasMoreBySession((prev) => (prev[name] === hasMore ? prev : { ...prev, [name]: hasMore }))
+  }, [])
+
+  // 增量同步一次：有本地 anchor 和 epoch 就只拉 anchor 之后的部分（没变化时是几百字节的 304），
+  // 否则拉最近一页。forcePage 用于流结束、停止、命令执行后的对账：拉最近一页覆盖本地
+  const loadMessages = React.useCallback(
+    async (name: string, options: { silent: boolean; signal?: AbortSignal; forcePage?: boolean }) => {
+      const { silent, signal, forcePage } = options
       if (!silent) {
         showLoadError("")
         setMessagesLoading(true)
       }
-      return apiGet(`/api/sessions/${encodeURIComponent(activeSession.name)}/messages`)
-        .then((data) => {
-          // 请求发出后状态可能已变：切到了别的会话（防串台）、或本标签页开始了
-          // 该会话的流式发送（晚到的旧快照会覆盖掉刚显示的乐观 user 消息，
-          // 用户表现为"发出去的提示词不立刻出现/消失"）——这两种响应直接丢弃
-          if (
-            shouldDiscardMessagesResponse(
-              activeSession.name,
-              activeSessionNameRef.current,
-              sendingNamesRef.current.has(activeSession.name)
-            )
-          ) {
-            return
-          }
-          setSessionMessages(
-            activeSession.name,
-            () => (Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [])
-          )
-          messagesSyncTickRef.current += 1
-          setMessagesSyncTick(messagesSyncTickRef.current)
-        })
-        .catch((err) => {
-          if (!silent) showLoadError(err instanceof Error ? err.message : "加载消息失败")
-        })
-        .finally(() => {
-          if (!silent) setMessagesLoading(false)
-        })
+      try {
+        const local = messagesBySessionRef.current[name]
+        const meta = syncMetaRef.current[name]
+        const query =
+          local && !forcePage
+            ? buildSyncQuery(local, meta?.epoch ?? null)
+            : { limit: MESSAGES_PAGE_LIMIT }
+        const anchor = query.after ?? null
+        const data = await apiGet(buildMessagesUrl(name, query), signal)
+        if (signal?.aborted) return
+        // 请求发出后状态可能已变：切到了别的会话（防串台）、或本标签页开始了
+        // 该会话的流式发送（晚到的旧快照会覆盖掉刚显示的乐观 user 消息，
+        // 用户表现为"发出去的提示词不立刻出现/消失"）——这两种响应直接丢弃
+        if (
+          shouldDiscardMessagesResponse(name, activeSessionNameRef.current, sendingNamesRef.current.has(name))
+        ) {
+          return
+        }
+        if (!Array.isArray(data.messages)) return
+        const res = data as unknown as MessagesResponse
+        const localNow = messagesBySessionRef.current[name] ?? []
+        const prevHasMore = syncMetaRef.current[name]?.hasMore ?? false
+        const applied =
+          res.mode === "tail"
+            ? applyMessagesResponse(localNow, res, anchor, prevHasMore)
+            : reconcileWithPage(localNow, res, prevHasMore)
+        if (!applied) {
+          // 本地 anchor 在请求期间被改动：下一次改拉最近一页
+          syncMetaRef.current[name] = { epoch: null, hasMore: prevHasMore }
+          return
+        }
+        syncMetaRef.current[name] = { epoch: applied.epoch, hasMore: applied.hasMore }
+        setHasMoreBySession((prev) => (prev[name] === applied.hasMore ? prev : { ...prev, [name]: applied.hasMore }))
+        setSessionMessages(name, () => applied.messages)
+        messagesSyncTickRef.current += 1
+        setMessagesSyncTick(messagesSyncTickRef.current)
+        checkOutbox(name, applied.messages)
+      } catch (err) {
+        if (signal?.aborted) return
+        if (!silent) showLoadError(err instanceof Error ? err.message : "加载消息失败")
+      } finally {
+        if (!silent && activeSessionNameRef.current === name) setMessagesLoading(false)
+      }
     },
-    // 依赖 activeSession?.name 而非整个对象：会话列表刷新会产生新的对象引用
-    // （同一个会话名），依赖整个对象会导致这个 callback 频繁重建、进而让下面
-    // 依赖它的 effect 反复重新加载
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeSession?.name, setSessionMessages]
+    [setSessionMessages, showLoadError, checkOutbox]
   )
 
-  const loadDetail = React.useCallback(() => {
-    if (!activeSession) {
-      setSessionDetail(null)
-      return Promise.resolve()
-    }
-    return apiGet(`/api/sessions/${encodeURIComponent(activeSession.name)}/detail`)
-      .then((data) => setSessionDetail((data.detail as SessionDetail) || null))
+  const loadDetailFor = React.useCallback((name: string, signal?: AbortSignal) => {
+    return apiGet(`/api/sessions/${encodeURIComponent(name)}/detail`, signal)
+      .then((data) => {
+        if (signal?.aborted || activeSessionNameRef.current !== name) return
+        setSessionDetail((data.detail as SessionDetail) || null)
+      })
       .catch(() => {
         // 静默失败：检查/配置/详情页保留上一次成功加载的数据
       })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSession?.name])
+  }, [])
+
+  const loadDetail = React.useCallback(() => {
+    const name = activeSessionNameRef.current
+    if (!name) {
+      setSessionDetail(null)
+      return Promise.resolve()
+    }
+    return loadDetailFor(name)
+  }, [loadDetailFor])
+
+  // 同步请求必须经过单飞：同一时间最多一个 /messages 在路上，定时触发遇到在途请求直接跳过；
+  // 主动触发（发送结束、停止、切回页面）遇到在途请求则排队补跑一次，不能丢。
+  // 每个会话一个实例，切换会话时 abort 上一个会话还在路上的请求
+  const forcePageRef = React.useRef(false)
+  const flightRef = React.useRef<SingleFlight | null>(null)
+  const requestSync = React.useCallback((manual: boolean, forcePage = false): Promise<void> => {
+    if (forcePage) forcePageRef.current = true
+    return flightRef.current?.run(manual) ?? Promise.resolve()
+  }, [])
 
   React.useEffect(() => {
-    queueMicrotask(() => {
-      loadMessages()
-      loadDetail()
+    const name = activeSession?.name ?? null
+    if (!name) {
+      flightRef.current = null
+      queueMicrotask(() => {
+        setMessagesLoading(false)
+        setSessionDetail(null)
+      })
+      return
+    }
+    const flight = createSingleFlight(async (signal) => {
+      const forcePage = forcePageRef.current
+      forcePageRef.current = false
+      // 已有缓存就静默刷新；首次进入该会话才用加载态占位
+      const silent = messagesBySessionRef.current[name] !== undefined
+      await Promise.all([loadMessages(name, { silent, signal, forcePage }), loadDetailFor(name, signal)])
     })
-  }, [loadMessages, loadDetail])
+    flightRef.current = flight
+    queueMicrotask(() => {
+      void flight.run(true)
+    })
+    return () => {
+      flight.abort()
+      if (flightRef.current === flight) flightRef.current = null
+    }
+    // 依赖 activeSession?.name 而非整个对象：会话列表刷新会产生新的对象引用（同一个会话名）
+  }, [activeSession?.name, loadMessages, loadDetailFor])
+
+  // 往上翻：加载更早的一页，接到列表前面
+  const loadEarlier = React.useCallback(async () => {
+    const name = activeSessionNameRef.current
+    if (!name || loadingEarlierRef.current) return
+    const local = messagesBySessionRef.current[name] ?? []
+    const firstId = firstServerMessageId(local)
+    if (firstId === null) return
+    loadingEarlierRef.current = true
+    setLoadingEarlier(true)
+    try {
+      const data = await apiGet(buildMessagesUrl(name, { before: firstId, limit: MESSAGES_PAGE_LIMIT }))
+      if (activeSessionNameRef.current !== name || !Array.isArray(data.messages)) return
+      const res = data as unknown as MessagesResponse
+      const meta = syncMetaRef.current[name]
+      if (meta?.epoch && res.epoch && res.epoch !== meta.epoch) {
+        // 期间服务端重排过历史：丢弃这一页，改拉最近一页对账
+        syncMetaRef.current[name] = { epoch: null, hasMore: meta.hasMore }
+        void requestSync(true, true)
+        return
+      }
+      const out = prependEarlierMessages(messagesBySessionRef.current[name] ?? [], res)
+      setSessionMessages(name, () => out.messages)
+      setHasMore(name, out.hasMore)
+    } catch (err) {
+      showLoadError(err instanceof Error ? err.message : "加载更早的消息失败")
+    } finally {
+      loadingEarlierRef.current = false
+      setLoadingEarlier(false)
+    }
+  }, [requestSync, setSessionMessages, setHasMore, showLoadError])
 
   // 刷新页面/切回会话后，如果后端
   // 仍在跑一次 Agent 回合（消息里还留着 pending 记录），持续轮询直到它结束；
@@ -841,8 +1089,8 @@ export function WorkspacePanel({
     activeSession,
     messages,
     React.useCallback(async () => {
-      await Promise.all([loadMessages(true), loadDetail()])
-    }, [loadMessages, loadDetail]),
+      await requestSync(false)
+    }, [requestSync]),
     sending
   )
 
@@ -863,31 +1111,62 @@ export function WorkspacePanel({
     showLoadError("")
   }, [loadErrorRecoverable, sending, messagesSyncTick, showLoadError])
 
-  // visibilitychange/focus 触发对账，另外补上多设备/多标签页同时打开同一会话
-  // 的同步：只靠 visibilitychange/focus 事件只能覆盖"从隐藏切回
-  // 可见"这一次状态跳变——如果手机和电脑两个窗口同时摆在眼前、都没有失去过
-  // 焦点，双方都不会触发任何事件，一边发的消息不会自动出现在另一边，必须手动
-  // 刷新或者随便发点内容才会重新拉取。这里在页面可见期间加一个轻量轮询，同时
-  // 用 SYNC_POLL_IDLE_TIMEOUT_MS 做空闲退避——超过这个时长没有任何用户操作就
-  // 暂停轮询，避免忘记关掉的标签页无限期空转消耗流量；有新操作、或重新可见/
-  // 聚焦会立刻恢复。本标签页正在为当前会话跑 stream 时跳过 loadMessages/loadDetail，
-  // 避免用半途的服务端快照覆盖实时状态；侧栏（onAfterSend）不受此限制。
+  // 多设备/多标签页同步：只靠 visibilitychange/focus 事件覆盖不了“两个窗口同时摆在眼前”的场景，
+  // 所以页面可见期间还要定时同步。节奏由 decideSyncDelay 决定（有焦点 6 秒、没焦点 30 秒、
+  // 隐藏或空闲超过 10 分钟暂停），用 setTimeout 链而不是 setInterval：上一轮结束后才排下一轮，
+  // 慢网下请求不会堆积。切回页面/重新聚焦时立刻同步一次（visibilitychange 与 focus 合并）。
+  // 本标签页正在为当前会话跑 stream 时跳过 /messages 与 /detail，避免用半途的服务端快照覆盖实时状态；
+  // 侧栏（onAfterSend）不受此限制。
   React.useEffect(() => {
     let lastActivityAt = Date.now()
+    let timer = 0
+    let ticking = false
+    let cancelled = false
+
+    async function reconcile(manual: boolean) {
+      if (document.visibilityState !== "visible") return
+      const sidebar = Promise.resolve(onAfterSend()).catch(() => {})
+      const name = activeSessionNameRef.current
+      if (name && !sendingNamesRef.current.has(name)) {
+        await requestSync(manual)
+      }
+      await sidebar
+    }
+
+    function schedule() {
+      window.clearTimeout(timer)
+      timer = 0
+      if (cancelled || ticking) return
+      const delay = decideSyncDelay({
+        visible: document.visibilityState === "visible",
+        focused: document.hasFocus(),
+        idleMs: Date.now() - lastActivityAt,
+      })
+      if (delay === null) return
+      timer = window.setTimeout(async () => {
+        timer = 0
+        ticking = true
+        try {
+          await reconcile(false)
+        } finally {
+          ticking = false
+        }
+        schedule()
+      }, delay)
+    }
+
     function markActivity() {
       lastActivityAt = Date.now()
+      if (timer === 0 && !ticking) schedule()
     }
-    function reconcile() {
-      if (document.visibilityState !== "visible") return
-      onAfterSend()
-      if (!activeSessionNameRef.current) return
-      if (sendingNamesRef.current.has(activeSessionNameRef.current)) return
-      loadMessages(true)
-      loadDetail()
-    }
-    function onVisibleOrFocus() {
+    const onVisibleOrFocus = createCoalescer(SYNC_EVENT_COALESCE_MS, () => {
       markActivity()
-      reconcile()
+      void reconcile(true)
+      schedule()
+    })
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") onVisibleOrFocus()
+      else schedule()
     }
     const activityEvents: Array<keyof WindowEventMap> = [
       "mousemove",
@@ -897,20 +1176,19 @@ export function WorkspacePanel({
       "scroll",
     ]
     activityEvents.forEach((type) => window.addEventListener(type, markActivity, { passive: true }))
-    document.addEventListener("visibilitychange", onVisibleOrFocus)
+    document.addEventListener("visibilitychange", onVisibilityChange)
     window.addEventListener("focus", onVisibleOrFocus)
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return
-      if (Date.now() - lastActivityAt > SYNC_POLL_IDLE_TIMEOUT_MS) return
-      reconcile()
-    }, SYNC_POLL_INTERVAL_MS)
+    window.addEventListener("blur", schedule)
+    schedule()
     return () => {
+      cancelled = true
       activityEvents.forEach((type) => window.removeEventListener(type, markActivity))
-      document.removeEventListener("visibilitychange", onVisibleOrFocus)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
       window.removeEventListener("focus", onVisibleOrFocus)
-      window.clearInterval(timer)
+      window.removeEventListener("blur", schedule)
+      window.clearTimeout(timer)
     }
-  }, [loadMessages, loadDetail, onAfterSend])
+  }, [requestSync, onAfterSend])
 
   async function handleSend() {
     const text = draft.trim()
@@ -920,8 +1198,33 @@ export function WorkspacePanel({
     // 隔离（setSessionMessages 按 name 定位），切走后回调仍持续维护原会话的
     // 实时状态；只有 loadError 这类"只属于当前视图"的提示才需要 isStillActive
     const isStillActive = () => activeSessionNameRef.current === name
-    setDraft("")
+    // 先把提示词同步写进待发箱再清空输入框：请求没发出去（400、409、断网、刷新、关浏览器）
+    // 也不会丢，见 checkOutbox / restoreUnsent
+    const clientId = createClientMessageId()
+    const outbox: Outbox = { clientId, text, mode, createdAt: Date.now(), tabId: getTabId() }
+    if (pendingSaveRef.current) {
+      window.clearTimeout(pendingSaveRef.current.timer)
+      pendingSaveRef.current = null
+    }
+    const bannerOutbox = restoreNotice?.kind === "banner" ? restoreNotice.outbox : null
+    setOutbox(name, outbox)
+    // 输入框上方还挂着上一次没发出去的内容：待发箱被新的覆盖前，先把它放回现在已清空的输入框
+    updateDraft(bannerOutbox ? bannerOutbox.text : "")
+    setRestoreNotice(bannerOutbox ? { kind: "info" } : null)
     showLoadError("")
+    // 没发出去：输入框为空就直接放回，不为空不覆盖，保留待发箱并给出“恢复”入口
+    const restoreUnsent = () => {
+      if (!isStillActive()) return
+      const plan = planRestore(draftRef.current, outbox)
+      if (plan.kind === "fill") {
+        clearOutbox(name, clientId)
+        updateDraft(plan.text)
+        setMode(outbox.mode)
+        setRestoreNotice({ kind: "info" })
+      } else {
+        setRestoreNotice({ kind: "banner", outbox })
+      }
+    }
     setSessionMessages(name, (prev) => [
       ...prev,
       {
@@ -930,13 +1233,15 @@ export function WorkspacePanel({
         content: text,
         timestamp: new Date().toISOString(),
         mode,
+        clientMessageId: clientId,
       },
     ])
 
     if (mode === "command") {
       setSendingFor(name, true)
       try {
-        const data = await apiPost(`/api/sessions/${encodeURIComponent(name)}/run`, { command: text })
+        const data = await apiPost(`/api/sessions/${encodeURIComponent(name)}/run`, { command: text, clientMessageId: clientId })
+        clearOutbox(name, clientId)
         setSessionMessages(name, (prev) => [
           ...prev,
           {
@@ -950,10 +1255,14 @@ export function WorkspacePanel({
         ])
       } catch (err) {
         if (isStillActive()) showLoadError(err instanceof Error ? err.message : "命令执行失败")
+        // 请求被拒绝或没到服务端：命令没有执行，内容放回输入框
+        setSessionMessages(name, (prev) => removeLocalPendingPlaceholders(prev))
+        restoreUnsent()
       } finally {
         setSendingFor(name, false)
         onAfterSend()
-        if (isStillActive()) loadDetail()
+        // 用服务端的最近一页对账（本地的命令结果是临时 id）
+        if (isStillActive()) void requestSync(true, true)
       }
       return
     }
@@ -967,6 +1276,8 @@ export function WorkspacePanel({
     // "执行过程"折叠面板因此永远不会出现，pending 也永远清不掉（停止按钮
     // 完成后不会变回发送）
     let traceMessageId: string | number = STREAMING_TRACE_ID
+    // 收到 meta 说明服务端已经存下了 user 消息：待发箱的使命完成。meta 之前失败才需要放回输入框
+    let metaReceived = false
     setSessionMessages(name, (prev) => [
       ...prev,
       {
@@ -989,8 +1300,10 @@ export function WorkspacePanel({
       },
     ])
     try {
-      await apiStream(`/api/sessions/${encodeURIComponent(name)}/agent/stream`, { prompt: text }, (event) => {
+      await apiStream(`/api/sessions/${encodeURIComponent(name)}/agent/stream`, { prompt: text, clientMessageId: clientId }, (event) => {
         if (event.type === "meta") {
+          metaReceived = true
+          clearOutbox(name, clientId)
           // 服务端为本轮 user/trace 消息预生成了持久化 id：第一时间把本地乐观占位
           // 换成服务端 id，之后轮询对账时 React key 才能对上，消息列表 DOM 不会
           // 整体重建（否则移动端代码块的横向滚动位置/文字选区会被清零）
@@ -1062,6 +1375,7 @@ export function WorkspacePanel({
         } else if (event.type === "error") {
           if (isStillActive()) showLoadError(event.error)
           setSessionMessages(name, (prev) => removeLocalPendingPlaceholders(prev))
+          if (!metaReceived) restoreUnsent()
         }
       })
     } catch (err) {
@@ -1081,14 +1395,20 @@ export function WorkspacePanel({
       // 请求没能在服务端落地（409 冲突 / 网络失败）：清除本轮全部本地占位
       //（含乐观 user 消息），否则会留下一条永远没有回复的幽灵消息
       setSessionMessages(name, (prev) => removeLocalPendingPlaceholders(prev))
+      if (!metaReceived) restoreUnsent()
       // 本地 stream 中断不代表服务端那一轮真的停了（可能只是网络抖动/标签页
       // 被节流）；删掉本地占位后立刻跟服务端对一次账，服务端如果仍在跑，
       // 返回的消息会带着 pending 标记，交给 useAgentRecoveryPoll 接手轮询
-      loadMessages(true)
     } finally {
       setSendingFor(name, false)
       onAfterSend()
-      if (isStillActive()) loadDetail()
+      // 流结束（成功或中断）后立刻用服务端的最近一页对账，主动触发不能被在途请求吞掉
+      if (isStillActive()) {
+        void requestSync(true, true)
+      } else {
+        // 流结束时用户已切到别的会话：本地留的是流式拼出来的内容，下次回来先按最近一页对账
+        syncMetaRef.current[name] = { epoch: null, hasMore: syncMetaRef.current[name]?.hasMore ?? false }
+      }
     }
   }
 
@@ -1102,8 +1422,7 @@ export function WorkspacePanel({
       // 无论成功失败都立即对一次账：成功时服务端 patch 可能晚于 stop 响应
       //（useAgentRecoveryPoll 轮询兜底收尾）；失败（如 serve 重启后的孤儿
       // 任务 404）时服务端已把残留 pending 标记为中断，对账后输入随之解锁
-      loadMessages(true)
-      loadDetail()
+      void requestSync(true, true)
     }
   }
 
@@ -1193,6 +1512,9 @@ export function WorkspacePanel({
               messages={messages}
               mode={mode}
               onPreviewHtml={(title, code) => setHtmlPreview({ title, code })}
+              hasMore={activeSession ? hasMoreBySession[activeSession.name] === true : false}
+              loadingEarlier={loadingEarlier}
+              onLoadEarlier={() => void loadEarlier()}
             />
           )
         ) : null}
@@ -1236,10 +1558,37 @@ export function WorkspacePanel({
         </Alert>
       ) : null}
 
+      {view === "activity" && restoreNotice ? (
+        <Alert className="mx-3 mb-2 w-auto min-w-0">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2 break-words">
+            <span>
+              {restoreNotice.kind === "banner"
+                ? "上次没发出去的内容还在，点“恢复”接到输入框末尾"
+                : RESTORE_NOTICE_TEXT}
+            </span>
+            {restoreNotice.kind === "banner" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const text = restoreNotice.outbox.text
+                  const current = draftRef.current
+                  updateDraft(current.trim() ? `${current}\n\n${text}` : text)
+                  if (activeSession) clearOutbox(activeSession.name, restoreNotice.outbox.clientId)
+                  setRestoreNotice({ kind: "info" })
+                }}
+              >
+                恢复
+              </Button>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {view === "activity" ? (
         <Composer
           draft={draft}
-          onDraftChange={setDraft}
+          onDraftChange={updateDraft}
           onSend={handleSend}
           onStop={handleStop}
           mode={mode}

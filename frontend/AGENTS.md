@@ -22,9 +22,19 @@
 - 弹窗类：`system-settings-dialog` / `create-container-dialog` / `agent-template-dialog` / `model-menu`（聊天输入框左下角的模型下拉，选项来自会话 env，CLI 内置目录后台补充）/ `logs-dialog` / `search-dialog` / `directory-picker-dialog` / `clone-name-dialog` / `prompt-dialog` / `quick-chat-setup-dialog`。
 - 消息渲染：`markdown-content.tsx` / `trace-block.tsx` + `lib/markdown-render.ts` / `lib/sanitize.ts`。
 - `lib/api.ts`：所有 HTTP 与流式调用的出口，`StreamEvent` 类型定义与会话/trace 相关纯函数也在这里。
+- `lib/sync-scheduler.ts`：同步调度纯函数。`decideSyncDelay`（有焦点 6s / 没焦点 30s / 隐藏或空闲 10 分钟暂停）、`createSingleFlight`（单飞）、`createCoalescer`（visibilitychange 与 focus 300ms 合并）。
+- `lib/message-sync.ts`：`/messages` 增量同步的纯函数——page / tail / reset / before 的合并、稳定前缀 anchor、内容没变的消息复用原对象（DOM 不重建）、流结束后用最近一页对账（`reconcileWithPage`）、trace 按需加载的缓存键与 LRU。
+- `lib/composer-store.ts`：提示词本地草稿与待发箱（`manyoyo:composer:<会话名>`，localStorage 不可用时静默降级）。发送前同步写待发箱，收到 `meta` 才清；没发出去放回输入框（输入框非空时不覆盖，给“恢复”入口）；`clearAllComposerData` 供登出清空（目前前端没有登出入口，加入口时要调用它）。
+- `lib/terminal-resize.ts`：终端 fit 后列数/行数变化的防抖上报（`{type:'resize',cols,rows}`）、容器尺寸为 0 不建连。
 - `lib/format.ts`：时间与体积的统一格式化（`formatDateTime` 固定 zh-CN 24 小时制 `MM/DD HH:mm`、`formatBytes`）。新增展示时间/体积的地方一律用它，别再各写一个 `toLocaleString()`。
-- `hooks/`：`use-mobile`（移动端断点）、`use-sessions`、`use-agent-recovery-poll`、`use-resizable-width`、`use-confirm-dialog`、`use-unsaved-changes-dialog`。
+- `hooks/`：`use-mobile`（移动端断点）、`use-sessions`、`use-agent-recovery-poll`（页面隐藏时不发请求，可见后立刻补一次，退避计数不清零）、`use-resizable-width`、`use-confirm-dialog`、`use-unsaved-changes-dialog`。
 - `components/ui/`（26 个）：shadcn 原样组件，默认不改；要调样式先想能不能在调用处用 variant 解决。
+
+## 同步请求
+
+- **同步请求必须经过单飞（`createSingleFlight`），主动触发不能丢**：定时触发（`manual=false`）遇到在途请求直接跳过；发送结束、停止、切回页面这类主动触发（`manual=true`）遇到在途请求要排队、结束后补跑恰好一次。只跳过不补会漏掉“流结束后立刻对账”那一次，表现是界面停在半途状态。`/messages` 与 `/detail` 共用一个按会话创建的单飞实例，切换会话时 `abort()`；`/api/sessions` 刷新（`use-sessions`）同理。
+- 定时器用 `setTimeout` 链（上一轮结束后才排下一轮），不要用 `setInterval`：慢网下会堆积请求。
+- 消息合并以服务端契约为准（稳定前缀不可修改、`epoch` 变了整体重拉），细节见 `lib/web/AGENTS.md`；新增会改历史前缀的前端动作前先想清楚会不会让 tail 合并显示旧内容。
 
 ## 移动端
 

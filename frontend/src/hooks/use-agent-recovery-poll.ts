@@ -33,27 +33,46 @@ export function useAgentRecoveryPoll(
     let cancelled = false
     let timer = 0
     let attempt = 0
+    // 定时器到点时页面不可见：不发请求，停在这里等切回可见后立刻补一次
+    let waitingForVisible = false
+
+    const isVisible = () => document.visibilityState === "visible"
+
+    async function fire() {
+      if (cancelled) return
+      if (!isVisible()) {
+        waitingForVisible = true
+        return
+      }
+      try {
+        await onTickRef.current()
+      } catch {
+        // 静默失败，等待下一轮轮询
+      }
+      if (!cancelled) scheduleNext()
+    }
 
     function scheduleNext() {
       if (cancelled || !hasPendingMessage(messagesRef.current)) return
+      // 退避计数照常累加，隐藏再恢复不会回到最灵敏的间隔
       const delay = nextRecoveryPollDelay(attempt)
       attempt += 1
-      timer = window.setTimeout(async () => {
-        if (cancelled) return
-        try {
-          await onTickRef.current()
-        } catch {
-          // 静默失败，等待下一轮轮询
-        }
-        if (!cancelled) scheduleNext()
-      }, delay)
+      timer = window.setTimeout(fire, delay)
     }
 
+    function onVisibilityChange() {
+      if (!waitingForVisible || cancelled || !isVisible()) return
+      waitingForVisible = false
+      void fire()
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange)
     scheduleNext()
 
     return () => {
       cancelled = true
       window.clearTimeout(timer)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.name, isPending, isAgentRunActive])

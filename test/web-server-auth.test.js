@@ -2493,7 +2493,7 @@ process.exit(0);
             expect(String(runRes.json.output || '')).not.toContain('playwright');
 
             const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
-            const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant');
+            const assistantMessage = ((persisted.agents.default || {}).messages || []).find(message => message && message.role === 'assistant');
             expect(assistantMessage).toEqual(expect.objectContaining({
                 content: '当前这个会话里，我是基于 gpt-5.4 的 Codex。'
             }));
@@ -2665,14 +2665,14 @@ process.exit(0);
                 }
 
                 const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, `${item.sessionName}.json`), 'utf-8'));
-                const traceMessage = (persisted.messages || []).find(message => message && message.streamTrace === true);
+                const traceMessage = ((persisted.agents.default || {}).messages || []).find(message => message && message.streamTrace === true);
                 expect(traceMessage).toEqual(expect.objectContaining({
                     role: 'assistant',
                     mode: 'agent',
                     streamTrace: true
                 }));
                 expect(String(traceMessage.content || '')).toContain(item.expectedToolStartTrace || item.expectedToolCompleteTrace);
-                const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
+                const assistantMessage = ((persisted.agents.default || {}).messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
                 expect(assistantMessage).toEqual(expect.objectContaining({
                     content: item.expectedResult
                 }));
@@ -2788,7 +2788,7 @@ process.exit(0);
                 expect(streamRes.response.status).toBe(200);
 
                 const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, `${item.sessionName}.json`), 'utf-8'));
-                const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
+                const assistantMessage = ((persisted.agents.default || {}).messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
                 expect(assistantMessage).toBeTruthy();
                 if (item.expectedUsage) {
                     expect(assistantMessage.usage).toEqual(item.expectedUsage);
@@ -3014,7 +3014,7 @@ process.exit(0);
             ]));
 
             const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
-            const traceMessage = (persisted.messages || []).find(message => message && message.streamTrace === true);
+            const traceMessage = ((persisted.agents.default || {}).messages || []).find(message => message && message.streamTrace === true);
             expect(traceMessage).toEqual(expect.objectContaining({
                 role: 'assistant',
                 mode: 'agent',
@@ -3035,7 +3035,7 @@ process.exit(0);
                     tool: 'search_web'
                 })
             ]));
-            const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
+            const assistantMessage = ((persisted.agents.default || {}).messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
             expect(assistantMessage).toEqual(expect.objectContaining({
                 content: '这是最终答案。'
             }));
@@ -3085,7 +3085,7 @@ process.exit(0);
             expect(stopRes.response.status).toBe(404);
 
             const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
-            for (const message of persisted.messages || []) {
+            for (const message of ((persisted.agents.default || {}).messages || [])) {
                 expect(message.pending).not.toBe(true);
                 expect(message.interrupted).toBe(true);
             }
@@ -3158,9 +3158,9 @@ process.exit(0);
             expect(resultEvent).toBeTruthy();
 
             const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
-            const persistedUser = (persisted.messages || []).find(message => message && message.role === 'user');
-            const persistedTrace = (persisted.messages || []).find(message => message && message.streamTrace === true);
-            const persistedReply = (persisted.messages || []).find(
+            const persistedUser = ((persisted.agents.default || {}).messages || []).find(message => message && message.role === 'user');
+            const persistedTrace = ((persisted.agents.default || {}).messages || []).find(message => message && message.streamTrace === true);
+            const persistedReply = ((persisted.agents.default || {}).messages || []).find(
                 message => message && message.role === 'assistant' && message.streamTrace !== true && message.pending !== true
             );
             expect(persistedUser && persistedUser.id).toBeTruthy();
@@ -3686,12 +3686,12 @@ process.exit(0);
             expect(stopAgain.response.status).toBe(404);
 
             const persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
-            const traceMessage = (persisted.messages || []).find(message => message && message.streamTrace === true);
+            const traceMessage = ((persisted.agents.default || {}).messages || []).find(message => message && message.streamTrace === true);
             expect(traceMessage).toEqual(expect.objectContaining({
                 streamTrace: true
             }));
             expect(String(traceMessage.content || '')).toContain('[任务] 已停止');
-            const assistantMessage = (persisted.messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
+            const assistantMessage = ((persisted.agents.default || {}).messages || []).find(message => message && message.role === 'assistant' && message.streamTrace !== true);
             expect(assistantMessage).toEqual(expect.objectContaining({
                 interrupted: true
             }));
@@ -3889,9 +3889,9 @@ process.exit(0);
             expect(persistedAfterTurn2.agents.default.engineSessionId).toBe(sessionId);
             expect(persistedAfterTurn2).toEqual(expect.objectContaining({
                 agentProgram: 'claude',
-                resumeSupported: true,
-                lastResumeOk: true
+                resumeSupported: true
             }));
+            expect(persistedAfterTurn2.agents.default.lastResumeOk).toBe(true);
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();

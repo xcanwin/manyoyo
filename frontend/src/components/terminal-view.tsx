@@ -6,6 +6,7 @@ import "@xterm/xterm/css/xterm.css"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
 import type { SessionSummary } from "@/lib/api"
+import { canConnectTerminal, createResizeReporter, type ResizeReporter } from "@/lib/terminal-resize"
 
 const MIN_COLS = 40
 const MIN_ROWS = 12
@@ -133,56 +134,84 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
       cursorBlink: true,
       theme: TERMINAL_THEME,
     })
+    const sessionName = session.name
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(container)
-    fitAddon.fit()
     termRef.current = term
 
-    const cols = Math.max(term.cols || DEFAULT_COLS, MIN_COLS)
-    const rows = Math.max(term.rows || DEFAULT_ROWS, MIN_ROWS)
-    setStatus("连接中...")
-    setDisconnected(false)
-    const socket = new WebSocket(buildTerminalWsUrl(session.name, cols, rows))
-    socketRef.current = socket
+    let socket: WebSocket | null = null
+    let keepAliveTimer = 0
+    let reporter: ResizeReporter | null = null
 
-    const keepAliveTimer = window.setInterval(() => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "ping" }))
-      }
-    }, KEEPALIVE_MS)
+    // 容器尺寸为 0（标签页隐藏）时量不出列数，先不建连；等第一次拿到实际尺寸、
+    // fit 完成后再连，保证初始列数就是对的
+    function connect() {
+      fitAddon.fit()
+      const cols = Math.max(term.cols || DEFAULT_COLS, MIN_COLS)
+      const rows = Math.max(term.rows || DEFAULT_ROWS, MIN_ROWS)
+      setStatus("连接中...")
+      setDisconnected(false)
+      const ws = new WebSocket(buildTerminalWsUrl(sessionName, cols, rows))
+      socket = ws
+      socketRef.current = ws
+      reporter = createResizeReporter({ cols, rows }, (c, r) => {
+        if (ws.readyState !== WebSocket.OPEN) return false
+        ws.send(JSON.stringify({ type: "resize", cols: c, rows: r }))
+        return true
+      })
 
-    socket.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data)
-        if (payload.type === "output") {
-          term.write(payload.data)
-        } else if (payload.type === "status") {
-          if (payload.phase === "ready") setStatus("已连接")
-          else if (payload.phase === "closed") setStatus("会话已结束")
-        } else if (payload.type === "error") {
-          term.write(`\r\n[error] ${payload.error}\r\n`)
+      keepAliveTimer = window.setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "ping" }))
         }
-        // 其余类型（保活的 pong 等）不需要落到终端上
-      } catch {
-        // 忽略无法解析的消息
+      }, KEEPALIVE_MS)
+
+      ws.onopen = () => {
+        // 连接建立前网页列数可能又变过：补报一次
+        reporter?.report(term.cols, term.rows)
+      }
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data)
+          if (payload.type === "output") {
+            term.write(payload.data)
+          } else if (payload.type === "status") {
+            if (payload.phase === "ready") setStatus("已连接")
+            else if (payload.phase === "closed") setStatus("会话已结束")
+          } else if (payload.type === "error") {
+            term.write(`\r\n[error] ${payload.error}\r\n`)
+          }
+          // 其余类型（保活的 pong 等）不需要落到终端上
+        } catch {
+          // 忽略无法解析的消息
+        }
+      }
+      ws.onclose = () => {
+        window.clearInterval(keepAliveTimer)
+        setStatus("连接已断开")
+        setDisconnected(true)
+      }
+      ws.onerror = () => {
+        setStatus("连接出错")
+        setDisconnected(true)
       }
     }
-    socket.onclose = () => {
-      window.clearInterval(keepAliveTimer)
-      setStatus("连接已断开")
-      setDisconnected(true)
-    }
-    socket.onerror = () => {
-      setStatus("连接出错")
-      setDisconnected(true)
-    }
+
+    // fit 之后列数/行数变了就上报（防抖在 reporter 里），容器里的终端宽度才跟得上
+    const resizeDisposable = term.onResize(({ cols, rows }) => reporter?.report(cols, rows))
 
     const dataDisposable = term.onData((data) => {
-      if (!data || socket.readyState !== WebSocket.OPEN) return
+      if (!data || !socket || socket.readyState !== WebSocket.OPEN) return
       const send = applyModifiers(data, ctrlModeRef.current, altModeRef.current)
       socket.send(JSON.stringify({ type: "input", data: send }))
     })
+
+    if (canConnectTerminal(container.clientWidth, container.clientHeight)) {
+      connect()
+    } else {
+      setStatus("等待显示...")
+    }
 
     let resizeTimer = 0
     const handleResize = () => {
@@ -190,7 +219,11 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
       resizeTimer = window.setTimeout(() => {
         // 切到其它标签页时终端是 display:none（尺寸为 0），此时 fit() 会按 0
         // 尺寸重排，切回来就是一屏错位的内容；等有实际尺寸了再量
-        if (!container.clientWidth || !container.clientHeight) return
+        if (!canConnectTerminal(container.clientWidth, container.clientHeight)) return
+        if (!socket) {
+          connect()
+          return
+        }
         fitAddon.fit()
       }, RESIZE_DEBOUNCE_MS)
     }
@@ -201,9 +234,12 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
       resizeObserver.disconnect()
       window.clearTimeout(resizeTimer)
       window.clearInterval(keepAliveTimer)
+      reporter?.dispose()
+      resizeDisposable.dispose()
       dataDisposable.dispose()
-      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
-        socket.send(JSON.stringify({ type: "close" }))
+      if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+        // CONNECTING 时 send 会抛 InvalidStateError，只在已打开时通知服务端
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "close" }))
         socket.close()
       }
       term.dispose()

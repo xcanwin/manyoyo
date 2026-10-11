@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { buildDocumentTitle, isNearBottom } from "./chat-behavior"
+import { buildDocumentTitle, computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier } from "./chat-behavior"
 
 describe("isNearBottom", () => {
   test("返回 true：滚动条已经在底部（distance = 0）", () => {
@@ -37,5 +37,41 @@ describe("buildDocumentTitle", () => {
 
   test("仅空白字符时回退默认标题", () => {
     expect(buildDocumentTitle("   ")).toBe("MANYOYO Web")
+  })
+})
+
+describe("getBubbleState", () => {
+  test("user 消息不受 pending 影响：不变淡、有内容就能复制", () => {
+    expect(getBubbleState({ role: "user", content: "你好", pending: true })).toEqual({ faded: false, copyable: true })
+    expect(getBubbleState({ role: "user", content: "你好" })).toEqual({ faded: false, copyable: true })
+  })
+  test("user 消息没有内容时不可复制", () => {
+    expect(getBubbleState({ role: "user", content: "", pending: true })).toEqual({ faded: false, copyable: false })
+  })
+  test("assistant 保持现状：pending 时变淡且不可复制", () => {
+    expect(getBubbleState({ role: "assistant", content: "x", pending: true })).toEqual({ faded: true, copyable: false })
+    expect(getBubbleState({ role: "assistant", content: "x" })).toEqual({ faded: false, copyable: true })
+    expect(getBubbleState({ role: "assistant", content: "", pending: false })).toEqual({ faded: false, copyable: false })
+  })
+})
+
+describe("shouldLoadEarlier", () => {
+  test("滚到顶部附近、还有更早的、没在加载：触发", () => {
+    expect(shouldLoadEarlier({ scrollTop: 10, hasMore: true, loading: false })).toBe(true)
+    expect(shouldLoadEarlier({ scrollTop: 80, hasMore: true, loading: false })).toBe(true)
+  })
+  test("离顶部远 / 没有更多 / 正在加载：不触发", () => {
+    expect(shouldLoadEarlier({ scrollTop: 400, hasMore: true, loading: false })).toBe(false)
+    expect(shouldLoadEarlier({ scrollTop: 0, hasMore: false, loading: false })).toBe(false)
+    expect(shouldLoadEarlier({ scrollTop: 0, hasMore: true, loading: true })).toBe(false)
+  })
+})
+
+describe("computeScrollRestore", () => {
+  test("前面插入内容后，滚动位置补上增加的高度，视野不跳动", () => {
+    expect(computeScrollRestore({ prevScrollHeight: 1000, nextScrollHeight: 2500, scrollTop: 20 })).toBe(1520)
+  })
+  test("高度没增加：不变", () => {
+    expect(computeScrollRestore({ prevScrollHeight: 1000, nextScrollHeight: 1000, scrollTop: 20 })).toBe(20)
   })
 })

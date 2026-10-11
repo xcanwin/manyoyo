@@ -15,12 +15,14 @@ import {
 
 import { cn } from "@/lib/utils"
 import {
+  apiGet,
   buildToolArgumentParts,
   mergeToolTraceEvents,
   summarizeTraceFlow,
   type ChatMessage,
   type TraceEvent,
 } from "@/lib/api"
+import { buildTraceUrl, createLruCache, traceCacheKey } from "@/lib/message-sync"
 import {
   Collapsible,
   CollapsibleContent,
@@ -36,6 +38,11 @@ const KIND_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
 }
 
 type BodyPart = { label: string; value: string }
+
+// 列表里的 trace 长字段被服务端截断过（traceTruncated）：展开时才按需下载完整内容，
+// 同一条消息（id + 事件数相同）只下载一次；任务还在跑、事件数变了就重新拉
+const NO_EVENTS: TraceEvent[] = []
+const fullTraceCache = createLruCache<TraceEvent[]>(40)
 
 function stringifyPretty(value: unknown): string {
   if (value === undefined || value === null) return ""
@@ -116,8 +123,9 @@ function CopyBodyButton({ text }: { text: string }) {
 }
 
 // "结果" 用代码块包裹并带复制按钮，其余字段（参数/命令等）只需要代码块展示
-function TraceBodySection({ part }: { part: BodyPart }) {
-  const isResult = part.label === "结果"
+function TraceBodySection({ part, copyable }: { part: BodyPart; copyable: boolean }) {
+  // 截断版本只能看，不能复制：复制按钮只给完整内容
+  const isResult = part.label === "结果" && copyable
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
@@ -131,7 +139,7 @@ function TraceBodySection({ part }: { part: BodyPart }) {
   )
 }
 
-function TraceEventRow({ event }: { event: TraceEvent }) {
+function TraceEventRow({ event, complete }: { event: TraceEvent; complete: boolean }) {
   const [open, setOpen] = React.useState(false)
   const isRawOutput = event.kind === "output"
   const isStderr = isRawOutput && event.stream === "stderr"
@@ -187,27 +195,51 @@ function TraceEventRow({ event }: { event: TraceEvent }) {
         {isNarration && !bodyParts.length ? (
           <p className="text-[13px] leading-[1.75] whitespace-pre-wrap text-foreground">{event.detail || event.text}</p>
         ) : (
-          bodyParts.map((part) => <TraceBodySection key={part.label} part={part} />)
+          bodyParts.map((part) => <TraceBodySection key={part.label} part={part} copyable={complete} />)
         )}
       </CollapsibleContent>
     </Collapsible>
   )
 }
 
-export function TraceBlock({ trace }: { trace: ChatMessage }) {
+export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; sessionName: string }) {
   // null = 用户还没手动开合过，此时跟随"有错误就自动展开"：出错的那一轮
   // 不该把错误藏在折叠面板里。用户手动点过之后以用户的选择为准，
   // 不会因为后续又来一条 error 事件把面板重新掰开
   const [userOpen, setUserOpen] = React.useState<boolean | null>(null)
   const wrapperRef = React.useRef<HTMLDivElement>(null)
-  const merged = React.useMemo(
-    () => mergeToolTraceEvents(trace.traceEvents || []),
-    [trace.traceEvents]
-  )
-  if (!merged.length) return null
-  const summary = summarizeTraceFlow(merged, trace.pending === true)
+  const listEvents = trace.traceEvents || NO_EVENTS
+  const truncated = trace.traceTruncated === true
+  const cacheKey = traceCacheKey(sessionName, trace.id, listEvents.length)
+  const full = truncated ? fullTraceCache.get(cacheKey) : undefined
+  const [loadState, setLoadState] = React.useState<{ key: string; failed: boolean } | null>(null)
+  const events = full ?? listEvents
+  const merged = React.useMemo(() => mergeToolTraceEvents(events), [events])
   const hasError = merged.some((event) => event.kind === "error")
   const open = userOpen ?? hasError
+  const needFetch = open && truncated && !full
+
+  React.useEffect(() => {
+    if (!needFetch) return
+    let cancelled = false
+    apiGet(buildTraceUrl(sessionName, trace.id))
+      .then((data) => {
+        if (!Array.isArray(data.traceEvents)) throw new Error("bad trace")
+        fullTraceCache.set(cacheKey, data.traceEvents as TraceEvent[])
+        if (!cancelled) setLoadState({ key: cacheKey, failed: false })
+      })
+      .catch(() => {
+        if (!cancelled) setLoadState({ key: cacheKey, failed: true })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [needFetch, cacheKey, sessionName, trace.id])
+
+  if (!merged.length) return null
+  const summary = summarizeTraceFlow(merged, trace.pending === true)
+  const complete = !truncated || full !== undefined
+  const loadFailed = !complete && loadState?.key === cacheKey && loadState.failed
 
   // 过程很长时，滚动条要拖很久才能离开它：展开后右侧给两个按钮，
   // 把整个过程框直接对齐到聊天区的顶部 / 底部
@@ -250,8 +282,13 @@ export function TraceBlock({ trace }: { trace: ChatMessage }) {
         <span className="flex-1">执行过程 · {summary}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-1 flex flex-col gap-0.5 rounded-lg border bg-muted/20 p-1.5">
+        {!complete ? (
+          <p className="px-1.5 text-xs text-muted-foreground">
+            {loadFailed ? "完整内容加载失败，收起再展开可重试" : "正在加载完整内容…"}
+          </p>
+        ) : null}
         {merged.map((event, index) => (
-          <TraceEventRow key={`${event.kind}-${index}`} event={event} />
+          <TraceEventRow key={`${event.kind}-${index}`} event={event} complete={complete} />
         ))}
       </CollapsibleContent>
       </Collapsible>

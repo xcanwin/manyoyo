@@ -125,6 +125,10 @@ export type ChatMessage = {
   exitCode?: number
   streamTrace?: boolean
   traceEvents?: TraceEvent[]
+  // 列表里 trace 的长字段被服务端截断过；展开时按需请求 /messages/<id>/trace 取完整内容
+  traceTruncated?: boolean
+  // 发送时前端生成的 id，服务端回显，用来确认“这条提示词已经发出去了”
+  clientMessageId?: string
 }
 
 export type DisplayMessage = ChatMessage & { pairedTrace?: ChatMessage }
@@ -419,7 +423,7 @@ export function apiErrorData(error: unknown): { status: number; data: Record<str
   return { status: e?.status ?? 0, data: e?.data ?? {} }
 }
 
-export const apiGet = (url: string) => request(url)
+export const apiGet = (url: string, signal?: AbortSignal) => request(url, signal ? { signal } : {})
 export const apiPost = (url: string, body?: unknown) =>
   request(url, { method: "POST", body: body === undefined ? "{}" : JSON.stringify(body) })
 export const apiPut = (url: string, body?: unknown, headers?: Record<string, string>) =>
