@@ -30,6 +30,10 @@
 
 `lib/web/container-manage.js`（路由工厂，由 `handleWebApi` 追加进路由表）：`/api/containers/:name/{env,autostart,autostart/run,autostart/log,network,network/allow,network/denied,expose}` 与 `/api/containers/orphans`。旧容器（无 `manyoyo.id`）GET 返回 `{legacy:true}`、写返回 409。`PUT env` 用 `If-Match`（etag）防止覆盖容器内的修改；放开类改动（切到 `custom`、新增很宽的允许规则、非 loopback 暴露）服务端也要求 `confirmRisk:true`；`network` 是 v2 规则表（`outbound` / `inbound`，旧 v1 读取时自动转换，`@container:<名称>` 保存时换成 id）。serve 运行时就绪后 `startContainerServices` 订阅 `<runtime> events`（start / die）补下发规则、拉起 `autostartOnServe` 容器、恢复端口暴露；事件流断开重连（运行时重启）后 `reconcileContainerServices` 再对账一次；过滤代理是 sidecar 容器（`lib/egress-sidecar.js`），由网络管理器 `ensure()` 保证在运行，不在 serve 进程里。`GET network` 带 `denied`（最近被拦截，已放行的不列）、`derived`（别的容器入站放行本容器产生的出站派生行）与 `peers[].ip`；`network/allow` 在出站用户规则最前插入允许域名行；`/agent/stream` 进行中 `createWebDeniedNotifier` 每 2 秒读一次拦截记录，有新域名就推一条 `trace`（只有 `text`，同一域名同一轮一次）。所有 exec 经 `spawnContainerExec`（env 临时文件在子进程 close 时删）。
 
+## 保存不覆盖别人的修改（If-Match）
+
+`PUT /api/config` 和 `PUT /api/sessions/:name/fs/write` **必须**带 `If-Match`，缺少返回 428，版本不一致返回 409 `{ conflict: true }`（与容器环境变量 `PUT env` 同一套约定）。`GET /api/config` 的 `etag` 是**磁盘原文**的 sha256（不是脱敏后的 `raw`：只改了密钥时脱敏文本不变，用它算版本就识别不出来），响应里只有哈希；409 的响应体带最新的 `buildSafeWebConfigSnapshot`（含新 `etag`）。配置文件的“读文件 → 比对版本 → 写文件”必须在同一个同步段里完成（中间不能有 `await`，并发请求测试 `test/web-config-etag.test.js` 守着）。`fs/read` 返回内容的 sha256 `etag`（只给 2MB 以内的可编辑文件算），`fs/write` 在容器内的脚本里写入前重新算当前内容的哈希，不一致就返回 `conflict`、服务端转成 409；容器内“比对”和“写入”之间仍有一个极短的窗口（同一个脚本里的两条语句），可以接受。其余写配置文件的接口（`/api/setup/*`、`quick-chat-config`、CLI 的 `build`/`init`/`setup`）都是“读当前磁盘内容 → 局部修改 → 写回”，不会盖掉别人的修改，不需要版本号。**新增写配置文件的接口时，要么走局部修改，要么也带 If-Match。**
+
 ## lib/web/index.html
 
 前端构建产物（`npm run build:web`，已 `.gitignore`），由 `loadIndexHtml()` 按文件 stat 缓存读取（文件变了才重读），`/` 与登录页 `/auth/login` 共用。服务端不托管其它前端静态资源，别往 `lib/web/` 里放散装 js/css。

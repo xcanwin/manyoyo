@@ -30,6 +30,11 @@
 - `hooks/`：`use-mobile`（移动端断点）、`use-sessions`、`use-agent-recovery-poll`（页面隐藏时不发请求，可见后立刻补一次，退避计数不清零）、`use-resizable-width`、`use-confirm-dialog`、`use-unsaved-changes-dialog`。
 - `components/ui/`（26 个）：shadcn 原样组件，默认不改；要调样式先想能不能在调用处用 variant 解决。
 
+## 保存不覆盖别人的修改
+
+- **系统设置对话框保存的是打开时读到的整份配置文本**，`PUT /api/config` 带 `If-Match`（`GET` 的 `etag`）。弹窗里的子面板（快捷对话、软件源）自己直接写配置文件，**必须接 `onSaved` 走 `handleSubPanelSaved`**（把最新内容和版本号接过来，用 `lib/config-rebase.ts` 的 `rebaseLeafEdits` 重放自己改过的字段）；不要再写只合并个别字段的对症代码（`c322c4b` 的 `syncQuickChatIntoRaw` 就是这样，漏掉了软件源和“键不存在”的情况，已删除）。保存遇到 409：表单模式自动在最新内容上重放并最多重试一次，字段两边都改了以我的为准并在提示里写字段名；JSON 文本模式不自动处理，给“重新加载（放弃我的修改）/仍然保存（覆盖对方的修改）”两个按钮。测试在 `system-settings-dialog.test.tsx`，用假 fetch 模拟服务端文件状态（`FAKE_SERVER_LEGACY=1` 可模拟改版前的服务端复现原始问题）。
+- 文件面板读取时记下 `etag`，保存带 `If-Match`，409 显示“文件已在容器里被修改”+“重新加载 / 仍然保存”（“仍然保存”先取最新的 etag 再写），样式沿用容器管理页环境变量冲突提示。
+
 ## 同步请求
 
 - **同步请求必须经过单飞（`createSingleFlight`，会话级封装在 `hooks/use-session-sync.ts`，定时与事件调度在 `hooks/use-sync-loop.ts`，都有 jsdom 用例），主动触发不能丢**：定时触发（`manual=false`）遇到在途请求直接跳过；发送结束、停止、切回页面这类主动触发（`manual=true`）遇到在途请求要排队、结束后补跑恰好一次。只跳过不补会漏掉“流结束后立刻对账”那一次，表现是界面停在半途状态。`/messages` 与 `/detail` 共用一个按会话创建的单飞实例，切换会话时 `abort()`；`/api/sessions` 刷新（`use-sessions`）同理。

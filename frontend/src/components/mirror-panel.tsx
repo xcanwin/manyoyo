@@ -16,7 +16,7 @@ import {
 } from "@/lib/mirrors"
 
 // 系统设置里的“软件源”：读当前配置，改完保存；只对之后新建的容器生效
-export function MirrorPanel() {
+export function MirrorPanel({ onSaved }: { onSaved?: () => void } = {}) {
   const [mirrors, setMirrors] = React.useState<Mirrors>(emptyMirrors())
   const [presets, setPresets] = React.useState<MirrorPresets>(emptyPresets())
   const [loading, setLoading] = React.useState(true)
@@ -53,6 +53,7 @@ export function MirrorPanel() {
     try {
       await saveMirrors(mirrors)
       setMessage({ tone: "ok", text: "已保存，之后新建的容器会使用这些软件源" })
+      onSaved?.()
     } catch (err) {
       setMessage({ tone: "error", text: err instanceof Error ? err.message : "保存失败" })
     } finally {

@@ -9,7 +9,6 @@ import { CodeMirrorEditor } from "@/components/code-mirror-editor"
 import { DoctorPanel } from "@/components/doctor-panel"
 import { MirrorPanel } from "@/components/mirror-panel"
 import { QuickChatSettingsView } from "@/components/quick-chat-settings-view"
-import { syncQuickChatIntoRaw } from "@/lib/quick-chat-sync"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useTheme } from "@/components/theme-provider"
 import {
@@ -35,7 +34,8 @@ import { OrphanStatesPanel } from "@/components/orphan-states-panel"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { apiGet, apiPut } from "@/lib/api"
+import { apiErrorData, apiGet, apiPut } from "@/lib/api"
+import { rebaseLeafEdits, type LeafEdit } from "@/lib/config-rebase"
 import { configLabel } from "@/lib/config-labels"
 import { applyTextReplacements, findValueRangeByPath } from "@/lib/json5-path-edit"
 
@@ -399,6 +399,16 @@ export function SystemSettingsDialog({
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState("")
   const [success, setSuccess] = React.useState("")
+  // 配置文件的版本（磁盘原文的哈希）：保存时带上，别处改过文件就会收到冲突，而不是悄悄覆盖
+  const etagRef = React.useRef("")
+  // 自己改过的字段（表单模式）：冲突时在最新内容上重放；baseRawRef 是这些修改所基于的文本
+  const editsRef = React.useRef<LeafEdit[]>([])
+  const baseRawRef = React.useRef("")
+  // JSON 文本是整段手改的，没法按字段重放：冲突时让用户选
+  const jsonDirtyRef = React.useRef(false)
+  // JSON 文本每被改一次就 +1：保存期间又改了，成功后不能把“已手改”标记清掉
+  const jsonEditSeqRef = React.useRef(0)
+  const [jsonConflict, setJsonConflict] = React.useState<{ etag: string; raw: string } | null>(null)
   const { theme, setTheme } = useTheme()
 
   const load = React.useCallback(() => {
@@ -408,6 +418,11 @@ export function SystemSettingsDialog({
     apiGet("/api/config")
       .then((data) => {
         const nextRaw = String(data.raw || "")
+        etagRef.current = String(data.etag || "")
+        editsRef.current = []
+        baseRawRef.current = nextRaw
+        jsonDirtyRef.current = false
+        setJsonConflict(null)
         setPath(String(data.path || ""))
         setRaw(nextRaw)
         // 表单要展示真实当前值，不能用接口里的 parsed 字段——那是给其它场景用的强脱敏
@@ -425,6 +440,7 @@ export function SystemSettingsDialog({
   }, [open, load])
 
   function handleLeafCommit(fieldPath: string[], valueText: string, jsValue: unknown) {
+    editsRef.current = [...editsRef.current, { path: fieldPath, valueText }]
     setRaw((prevRaw) => {
       const range = findValueRangeByPath(prevRaw, fieldPath)
       if (!range) return prevRaw
@@ -433,20 +449,104 @@ export function SystemSettingsDialog({
     setLiveParsed((prev) => setAtPath(prev, fieldPath, jsValue) as Record<string, unknown>)
   }
 
-  // 快捷对话设置自己直接写了配置文件：把它并入这里的文本，否则稍后点“保存”会用打开时的旧值覆盖回去
-  async function handleQuickChatSaved() {
+  // 在最新的服务端内容上重放自己改过的字段，并换成最新的版本号。
+  // 返回 null：JSON 文本被手改过，没法重放；返回 { unparsable: true }：最新内容无法解析（被改坏了），什么都不动，保住用户的修改。
+  function rebaseOnto(fresh: { raw: string; etag: string }) {
+    if (jsonDirtyRef.current) return null
+    const result = rebaseLeafEdits(fresh.raw, editsRef.current, baseRawRef.current)
+    let parsed: Record<string, unknown>
+    try {
+      if (!fresh.raw.trim()) throw new Error("empty")
+      parsed = JSON5.parse(result.raw)
+    } catch {
+      return { unparsable: true as const }
+    }
+    etagRef.current = fresh.etag
+    baseRawRef.current = fresh.raw
+    setRaw(result.raw)
+    setLiveParsed(parsed)
+    // 只让分类里的表单字段重新挂载（输入框各自持有文本，换了内容要重新挂载才会显示最新值）；
+    // 子面板（快捷对话、软件源）不重新挂载，它们里面还没保存的选择不能丢
+    setFormVersion((v) => v + 1)
+    return { unparsable: false as const, ...result }
+  }
+
+  // 子面板（快捷对话、软件源）自己直接写了配置文件：把最新版本号和内容接过来，稍后点“保存”不会再用旧值覆盖回去
+  async function handleSubPanelSaved() {
     try {
       const data = await apiGet("/api/config")
-      const serverRaw = String(data.raw || "")
-      const merged = syncQuickChatIntoRaw(raw, serverRaw)
-      if (merged === null) {
-        load()
+      const fresh = { raw: String(data.raw || ""), etag: String(data.etag || "") }
+      if (jsonDirtyRef.current) {
+        // JSON 文本手改过，没法按字段合并：立刻让用户选，而不是稍后点保存时才悄悄覆盖掉子面板刚写的值
+        setJsonConflict(fresh)
         return
       }
-      setRaw(merged)
-      setLiveParsed(JSON5.parse(merged))
+      rebaseOnto(fresh)
     } catch {
-      load()
+      // 拿不到最新内容就保持旧版本号：之后点“保存”会收到冲突提示，不会悄悄覆盖
+    }
+  }
+
+  async function putConfig(nextRaw: string, etag: string) {
+    return apiPut("/api/config", { raw: nextRaw }, { "If-Match": etag })
+  }
+
+  function describeRebase(result: { missing: string[]; overridden: string[] }) {
+    const parts = ["配置文件刚被其他地方修改过，已在最新内容上保存你的修改。"]
+    if (result.overridden.length) parts.push(`${result.overridden.join("、")} 两边都改了，以你的为准。`)
+    if (result.missing.length) parts.push(`${result.missing.join("、")} 在最新内容里已经不存在，这项修改没有保存。`)
+    return parts.join("")
+  }
+
+  async function handleSave(options: { forceEtag?: string } = {}) {
+    setSaving(true)
+    setError("")
+    setSuccess("")
+    setJsonConflict(null)
+    let nextRaw = raw
+    let etag = options.forceEtag ?? etagRef.current
+    let rebased: { missing: string[]; overridden: string[] } | null = null
+    try {
+      // 冲突后最多自动在最新内容上重放并重试一次
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        // 保存期间用户还可能继续改：只清掉这次已经提交的那部分
+        const sentEdits = editsRef.current.length
+        const sentJsonSeq = jsonEditSeqRef.current
+        try {
+          const data = await putConfig(nextRaw, etag)
+          etagRef.current = String(data.etag || "")
+          editsRef.current = editsRef.current.slice(sentEdits)
+          baseRawRef.current = nextRaw
+          if (jsonEditSeqRef.current === sentJsonSeq) jsonDirtyRef.current = false
+          setSuccess(rebased ? describeRebase(rebased) : "已保存")
+          return
+        } catch (err) {
+          const { status, data } = apiErrorData(err)
+          if (status !== 409 || data.conflict !== true) throw err
+          const fresh = { raw: String(data.raw || ""), etag: String(data.etag || "") }
+          if (jsonDirtyRef.current) {
+            setJsonConflict(fresh)
+            return
+          }
+          const result = rebaseOnto(fresh)
+          if (!result) return
+          if (result.unparsable) {
+            setError("配置文件当前无法解析（可能被其他地方改坏了），你的修改还在这里；修好文件后再保存，或点“重新加载”放弃修改")
+            return
+          }
+          if (attempt === 1) {
+            setError("配置文件一直在被其他地方修改，你的修改还没有保存，请再点一次保存")
+            return
+          }
+          nextRaw = result.raw
+          etag = fresh.etag
+          rebased = { missing: result.missing, overridden: result.overridden }
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存失败")
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -460,20 +560,6 @@ export function SystemSettingsDialog({
       setViewMode("form")
     } catch (err) {
       setError(err instanceof Error ? `JSON 内容有误，无法切回分类设置：${err.message}` : "JSON 内容有误，无法切回分类设置")
-    }
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    setError("")
-    setSuccess("")
-    try {
-      await apiPut("/api/config", { raw })
-      setSuccess("已保存")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败")
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -493,11 +579,19 @@ export function SystemSettingsDialog({
               {/* 配置文件是 JSON5：key 不带引号、可以写注释和尾逗号。用 json 模式解析
                   会整片报错，缩进/高亮跟着失效——JSON5 本质就是 JS 对象字面量，
                   用 javascript 模式才能正确缩进与高亮 */}
-              <CodeMirrorEditor value={raw} language="javascript" readOnly={false} onChange={setRaw} />
+              <CodeMirrorEditor
+                value={raw}
+                language="javascript"
+                readOnly={false}
+                onChange={(text) => {
+                  jsonDirtyRef.current = true
+                  jsonEditSeqRef.current += 1
+                  setRaw(text)
+                }}
+              />
             </div>
           ) : (
             <Tabs
-              key={formVersion}
               value={activeCategory}
               onValueChange={(value) => setActiveCategory(String(value))}
               orientation="vertical"
@@ -534,19 +628,19 @@ export function SystemSettingsDialog({
                         </Field>
                       </FieldGroup>
                     ) : category.id === "runs" ? (
-                      <RunsCategoryFields liveParsed={liveParsed} onCommit={handleLeafCommit} />
+                      <RunsCategoryFields key={formVersion} liveParsed={liveParsed} onCommit={handleLeafCommit} />
                     ) : category.id === "capacity" ? (
                       <CapacityEstimateView />
                     ) : category.id === "mirrors" ? (
-                      <MirrorPanel />
+                      <MirrorPanel onSaved={handleSubPanelSaved} />
                     ) : category.id === "doctor" ? (
                       <DoctorPanel />
                     ) : category.id === "orphans" ? (
                       <OrphanStatesPanel />
                     ) : category.id === "quick-chat" ? (
-                      <QuickChatSettingsView onSaved={handleQuickChatSaved} />
+                      <QuickChatSettingsView onSaved={handleSubPanelSaved} />
                     ) : (
-                      <CategoryFields category={category} liveParsed={liveParsed} onCommit={handleLeafCommit} />
+                      <CategoryFields key={formVersion} category={category} liveParsed={liveParsed} onCommit={handleLeafCommit} />
                     )}
                   </TabsContent>
                 ))}
@@ -563,6 +657,19 @@ export function SystemSettingsDialog({
         {success ? (
           <Alert className="shrink-0">
             <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        ) : null}
+        {jsonConflict ? (
+          <Alert variant="destructive" className="shrink-0">
+            <AlertDescription className="flex flex-wrap items-center gap-2">
+              配置文件刚被其他地方修改过，还没有保存。
+              <Button variant="outline" size="xs" onClick={load}>
+                重新加载（放弃我的修改）
+              </Button>
+              <Button variant="outline" size="xs" onClick={() => void handleSave({ forceEtag: jsonConflict.etag })}>
+                仍然保存（覆盖对方的修改）
+              </Button>
+            </AlertDescription>
           </Alert>
         ) : null}
 
@@ -587,7 +694,7 @@ export function SystemSettingsDialog({
             >
               重新加载
             </Button>
-            <Button type="button" className="w-full sm:w-auto" onClick={handleSave} disabled={loading || saving}>
+            <Button type="button" className="w-full sm:w-auto" onClick={() => void handleSave()} disabled={loading || saving}>
               {saving ? "保存中..." : "保存"}
             </Button>
           </div>

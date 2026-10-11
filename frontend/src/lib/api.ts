@@ -373,6 +373,8 @@ export type FsReadResult = {
   content?: string
   language?: string
   editable?: boolean
+  // 内容的版本号（sha256）：保存时带回去，容器里的文件被改过就能发现，不会悄悄覆盖
+  etag?: string
 }
 
 export type DirectoryEntry = {

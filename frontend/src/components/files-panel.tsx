@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { apiGet, apiPost, apiPut, type FsEntry, type FsReadResult, type SessionSummary } from "@/lib/api"
+import { apiErrorData, apiGet, apiPost, apiPut, type FsEntry, type FsReadResult, type SessionSummary } from "@/lib/api"
 import { sanitizeDisplayText } from "@/lib/sanitize"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -140,9 +140,13 @@ export function FilesPanel({
   const [loading, setLoading] = React.useState(false)
   const [listError, setListError] = React.useState("")
   const [selectedPath, setSelectedPath] = React.useState("")
+  // 异步请求回来时要核对“现在选中的还是不是发起请求的那个文件”，否则旧文件的结果会写进新文件的状态
+  const selectedPathRef = React.useRef("")
   const [fileData, setFileData] = React.useState<FsReadResult | null>(null)
   const [fileLoading, setFileLoading] = React.useState(false)
   const [fileError, setFileError] = React.useState("")
+  // 保存时发现容器里的文件已经被改过（比如 Agent 刚改了它）
+  const [fileConflict, setFileConflict] = React.useState(false)
   const [newDialog, setNewDialog] = React.useState<"file" | "folder" | null>(null)
   // 只有"编辑/预览"两种模式：预览对纯文本文件是只读展示，对 md 是渲染视图，
   // 对 html 是触发右侧沙箱面板（内容区本身还是展示只读源码）
@@ -229,11 +233,17 @@ export function FilesPanel({
     setSelectedPath("")
     setFileData(null)
     setFileError("")
+    setFileConflict(false)
     setEditContent(null)
     setMode("preview")
     setMobilePane("list")
     if (!activeSession || historyOnly) setEntries([])
   }
+
+  // 切换会话时 selectedPath 被重置为空，ref 跟着清掉（旧会话里还在路上的请求结果会被丢弃）
+  React.useEffect(() => {
+    selectedPathRef.current = selectedPath
+  }, [selectedPath])
 
   React.useEffect(() => {
     if (!activeSession || historyOnly) return
@@ -248,12 +258,14 @@ export function FilesPanel({
     if (!(await confirmLeaveIfDirty())) return
     setMobilePane("detail")
     setSelectedPath(path)
+    selectedPathRef.current = path
     setFileData(null)
     setEditContent(null)
     setMode("preview")
     setPreviewReadOnly(readOnly)
     setFileLoading(true)
     setFileError("")
+    setFileConflict(false)
     try {
       const data = (await apiGet(
         `/api/sessions/${encodeURIComponent(activeSession.name)}/fs/read?path=${encodeURIComponent(path)}&full=1`
@@ -329,32 +341,75 @@ export function FilesPanel({
     }
   }
 
-  async function handleSaveFile(): Promise<boolean> {
+  async function readLatest(path: string): Promise<FsReadResult> {
+    return (await apiGet(
+      `/api/sessions/${encodeURIComponent(activeSession!.name)}/fs/read?path=${encodeURIComponent(path)}&full=1`
+    )) as unknown as FsReadResult
+  }
+
+  // overwrite=true（“仍然保存”）：先取容器里当前内容的版本，再用它写，明确覆盖对方的修改
+  async function handleSaveFile(options: { overwrite?: boolean } = {}): Promise<boolean> {
     if (!activeSession || !selectedPath || saving || editContent === null) return false
+    const savingPath = selectedPath
     setSaving(true)
     setFileError("")
+    setFileConflict(false)
     try {
-      await apiPut(`/api/sessions/${encodeURIComponent(activeSession.name)}/fs/write`, {
-        path: selectedPath,
-        content: editContent,
-      })
+      let etag = fileData?.etag ?? ""
+      if (options.overwrite) {
+        etag = (await readLatest(savingPath)).etag ?? ""
+        if (!etag) throw new Error("无法确认容器里这个文件的当前版本，请先点“重新加载”")
+      }
+      const data = await apiPut(
+        `/api/sessions/${encodeURIComponent(activeSession.name)}/fs/write`,
+        { path: savingPath, content: editContent },
+        { "If-Match": etag }
+      )
+      // 保存期间用户已经切到别的文件：结果只属于旧文件，不写进现在的状态
+      if (selectedPathRef.current !== savingPath) return true
       // 保存后继续停留在编辑态：CodeMirrorEditor 的 value 没变（就是刚保存的 editContent），
       // 内容同步 effect 会因为 doc 已经等于 value 而直接跳过，光标/选区不受影响
       const savedContent = editContent
-      setFileData((prev) => (prev ? { ...prev, content: savedContent, size: savedContent.length } : prev))
+      const nextEtag = typeof data.etag === "string" ? data.etag : undefined
+      setFileData((prev) =>
+        prev ? { ...prev, content: savedContent, size: savedContent.length, etag: nextEtag } : prev
+      )
       return true
     } catch (err) {
-      setFileError(err instanceof Error ? err.message : "保存失败")
+      if (selectedPathRef.current !== savingPath) return false
+      const { status, data } = apiErrorData(err)
+      if (status === 409 && data.conflict === true) {
+        setFileConflict(true)
+      } else {
+        setFileError(err instanceof Error ? err.message : "保存失败")
+      }
       return false
     } finally {
       setSaving(false)
     }
   }
+
+  // “重新加载”：放弃本地修改，换成容器里的最新内容
+  async function handleReloadAfterConflict() {
+    if (!activeSession || !selectedPath || saving) return
+    const reloadPath = selectedPath
+    setFileError("")
+    try {
+      const data = await readLatest(reloadPath)
+      if (selectedPathRef.current !== reloadPath) return
+      setFileData(data)
+      setEditContent(data.kind === "text" ? data.content || "" : null)
+      setFileConflict(false)
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : "读取文件失败")
+    }
+  }
   React.useEffect(() => {
-    handleSaveFileRef.current = handleSaveFile
+    handleSaveFileRef.current = () => handleSaveFile()
   })
 
   function handleCancelEdit() {
+    setFileConflict(false)
     setEditContent(null)
     setMode("preview")
     if (isHtml && onPreviewHtml) {
@@ -557,7 +612,7 @@ export function FilesPanel({
                   </Button>
                   <Button
                     size="sm"
-                    onClick={handleSaveFile}
+                    onClick={() => void handleSaveFile()}
                     disabled={!(mode === "edit" && isDirty) || saving}
                   >
                     {saving ? "保存中..." : "保存"}
@@ -581,6 +636,19 @@ export function FilesPanel({
             {fileError ? (
               <Alert variant="destructive">
                 <AlertDescription>{fileError}</AlertDescription>
+              </Alert>
+            ) : null}
+            {fileConflict ? (
+              <Alert variant="destructive">
+                <AlertDescription className="flex flex-wrap items-center gap-2">
+                  文件已在容器里被修改。
+                  <Button variant="outline" size="xs" onClick={() => void handleReloadAfterConflict()}>
+                    重新加载
+                  </Button>
+                  <Button variant="outline" size="xs" onClick={() => void handleSaveFile({ overwrite: true })}>
+                    仍然保存
+                  </Button>
+                </AlertDescription>
               </Alert>
             ) : null}
             {fileData && !fileLoading ? (

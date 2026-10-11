@@ -545,7 +545,9 @@ process.exit(2);
                 method: 'PUT',
                 headers: {
                     Cookie: authCookie,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    // 假运行时不校验版本；版本校验的用例在 web-config-etag.test.js
+                    'If-Match': 'fake-etag'
                 },
                 body: JSON.stringify({
                     path: '/workspace/README.md',
@@ -1605,7 +1607,8 @@ process.exit(2);
                 method: 'PUT',
                 headers: {
                     Cookie: authCookie,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'If-Match': configRes.json.etag
                 },
                 body: JSON.stringify({ raw: '{ invalid-json5 ' })
             });
@@ -1616,7 +1619,8 @@ process.exit(2);
                 method: 'PUT',
                 headers: {
                     Cookie: authCookie,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'If-Match': configRes.json.etag
                 },
                 body: JSON.stringify({ raw: '{\n"ports": "8080:80"\n}\n' })
             });
@@ -1627,7 +1631,8 @@ process.exit(2);
                 method: 'PUT',
                 headers: {
                     Cookie: authCookie,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'If-Match': configRes.json.etag
                 },
                 body: JSON.stringify({
                     raw: [
