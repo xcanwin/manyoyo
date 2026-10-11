@@ -77,6 +77,11 @@ export function renderMarkdownToHtml(content: string, enableHtmlPreview: boolean
     const copy = `<button type="button" title="复制代码" aria-label="复制代码" data-copy-code-index="${copyIndex}" class="flex items-center rounded-md border border-border bg-background p-1.5 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground">${COPY_ICON}</button>`
     return `<div class="not-prose relative [&_pre]:overflow-x-auto [&_pre]:py-3.5 [&_pre]:pl-4 [&_pre]:pr-14">${base}<div class="absolute top-2 right-2 flex gap-1">${preview}${copy}</div></div>`
   }
+  // 单元格内容包一层 div：列很多、表格放不下时，浏览器会把每列压到最窄，一句话被折成好几行。
+  // 在这层 div 上给最小宽度（见 index.css 的 .md-cell），长内容的列就不会被压得太窄
+  const defaultTablecell = renderer.tablecell.bind(renderer)
+  renderer.tablecell = (token) =>
+    defaultTablecell(token).replace(/^(<t[hd][^>]*>)([\s\S]*)(<\/t[hd]>\s*)$/, '$1<div class="md-cell">$2</div>$3')
   const rawHtml = marked.parse(content || "", { async: false, renderer }) as string
   const sanitized = DOMPurify.sanitize(rawHtml, {
     // 只允许 https/mailto/tel 这几个协议、锚点，以及不带协议头的相对路径

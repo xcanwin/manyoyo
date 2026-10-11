@@ -303,7 +303,8 @@ function ActivityView({
                           ? "bg-muted/40 font-mono text-[13px] leading-[1.6] whitespace-pre-wrap text-foreground"
                           : message.role === "system"
                             ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
-                            : "bg-muted/40 text-foreground",
+                            // AGENT 回复不加底色，只用浅色圆角边框圈出范围；用户气泡保留底色作区分
+                            : "border bg-transparent px-4 py-3 text-foreground",
                       // AGENT 回复固定占满可用宽度（与上面的执行过程框等宽），
                       // 不随内容长短忽宽忽窄
                       message.role === "assistant" && "w-full",

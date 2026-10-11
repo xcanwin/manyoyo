@@ -95,3 +95,12 @@ describe("代码块复制按钮", () => {
     expect(codeBlocks).toEqual(["<b>x</b>"])
   })
 })
+
+describe("表格单元格", () => {
+  test("单元格内容包一层 md-cell，align 属性保留在 th/td 上", () => {
+    const { html } = renderMarkdownToHtml("| a | b |\n| :---: | --- |\n| `x` | y |", false)
+    expect(html).toContain('<th align="center"><div class="md-cell">a</div></th>')
+    expect(html).toContain('<td align="center"><div class="md-cell"><code>x</code></div></td>')
+    expect(html).toContain('<td><div class="md-cell">y</div></td>')
+  })
+})

@@ -136,6 +136,14 @@
   html, body {
     overscroll-behavior: none;
   }
+  /* 告诉浏览器当前是亮/暗哪种配色：原生滚动条、复选框等系统控件跟着变色，
+     否则暗色主题下各处滚动条仍是白底，非常刺眼 */
+  :root {
+    color-scheme: light;
+  }
+  .dark {
+    color-scheme: dark;
+  }
   /* 按钮/可点元素关掉双击缩放：终端按键条、发送按钮这类地方经常要连点两下，
      浏览器默认会把它当成 double-tap zoom，画面突然放大一截。只作用在可点元素上，
      页面其余部分的双指缩放照常可用（别整页 user-scalable=no，那是无障碍倒退） */
@@ -309,14 +317,25 @@
   color: var(--foreground);
   font-size: 13px;
   line-height: 1.6;
-  scrollbar-width: thin;
 }
-.chat-markdown pre::-webkit-scrollbar {
+/* 横向滚动条两端各让出圆角的宽度：贴满整条底边时，滚动条会把圆角代码块的下方两个角盖成直角。
+   track 的 margin 只有 ::-webkit-scrollbar 能做，而 Chrome 一旦看到标准的 scrollbar-width
+   就会忽略这些伪元素，所以 thin 只留给不支持它们的浏览器（Firefox） */
+.chat-markdown :is(pre, table)::-webkit-scrollbar {
   height: 6px;
 }
-.chat-markdown pre::-webkit-scrollbar-thumb {
+.chat-markdown :is(pre, table)::-webkit-scrollbar-track {
+  margin: 0 10px;
+  background: transparent;
+}
+.chat-markdown :is(pre, table)::-webkit-scrollbar-thumb {
   border-radius: 9999px;
   background: color-mix(in oklab, var(--foreground) 25%, transparent);
+}
+@supports not selector(::-webkit-scrollbar) {
+  .chat-markdown :is(pre, table) {
+    scrollbar-width: thin;
+  }
 }
 .chat-markdown pre code {
   font-size: inherit;
@@ -332,14 +351,6 @@
   overflow-x: auto;
   border-collapse: collapse;
   font-size: 14px;
-  scrollbar-width: thin;
-}
-.chat-markdown table::-webkit-scrollbar {
-  height: 6px;
-}
-.chat-markdown table::-webkit-scrollbar-thumb {
-  border-radius: 9999px;
-  background: color-mix(in oklab, var(--foreground) 25%, transparent);
 }
 .chat-markdown :is(th, td) {
   min-width: 6rem;
@@ -367,6 +378,12 @@
 }
 .chat-markdown tbody tr:nth-child(even) {
   background: color-mix(in oklab, var(--foreground) 4%, transparent);
+}
+/* 列多到放不下时，浏览器把每列压到能折行的最窄宽度，一句话会被折成好几行。
+   让每列至少保留自身内容宽度，但不超过 14rem（手机上不超过 40% 屏宽）：
+   短列不受影响，长内容的列不被压扁，整张表横向滚动。calc-size 不支持时这条被忽略，退回原样 */
+.chat-markdown .md-cell {
+  min-width: calc-size(max-content, min(size, 14rem, 40vw));
 }
 /* 单元格里的行内代码换行时，上下内边距会让相邻两行底色叠在一起 */
 .chat-markdown :is(td, th) code {
