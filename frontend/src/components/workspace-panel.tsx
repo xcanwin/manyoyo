@@ -290,14 +290,17 @@ function ActivityView({
                   <div
                     className={cn(
                       // [overflow-wrap:anywhere]：超长无空格内容（长链接、哈希、一整行 W）在气泡里换行，
-                      // 而不是把气泡撑出屏幕；流式输出期间的纯文本同样靠它
-                      "max-w-full rounded-xl px-3 py-2 text-sm [overflow-wrap:anywhere] @3xl:max-w-[75%]",
+                      // 而不是把气泡撑出屏幕；流式输出期间的纯文本同样靠它。
+                      // 行高 1.75 与 markdown 正文（.chat-markdown）一致：用户气泡、流式纯文本、
+                      // 渲染后的回复同一种行距，流结束切到 markdown 时不跳动
+                      "max-w-full rounded-xl px-3 py-2 text-sm leading-[1.75] [overflow-wrap:anywhere] @3xl:max-w-[75%]",
                       message.role === "user"
                         ? "max-w-[88%] bg-muted/80 text-foreground whitespace-pre-wrap @3xl:max-w-[75%]"
                         : message.mode === "command"
                           // 命令模式的回复是原始命令输出，不是被动的系统提示——
-                          // 走跟 assistant 一样的正常气泡，只是下面不做 markdown 渲染
-                          ? "bg-muted/40 whitespace-pre-wrap text-foreground"
+                          // 走跟 assistant 一样的正常气泡，只是下面不做 markdown 渲染；
+                          // 等宽字体保证 ls -al 这类按列对齐的输出不错位
+                          ? "bg-muted/40 font-mono text-[13px] leading-[1.6] whitespace-pre-wrap text-foreground"
                           : message.role === "system"
                             ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
                             : "bg-muted/40 text-foreground",

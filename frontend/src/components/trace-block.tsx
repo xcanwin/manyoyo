@@ -124,7 +124,7 @@ function TraceBodySection({ part }: { part: BodyPart }) {
         <span className="text-xs font-medium text-muted-foreground">{part.label}</span>
         {isResult ? <CopyBodyButton text={part.value} /> : null}
       </div>
-      <pre className="overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs whitespace-pre-wrap text-foreground">
+      <pre className="overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs leading-[1.6] whitespace-pre-wrap text-foreground">
         {part.value}
       </pre>
     </div>
@@ -148,7 +148,7 @@ function TraceEventRow({ event }: { event: TraceEvent }) {
     return (
       // 原始输出行（stdout/stderr 兜底）用等宽字体照原样展示，stderr 标红；
       // 行可能很长，截断后把全文放进 title 方便悬浮查看
-      <div className="flex items-start gap-1.5 px-1.5 py-1 text-sm">
+      <div className="flex items-start gap-1.5 px-1.5 py-1 text-[13px]">
         <Icon
           className={cn(
             "mt-0.5 size-3.5 shrink-0",
@@ -171,7 +171,7 @@ function TraceEventRow({ event }: { event: TraceEvent }) {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm hover:bg-muted">
+      <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[13px] hover:bg-muted">
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="flex-1 truncate text-foreground">
           {isNarration ? "说明" : event.text}
@@ -185,7 +185,7 @@ function TraceEventRow({ event }: { event: TraceEvent }) {
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-2 px-1.5 pt-1 pb-1.5 pl-6">
         {isNarration && !bodyParts.length ? (
-          <p className="text-sm whitespace-pre-wrap text-foreground">{event.detail || event.text}</p>
+          <p className="text-[13px] leading-[1.75] whitespace-pre-wrap text-foreground">{event.detail || event.text}</p>
         ) : (
           bodyParts.map((part) => <TraceBodySection key={part.label} part={part} />)
         )}

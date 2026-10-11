@@ -100,31 +100,9 @@ export const MarkdownContent = React.memo(
     return (
       <>
         <div
+          // 排版细节（字号档位、代码块、表格、引用、颜色）集中在 index.css 的 .chat-markdown
           className={cn(
-            "prose prose-sm dark:prose-invert max-w-none break-words",
-            // prose-sm 是为长文档设计的排版参数（行高 ≈1.71、段落上下各留 16px），
-            // 套进聊天气泡显得松散；这里用更紧凑的排版
-            // （行高 1.6、块级元素 margin 0.6em、列表项不额外加 margin）
-            "prose-p:my-[0.6em] prose-p:leading-[1.75] prose-li:my-0 prose-li:leading-[1.75]",
-            "prose-ul:my-[0.6em] prose-ol:my-[0.6em] prose-blockquote:my-[0.6em]",
-            // prose-sm 的 code 用 em 相对缩放，算下来比气泡正文还小，这里固定跟正文一样大
-            "prose-code:text-sm prose-pre:text-sm prose-pre:my-[0.6em]",
-            // typography 插件默认给行内 code 补一对 ` 伪元素、并把字重提到 600，
-            // 于是 `foo` 在页面上就是"加粗的 foo 前后各挂一个反引号"，既不像代码
-            // 也没有底色区分。去掉伪元素与加粗，换成底色+圆角的常规行内代码样式；
-            // :not(pre)>code 把代码块内部的 code 排除在外，避免和 pre 的底色叠两层
-            "prose-code:before:content-none prose-code:after:content-none prose-code:font-normal",
-            "[&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-foreground/10 [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:pt-[5.5px] [&_:not(pre)>code]:pb-[3px]",
-            "dark:[&_:not(pre)>code]:bg-foreground/15",
-            // 代码块背景改用 foreground 的浅色叠加而不是 muted——跟气泡本身的 muted 底色太接近，
-            // 混在一起分不清代码块的边界。prose-pre: 修饰符只改 typography 插件自己的
-            // --tw-prose-pre-bg 变量，套不到实际渲染的 background-color 上，改用直接的
-            // 后代选择器 + !important 绕开插件内部的变量间接层
-            "[&_pre]:bg-foreground/10! dark:[&_pre]:bg-foreground/15! prose-pre:text-foreground",
-            // 表格默认可能比气泡宽，加 overflow-x-auto 让它能横向滚动，再给一条常驻可见的
-            // 细滚动条（不依赖系统"仅交互时显示"的覆盖式滚动条），避免用户看不出还能往右滑
-            "[&_table]:border-collapse [&_th]:border [&_td]:border [&_th]:border-foreground/15 [&_td]:border-foreground/15 [&_th]:bg-foreground/6! [&_th]:leading-[1.75] [&_td]:leading-[1.75] [&_td_code]:py-0! [&_th_code]:py-0! [&_th]:min-w-24 [&_td]:min-w-24 [&_th]:[overflow-wrap:anywhere] [&_td]:[overflow-wrap:anywhere] [&_th]:px-3 [&_td]:px-3 [&_th]:py-2 [&_td]:py-2 [&_tbody_tr:nth-child(even)]:bg-foreground/4",
-            "prose-table:my-[0.6em] [&_table]:block [&_table]:overflow-x-auto [&_table]:[scrollbar-width:thin] [&_table::-webkit-scrollbar]:h-1.5 [&_table::-webkit-scrollbar-thumb]:rounded-full [&_table::-webkit-scrollbar-thumb]:bg-foreground/25",
+            "prose prose-sm chat-markdown max-w-none break-words",
             className
           )}
           onClick={handleClick}
