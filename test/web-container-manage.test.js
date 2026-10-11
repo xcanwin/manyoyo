@@ -164,6 +164,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(badKey.response.status).toBe(400);
             const noMatch = await request(`${baseUrl}/api/containers/boxa/env`, json(cookie, 'PUT', { text: 'A=9' }));
             expect(noMatch.response.status).toBe(428);
+            expect(noMatch.json.error).toBe('页面已更新，请刷新页面后再保存');
             const notText = await request(`${baseUrl}/api/containers/boxa/env`, json(cookie, 'PUT', { text: 5 }, { 'If-Match': ok.json.etag }));
             expect(notText.response.status).toBe(400);
         });

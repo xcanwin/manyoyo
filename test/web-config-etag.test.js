@@ -92,6 +92,8 @@ describe('配置文件保存的版本校验（If-Match）', () => {
         await start();
         const res = await putConfig(CONFIG.replace('"m1"', '"m2"'));
         expect(res.response.status).toBe(428);
+        // 升级时还开着的旧页面会走到这里：提示要让用户看得懂、知道怎么办，不能出现 If-Match / etag
+        expect(res.json.error).toBe('页面已更新，请刷新页面后再保存');
         expect(fs.readFileSync(configPath, 'utf-8')).toBe(CONFIG);
     });
 
@@ -249,6 +251,7 @@ process.exit(r.status === null ? 1 : r.status);
         await start();
         const res = await writeFile(file, 'changed\n');
         expect(res.response.status).toBe(428);
+        expect(res.json.error).toBe('页面已更新，请刷新页面后再保存');
         expect(fs.readFileSync(file, 'utf-8')).toBe('hello\n');
     });
 

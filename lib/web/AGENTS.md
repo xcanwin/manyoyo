@@ -32,7 +32,7 @@
 
 ## 保存不覆盖别人的修改（If-Match）
 
-`PUT /api/config` 和 `PUT /api/sessions/:name/fs/write` **必须**带 `If-Match`，缺少返回 428，版本不一致返回 409 `{ conflict: true }`（与容器环境变量 `PUT env` 同一套约定）。`GET /api/config` 的 `etag` 是**磁盘原文**的 sha256（不是脱敏后的 `raw`：只改了密钥时脱敏文本不变，用它算版本就识别不出来），响应里只有哈希；409 的响应体带最新的 `buildSafeWebConfigSnapshot`（含新 `etag`）。配置文件的“读文件 → 比对版本 → 写文件”必须在同一个同步段里完成（中间不能有 `await`，并发请求测试 `test/web-config-etag.test.js` 守着）。`fs/read` 返回内容的 sha256 `etag`（只给 2MB 以内的可编辑文件算），`fs/write` 在容器内的脚本里写入前重新算当前内容的哈希，不一致就返回 `conflict`、服务端转成 409；容器内“比对”和“写入”之间仍有一个极短的窗口（同一个脚本里的两条语句），可以接受。其余写配置文件的接口（`/api/setup/*`、`quick-chat-config`、CLI 的 `build`/`init`/`setup`）都是“读当前磁盘内容 → 局部修改 → 写回”，不会盖掉别人的修改，不需要版本号。**新增写配置文件的接口时，要么走局部修改，要么也带 If-Match。**
+`PUT /api/config` 和 `PUT /api/sessions/:name/fs/write` **必须**带 `If-Match`，缺少返回 428（报错统一用 `STALE_PAGE_MESSAGE`“页面已更新，请刷新页面后再保存”：现在的前端总会带上 If-Match，走到这里的只有升级前就打开、还没刷新的旧页面，提示要让用户知道怎么办），版本不一致返回 409 `{ conflict: true }`（与容器环境变量 `PUT env` 同一套约定）。`GET /api/config` 的 `etag` 是**磁盘原文**的 sha256（不是脱敏后的 `raw`：只改了密钥时脱敏文本不变，用它算版本就识别不出来），响应里只有哈希；409 的响应体带最新的 `buildSafeWebConfigSnapshot`（含新 `etag`）。配置文件的“读文件 → 比对版本 → 写文件”必须在同一个同步段里完成（中间不能有 `await`，并发请求测试 `test/web-config-etag.test.js` 守着）。`fs/read` 返回内容的 sha256 `etag`（只给 2MB 以内的可编辑文件算），`fs/write` 在容器内的脚本里写入前重新算当前内容的哈希，不一致就返回 `conflict`、服务端转成 409；容器内“比对”和“写入”之间仍有一个极短的窗口（同一个脚本里的两条语句），可以接受。其余写配置文件的接口（`/api/setup/*`、`quick-chat-config`、CLI 的 `build`/`init`/`setup`）都是“读当前磁盘内容 → 局部修改 → 写回”，不会盖掉别人的修改，不需要版本号。**新增写配置文件的接口时，要么走局部修改，要么也带 If-Match。**
 
 ## lib/web/index.html
 
