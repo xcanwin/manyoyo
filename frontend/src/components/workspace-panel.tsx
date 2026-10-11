@@ -289,7 +289,9 @@ function ActivityView({
                 <>
                   <div
                     className={cn(
-                      "max-w-full rounded-xl px-3 py-2 text-sm @3xl:max-w-[75%]",
+                      // [overflow-wrap:anywhere]：超长无空格内容（长链接、哈希、一整行 W）在气泡里换行，
+                      // 而不是把气泡撑出屏幕；流式输出期间的纯文本同样靠它
+                      "max-w-full rounded-xl px-3 py-2 text-sm [overflow-wrap:anywhere] @3xl:max-w-[75%]",
                       message.role === "user"
                         ? "max-w-[88%] bg-muted/80 text-foreground whitespace-pre-wrap @3xl:max-w-[75%]"
                         : message.mode === "command"
