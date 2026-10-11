@@ -114,7 +114,7 @@ export const MarkdownContent = React.memo(
             // 也没有底色区分。去掉伪元素与加粗，换成底色+圆角的常规行内代码样式；
             // :not(pre)>code 把代码块内部的 code 排除在外，避免和 pre 的底色叠两层
             "prose-code:before:content-none prose-code:after:content-none prose-code:font-normal",
-            "[&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-foreground/10 [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5",
+            "[&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-foreground/10 [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-[3px]",
             "dark:[&_:not(pre)>code]:bg-foreground/15",
             // 代码块背景改用 foreground 的浅色叠加而不是 muted——跟气泡本身的 muted 底色太接近，
             // 混在一起分不清代码块的边界。prose-pre: 修饰符只改 typography 插件自己的
@@ -123,7 +123,7 @@ export const MarkdownContent = React.memo(
             "[&_pre]:bg-foreground/10! dark:[&_pre]:bg-foreground/15! prose-pre:text-foreground",
             // 表格默认可能比气泡宽，加 overflow-x-auto 让它能横向滚动，再给一条常驻可见的
             // 细滚动条（不依赖系统"仅交互时显示"的覆盖式滚动条），避免用户看不出还能往右滑
-            "[&_table]:border-collapse [&_th]:border [&_td]:border [&_th]:border-foreground/15 [&_td]:border-foreground/15 [&_th]:bg-foreground/6! [&_th]:px-3 [&_td]:px-3 [&_th]:py-2 [&_td]:py-2 [&_tbody_tr:nth-child(even)]:bg-foreground/4",
+            "[&_table]:border-collapse [&_th]:border [&_td]:border [&_th]:border-foreground/15 [&_td]:border-foreground/15 [&_th]:bg-foreground/6! [&_th]:min-w-24 [&_td]:min-w-24 [&_th]:px-3 [&_td]:px-3 [&_th]:py-2 [&_td]:py-2 [&_tbody_tr:nth-child(even)]:bg-foreground/4",
             "prose-table:my-[0.6em] [&_table]:block [&_table]:overflow-x-auto [&_table]:[scrollbar-width:thin] [&_table::-webkit-scrollbar]:h-1.5 [&_table::-webkit-scrollbar-thumb]:rounded-full [&_table::-webkit-scrollbar-thumb]:bg-foreground/25",
             className
           )}

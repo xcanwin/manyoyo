@@ -75,7 +75,7 @@ export function renderMarkdownToHtml(content: string, enableHtmlPreview: boolean
       preview = `<button type="button" data-preview-html-index="${index}" class="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm hover:bg-muted">预览</button>`
     }
     const copy = `<button type="button" title="复制代码" aria-label="复制代码" data-copy-code-index="${copyIndex}" class="flex items-center rounded-md border border-border bg-background p-1.5 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground">${COPY_ICON}</button>`
-    return `<div class="not-prose relative [&_pre]:py-2.5 [&_pre]:pl-3 [&_pre]:pr-12">${base}<div class="absolute top-2 right-2 flex gap-1">${preview}${copy}</div></div>`
+    return `<div class="not-prose relative [&_pre]:overflow-x-auto [&_pre]:py-3.5 [&_pre]:pl-4 [&_pre]:pr-14">${base}<div class="absolute top-2 right-2 flex gap-1">${preview}${copy}</div></div>`
   }
   const rawHtml = marked.parse(content || "", { async: false, renderer }) as string
   const sanitized = DOMPurify.sanitize(rawHtml, {
