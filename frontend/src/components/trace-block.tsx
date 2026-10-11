@@ -211,19 +211,32 @@ export function TraceBlock({ trace }: { trace: ChatMessage }) {
 
   // 过程很长时，滚动条要拖很久才能离开它：展开后右侧给两个按钮，
   // 把整个过程框直接对齐到聊天区的顶部 / 底部
-  function alignInChat(edge: "top" | "bottom") {
+  function alignInChat(edge: "top" | "bottom", behavior: ScrollBehavior = "smooth") {
     const el = wrapperRef.current
     const box = el?.closest<HTMLElement>("[data-chat-scroll]")
     if (!el || !box) return
     const rect = el.getBoundingClientRect()
     const boxRect = box.getBoundingClientRect()
     const delta = edge === "top" ? rect.top - boxRect.top : rect.bottom - boxRect.bottom
-    box.scrollTo({ top: box.scrollTop + delta, behavior: "smooth" })
+    box.scrollTo({ top: box.scrollTop + delta, behavior })
   }
 
   return (
     <div ref={wrapperRef} className="flex w-full max-w-full items-stretch gap-1 @3xl:max-w-[75%]">
-      <Collapsible open={open} onOpenChange={setUserOpen} className="min-w-0 flex-1">
+      <Collapsible
+        open={open}
+        onOpenChange={(next) => {
+          // 在过程中间点吸顶的标题行收起时，先把这段过程的顶部贴回聊天窗口顶部再收起，
+          // 否则收起后内容变短，视野会落到别的消息上
+          if (!next) {
+            const rect = wrapperRef.current?.getBoundingClientRect()
+            const boxTop = wrapperRef.current?.closest<HTMLElement>("[data-chat-scroll]")?.getBoundingClientRect().top
+            if (rect && boxTop !== undefined && rect.top < boxTop) alignInChat("top", "auto")
+          }
+          setUserOpen(next)
+        }}
+        className="min-w-0 flex-1"
+      >
       {/* 展开后标题行吸顶：过程很长时也能随时点它收起；用不透明底色，否则下面的内容会从半透明背景里透出来 */}
       <CollapsibleTrigger
         className={cn(

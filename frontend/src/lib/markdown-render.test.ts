@@ -79,3 +79,19 @@ describe("裸网址不自动成链接", () => {
     expect(renderMarkdownToHtml("<https://www.baidu.com>", false).html).toContain('href="https://www.baidu.com"')
   })
 })
+
+describe("代码块复制按钮", () => {
+  test("围栏代码块带复制按钮，原文按下标放进 codeBlocks", () => {
+    const { html, codeBlocks } = renderMarkdownToHtml("```js\nconst a = 1\n```", false)
+    expect(html).toContain('data-copy-code-index="0"')
+    expect(codeBlocks).toEqual(["const a = 1"])
+  })
+
+  test("html 代码块开启预览时多一个预览按钮，复制按钮仍在", () => {
+    const { html, htmlBlocks, codeBlocks } = renderMarkdownToHtml("```html\n<b>x</b>\n```", true)
+    expect(html).toContain('data-preview-html-index="0"')
+    expect(html).toContain('data-copy-code-index="0"')
+    expect(htmlBlocks).toEqual(["<b>x</b>"])
+    expect(codeBlocks).toEqual(["<b>x</b>"])
+  })
+})

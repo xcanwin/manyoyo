@@ -1,7 +1,7 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
-import { renderMarkdownToHtml } from "@/lib/markdown-render"
+import { CHECK_ICON, renderMarkdownToHtml } from "@/lib/markdown-render"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -46,12 +46,32 @@ export const MarkdownContent = React.memo(
 
     // 代码块原文存进这份和 html 一起算出来的数组，而不是编码进 DOM 属性——
     // 避免大段 html 反复转义/截断，handleClick 委托点击时按下标查表即可
-    const { html, htmlBlocks } = React.useMemo(
+    const { html, htmlBlocks, codeBlocks } = React.useMemo(
       () => renderMarkdownToHtml(content, Boolean(onPreviewHtml)),
       [content, Boolean(onPreviewHtml)]
     )
 
     function handleClick(event: React.MouseEvent<HTMLDivElement>) {
+      const copyTrigger = (event.target as HTMLElement).closest<HTMLElement>("[data-copy-code-index]")
+      if (copyTrigger) {
+        const code = codeBlocks[Number(copyTrigger.getAttribute("data-copy-code-index"))]
+        if (code !== undefined) {
+          navigator.clipboard.writeText(code).then(
+            () => {
+              // 短暂换成对勾表示已复制；直接改这颗按钮的 DOM，不触发整段 markdown 重渲染
+              const original = copyTrigger.innerHTML
+              copyTrigger.innerHTML = CHECK_ICON
+              window.setTimeout(() => {
+                copyTrigger.innerHTML = original
+              }, 1500)
+            },
+            () => {
+              // 剪贴板权限被拒绝时静默失败，不打断阅读
+            }
+          )
+        }
+        return
+      }
       const previewTrigger = (event.target as HTMLElement).closest("[data-preview-html-index]")
       if (previewTrigger) {
         const index = Number(previewTrigger.getAttribute("data-preview-html-index"))
@@ -103,6 +123,7 @@ export const MarkdownContent = React.memo(
             "[&_pre]:bg-foreground/10! dark:[&_pre]:bg-foreground/15! prose-pre:text-foreground",
             // 表格默认可能比气泡宽，加 overflow-x-auto 让它能横向滚动，再给一条常驻可见的
             // 细滚动条（不依赖系统"仅交互时显示"的覆盖式滚动条），避免用户看不出还能往右滑
+            "[&_table]:border-collapse [&_th]:border [&_td]:border [&_th]:border-foreground/25 [&_td]:border-foreground/25 [&_th]:bg-foreground/10! [&_th]:px-2.5 [&_td]:px-2.5 [&_th]:py-1.5 [&_td]:py-1.5 [&_tbody_tr:nth-child(even)]:bg-foreground/5",
             "prose-table:my-[0.6em] [&_table]:block [&_table]:overflow-x-auto [&_table]:[scrollbar-width:thin] [&_table::-webkit-scrollbar]:h-1.5 [&_table::-webkit-scrollbar-thumb]:rounded-full [&_table::-webkit-scrollbar-thumb]:bg-foreground/25",
             className
           )}

@@ -35,13 +35,20 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
   }
 })
 
-export type RenderedMarkdown = { html: string; htmlBlocks: string[] }
+// lucide 的 copy / check 图标（内联 svg，避免在 innerHTML 里引组件）
+export const COPY_ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>'
+export const CHECK_ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
+
+export type RenderedMarkdown = { html: string; htmlBlocks: string[]; codeBlocks: string[] }
 
 // markdown 渲染的核心逻辑：抽成纯函数方便单测，
 // MarkdownContent 组件里只负责把 content/enableHtmlPreview 传进来、渲染结果
 // 塞进 dangerouslySetInnerHTML
 export function renderMarkdownToHtml(content: string, enableHtmlPreview: boolean): RenderedMarkdown {
   const blocks: string[] = []
+  const codeBlocks: string[] = []
   const renderer = new Renderer()
   const defaultImage = renderer.image.bind(renderer)
   // 外部 http(s) 图片转为需用户点击确认的链接，避免消息一渲染就自动发起外部
@@ -54,15 +61,21 @@ export function renderMarkdownToHtml(content: string, enableHtmlPreview: boolean
     }
     return defaultImage(token)
   }
-  if (enableHtmlPreview) {
-    const defaultCode = renderer.code.bind(renderer)
-    renderer.code = (token) => {
-      const base = defaultCode(token)
-      if (String(token.lang || "").trim().toLowerCase() !== "html") return base
+  // 所有代码块右上角都有复制按钮；html 代码块（开启预览时）在它左边多一个“预览”按钮。
+  // 原文存进数组、按下标查表（见 MarkdownContent 的 handleClick），不编码进 DOM 属性
+  const defaultCode = renderer.code.bind(renderer)
+  renderer.code = (token) => {
+    const base = defaultCode(token)
+    const copyIndex = codeBlocks.length
+    codeBlocks.push(token.text)
+    let preview = ""
+    if (enableHtmlPreview && String(token.lang || "").trim().toLowerCase() === "html") {
       const index = blocks.length
       blocks.push(token.text)
-      return `<div class="not-prose relative">${base}<button type="button" data-preview-html-index="${index}" class="absolute top-2 right-2 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm hover:bg-muted">预览</button></div>`
+      preview = `<button type="button" data-preview-html-index="${index}" class="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm hover:bg-muted">预览</button>`
     }
+    const copy = `<button type="button" title="复制代码" aria-label="复制代码" data-copy-code-index="${copyIndex}" class="flex items-center rounded-md border border-border bg-background p-1.5 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground">${COPY_ICON}</button>`
+    return `<div class="not-prose relative [&_pre]:pr-12">${base}<div class="absolute top-2 right-2 flex gap-1">${preview}${copy}</div></div>`
   }
   const rawHtml = marked.parse(content || "", { async: false, renderer }) as string
   const sanitized = DOMPurify.sanitize(rawHtml, {
@@ -73,7 +86,7 @@ export function renderMarkdownToHtml(content: string, enableHtmlPreview: boolean
     // 只是把协议白名单收窄到项目实际用到的几个——之前收窄成只认 "/" 开头，
     // 漏掉了不带开头斜杠的相对路径，会导致这类图片的 src 被整个过滤掉
     ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|[^a-z]|[a-z+.-]+(?:[^a-z+.:-]|$))/i,
-    ADD_ATTR: ["referrerpolicy", "data-preview-html-index"],
+    ADD_ATTR: ["referrerpolicy", "data-preview-html-index", "data-copy-code-index"],
   })
-  return { html: sanitized, htmlBlocks: blocks }
+  return { html: sanitized, htmlBlocks: blocks, codeBlocks }
 }
