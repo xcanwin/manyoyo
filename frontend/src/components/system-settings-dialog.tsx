@@ -9,6 +9,7 @@ import { CodeMirrorEditor } from "@/components/code-mirror-editor"
 import { DoctorPanel } from "@/components/doctor-panel"
 import { MirrorPanel } from "@/components/mirror-panel"
 import { QuickChatSettingsView } from "@/components/quick-chat-settings-view"
+import { syncQuickChatIntoRaw } from "@/lib/quick-chat-sync"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useTheme } from "@/components/theme-provider"
 import {
@@ -432,6 +433,23 @@ export function SystemSettingsDialog({
     setLiveParsed((prev) => setAtPath(prev, fieldPath, jsValue) as Record<string, unknown>)
   }
 
+  // 快捷对话设置自己直接写了配置文件：把它并入这里的文本，否则稍后点“保存”会用打开时的旧值覆盖回去
+  async function handleQuickChatSaved() {
+    try {
+      const data = await apiGet("/api/config")
+      const serverRaw = String(data.raw || "")
+      const merged = syncQuickChatIntoRaw(raw, serverRaw)
+      if (merged === null) {
+        load()
+        return
+      }
+      setRaw(merged)
+      setLiveParsed(JSON5.parse(merged))
+    } catch {
+      load()
+    }
+  }
+
   function switchToFormView() {
     try {
       const parsedAgain = JSON5.parse(raw)
@@ -526,7 +544,7 @@ export function SystemSettingsDialog({
                     ) : category.id === "orphans" ? (
                       <OrphanStatesPanel />
                     ) : category.id === "quick-chat" ? (
-                      <QuickChatSettingsView />
+                      <QuickChatSettingsView onSaved={handleQuickChatSaved} />
                     ) : (
                       <CategoryFields category={category} liveParsed={liveParsed} onCommit={handleLeafCommit} />
                     )}

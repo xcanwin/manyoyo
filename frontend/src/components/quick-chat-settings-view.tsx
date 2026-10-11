@@ -6,7 +6,7 @@ import { QuickChatSetupDialog } from "@/components/quick-chat-setup-dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { apiGet } from "@/lib/api"
 
-export function QuickChatSettingsView() {
+export function QuickChatSettingsView({ onSaved }: { onSaved?: () => void } = {}) {
   const [path, setPath] = React.useState<string | null>(null)
   const [run, setRun] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -68,7 +68,10 @@ export function QuickChatSettingsView() {
         onOpenChange={setSetupOpen}
         initialPath={path || ""}
         initialRun={run || ""}
-        onSaved={() => load()}
+        onSaved={() => {
+          load()
+          onSaved?.()
+        }}
       />
     </div>
   )
