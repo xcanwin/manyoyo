@@ -327,7 +327,7 @@ export function CreateContainerDialog({
                   <div className="flex gap-2">
                     <Input
                       id="create-host-path"
-                      placeholder="例如 /home/me/project"
+                      placeholder="例如 /path/to/project"
                       value={form.hostPath}
                       onChange={(event) =>
                         setField("hostPath", event.target.value)
@@ -477,7 +477,7 @@ export function CreateContainerDialog({
                 </FieldLabel>
                 <Textarea
                   id="create-volumes"
-                  placeholder="例如 /home/me/data:/data"
+                  placeholder="例如 /path/to/data:/data"
                   className="min-h-16"
                   value={form.volumes}
                   onChange={(event) => setField("volumes", event.target.value)}
