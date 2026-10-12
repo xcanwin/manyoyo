@@ -40,6 +40,7 @@ export type Status = {
   ruleMessage: string
   suggestions: Suggestion[]
   notesDraft: string
+  pendingCommits: string[]
   checklist: ChecklistItem[]
   published: boolean
   job: JobSnapshot

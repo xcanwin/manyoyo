@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/spinner"
 
 import { api, subscribeEvents, type ReleaseEvent, type Stage, type Status } from "./api"
 import { CommitDialog, ConfirmDialog, ReleaseDialog, RunAllDialog, VersionDialog } from "./dialogs"
+import { buildOverview } from "./overview"
 
 type StageView = Stage & { commands?: string[] }
 type Dialog =
@@ -122,6 +123,7 @@ export function ReleaseApp() {
 
   const stages = status.stages as StageView[]
   const next = stages.find((stage) => stage.id === status.nextStage)
+  const overview = buildOverview(status, next)
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
@@ -154,18 +156,23 @@ export function ReleaseApp() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{next ? `下一步：${next.title}` : status.published ? `v${status.version} 已发布 ✓` : "全部完成"}</CardTitle>
-          <CardDescription>{next ? next.detail : status.published ? "下一次发布需要先升版本号（「版本」阶段）。" : "所有阶段都已完成。"}</CardDescription>
+          <CardTitle>{overview.title}</CardTitle>
+          <CardDescription>{overview.description}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          {next && next.id !== "manual" && next.id !== "device" && (
-            <Button disabled={running} onClick={() => openStage(next)}>
-              执行「{next.title}」
+          {overview.primary && (
+            <Button
+              disabled={running}
+              onClick={() => (overview.primary?.kind === "version" ? setDialog({ kind: "version" }) : next && openStage(next))}
+            >
+              {overview.primary.label}
             </Button>
           )}
-          <Button variant="outline" disabled={running} onClick={() => setDialog({ kind: "runAll" })}>
-            一键发布（合并 main → 验证）
-          </Button>
+          {overview.showRunAll && (
+            <Button variant="outline" disabled={running} onClick={() => setDialog({ kind: "runAll" })}>
+              一键发布（合并 main → 验证）
+            </Button>
+          )}
           {running && (
             <Button variant="destructive" onClick={() => api("/api/cancel", {}).then(() => refresh(false))}>
               取消任务
@@ -174,6 +181,24 @@ export function ReleaseApp() {
         </CardContent>
       </Card>
 
+      {status.pendingCommits.length > 0 && (
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle className="text-sm">
+              这次要发布的改动（{status.latestTag ? `${status.latestTag} 之后` : "全部"}，共 {status.pendingCommits.length} 个）
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc space-y-1 pl-5 text-sm">
+              {status.pendingCommits.map((subject, index) => (
+                <li key={`${index}-${subject}`}>{subject}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {overview.historyNote && <p className="text-sm text-muted-foreground">{overview.historyNote}</p>}
       <ol className="space-y-2">
         {stages.map((stage, index) => (
           <li key={stage.id}>
@@ -185,7 +210,7 @@ export function ReleaseApp() {
                   <span className={`rounded px-2 py-0.5 text-xs ${STATE_STYLE[stage.state]}`}>{STATE_LABEL[stage.state]}</span>
                   {stage.external && <Badge variant="outline">对外动作</Badge>}
                   {status.job?.currentStage === stage.id && running && <Spinner />}
-                  {stage.id !== "manual" && stage.id !== "device" && (
+                  {stage.id !== "manual" && stage.id !== "device" && !(status.published && stage.state === "done") && (
                     <Button
                       className="ml-auto"
                       size="sm"

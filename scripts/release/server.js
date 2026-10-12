@@ -107,6 +107,8 @@ function createReleaseServer(options = {}) {
             ruleMessage: ruleCommitMessage(facts.git.dirty),
             suggestions: buildVersionSuggestions((facts.git.latestTag || `v${facts.pkg.version}`).replace(/^v/, '')),
             notesDraft: buildNotesDraft(facts),
+            // 自上个 tag 以来的提交（合并提交不列），页面上展示“这次要发布的改动”
+            pendingCommits: facts.git.commitsSinceTag.filter(subject => !/^合并 /.test(subject)),
             checklist: MANUAL_CHECKLIST.map(item => ({ ...item, done: Boolean(checklist[item.id]) })),
             published: isPublished(facts),
             job: runner.snapshot(),

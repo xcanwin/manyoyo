@@ -93,6 +93,8 @@ describe('release server API', () => {
         expect(status.notesDraft).toContain('- feat: 新增 A');
         expect(status.notesDraft).toContain('- fix: 修 B');
         expect(status.notesDraft).not.toContain('合并 feat/y');
+        // 页面要列出“这次要发布的改动”：自上个 tag 以来的提交，合并提交不列
+        expect(status.pendingCommits).toEqual(['feat: 新增 A', 'fix: 修 B']);
         expect(status.checklist.every(item => item.done === false)).toBe(true);
     });
 
