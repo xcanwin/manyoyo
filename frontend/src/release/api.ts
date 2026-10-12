@@ -1,3 +1,5 @@
+import type { LastRun } from "./last-run"
+
 export type StageState = "done" | "todo" | "blocked" | "warn"
 
 export type Stage = {
@@ -8,14 +10,10 @@ export type Stage = {
   state: StageState
   detail: string
   url?: string
-  items?: DeviceItem[]
 }
-
-export type DeviceItem = { id: string; title: string; files: string[]; done: boolean; by: string }
 
 export type DirtyFile = { code: string; path: string }
 export type Suggestion = { key: string; label: string; version: string; recommended: boolean }
-export type ChecklistItem = { id: string; title: string; done: boolean }
 
 export type JobSnapshot = {
   id: string
@@ -42,11 +40,15 @@ export type Status = {
   notesDraft: string
   pendingCommits: string[]
   unpushedFiles: DirtyFile[]
-  lastJobLog: { at: string; lines: string[] } | null
-  checklist: ChecklistItem[]
+  lastRun: LastRun | null
   published: boolean
+  remotePlan: { version: string; willBump: boolean; problem: string }
   job: JobSnapshot
 }
+
+export type RemoteStage = { id: string; result: string; durationSec: number; url?: string }
+export type RemoteRun = { runId: number; status: string; conclusion: string; url: string; stages: RemoteStage[] }
+export type RemoteStatus = { run: RemoteRun | null; report?: { logDir: string; failedLogs: string[] } | null }
 
 export type ReleaseEvent =
   | { seq: number; type: "start"; mode: string; stages: string[] }

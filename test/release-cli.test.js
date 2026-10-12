@@ -4,11 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { runStages, checkItem, stageList, createEngine, EXIT } = require('../scripts/release/cli');
+const { runStages, runRemote, runRemoteStatus, stageList, createEngine, EXIT } = require('../scripts/release/cli');
 const { parseArgs } = require('../scripts/release/index');
 const { acquireJobLock } = require('../scripts/release/lock');
 const { JobRunner } = require('../scripts/release/jobs');
-const { createStateStore } = require('../scripts/release/state');
 
 let root;
 beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-relcli-')); });
@@ -45,8 +44,7 @@ describe('command line driver', () => {
         expect(actions.release).not.toHaveBeenCalled();
     });
 
-    test('--run release needs --notes-file, unknown stages are rejected', async () => {
-        await expect(runStages(fakeEngine({}), { run: 'release', yes: true }, io())).rejects.toThrow(/--notes-file/);
+    test('unknown stages are rejected', async () => {
         expect(() => stageList('merge,nope')).toThrow(/未知阶段/);
     });
 
@@ -62,8 +60,8 @@ describe('command line driver', () => {
         });
         engine.collect = engine.runner.deps.collect;
         const output = io();
-        const code = await runStages(engine, { run: 'device,publish', yes: true }, output);
-        expect(output.lines.out.join('\n')).toContain('[device] skipped');
+        const code = await runStages(engine, { run: 'merge,publish', yes: true }, output);
+        expect(output.lines.out.join('\n')).toContain('[merge] skipped');
         expect(actions.publish).toHaveBeenCalledTimes(1);
         expect(code).toBe(EXIT.OK);
 
@@ -83,18 +81,6 @@ describe('command line driver', () => {
         expect(parseArgs(['--run', 'merge,packages', '--yes', '--json', '--notes-file', 'n.md', '--version', '8.3.2', '--npm-dispatch'])).toMatchObject({ run: 'merge,packages', yes: true, json: true, notesFile: 'n.md', version: '8.3.2', npmDispatch: true });
         expect(() => parseArgs(['--run'])).toThrow(/需要一个值/);
         expect(() => parseArgs(['--run', '--yes'])).toThrow(/需要一个值/);
-    });
-});
-
-describe('device checks can only be ticked by a person', () => {
-    test('no TTY refuses; a TTY needs the typed confirmation; the entry records who confirmed', async () => {
-        const engine = fakeEngine({});
-        await expect(checkItem(engine, 'plugin', io(), { isTTY: false, ask: async () => 'yes' })).rejects.toThrow(/只能由人确认/);
-        await expect(checkItem(engine, 'plugin', io(), { isTTY: true, ask: async () => 'y' })).rejects.toThrow(/未确认/);
-        await expect(checkItem(engine, 'nope', io(), { isTTY: true, ask: async () => 'yes' })).rejects.toThrow(/未知的检查项/);
-        expect(createStateStore(root).load().devices).toBeUndefined();
-        await checkItem(engine, 'plugin', io(), { isTTY: true, ask: async () => 'yes' });
-        expect(createStateStore(root).load().devices['v8.2.0'].plugin).toMatchObject({ done: true, by: '终端确认' });
     });
 });
 
@@ -164,37 +150,77 @@ describe('single stage runs even when already done', () => {
     });
 });
 
-describe('an unfinished human-only stage is not a success', () => {
-    test('--run device exits 1 while checks are pending and 0 once ticked', async () => {
-        const hit = worldFacts({ git: { ...worldFacts().git, changedFiles: ['lib/plugin/a.js'] } });
-        const engine = fakeEngine({ device: async () => {} }, hit);
-        const output = io();
-        expect(await runStages(engine, { run: 'device' }, output)).toBe(EXIT.FAILED);
-        expect(output.lines.err.join('\n')).toContain('未完成');
-        await checkItem(engine, 'plugin', io(), { isTTY: true, ask: async () => 'yes' });
-        expect(await runStages(engine, { run: 'device' }, io())).toBe(EXIT.OK);
-    });
-});
+describe('--remote / --remote-status', () => {
+    const runInfo = { runId: 77, url: 'https://github.com/x/y/actions/runs/77', version: '8.7.0', sha: 'a'.repeat(40) };
 
-describe('human-only stages are not offered as --run', () => {
-    const published = () => worldFacts({ release: { exists: true, draft: false, assets: ['SHA256SUMS', ...['macos', 'linux'].flatMap(o => ['arm64', 'x64'].flatMap(a => [`manyoyo-8.2.0-${o}-${a}.run`, `manyoyo-8.2.0-${o}-${a}-app.tar.gz`]))].sort(), sums: null, createdAt: '2026-10-04T00:00:00Z', url: '' }, npm: { version: '8.2.0' }, runs: { ci: [], packages: [], image: [], npm: [], assets: [], verify: [{ databaseId: 9, status: 'completed', conclusion: 'success', headSha: 'm', createdAt: '2026-10-04T01:00:00Z' }] } });
-
-    test('--status with manual as the next step suggests --check, never --run manual', async () => {
-        const engine = fakeEngine({}, published());
-        const output = io();
-        await require('../scripts/release/cli').printStatus(engine, output, false);
-        const text = output.lines.out.join('\n');
-        expect(text).toContain('--check mac-upgrade');
-        expect(text).not.toContain('--run manual');
+    test('flags parse; --remote-status takes an optional run id', () => {
+        expect(parseArgs(['--remote'])).toMatchObject({ remote: true, watch: false });
+        expect(parseArgs(['--remote', '--watch', '--version', '8.7.0', '--dry-run'])).toMatchObject({ remote: true, watch: true, version: '8.7.0', dryRun: true });
+        expect(parseArgs(['--remote-status'])).toMatchObject({ remoteStatus: true, remoteRunId: '' });
+        expect(parseArgs(['--remote-status', '12345'])).toMatchObject({ remoteStatus: true, remoteRunId: '12345' });
+        expect(parseArgs(['--remote-status', '--json'])).toMatchObject({ remoteStatus: true, remoteRunId: '', json: true });
     });
 
-    test('--run manual is refused before any job starts: exit 2, Chinese explanation, no internal error', async () => {
-        const engine = fakeEngine(require('../scripts/release/actions').ACTIONS, published());
+    test('--remote starts the pipeline without --yes (the flag itself is the authorization), prints the run address and returns at once', async () => {
+        const start = jest.fn(async () => runInfo);
         const output = io();
-        expect(await runStages(engine, { run: 'manual' }, output)).toBe(EXIT.NEEDS_YES);
-        const text = output.lines.err.join('\n');
-        expect(text).toContain('没有可执行的动作');
-        expect(text).not.toContain('is not a function');
-        expect(engine.runner.current).toBeNull();
+        const code = await runRemote(fakeEngine({}), { remote: true, version: '8.7.0' }, output, { start });
+        expect(code).toBe(EXIT.OK);
+        expect(start).toHaveBeenCalledWith(expect.anything(), expect.anything(), { version: '8.7.0' });
+        expect(output.lines.out.join('\n')).toContain('https://github.com/x/y/actions/runs/77');
+        expect(output.lines.out.join('\n')).toContain('--remote-status');
+    });
+
+    test('--remote reports why it refused (exit 1) and does not need the console lock when nothing ran', async () => {
+        const start = jest.fn(async () => { throw Object.assign(new Error('有 1 个文件未提交'), { code: 'DIRTY' }); });
+        const output = io();
+        expect(await runRemote(fakeEngine({}), { remote: true }, output, { start })).toBe(EXIT.FAILED);
+        expect(output.lines.err.join('\n')).toContain('有 1 个文件未提交');
+    });
+
+    test('--remote --watch follows the run and exits with its result', async () => {
+        const start = jest.fn(async () => runInfo);
+        const states = [
+            { runId: 77, status: 'in_progress', conclusion: '', url: 'u', stages: [{ id: 'prepare', result: 'success', durationSec: 5 }] },
+            { runId: 77, status: 'completed', conclusion: 'failure', url: 'u', stages: [{ id: 'packages', result: 'failure', durationSec: 9 }] }
+        ];
+        const fetch = jest.fn(async () => states.shift());
+        const output = io();
+        const download = jest.fn(async () => ({ logDir: '/tmp/r/remote-77', failedLogs: ['/tmp/r/remote-77/failed-packages.log'] }));
+        const code = await runRemote(fakeEngine({}), { remote: true, watch: true }, output, { start, fetch, download, sleep: async () => {} });
+        expect(code).toBe(EXIT.FAILED);
+        expect(output.lines.out.join('\n')).toContain('packages');
+        expect(download).toHaveBeenCalled();
+    });
+
+    test('--remote --watch gives up with a clear message when the run cannot be read for a while (gh logged out, network down) instead of looping forever', async () => {
+        const start = jest.fn(async () => runInfo);
+        const fetch = jest.fn(async () => null);
+        const output = io();
+        const code = await runRemote(fakeEngine({}), { remote: true, watch: true }, output, { start, fetch, sleep: async () => {} });
+        expect(code).toBe(EXIT.FAILED);
+        expect(fetch.mock.calls.length).toBeGreaterThanOrEqual(5);
+        expect(output.lines.err.join('\n')).toContain('读不到');
+    });
+
+    test('--remote-status prints the stages; a finished run downloads the report and names the failed stage logs; success exits 0, failure exits 1', async () => {
+        const failed = { runId: 9, status: 'completed', conclusion: 'failure', url: 'u', stages: [{ id: 'packages', result: 'failure', durationSec: 60 }] };
+        const download = jest.fn(async () => ({ logDir: '/tmp/r/remote-9', failedLogs: ['/tmp/r/remote-9/failed-packages.log'] }));
+        const output = io();
+        expect(await runRemoteStatus(fakeEngine({}), { remoteStatus: true, remoteRunId: '9' }, output, { fetch: async () => failed, download })).toBe(EXIT.FAILED);
+        expect(download).toHaveBeenCalled();
+        expect(output.lines.out.join('\n')).toContain('失败阶段的日志在：/tmp/r/remote-9/failed-packages.log');
+
+        const ok = { ...failed, conclusion: 'success', stages: [{ id: 'prepare', result: 'success', durationSec: 3 }] };
+        expect(await runRemoteStatus(fakeEngine({}), { remoteStatus: true, remoteRunId: '' }, io(), { fetch: async () => ok, download: async () => ({ logDir: 'd', failedLogs: [] }) })).toBe(EXIT.OK);
+
+        const running = { ...failed, status: 'in_progress', conclusion: '' };
+        const dl = jest.fn();
+        expect(await runRemoteStatus(fakeEngine({}), { remoteStatus: true, remoteRunId: '' }, io(), { fetch: async () => running, download: dl })).toBe(EXIT.OK);
+        expect(dl).not.toHaveBeenCalled();
+
+        const none = io();
+        expect(await runRemoteStatus(fakeEngine({}), { remoteStatus: true, remoteRunId: '' }, none, { fetch: async () => null })).toBe(EXIT.FAILED);
+        expect(none.lines.err.join('\n')).toContain('没有');
     });
 });

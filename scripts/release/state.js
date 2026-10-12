@@ -1,6 +1,6 @@
 'use strict';
 
-// 本地少量不可推导的状态：预检结果、验证运行 id、真机清单勾选。放 .release/state.json（已 .gitignore，不提交）。
+// 本地少量不可推导的状态：预检结果、验证运行 id、npm 可见标记。放 .release/state.json（已 .gitignore，不提交）。
 
 const fs = require('fs');
 const path = require('path');

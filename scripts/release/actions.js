@@ -11,8 +11,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { parseReleaseVersion, compareReleaseVersions, normalizeCommitMessage } = require('./versions');
+const { buildNotes } = require('./notes');
 const { WORKFLOWS, NPM_PACKAGE, NPM_VIEW_ARGS, checkAssets, parseSums, treeFingerprint } = require('./facts');
-const { deviceItems } = require('./stages');
 
 const POLL_MS = 15000;
 const RUN_APPEAR_TIMEOUT_MS = 120000;
@@ -221,19 +221,9 @@ const ACTIONS = {
         await triggerAndWait(ctx, WORKFLOWS.packages, {}, '安装包构建', ['-b', 'main']);
     },
 
-    // 真机检查只能由人确认：这里只列出清单和下载命令，没确认完的状态由任务执行器报“未完成”
-    async device(ctx, params, facts) {
-        const items = deviceItems(facts);
-        if (items.length === 0) return ctx.log('本次改动不涉及真机敏感区域');
-        const run = packagesRunFor(facts);
-        for (const item of items) ctx.log(`- [${item.id}] ${item.title}（命中：${item.files.slice(0, 3).join('、')}${item.files.length > 3 ? ' 等' : ''}）`);
-        if (run) ctx.log(`下载 CI 产物：gh run download ${run.databaseId} -n manyoyo-${facts.pkg.version}-macos-<arm64|x64>`);
-        ctx.log('检查完成后在网页上勾选，或在终端运行 npm run release -- --check <id>（需要有终端）');
-    },
-
     async release(ctx, params, facts) {
-        const notes = String(params.notes || '').trim();
-        if (!notes) throw new ReleaseError('NO_NOTES', 'Release 说明不能为空');
+        // 没传说明就按提交列表自动生成，不再需要人编辑
+        const notes = String(params.notes || '').trim() || buildNotes(facts).trim();
         const run = packagesRunFor(facts);
         if (!run) throw new ReleaseError('NO_BUILD', 'main 当前提交上没有成功的安装包构建');
         const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-release-')), 'notes.md');

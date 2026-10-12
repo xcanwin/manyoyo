@@ -10,21 +10,27 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const { collectFacts } = require('./facts');
-const { STAGES, MANUAL_CHECKLIST, computeStages, nextStage, isPublished } = require('./stages');
+const { STAGES, computeStages, nextStage, isPublished } = require('./stages');
 const { ACTIONS, describeCommands, ReleaseError } = require('./actions');
 const { JobRunner } = require('./jobs');
 const { createBaseContext, createJobContext } = require('./context');
 const { ruleCommitMessage, agentCommitMessage } = require('./commit-message');
-const { buildVersionSuggestions } = require('./versions');
+const { buildVersionSuggestions, compareReleaseVersions } = require('./versions');
 const { acquireJobLock } = require('./lock');
-const { readLastJobLog } = require('./jobs');
-const { buildNotesDraft } = require('./notes');
-const { checkKind, recordCheck } = require('./checks');
+const { readLatestRun, readStageLog } = require('./job-log');
+const { buildNotes, releaseCommits } = require('./notes');
+const { planRemote, startRemote, fetchRemoteRun, downloadRemoteReport } = require('./remote');
 
 const DEFAULT_PORT = 3900;
 const HOST = '127.0.0.1';
 const FACTS_TTL_MS = 20000;
 const CONSOLE_HTML = path.join(__dirname, 'console.html');
+
+// 版本号已高于最近发布：规则生成的提交说明才写“升级版本到 x.y.z”
+function versionBump(facts) {
+    const latest = facts.git.latestTag ? facts.git.latestTag.replace(/^v/, '') : null;
+    return !latest || compareReleaseVersions(facts.pkg.version, latest) > 0 ? { version: facts.pkg.version } : {};
+}
 
 function sendJson(res, status, body) {
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -58,6 +64,7 @@ function createReleaseServer(options = {}) {
     const token = options.token || crypto.randomBytes(16).toString('hex');
     const base = createBaseContext({ repoRoot, dryRun: Boolean(options.dryRun), fetchImpl: options.fetchImpl });
     if (options.read) base.read = options.read;
+    const logDir = path.join(repoRoot, '.release', 'logs');
     const htmlFile = options.htmlFile || CONSOLE_HTML;
 
     let cache = { at: 0, facts: null };
@@ -72,10 +79,12 @@ function createReleaseServer(options = {}) {
         describe: describeCommands,
         getState: () => base.state.load(),
         acquireLock: options.acquireLock === undefined ? () => acquireJobLock(repoRoot, 'web') : options.acquireLock,
-        logFile: path.join(repoRoot, '.release', 'last-job.log'),
+        logDir,
         dryRun: base.dryRun
     });
 
+    // 同一进程里 /api/remote 与分步任务不能并发（跨进程锁对同一进程是可重入的）
+    let remoteBusy = false;
     let listenPort = port;
     const allowedHosts = () => new Set([`${HOST}:${listenPort}`, `localhost:${listenPort}`]);
 
@@ -96,7 +105,6 @@ function createReleaseServer(options = {}) {
         const state = base.state.load();
         const stages = computeStages(facts, state);
         const next = nextStage(stages);
-        const checklist = (state.checklists || {})[facts.tag] || {};
         return {
             version: facts.pkg.version,
             imageVersion: facts.pkg.imageVersion,
@@ -106,16 +114,17 @@ function createReleaseServer(options = {}) {
             stages: stages.map(stage => ({ ...stage, commands: describeCommands(stage.id, facts, {}) })),
             nextStage: next ? next.id : null,
             dirty: facts.git.dirty,
-            ruleMessage: ruleCommitMessage(facts.git.dirty),
+            ruleMessage: ruleCommitMessage(facts.git.dirty, versionBump(facts)),
             suggestions: buildVersionSuggestions((facts.git.latestTag || `v${facts.pkg.version}`).replace(/^v/, '')),
-            notesDraft: buildNotesDraft(facts),
-            // 自上个 tag 以来的提交（合并提交不列），页面上展示“这次要发布的改动”
-            pendingCommits: facts.git.commitsSinceTag.filter(subject => !/^合并 /.test(subject)),
+            notesDraft: buildNotes(facts),
+            // 自上个 tag 以来的提交（合并提交、docs: 与升版本提交不列），页面上展示“这次要发布的改动”
+            pendingCommits: releaseCommits(facts),
             unpushedFiles: facts.git.unpushedFiles || [],
-            // 本进程还没跑过任务时，给出上次（可能是重启前、或命令行跑的）任务日志
-            lastJobLog: runner.events.length ? null : readLastJobLog(path.join(repoRoot, '.release', 'last-job.log')),
-            checklist: MANUAL_CHECKLIST.map(item => ({ ...item, done: Boolean(checklist[item.id]) })),
+            // 最近一次任务（可能是重启前、或命令行跑的）：各阶段的结果与耗时，点开某个阶段再读它的日志
+            lastRun: readLatestRun(logDir),
             published: isPublished(facts),
+            // 一键发布（远端流水线）要发布的版本、是否还要升版本、挡住发布的问题
+            remotePlan: planRemote(facts),
             job: runner.snapshot(),
             gh: facts.gh.ok
         };
@@ -133,10 +142,55 @@ function createReleaseServer(options = {}) {
             req.on('close', () => { clearInterval(ping); runner.off('event', send); });
             return undefined;
         }
+        if (req.method === 'GET' && pathname === '/api/stage-log') {
+            const log = readStageLog(logDir, url.searchParams.get('run'), url.searchParams.get('stage'));
+            if (!log) throw new ReleaseError('NOT_FOUND', '没有这个阶段的日志');
+            return sendJson(res, 200, log);
+        }
         if (req.method === 'POST' && pathname === '/api/run') {
             const body = await readBody(req);
+            if (remoteBusy) throw new ReleaseError('BUSY', '正在推送并触发远端流水线，请稍候');
             const snapshot = runner.start({ stages: body.stages, mode: body.mode, params: body.params || {}, confirmed: body.confirmed === true });
             return sendJson(res, 200, { job: snapshot });
+        }
+        // 一键发布 = 推送 main + 触发远端流水线（与命令行 --remote 同一段代码）；之后关掉页面也不影响
+        if (req.method === 'POST' && pathname === '/api/remote') {
+            const body = await readBody(req);
+            if (body.confirmed !== true) throw new ReleaseError('CONFIRM_REQUIRED', '对外动作需要明确确认');
+            if (remoteBusy || (runner.current && runner.current.status === 'running')) throw new ReleaseError('BUSY', '已有任务在运行');
+            remoteBusy = true;
+            let release = null;
+            if (options.acquireLock !== null) {
+                try {
+                    release = (options.acquireLock || (() => acquireJobLock(repoRoot, 'web')))();
+                } catch (error) {
+                    remoteBusy = false;
+                    throw new ReleaseError('BUSY', error.message);
+                }
+            }
+            try {
+                await base.readAsync('git', ['fetch', '--quiet', 'origin', '--tags']);
+                const facts = await collect();
+                const lines = [];
+                const ctx = { ...createJobContext(base, line => lines.push(String(line)), undefined), collect };
+                const info = await (options.startRemote || startRemote)(ctx, facts, body.version ? { version: String(body.version) } : {});
+                return sendJson(res, 200, { ...info, log: lines });
+            } finally {
+                remoteBusy = false;
+                if (release) release();
+            }
+        }
+        if (req.method === 'GET' && pathname === '/api/remote/status') {
+            const id = url.searchParams.get('run') || '';
+            if (id && !/^\d+$/.test(id)) throw new ReleaseError('BAD_REQUEST', 'run 必须是数字');
+            const run = await (options.fetchRemoteRun || fetchRemoteRun)(base, id);
+            if (!run) return sendJson(res, 200, { run: null });
+            // 结束且没成功：顺手取回汇总，页面直接给出失败阶段的日志位置
+            let report = null;
+            if (run.status === 'completed' && run.conclusion !== 'success' && !options.fetchRemoteRun) {
+                report = await downloadRemoteReport(createJobContext(base, () => {}, undefined), run);
+            }
+            return sendJson(res, 200, { run, report });
         }
         if (req.method === 'POST' && pathname === '/api/confirm') {
             const body = await readBody(req);
@@ -147,15 +201,8 @@ function createReleaseServer(options = {}) {
         if (req.method === 'POST' && pathname === '/api/commit-message') {
             const body = await readBody(req);
             if (body.mode === 'agent') return sendJson(res, 200, await (options.agentCommitMessage || agentCommitMessage)({ repoRoot }));
-            const message = ruleCommitMessage(body.files || []);
+            const message = ruleCommitMessage(body.files || [], versionBump(cache.facts || await collect()));
             return sendJson(res, 200, { message, reason: message ? '' : '没有选择文件' });
-        }
-        if (req.method === 'POST' && pathname === '/api/checklist') {
-            const body = await readBody(req);
-            if (!checkKind(body.id)) throw new ReleaseError('BAD_REQUEST', '未知的检查项');
-            const known = cache.facts || await collect();
-            recordCheck(base.state, known.tag, body.id, body.done === true, '网页勾选', known.git.originMainSha);
-            return sendJson(res, 200, { ok: true });
         }
         if (req.method === 'POST' && pathname === '/api/quit') {
             sendJson(res, 200, { ok: true });
@@ -211,4 +258,4 @@ function createReleaseServer(options = {}) {
     };
 }
 
-module.exports = { createReleaseServer, buildNotesDraft, DEFAULT_PORT, HOST };
+module.exports = { createReleaseServer, DEFAULT_PORT, HOST };

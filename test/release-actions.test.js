@@ -117,9 +117,14 @@ describe('release / assets / npm', () => {
         await expect(ACTIONS.preflight(ctx, {}, facts())).rejects.toMatchObject({ code: 'CANCELLED' });
     });
 
-    test('release needs notes and passes them through a temp file that is removed afterwards', async () => {
+    test('release passes notes through a temp file that is removed afterwards; without notes it generates them', async () => {
         const f = { ...facts(), runs: { packages: [{ databaseId: 1, status: 'completed', conclusion: 'success', headSha: 'm' }] } };
-        await expect(ACTIONS.release(makeCtx(), { notes: ' ' }, f)).rejects.toMatchObject({ code: 'NO_NOTES' });
+        const generated = makeCtx();
+        let generatedNotes = '';
+        generated.run = jest.fn(async (cmd, args) => { generatedNotes = fs.readFileSync(args[args.indexOf('--notes-file') + 1], 'utf-8'); return { status: 0 }; });
+        await ACTIONS.release(generated, { notes: ' ' }, { ...f, git: { ...f.git, commitsSinceTag: ['fix: 修 B'] } });
+        expect(generatedNotes).toContain('- fix: 修 B');
+        expect(generatedNotes).not.toContain('…');
         await expect(ACTIONS.release(makeCtx(), { notes: 'x' }, facts())).rejects.toMatchObject({ code: 'NO_BUILD' });
         const ctx = makeCtx();
         let notesFile = '';

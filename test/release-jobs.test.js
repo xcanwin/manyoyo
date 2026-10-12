@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { JobRunner, readLastJobLog } = require('../scripts/release/jobs');
+const { JobRunner } = require('../scripts/release/jobs');
 
 // 一个会随动作变化的假世界：合并后 merged=true，构建后 packages=true
 function makeWorld() {
@@ -41,29 +41,6 @@ const finished = runner => new Promise(resolve => runner.on('event', event => { 
 const nextConfirm = runner => new Promise(resolve => runner.on('event', function handler(event) { if (event.type === 'confirm') { runner.off('event', handler); resolve(event); } }));
 
 describe('JobRunner', () => {
-    test('任务日志写进 logFile：新任务覆盖旧日志，记下阶段、输出和结果；重启后用 readLastJobLog 读回', async () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-joblog-'));
-        const logFile = path.join(dir, 'last-job.log');
-        fs.writeFileSync(logFile, 'old job\n');
-        const { runner } = makeWorld();
-        runner.deps.logFile = logFile;
-        runner.deps.actions.merge = jest.fn(async ctx => { ctx.log('git push origin main'); ctx.log('\u001b[32m✓ built\u001b[39m'); throw new Error('push 被拒绝'); });
-        const done = finished(runner);
-        runner.start({ stages: ['merge'], mode: 'single', confirmed: true });
-        expect((await done).status).toBe('failed');
-        const text = fs.readFileSync(logFile, 'utf-8');
-        expect(text).not.toContain('old job');
-        expect(text).toContain('[merge] git push origin main');
-        expect(text).toContain('push 被拒绝');
-        // 子进程输出里的终端颜色码不进日志（网页上会显示成乱码）
-        expect(text).toContain('[merge] ✓ built');
-        expect(text).not.toContain('\u001b');
-        const last = readLastJobLog(logFile);
-        expect(last.lines.join('\n')).toContain('[merge] git push origin main');
-        expect(readLastJobLog(path.join(dir, 'missing.log'))).toBeNull();
-        fs.rmSync(dir, { recursive: true, force: true });
-    });
-
     test('a single external stage needs an explicit confirmation; unknown stages and a second job are rejected', async () => {
         const { runner, actions } = makeWorld();
         expect(() => runner.start({ stages: ['merge'], mode: 'single' })).toThrow(expect.objectContaining({ code: 'CONFIRM_REQUIRED' }));

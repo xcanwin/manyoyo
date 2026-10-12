@@ -20,9 +20,9 @@ function area(file) {
 }
 
 /**
- * 按改动的文件给一行建议文案（≤50 字）：只改文档 → docs:，只改测试 → test:，只改 CI → ci:，其余 → feat:（可在网页里改成 fix: 等）。
+ * 按改动的文件给一行建议文案（≤50 字）：只改文档 → docs:，只改测试 → test:，只改 CI → ci:，只改 package*.json 且版本号待发布 → 升级版本到 x.y.z，其余 → feat:（可在网页里改成 fix: 等）。
  */
-function ruleCommitMessage(files) {
+function ruleCommitMessage(files, { version } = {}) {
     const list = (files || []).map(item => (typeof item === 'string' ? item : item.path)).filter(Boolean);
     if (list.length === 0) return '';
     const areas = new Set(list.map(area));
@@ -31,7 +31,7 @@ function ruleCommitMessage(files) {
     if (only('docs')) return `docs: 更新 ${tops} 文档`;
     if (only('test')) return `test: 补充 ${tops} 用例`;
     if (only('ci')) return 'ci: 调整工作流';
-    if (areas.size === 1 && areas.has('deps')) return 'chore: 更新依赖与版本';
+    if (areas.size === 1 && areas.has('deps')) return version ? `升级版本到 ${version}` : 'chore: 更新依赖';
     return `feat: 调整 ${tops}`.slice(0, 50);
 }
 

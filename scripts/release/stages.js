@@ -1,16 +1,10 @@
 'use strict';
 
 // 发布流水线的阶段定义与状态判断。状态完全由“事实”推出（git / GitHub / npm 的真实状态），
-// 所以随时中断、重开控制台都能从断点继续；本地只记少量不可推导的内容（预检结果、人工清单）。
+// 所以随时中断、重开控制台都能从断点继续；本地只记少量不可推导的内容（预检结果等）。
 
 const { compareReleaseVersions } = require('./versions');
 const { checkAssets } = require('./facts');
-const { matchDeviceRules } = require('./device-rules');
-
-// 发布后的真机检查（依赖已公开的 Release）。发布前的真机检查见 device-rules.js
-const MANUAL_CHECKLIST = [
-    { id: 'mac-upgrade', title: '已装旧版的 Mac：manyoyo update 升到新版 → manyoyo 能打开 → update --rollback 回到旧版 → 再 update' }
-];
 
 // 阶段定义：external=true 表示会推送 / 触发 workflow / 发布，执行前必须明确确认
 // group：相邻且 group 相同的阶段并行执行（verify 与 npm 互不依赖）
@@ -21,13 +15,11 @@ const STAGES = [
     { id: 'merge', title: '合并到 main', external: true, description: '合并当前分支到 main 并推送（需要预检或 CI 通过；文档站随 main 自动部署）' },
     { id: 'image', title: '镜像', external: true, description: '发布镜像（仅 docker/ 或 imageVersion 有变化时需要；已有 tag 不会被覆盖）' },
     { id: 'packages', title: '安装包构建', external: true, description: '触发 build-packages 构建四个平台的安装包并等待（只产出 artifact）' },
-    { id: 'device', title: '发布前真机', external: false, description: '按改动区域匹配必须在真实 Mac 上做的检查（用 CI 产物安装），逐项勾选' },
     { id: 'release', title: 'Release 草稿', external: true, description: '创建 GitHub Release 草稿并钉在安装包构建的提交上（草稿没有 tag、不会成为 latest）' },
     { id: 'assets', title: '挂载安装包', external: true, description: '把安装包上传到草稿 Release，并核对资产与 SHA256SUMS 完全一致' },
     { id: 'publish', title: '公开发布', external: true, description: '把草稿改为公开（这时才创建 tag、成为 latest，并触发 npm 发布）' },
     { id: 'verify', title: '发版后验证', external: true, group: 'post', description: '在干净 runner 上验证安装、update、卸载与一键脚本' },
-    { id: 'npm', title: 'npm 发布', external: true, group: 'post', description: '等待 npm-publish 成功并确认 npm 上已可见（没被触发时可用 --npm-dispatch 手动触发）' },
-    { id: 'manual', title: '发布后真机', external: false, description: '必须在真实 Mac 上做的发布后检查，逐项勾选' }
+    { id: 'npm', title: 'npm 发布', external: true, group: 'post', description: '等待 npm-publish 成功并确认 npm 上已可见（没被触发时可用 --npm-dispatch 手动触发）' }
 ];
 
 function successfulRunFor(runs, sha) {
@@ -37,11 +29,6 @@ function successfulRunFor(runs, sha) {
 function bumpPending(facts) {
     const latest = facts.git.latestTag ? facts.git.latestTag.replace(/^v/, '') : null;
     return !latest || compareReleaseVersions(facts.pkg.version, latest) > 0;
-}
-
-/** 本次发布需要的真机检查（命中的区域规则） */
-function deviceItems(facts) {
-    return matchDeviceRules(facts.git.changedFiles || []);
 }
 
 /** 公开的 Release 且资产齐全 = 这个版本已经发布出去了 */
@@ -66,19 +53,16 @@ function computeStages(facts, state = {}) {
     const published = isPublished(facts);
     // npm 的 CDN 节点同步有先后，单次读取会在新旧版本间来回跳；动作里连续几次读到新版本后会记下，之后不再因为一次读到旧版本而翻回未完成
     const npmConfirmed = (state.npmVisible || {}).tag === facts.tag;
-    const checks = (state.checklists || {})[facts.tag] || {};
-    const manualLeft = MANUAL_CHECKLIST.filter(item => !checks[item.id]).length;
     // 公开的 Release 之前的阶段对这个版本已经是历史：之后 main 再前进（文档提交等）也不会把它们翻回未完成
     const verifyRun = (state.verify && state.verify.tag === facts.tag ? (runs.verify || []).find(run => run.databaseId === state.verify.id) : null)
         || (release.exists && !release.draft ? (runs.verify || []).find(run => run.status === 'completed' && run.conclusion === 'success' && Date.parse(run.createdAt) >= Date.parse(release.createdAt)) : null);
     const verifyOk = Boolean(verifyRun && verifyRun.status === 'completed' && verifyRun.conclusion === 'success');
     if (published) {
         const text = `v${V} 已发布`;
-        for (const id of ['preflight', 'commit', 'merge', 'image', 'packages', 'device', 'release', 'assets', 'publish']) add(id, 'done', text, id === 'release' ? { url: release.url } : {});
+        for (const id of ['preflight', 'commit', 'merge', 'image', 'packages', 'release', 'assets', 'publish']) add(id, 'done', text, id === 'release' ? { url: release.url } : {});
         add('version', 'done', `${text}；下一次发布需要先升版本`);
         add('verify', verifyOk ? 'done' : 'todo', verifyOk ? `验证通过（run #${verifyRun.databaseId}）` : verifyRun ? `上次验证 ${verifyRun.conclusion || verifyRun.status}` : '尚未验证');
         add('npm', npm.version === V || npmConfirmed ? 'done' : 'todo', npm.version === V || npmConfirmed ? `npm 上已是 ${V}` : `npm 上是 ${npm.version || '未知'}，等待 ${V}（发布后可能延迟几分钟）`);
-        add('manual', manualLeft === 0 ? 'done' : 'todo', manualLeft === 0 ? '真机检查全部完成' : `还有 ${manualLeft} 项待勾选`);
         return result.sort((a, b) => STAGES.findIndex(item => item.id === a.id) - STAGES.findIndex(item => item.id === b.id));
     }
 
@@ -123,21 +107,9 @@ function computeStages(facts, state = {}) {
     else if (imageNeeded) add('packages', 'blocked', '先发布镜像（安装包里带镜像归档）');
     else add('packages', 'todo', 'main 的当前提交还没有成功的构建');
 
-    const items = deviceItems(facts);
-    const devices = (state.devices || {})[facts.tag] || {};
-    // 勾选只对确认时的 main 提交有效：之后又有新提交、安装包重建，就必须重新在真机上确认
-    const approved = item => Boolean(devices[item.id] && devices[item.id].done && devices[item.id].sha === git.originMainSha);
-    const deviceLeft = items.filter(item => !approved(item));
-    if (items.length === 0) add('device', 'done', '本次改动不涉及真机敏感区域');
-    else if (deviceLeft.length === 0) add('device', 'done', `${items.length} 项真机检查已全部确认`);
-    else add('device', 'todo', `还有 ${deviceLeft.length} 项真机检查待确认${deviceLeft.some(item => devices[item.id] && devices[item.id].done) ? '（有的确认过，但之后 main 的提交变了，需要对新构建重新确认）' : ''}`, { items: items.map(item => ({ ...item, done: approved(item), by: (devices[item.id] || {}).by || '' })) });
-    if (items.length > 0 && result[result.length - 1].state === 'done') result[result.length - 1].items = items.map(item => ({ ...item, done: true, by: (devices[item.id] || {}).by || '' }));
-
-    const deviceOk = deviceLeft.length === 0;
     if (ghBlock) add('release', 'blocked', ghBlock);
     else if (release.exists) add('release', 'done', `v${V} 的${release.draft ? '草稿' : ' Release '}已创建`, { url: release.url });
     else if (!merged || imageNeeded || !packagesDone) add('release', 'blocked', '需要先完成：合并到 main、镜像、安装包构建');
-    else if (!deviceOk) add('release', 'blocked', '先完成发布前真机检查');
     else add('release', 'todo', `将创建 v${V} 草稿并钉在 ${packagesRun.headSha.slice(0, 7)}`);
 
     const assetCheck = checkAssets(V, release.assets, release.sums);
@@ -161,8 +133,6 @@ function computeStages(facts, state = {}) {
     else if (!release.exists || release.draft) add('npm', 'blocked', '先公开发布');
     else add('npm', 'todo', `npm 上是 ${npm.version || '未知'}，等待 ${V}（发布后可能延迟几分钟）`);
 
-    // 清单按版本记录：上一次发布勾选过的不会带到下一次
-    add('manual', manualLeft === 0 ? 'done' : 'todo', manualLeft === 0 ? '真机检查全部完成' : `还有 ${manualLeft} 项待勾选`);
     return result;
 }
 
@@ -171,4 +141,4 @@ function nextStage(stages) {
     return stages.find(stage => stage.state === 'todo' || stage.state === 'warn') || null;
 }
 
-module.exports = { STAGES, MANUAL_CHECKLIST, computeStages, nextStage, deviceItems, isPublished };
+module.exports = { STAGES, computeStages, nextStage, isPublished };
