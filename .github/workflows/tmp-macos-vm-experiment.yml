@@ -1,0 +1,42 @@
+# TEMP 实验（交付前删除）：macOS runner 上能不能启动 Podman 虚拟机（GitHub 文档称 macOS runner 不支持嵌套虚拟化）。
+name: TMP macOS VM experiment
+
+on:
+  push:
+    branches:
+      - feat/release-autopilot
+    paths:
+      - '.release-vm-experiment'
+
+permissions:
+  contents: read
+
+jobs:
+  vm:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - name: Machine info
+        run: |
+          uname -a
+          sysctl -n machdep.cpu.brand_string || true
+          sysctl kern.hv_support kern.hv_vmm_present 2>&1 || true
+      - name: Install podman
+        run: |
+          brew install podman
+          podman --version
+      - name: podman machine init + start (10 min limit)
+        run: |
+          set +e
+          podman machine init --disk-size 10 2>&1 | tail -20
+          echo "init exit: ${PIPESTATUS[0]}"
+          perl -e 'alarm 600; exec @ARGV' podman machine start 2>&1 | tail -40
+          code=${PIPESTATUS[0]}
+          echo "start exit: $code"
+          podman machine list 2>&1 | cat
+          podman info 2>&1 | head -5
+          exit 0
