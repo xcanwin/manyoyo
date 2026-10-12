@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { buildReport, tailLog, renderMarkdown, writeReport } = require('../scripts/release/pipeline-report');
+const { buildReport, tailLog, renderMarkdown, writeReport, loadJobs } = require('../scripts/release/pipeline-report');
 
 const job = (name, over = {}) => ({ id: Math.floor(Math.random() * 1e6), name, status: 'completed', conclusion: 'success', started_at: '2026-10-13T10:00:00Z', completed_at: '2026-10-13T10:01:30Z', html_url: `https://github.com/x/y/actions/runs/1/job/${name.length}`, ...over });
 
@@ -82,5 +82,13 @@ describe('pipeline report', () => {
         } finally {
             fs.rmSync(out, { recursive: true, force: true });
         }
+    });
+});
+
+describe('loadJobs', () => {
+    test('parses the paginated jobs listing; a failing gh call is an error, not an empty report', () => {
+        const ok = loadJobs(() => ({ status: 0, stdout: '{"id":1,"name":"a"}\n{"id":2,"name":"b"}\n' }), 'x/y', '1');
+        expect(ok.map(item => item.id)).toEqual([1, 2]);
+        expect(() => loadJobs(() => ({ status: 1, stdout: '' }), 'x/y', '1')).toThrow(/读不到/);
     });
 });

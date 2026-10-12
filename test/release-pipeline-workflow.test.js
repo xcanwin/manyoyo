@@ -38,8 +38,26 @@ describe('release-pipeline workflow', () => {
         expect(npmPublish).toContain('scan-release-artifacts.js');
     });
 
-    test('only one release pipeline at a time, and it never cancels a running one', () => {
-        expect(block(pipeline, 'concurrency')).toMatch(/group: release\s*\n\s+cancel-in-progress: false/);
+    test('only one real release at a time and it never cancels a running one; dry runs use their own group so they cannot push a queued real release out', () => {
+        const concurrency = block(pipeline, 'concurrency');
+        expect(concurrency).toContain("'release'");
+        expect(concurrency).toContain('release-dry-');
+        expect(concurrency).toMatch(/cancel-in-progress: false/);
+    });
+
+    test('npm stage is safe to re-run (skips the dispatch when npm already has the version) and recognises only its own dispatched run', () => {
+        const npm = job('npm');
+        expect(npm.indexOf('npm view "@xcanwin/manyoyo@${VERSION}" version')).toBeGreaterThan(-1);
+        expect(npm.indexOf('npm view "@xcanwin/manyoyo@${VERSION}" version')).toBeLessThan(npm.indexOf('gh workflow run npm-publish.yml'));
+        expect(npm).toContain('endswith(');
+        expect(npm).toContain('-b main');
+        expect(npmPublish).toMatch(/run-name: .*tag/);
+    });
+
+    test('nothing from package.json is interpolated into a shell script unchecked: prepare validates the version, summary reads it from env', () => {
+        expect(job('prepare')).toContain("grep -Eq '^[0-9]+");
+        expect(job('summary')).toContain('VERSION: ${{ needs.prepare.outputs.version }}');
+        expect(job('summary')).not.toMatch(/run: \|[\s\S]*\$\{\{ needs\./);
     });
 
     test('order: tested + built → draft → attach → verify before publish → npm and post-publish verify only after publish', () => {
@@ -64,6 +82,22 @@ describe('release-pipeline workflow', () => {
         expect(pipeline.match(/--draft=false/g) || []).toHaveLength(1);
         expect(job('publish')).toContain('--draft=false');
         expect(job('publish')).toContain('assert-assets.js');
+    });
+
+    test('every job after prepare runs only when the jobs it needs really succeeded (a skipped image job must not skip the chain, a failed test must not let it through)', () => {
+        const condition = name => (job(name).match(/^ {4}if: (.+)$/m) || [, ''])[1];
+        expect(condition('packages')).toContain("needs.prepare.result == 'success'");
+        expect(condition('packages')).toContain("needs.image.result == 'skipped'");
+        expect(condition('draft')).toContain("needs.test.result == 'success'");
+        expect(condition('draft')).toContain("needs.packages.result == 'success'");
+        expect(condition('attach')).toContain("needs.draft.result == 'success'");
+        expect(condition('smoke-macos')).toContain("needs.packages.result == 'success'");
+        expect(condition('prepublish-verify')).toContain("needs.attach.result == 'success'");
+        for (const upstream of ['prepublish-verify', 'smoke-macos']) expect(condition('publish')).toContain(`needs.${upstream}.result == 'success'`);
+        expect(condition('npm')).toContain("needs.publish.result == 'success'");
+        expect(condition('postpublish-verify')).toContain("needs.publish.result == 'success'");
+        // 不能用会在 test 失败时放行的 !failure() 兜底
+        for (const name of ['draft', 'attach', 'publish', 'npm']) expect(condition(name)).not.toContain('!failure()');
     });
 
     test('dryRun never publishes: publish, npm and post-publish are skipped, and the dry-run draft is deleted whatever happens', () => {

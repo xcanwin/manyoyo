@@ -11,6 +11,9 @@ function assertReleaseAssets({ tag, version, gh }) {
     if (view.status !== 0) return { ok: false, reason: `读不到 Release ${tag}` };
     const release = JSON.parse(view.stdout);
     if (release.isDraft !== true) return { ok: false, reason: `${tag} 不是草稿（已经公开，不再处理）` };
+    // 上传中途中断会留下同名的残缺资产：只认已上传完成且非空的
+    const unfinished = release.assets.filter(item => item.state !== 'uploaded' || !(item.size > 0)).map(item => item.name);
+    if (unfinished.length > 0) return { ok: false, reason: `这些资产没有上传完成（或为空）：${unfinished.join('、')}` };
     const names = release.assets.map(item => item.name).sort();
     const sums = gh(['release', 'download', tag, '-p', 'SHA256SUMS', '-O', '-']);
     if (sums.status !== 0) return { ok: false, reason: `${tag} 里没有可下载的 SHA256SUMS` };

@@ -133,6 +133,7 @@ async function runStages(engine, args, io) {
 
 const sleepMs = ms => new Promise(resolve => setTimeout(resolve, ms));
 const WATCH_INTERVAL_MS = 15000;
+const WATCH_MAX_MISSES = 5;
 
 /**
  * --remote：升版本（需要时）→ 推送 main → 触发流水线。加了这个参数本身就是授权，不需要 --yes。
@@ -149,7 +150,7 @@ async function runRemote(engine, args, io, deps = {}) {
         if (engine.acquireLock) release = engine.acquireLock();
         await engine.base.readAsync('git', ['fetch', '--quiet', 'origin', '--tags']);
         const facts = await engine.collect();
-        const ctx = createJobContext(engine.base, line => io.out(line), undefined);
+        const ctx = { ...createJobContext(engine.base, line => io.out(line), undefined), collect: engine.collect };
         info = await start(ctx, facts, args.version ? { version: args.version } : {});
     } catch (error) {
         io.err(`失败：${error.message}`);
@@ -163,8 +164,15 @@ async function runRemote(engine, args, io, deps = {}) {
         return EXIT.OK;
     }
     let last = '';
+    let misses = 0;
     for (;;) {
         const run = await fetchRun({ ...engine.base, readAsync: engine.base.readAsync }, String(info.runId));
+        misses = run ? 0 : misses + 1;
+        // 连续读不到（gh 登出、网络断了）就停下来说明，不要无声地一直循环
+        if (misses >= WATCH_MAX_MISSES) {
+            io.err(`读不到流水线 #${info.runId} 的状态（连续 ${WATCH_MAX_MISSES} 次）：检查 gh auth status 与网络；流水线本身不受影响，稍后用 --remote-status 查看`);
+            return EXIT.FAILED;
+        }
         if (run) {
             const text = run.stages.map(stage => `${stage.id}:${stage.result}`).join(' ');
             if (text !== last) {

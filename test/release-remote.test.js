@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { startRemote, fetchRemoteRun, remoteStatusText, planRemote } = require('../scripts/release/remote');
+const { startRemote, fetchRemoteRun, downloadRemoteReport, remoteStatusText, planRemote } = require('../scripts/release/remote');
 
 let root;
 beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-remote-')); });
@@ -47,7 +47,7 @@ const runList = JSON.stringify([{ databaseId: 77, createdAt: new Date(1000000).t
 
 describe('startRemote (npm run release -- --remote)', () => {
     test('version already above the last release: push main, dispatch the pipeline with the commit — no version bump, no --yes involved', async () => {
-        const ctx = makeCtx({ answers: { 'git rev-parse HEAD': { status: 0, stdout: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678\n' }, 'gh run list': { status: 0, stdout: runList }, 'gh run view': { status: 0, stdout: JSON.stringify({ url: 'https://github.com/x/y/actions/runs/77' }) } } });
+        const ctx = makeCtx({ answers: { 'git rev-parse HEAD': { status: 0, stdout: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678\n' }, 'gh run list --workflow release-pipeline.yml -L 10': { status: 0, stdout: runList }, 'gh run view': { status: 0, stdout: JSON.stringify({ url: 'https://github.com/x/y/actions/runs/77' }) } } });
         ctx.now = () => 1000000;
         const result = await startRemote(ctx, facts({ top: { pkg: { version: '8.6.4', imageVersion: '2.1.0-common' } } }), {});
         expect(result).toMatchObject({ runId: 77, version: '8.6.4', sha: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678', url: 'https://github.com/x/y/actions/runs/77' });
@@ -62,7 +62,7 @@ describe('startRemote (npm run release -- --remote)', () => {
     });
 
     test('version not bumped: bump to the recommended patch (or --version), commit "升级版本到 x.y.z", then push and dispatch', async () => {
-        const ctx = makeCtx({ answers: { 'git rev-parse HEAD': { status: 0, stdout: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678\n' }, 'gh run list': { status: 0, stdout: runList }, 'gh run view': { status: 0, stdout: '{}' } } });
+        const ctx = makeCtx({ answers: { 'git rev-parse HEAD': { status: 0, stdout: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678\n' }, 'gh run list --workflow release-pipeline.yml -L 10': { status: 0, stdout: runList }, 'gh run view': { status: 0, stdout: '{}' } } });
         ctx.now = () => 1000000;
         const result = await startRemote(ctx, facts(), {});
         expect(result.version).toBe('8.6.4');
@@ -73,7 +73,7 @@ describe('startRemote (npm run release -- --remote)', () => {
         expect(commit.input).toBe('升级版本到 8.6.4\n');
         expect(list.findIndex(line => line.includes('push origin main'))).toBeGreaterThan(list.indexOf('npm version 8.6.4 --no-git-tag-version'));
 
-        const custom = makeCtx({ answers: { 'git rev-parse HEAD': { status: 0, stdout: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678\n' }, 'gh run list': { status: 0, stdout: runList }, 'gh run view': { status: 0, stdout: '{}' } } });
+        const custom = makeCtx({ answers: { 'git rev-parse HEAD': { status: 0, stdout: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678\n' }, 'gh run list --workflow release-pipeline.yml -L 10': { status: 0, stdout: runList }, 'gh run view': { status: 0, stdout: '{}' } } });
         custom.now = () => 1000000;
         expect((await startRemote(custom, facts(), { version: '8.7.0' })).version).toBe('8.7.0');
         expect(commands(custom)).toContain('npm version 8.7.0 --no-git-tag-version');
@@ -89,6 +89,39 @@ describe('startRemote (npm run release -- --remote)', () => {
         const ctx = makeCtx();
         await expect(startRemote(ctx, dirty, {})).rejects.toBeDefined();
         expect(ctx.calls).toEqual([]);
+    });
+
+    test('refuses while a pipeline run is queued or in progress (a second queued run would silently replace a waiting real release)', async () => {
+        const busy = JSON.stringify([{ databaseId: 70, status: 'in_progress' }]);
+        const ctx = makeCtx({ answers: { 'gh run list --workflow release-pipeline.yml -L 5': { status: 0, stdout: busy } } });
+        await expect(startRemote(ctx, facts({ top: { pkg: { version: '8.6.4', imageVersion: 'x' } } }), {})).rejects.toMatchObject({ code: 'BUSY' });
+        expect(ctx.calls).toEqual([]);
+        const idle = JSON.stringify([{ databaseId: 70, status: 'completed' }]);
+        const ok = makeCtx({ answers: { 'gh run list --workflow release-pipeline.yml -L 5': { status: 0, stdout: idle }, 'git rev-parse HEAD': { status: 0, stdout: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678\n' }, 'gh run list --workflow release-pipeline.yml -L 10': { status: 0, stdout: runList } } });
+        ok.now = () => 1000000;
+        await expect(startRemote(ok, facts({ top: { pkg: { version: '8.6.4', imageVersion: 'x' } } }), {})).resolves.toBeDefined();
+    });
+
+    test('plans again after pulling: a version somebody else already bumped is not bumped twice', async () => {
+        const ctx = makeCtx({ answers: { 'git rev-parse HEAD': { status: 0, stdout: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678\n' }, 'gh run list --workflow release-pipeline.yml -L 10': { status: 0, stdout: runList }, 'gh run view': { status: 0, stdout: '{}' } } });
+        ctx.now = () => 1000000;
+        // pull 之前本地版本没升（8.6.3 == 最近发布），pull 之后别人已经升到 8.6.4
+        ctx.collect = async () => facts({ top: { pkg: { version: '8.6.4', imageVersion: 'x' } } });
+        const result = await startRemote(ctx, facts(), {});
+        expect(result.version).toBe('8.6.4');
+        expect(commands(ctx).some(line => line.startsWith('npm version'))).toBe(false);
+    });
+
+    test('a failed commit after the bump puts package.json and the lock file back, so the next run is not blocked by a dirty tree', async () => {
+        const ctx = makeCtx({});
+        const base = ctx.run;
+        ctx.run = async (cmd, args, opts = {}) => {
+            if (cmd === 'git' && args[0] === 'commit') { ctx.calls.push({ cmd, args }); return { status: 1 }; }
+            return base(cmd, args, opts);
+        };
+        await expect(startRemote(ctx, facts(), {})).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+        expect(commands(ctx)).toContain('git checkout -- package.json package-lock.json');
+        expect(commands(ctx).some(line => line.includes('push origin main'))).toBe(false);
     });
 
     test('--dry-run prints what it would do and neither pushes nor dispatches', async () => {
@@ -124,6 +157,23 @@ describe('remote run status', () => {
         expect(text).toContain('packages');
         expect(text).toContain('failure');
         expect(text).toContain('失败阶段的日志在：/tmp/x/remote-9/failed-packages.log');
+    });
+});
+
+describe('downloadRemoteReport', () => {
+    test('a report that is already on disk is reused (polling must not delete and re-download it), and a missing summary file is not a crash', async () => {
+        const dir = path.join(root, '.release', 'logs', 'remote-9');
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'release-summary.json'), JSON.stringify({ stages: [{ id: 'packages', logArtifact: 'failed-packages.log' }] }));
+        const ctx = makeCtx({});
+        const result = await downloadRemoteReport(ctx, { runId: 9 });
+        expect(ctx.calls).toEqual([]);
+        expect(result.failedLogs).toEqual([path.join(dir, 'failed-packages.log')]);
+
+        // artifact 下载成功但没有汇总文件：不抛错
+        const broken = makeCtx({});
+        broken.run = async () => ({ status: 0 });
+        expect(await downloadRemoteReport(broken, { runId: 10 })).toMatchObject({ failedLogs: [], summary: null });
     });
 });
 

@@ -74,6 +74,9 @@ describe('release-offline workflow', () => {
         expect(compare).toBeGreaterThan(-1);
         expect(compare).toBeLessThan(text.indexOf('gh release upload'));
         expect(text).toContain("if: steps.existing.outputs.skip != 'true'");
+        // 只比名字不够（上传中途中断会留下同名的残缺资产）：要求 state 为 uploaded 且大小一致
+        expect(text).toContain('select(.state == "uploaded")');
+        expect(text).toContain('wc -c');
     });
 
     test('uses least privilege and no secrets other than the built-in token', () => {

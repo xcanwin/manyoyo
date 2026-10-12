@@ -102,20 +102,27 @@ function writeReport({ report, outDir, fetchLog }) {
 
 function gh(args) {
     const result = spawnSync('gh', args, { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
-    return result.status === 0 ? result.stdout : '';
+    return { status: result.error ? 127 : result.status, stdout: result.stdout || '' };
+}
+
+/** 一次运行的全部 job；读不到就报错（不能把“读不到”当成“没有 job”，否则会产出一份误导人的空报告） */
+function loadJobs(ghImpl, repo, run) {
+    // --paginate 对每一页各输出一个 JSON 对象：用 --jq 展平成每行一个 job
+    const result = ghImpl(['api', `repos/${repo}/actions/runs/${run}/jobs?per_page=100`, '--paginate', '--jq', '.jobs[] | @json']);
+    if (result.status !== 0) throw new Error(`读不到运行 ${run} 的 job 列表（gh api 退出码 ${result.status}）`);
+    return result.stdout.split('\n').filter(Boolean).map(line => JSON.parse(line));
 }
 
 function main(argv) {
     const get = name => { const i = argv.indexOf(`--${name}`); return i >= 0 ? argv[i + 1] : ''; };
     const [run, repo, out] = [get('run'), get('repo'), get('out')];
     if (!run || !repo || !out) throw new Error('用法: pipeline-report.js --run <id> --repo <owner/repo> --version <v> --sha <sha> --out <目录>');
-    // --paginate 对每一页各输出一个 JSON 对象：用 --jq 展平成 job 数组
-    const jobs = JSON.parse(`[${gh(['api', `repos/${repo}/actions/runs/${run}/jobs?per_page=100`, '--paginate', '--jq', '.jobs[] | @json']).split('\n').filter(Boolean).join(',')}]`);
+    const jobs = loadJobs(gh, repo, run);
     const report = buildReport({ jobs, version: get('version'), sha: get('sha'), runUrl: `https://github.com/${repo}/actions/runs/${run}` });
-    writeReport({ report, outDir: out, fetchLog: id => gh(['api', `repos/${repo}/actions/jobs/${id}/logs`]) });
+    writeReport({ report, outDir: out, fetchLog: id => gh(['api', `repos/${repo}/actions/jobs/${id}/logs`]).stdout });
     process.stdout.write(renderMarkdown(report));
 }
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { buildReport, tailLog, renderMarkdown, writeReport, LOG_TAIL_LINES };
+module.exports = { buildReport, tailLog, renderMarkdown, writeReport, loadJobs, LOG_TAIL_LINES };

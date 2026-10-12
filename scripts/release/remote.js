@@ -69,12 +69,28 @@ async function startRemote(ctx, facts, params = {}) {
     if (requested) validateVersion(requested, facts);
     const prefix = gitPrefix(ctx, facts);
 
+    // 同一组最多排一个等待中的运行，再触发一个会悄悄顶掉排队中的真实发布：已有运行在跑 / 排队就拒绝
+    const active = parseJson(String((await ctx.readAsync('gh', ['run', 'list', '--workflow', PIPELINE, '-L', '5', '--json', 'databaseId,status'])).stdout || ''), []);
+    const busy = (Array.isArray(active) ? active : []).find(run => ['queued', 'in_progress', 'waiting', 'pending', 'requested'].includes(run.status));
+    if (busy) throw new ReleaseError('BUSY', `已有一次发布流水线在进行（#${busy.databaseId}，${busy.status}）：等它结束，或 --remote-status 查看`);
+
     await runOk(ctx, 'git', [...prefix, 'pull', '--ff-only', 'origin', 'main'], { external: true });
-    if (plan.willBump) {
-        ctx.log(`版本 ${facts.pkg.version} 还没升：升到 ${plan.version} 并提交`);
-        await runOk(ctx, 'npm', ['version', plan.version, '--no-git-tag-version']);
-        await runOk(ctx, 'git', ['add', '--', 'package.json', 'package-lock.json']);
-        await runOk(ctx, 'git', ['commit', '-F', '-'], { input: `升级版本到 ${plan.version}\n` });
+    // pull 可能带来别人已经升好的版本 / 新 tag：按拉取后的状态重新规划，不重复升版本
+    const fresh = ctx.collect && !ctx.dryRun ? await ctx.collect() : facts;
+    const replan = planRemote(fresh, requested);
+    if (replan.problem) throw new ReleaseError(replan.code, replan.problem);
+    if (requested) validateVersion(requested, fresh);
+    if (replan.willBump) {
+        ctx.log(`版本 ${fresh.pkg.version} 还没升：升到 ${replan.version} 并提交`);
+        try {
+            await runOk(ctx, 'npm', ['version', replan.version, '--no-git-tag-version']);
+            await runOk(ctx, 'git', ['add', '--', 'package.json', 'package-lock.json']);
+            await runOk(ctx, 'git', ['commit', '-F', '-'], { input: `升级版本到 ${replan.version}\n` });
+        } catch (error) {
+            // 升了版本却没提交成功：把文件还原，下一次 --remote 才不会被“工作区不干净”挡住
+            if (!ctx.dryRun) await ctx.run('git', ['checkout', '--', 'package.json', 'package-lock.json']);
+            throw error;
+        }
     }
     await runOk(ctx, 'git', [...prefix, 'push', 'origin', 'main'], { external: true });
     const sha = ctx.dryRun ? '<提交>' : String(ctx.read('git', ['rev-parse', 'HEAD']).stdout || '').trim();
@@ -89,7 +105,7 @@ async function startRemote(ctx, facts, params = {}) {
         url = view.url || '';
     }
     ctx.log(`流水线已触发：${url || '(dry-run)'}`);
-    return { runId: run.databaseId, url, version: plan.version, sha };
+    return { runId: run.databaseId, url, version: replan.version, sha };
 }
 
 /** 流水线一次运行的进度：最近一次（runId 为空）或指定的一次；没有运行返回 null */
@@ -110,11 +126,23 @@ async function fetchRemoteRun(ctx, runId) {
 /** 流水线结束后取回汇总 artifact（release-report）到 .release/logs/remote-<id>/，返回目录和失败阶段的日志路径 */
 async function downloadRemoteReport(ctx, run) {
     const logDir = path.join(ctx.repoRoot, '.release', 'logs', `remote-${run.runId}`);
-    fs.rmSync(logDir, { recursive: true, force: true });
-    fs.mkdirSync(logDir, { recursive: true });
-    const result = await ctx.run('gh', ['run', 'download', String(run.runId), '-n', 'release-report', '-D', logDir], { safe: true });
-    if (result.status !== 0) return { logDir, failedLogs: [], summary: null };
-    const summary = parseJson(fs.readFileSync(path.join(logDir, 'release-summary.json'), 'utf-8'), null);
+    const summaryFile = path.join(logDir, 'release-summary.json');
+    const read = () => {
+        try {
+            return parseJson(fs.readFileSync(summaryFile, 'utf-8'), null);
+        } catch (error) {
+            return null;
+        }
+    };
+    // 已经取回过就直接用（网页每 10 秒轮询一次，不能每次都删了重下）
+    let summary = read();
+    if (!summary) {
+        fs.rmSync(logDir, { recursive: true, force: true });
+        fs.mkdirSync(logDir, { recursive: true });
+        const result = await ctx.run('gh', ['run', 'download', String(run.runId), '-n', 'release-report', '-D', logDir], { safe: true });
+        if (result.status !== 0) return { logDir, failedLogs: [], summary: null };
+        summary = read();
+    }
     const failedLogs = ((summary && summary.stages) || []).filter(stage => stage.logArtifact).map(stage => path.join(logDir, stage.logArtifact));
     return { logDir, failedLogs, summary };
 }

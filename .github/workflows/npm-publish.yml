@@ -5,6 +5,9 @@
 
 name: Node.js Package
 
+# run-name 带 tag：发布流水线按它认出自己派发的那一次运行
+run-name: Node.js Package ${{ inputs.tag || github.event.release.tag_name }}
+
 on:
   release:
     types: [published]

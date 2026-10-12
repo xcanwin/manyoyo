@@ -36,7 +36,7 @@ describe('per-stage job logs', () => {
         runner.start({ stages: ['merge', 'packages'], mode: 'auto', confirmed: true });
         expect((await done).status).toBe('failed');
         const [dir] = runDirs();
-        expect(dir).toMatch(/^\d{8}-\d{6}-merge\+packages$/);
+        expect(dir).toMatch(/^\d{8}-\d{6}-merge\+packages-\d{3}$/);
         const full = path.join(root, 'logs', dir);
         expect(fs.readdirSync(full).sort()).toEqual(['01-merge.log', '02-packages.log', 'summary.json']);
         // 日志文件只含本阶段的输出，且没有终端颜色码
@@ -73,8 +73,19 @@ describe('per-stage job logs', () => {
         await done;
         const dirs = runDirs();
         expect(dirs).toHaveLength(20);
-        expect(dirs.some(name => name.endsWith('-merge'))).toBe(true);
-        expect(fs.readFileSync(path.join(logs, 'latest'), 'utf-8').trim()).toBe(dirs.find(name => name.endsWith('-merge')));
+        expect(dirs.some(name => /-merge-\d{3}$/.test(name))).toBe(true);
+        expect(fs.readFileSync(path.join(logs, 'latest'), 'utf-8').trim()).toBe(dirs.find(name => /-merge-\d{3}$/.test(name)));
+    });
+
+    test('two jobs started within the same second do not share a folder', async () => {
+        const { runner } = makeRunner({});
+        const first = finished(runner);
+        runner.start({ stages: ['merge'], mode: 'single', confirmed: true });
+        await first;
+        const second = finished(runner);
+        runner.start({ stages: ['merge'], mode: 'single', confirmed: true });
+        await second;
+        expect(new Set(runDirs()).size).toBe(2);
     });
 
     test('readLatestRun and readStageLog serve the web page; a crafted stage id cannot escape the folder', async () => {

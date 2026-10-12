@@ -20,6 +20,7 @@ let root;
 let app;
 let url;
 let facts;
+let holdRemote = null;
 const waitDone = async () => { for (let i = 0; i < 100 && !app.runner.events.some(event => event.type === 'done'); i += 1) await new Promise(resolve => setTimeout(resolve, 20)); };
 beforeEach(async () => {
     facts = fakeFacts();
@@ -30,7 +31,7 @@ beforeEach(async () => {
         collect: async () => facts, read: () => ({ status: 0, stdout: '' }),
         actions: { merge: async ctx => ctx.log('merging'), preflight: async () => {} },
         agentCommitMessage: async () => ({ message: 'feat: from agent', reason: '' }),
-        startRemote: async (ctx, f, params) => { ctx.log('pushing'); return { runId: 55, url: 'https://github.com/x/y/actions/runs/55', version: params.version || '8.2.1', sha: 'a'.repeat(40) }; },
+        startRemote: async (ctx, f, params) => { ctx.log('pushing'); if (holdRemote) await holdRemote; return { runId: 55, url: 'https://github.com/x/y/actions/runs/55', version: params.version || '8.2.1', sha: 'a'.repeat(40) }; },
         fetchRemoteRun: async (ctx, id) => ({ runId: Number(id) || 55, status: 'in_progress', conclusion: '', url: 'https://github.com/x/y/actions/runs/55', stages: [{ id: 'prepare', result: 'success', durationSec: 5 }] })
     });
     const info = await app.listen();
@@ -148,6 +149,19 @@ describe('release server API', () => {
         expect((await call('GET', '/api/remote/status?run=abc')).status).toBe(400);
         const status = await (await call('GET', '/api/status')).json();
         expect(status.remotePlan).toMatchObject({ version: expect.any(String), willBump: expect.any(Boolean) });
+    });
+
+    test('a second one-click request, or a stage job, while a remote start is in flight is refused with 409 (the cross-process lock does not stop the same process)', async () => {
+        let release;
+        holdRemote = new Promise(resolve => { release = resolve; });
+        const first = call('POST', '/api/remote', { body: { confirmed: true } });
+        await new Promise(resolve => setTimeout(resolve, 100));
+        expect((await call('POST', '/api/remote', { body: { confirmed: true } })).status).toBe(409);
+        expect((await call('POST', '/api/run', { body: { stages: ['merge'], mode: 'single', confirmed: true } })).status).toBe(409);
+        release();
+        expect((await first).status).toBe(200);
+        holdRemote = null;
+        expect((await call('POST', '/api/remote', { body: { confirmed: true } })).status).toBe(200);
     });
 
     test('step mode: the page confirms through /api/confirm; cancel works; a second job is refused with 409', async () => {

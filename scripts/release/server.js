@@ -83,6 +83,8 @@ function createReleaseServer(options = {}) {
         dryRun: base.dryRun
     });
 
+    // 同一进程里 /api/remote 与分步任务不能并发（跨进程锁对同一进程是可重入的）
+    let remoteBusy = false;
     let listenPort = port;
     const allowedHosts = () => new Set([`${HOST}:${listenPort}`, `localhost:${listenPort}`]);
 
@@ -147,6 +149,7 @@ function createReleaseServer(options = {}) {
         }
         if (req.method === 'POST' && pathname === '/api/run') {
             const body = await readBody(req);
+            if (remoteBusy) throw new ReleaseError('BUSY', '正在推送并触发远端流水线，请稍候');
             const snapshot = runner.start({ stages: body.stages, mode: body.mode, params: body.params || {}, confirmed: body.confirmed === true });
             return sendJson(res, 200, { job: snapshot });
         }
@@ -154,12 +157,14 @@ function createReleaseServer(options = {}) {
         if (req.method === 'POST' && pathname === '/api/remote') {
             const body = await readBody(req);
             if (body.confirmed !== true) throw new ReleaseError('CONFIRM_REQUIRED', '对外动作需要明确确认');
-            if (runner.current && runner.current.status === 'running') throw new ReleaseError('BUSY', '已有任务在运行');
+            if (remoteBusy || (runner.current && runner.current.status === 'running')) throw new ReleaseError('BUSY', '已有任务在运行');
+            remoteBusy = true;
             let release = null;
             if (options.acquireLock !== null) {
                 try {
                     release = (options.acquireLock || (() => acquireJobLock(repoRoot, 'web')))();
                 } catch (error) {
+                    remoteBusy = false;
                     throw new ReleaseError('BUSY', error.message);
                 }
             }
@@ -167,10 +172,11 @@ function createReleaseServer(options = {}) {
                 await base.readAsync('git', ['fetch', '--quiet', 'origin', '--tags']);
                 const facts = await collect();
                 const lines = [];
-                const ctx = createJobContext(base, line => lines.push(String(line)), undefined);
+                const ctx = { ...createJobContext(base, line => lines.push(String(line)), undefined), collect };
                 const info = await (options.startRemote || startRemote)(ctx, facts, body.version ? { version: String(body.version) } : {});
                 return sendJson(res, 200, { ...info, log: lines });
             } finally {
+                remoteBusy = false;
                 if (release) release();
             }
         }

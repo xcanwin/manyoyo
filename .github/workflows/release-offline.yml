@@ -129,17 +129,20 @@ jobs:
           listed="$(awk '{print $2}' SHA256SUMS | sed 's/^\*//' | sort)"
           [ "$expected" = "$listed" ] || { echo "SHA256SUMS 与待上传文件不一致"; printf '待上传:\n%s\n清单:\n%s\n' "$expected" "$listed"; exit 1; }
 
-      # 重跑安全：Release 里已经是同一份清单、同一组文件，就不重复上传（几个 GB）
-      - name: Compare with what the Release already holds
+      # 重跑安全：Release 里已经是同一份 SHA256SUMS、同一组文件、每个文件都上传完成且大小一致，就不重复上传（几个 GB）。
+      # 只比名字不够：上一次上传中途中断会留下同名但不完整的资产。
+      - name: Compare with what the Release already holds (names, state and sizes)
         id: existing
         run: |
           cd assets
           if gh release download "$TAG" -p SHA256SUMS -O existing.sums --clobber --repo "$GITHUB_REPOSITORY" 2>/dev/null && cmp -s existing.sums SHA256SUMS; then
-            remote="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)"
-            expected="$( { awk '{print $2}' SHA256SUMS | sed 's/^\*//'; echo SHA256SUMS; } | sort)"
-            if [ "$remote" = "$expected" ]; then
+            remote="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[] | select(.state == "uploaded") | "\(.name) \(.size)"' | sort)"
+            local_list="$( { awk '{print $2}' SHA256SUMS | sed 's/^\*//' | while read -r name; do echo "$name $(wc -c < "$name" | tr -d ' ')"; done; echo "SHA256SUMS $(wc -c < SHA256SUMS | tr -d ' ')"; } | sort)"
+            if [ "$remote" = "$local_list" ]; then
               echo "skip=true" >> "$GITHUB_OUTPUT"
-              echo "Release 已经有同一份 SHA256SUMS 和同一组资产，跳过上传"
+              echo "Release 已经有同一份 SHA256SUMS 和同一组完整的资产（名字、状态、大小都一致），跳过上传"
+            else
+              echo "Release 里的资产与本次产物不完全一致（名字 / 大小 / 未上传完成），重新上传"
             fi
           fi
           rm -f existing.sums

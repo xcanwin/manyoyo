@@ -29,13 +29,17 @@ on:
     paths:
       - '.release-dryrun-trigger'
 
+# 同一时间只有一个真实发布，也不取消进行中的。排队中的运行同组最多保留一个，所以 --remote 触发前会先拒绝“已有发布在进行”；
+# 非 main 的 dryRun 用自己的组，不会把排队中的真实发布挤掉
 concurrency:
-  group: release
+  group: ${{ github.ref == 'refs/heads/main' && 'release' || format('release-dry-{0}', github.ref_name) }}
   cancel-in-progress: false
 
 permissions:
   contents: read
 
+# 条件表达式一律写成“上游 job 的结果必须是 success”：GitHub 会把“上游被跳过”沿依赖链传下去，
+# 光靠默认的 success() 会让整条链在镜像 job 被跳过时全部跳过（第二次试跑实测）；!failure() 又会在 test 失败时放行，所以显式判断 result。
 jobs:
   prepare:
     runs-on: ubuntu-24.04
@@ -79,6 +83,8 @@ jobs:
 
           version="$(node -p "require('./package.json').version")"
           imageVersion="$(node -p "require('./package.json').imageVersion")"
+          printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "版本号格式错误: $version"; exit 1; }
+          printf '%s' "$imageVersion" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[A-Za-z0-9][A-Za-z0-9_.-]*$' || { echo "imageVersion 格式错误: $imageVersion"; exit 1; }
           tag="v${version}"
           latest="$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
           if [ -n "$latest" ]; then
@@ -104,6 +110,9 @@ jobs:
             404) need=true ;;
             *) echo "无法确认镜像 ${imageVersion} 是否存在（HTTP ${code}）"; exit 1 ;;
           esac
+          if [ "$need" = true ] && [ "$dry" = true ]; then
+            echo "::warning::dryRun 不推送镜像，而安装包构建要拉 ghcr.io 上的 ${imageVersion}：packages 会失败，这次 dryRun 覆盖不到公开前验证"
+          fi
           if [ "$need" = false ] && [ -n "$latest" ] && git diff --name-only "${latest}..HEAD" -- docker | grep -q .; then
             old="$(git show "${latest}:package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).imageVersion")"
             if [ "$old" = "$imageVersion" ]; then
@@ -152,7 +161,7 @@ jobs:
 
   packages:
     needs: [prepare, image]
-    if: ${{ !failure() && !cancelled() }}
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && (needs.image.result == 'success' || needs.image.result == 'skipped') }}
     permissions:
       contents: read
       packages: read
@@ -162,6 +171,7 @@ jobs:
 
   draft:
     needs: [prepare, test, packages]
+    if: ${{ !cancelled() && needs.test.result == 'success' && needs.packages.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -202,6 +212,7 @@ jobs:
 
   attach:
     needs: [prepare, draft]
+    if: ${{ !cancelled() && needs.draft.result == 'success' }}
     permissions:
       contents: write
       actions: read
@@ -214,6 +225,7 @@ jobs:
   # 放在这里与 草稿 / 挂资产 / 公开前验证 并行，只挡住 publish。用临时 HOME 安装刚构建的包（跳过虚拟机），查版本、卸载。
   smoke-macos:
     needs: [prepare, packages]
+    if: ${{ !cancelled() && needs.packages.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
@@ -252,6 +264,7 @@ jobs:
   # 再起 serve 走一遍网页冒烟。失败就不公开。
   prepublish-verify:
     needs: [prepare, attach]
+    if: ${{ !cancelled() && needs.attach.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
@@ -324,7 +337,7 @@ jobs:
 
   publish:
     needs: [prepare, prepublish-verify, smoke-macos]
-    if: needs.prepare.outputs.dryRun != 'true'
+    if: ${{ !cancelled() && needs.prepare.outputs.dryRun != 'true' && needs.prepublish-verify.result == 'success' && needs.smoke-macos.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -348,7 +361,7 @@ jobs:
   # npm：只能 workflow_dispatch 触发 npm-publish.yml（原因见文件开头）。skipTests：流水线已在同一提交上测试过，npm-publish 自己校验 tag 指向的提交与之一致
   npm:
     needs: [prepare, publish]
-    if: needs.prepare.outputs.dryRun != 'true'
+    if: ${{ !cancelled() && needs.prepare.outputs.dryRun != 'true' && needs.publish.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -361,14 +374,20 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
       SHA: ${{ needs.prepare.outputs.sha }}
     steps:
-      - name: Dispatch npm-publish.yml and wait for it
+      # 重跑安全：npm 上已经有这个版本就不再派发（再发一次会 403 并让这一阶段永远失败），直接去核对可见性
+      - name: Dispatch npm-publish.yml and wait for it (skipped when npm already has this version)
         run: |
           set -eu
+          if [ "$(npm view "@xcanwin/manyoyo@${VERSION}" version --registry https://registry.npmjs.org/ 2>/dev/null || true)" = "$VERSION" ]; then
+            echo "npm 上已经有 ${VERSION}，不再派发 npm-publish.yml"
+            exit 0
+          fi
           since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           gh workflow run npm-publish.yml --ref main -f "tag=$TAG" -f skipTests=true -f "sha=$SHA"
+          # npm-publish.yml 的 run-name 带 tag：只认本次派发的那一个，不会跟到别人手动触发的运行
           run_id=""
           for _ in $(seq 1 40); do
-            run_id="$(gh run list --workflow npm-publish.yml --event workflow_dispatch -L 10 --json databaseId,createdAt --jq "[.[] | select(.createdAt >= \"$since\")] | sort_by(.createdAt) | .[0].databaseId // empty")"
+            run_id="$(gh run list --workflow npm-publish.yml --event workflow_dispatch -b main -L 10 --json databaseId,createdAt,displayTitle --jq "[.[] | select(.createdAt >= \"$since\" and (.displayTitle | endswith(\"$TAG\")))] | sort_by(.createdAt) | .[0].databaseId // empty")"
             [ -n "$run_id" ] && break
             sleep 3
           done
@@ -394,7 +413,7 @@ jobs:
 
   postpublish-verify:
     needs: [prepare, publish]
-    if: needs.prepare.outputs.dryRun != 'true'
+    if: ${{ !cancelled() && needs.prepare.outputs.dryRun != 'true' && needs.publish.result == 'success' }}
     permissions:
       contents: read
     uses: ./.github/workflows/release-verify.yml
@@ -424,14 +443,15 @@ jobs:
       contents: read
     env:
       GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
       - name: Collect per-stage results, timings and the tails of failed logs
         run: |
-          node scripts/release/pipeline-report.js --run "${{ github.run_id }}" --repo "${{ github.repository }}" \
-            --version "${{ needs.prepare.outputs.version }}" --sha "${{ github.sha }}" --out "$RUNNER_TEMP/release-report" | tee -a "$GITHUB_STEP_SUMMARY"
+          node scripts/release/pipeline-report.js --run "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --version "$VERSION" --sha "$GITHUB_SHA" --out "$RUNNER_TEMP/release-report" | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: release-report

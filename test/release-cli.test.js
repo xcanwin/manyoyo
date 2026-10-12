@@ -193,6 +193,16 @@ describe('--remote / --remote-status', () => {
         expect(download).toHaveBeenCalled();
     });
 
+    test('--remote --watch gives up with a clear message when the run cannot be read for a while (gh logged out, network down) instead of looping forever', async () => {
+        const start = jest.fn(async () => runInfo);
+        const fetch = jest.fn(async () => null);
+        const output = io();
+        const code = await runRemote(fakeEngine({}), { remote: true, watch: true }, output, { start, fetch, sleep: async () => {} });
+        expect(code).toBe(EXIT.FAILED);
+        expect(fetch.mock.calls.length).toBeGreaterThanOrEqual(5);
+        expect(output.lines.err.join('\n')).toContain('读不到');
+    });
+
     test('--remote-status prints the stages; a finished run downloads the report and names the failed stage logs; success exits 0, failure exits 1', async () => {
         const failed = { runId: 9, status: 'completed', conclusion: 'failure', url: 'u', stages: [{ id: 'packages', result: 'failure', durationSec: 60 }] };
         const download = jest.fn(async () => ({ logDir: '/tmp/r/remote-9', failedLogs: ['/tmp/r/remote-9/failed-packages.log'] }));

@@ -33,7 +33,10 @@ function createJobLog(root, { keep = KEEP_RUNS } = {}) {
     };
 
     const begin = event => {
-        const name = `${stamp(event.at)}-${event.stages.join('+').slice(0, 40)}`;
+        // 末尾加毫秒：同一秒内启动的两次任务不会共用目录
+        const stem = `${stamp(event.at)}-${event.stages.join('+').slice(0, 40)}-${pad(event.at % 1000, 3)}`;
+        let name = stem;
+        for (let n = 2; fs.existsSync(path.join(root, name)); n += 1) name = `${stem}-${n}`;
         fs.mkdirSync(path.join(root, name), { recursive: true });
         run = {
             name,
