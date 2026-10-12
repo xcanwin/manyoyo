@@ -77,6 +77,15 @@ describe('pipeline report', () => {
         expect(tailLog('', 200)).toBe('');
     });
 
+    test('tailLog ends at the failing step (##[error]) instead of the post-job cleanup noise that follows it', () => {
+        const lines = [...Array.from({ length: 30 }, (_, i) => `2026-10-13T10:00:00.0000000Z step line ${i}`), '2026-10-13T10:01:00.0000000Z curl: (22) The requested URL returned error: 403', '2026-10-13T10:01:00.0000000Z ##[error]Process completed with exit code 22.', ...Array.from({ length: 80 }, (_, i) => `2026-10-13T10:01:01.0000000Z Post job cleanup ${i}`)];
+        const tail = tailLog(lines.join('\n'), 200).split('\n');
+        expect(tail[tail.length - 1]).toContain('##[error]Process completed with exit code 22.');
+        expect(tail.some(line => line.includes('Post job cleanup'))).toBe(false);
+        // 没有 ##[error] 时仍是整份日志的最后 N 行
+        expect(tailLog(['a', 'b', 'c'].join('\n'), 2)).toBe('b\nc');
+    });
+
     test('markdown table lists every stage with a link; writeReport writes summary json and one log per failed stage', () => {
         const report = buildReport({ version: '8.7.0', sha: 'abc', runUrl: 'https://r', jobs: [job('prepare'), job('packages / build', { id: 77, conclusion: 'failure' })] });
         const md = renderMarkdown(report);

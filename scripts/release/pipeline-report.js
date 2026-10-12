@@ -15,11 +15,14 @@ const ANSI = /\u001b\[[0-9;?]*[A-Za-z]/g;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s?/;
 const SELF = 'summary';
 
-/** 日志文本 → 最后 N 行（去掉 Actions 的时间戳前缀和终端颜色码） */
+/** 日志文本 → 失败位置（最后一个 ##[error]）之前的 N 行，没有 ##[error] 就是最后 N 行（去掉 Actions 的时间戳前缀和终端颜色码） */
 function tailLog(text, lines = LOG_TAIL_LINES) {
     const cleaned = String(text || '').replace(ANSI, '').split('\n').map(line => line.replace(TIMESTAMP, ''));
     while (cleaned.length > 0 && cleaned[cleaned.length - 1] === '') cleaned.pop();
-    return cleaned.slice(-lines).join('\n');
+    // 整个 job 日志的末尾几十行几乎都是收尾清理；失败的原因在最后一个 ##[error] 附近，所以截到那里
+    const lastError = cleaned.map(line => line.startsWith('##[error]')).lastIndexOf(true);
+    const end = lastError >= 0 ? lastError + 1 : cleaned.length;
+    return cleaned.slice(Math.max(0, end - lines), end).join('\n');
 }
 
 function stageResult(conclusions) {
