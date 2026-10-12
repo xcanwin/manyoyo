@@ -14,6 +14,7 @@ const { buildContainerRunArgs } = require('../../../lib/container-run');
 const { createNetworkManager, NETWORK_NAME } = require('../../../lib/container-network');
 const { normalizePolicy, isUnrestricted } = require('../../../lib/network-policy');
 const { sidecarName } = require('../../../lib/egress-sidecar');
+const { makeSidecarSafeHome } = require('./sidecar-home');
 const containerState = require('../../../lib/container-state');
 const { buildExecArgs } = require('../../../lib/container-exec');
 const { googleChromeCandidates } = require('../../../lib/plugin/playwright');
@@ -76,7 +77,7 @@ function cli(home, args, options = {}) {
 }
 
 function makeHome() {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-pw-it-'));
+    const home = makeSidecarSafeHome('manyoyo-pw-it-');
     fs.mkdirSync(path.join(home, '.manyoyo'), { recursive: true });
     return home;
 }

@@ -2,6 +2,7 @@
 
 // 真实容器：统一规则表（出站 / 入站）与运行时注入的宿主机代理。运行时不可用或镜像缺失时自动跳过。
 const { spawn, spawnSync } = require('child_process');
+const { makeSidecarSafeHome } = require('./helpers/sidecar-home');
 const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
@@ -75,7 +76,7 @@ maybe('统一网络规则（真实容器）', () => {
     const online = () => spawnSync('curl', ['--noproxy', '*', '-s', '-m', '8', '-o', '/dev/null', '-w', '%{http_code}', 'https://example.com/'], { encoding: 'utf-8' }).stdout.trim() === '200';
 
     beforeAll(async () => {
-        home = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-rules-home-'));
+        home = makeSidecarSafeHome('cm-rules-home-');
         work = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-rules-work-'));
         hostServer = http.createServer((req, res) => res.end('host-ok'));
         await new Promise(resolve => hostServer.listen(0, '0.0.0.0', resolve));

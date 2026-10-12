@@ -2,6 +2,7 @@
 
 // 真实容器：默认收紧、热更新宿主机端口、容器间、失败即关闭、越界被拒。运行时不可用或镜像缺失时自动跳过。
 const { spawn, spawnSync } = require('child_process');
+const { makeSidecarSafeHome } = require('./helpers/sidecar-home');
 const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
@@ -64,7 +65,7 @@ maybe('container-network（真实容器）', () => {
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
     beforeAll(async () => {
-        home = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-net-home-'));
+        home = makeSidecarSafeHome('cm-net-home-');
         work = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-net-work-'));
         server = http.createServer((req, res) => res.end('host-ok'));
         await new Promise(resolve => server.listen(0, '0.0.0.0', resolve));
@@ -391,7 +392,7 @@ EOF`)).stdout;
 
     test('别的 manyoyo 实例（另一个 HOME）的容器：不碰它的网络', async () => {
         const { name } = await create();
-        const otherHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-net-other-'));
+        const otherHome = makeSidecarSafeHome('cm-net-other-');
         try {
             const foreign = createNetworkManager({ command: runtime.command, env: runtime.env, homeDir: otherHome, imageRef: () => IMAGE });
             expect(await foreign.apply(name)).toEqual(expect.objectContaining({ status: 'foreign' }));
