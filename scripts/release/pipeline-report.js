@@ -15,11 +15,14 @@ const ANSI = /\u001b\[[0-9;?]*[A-Za-z]/g;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s?/;
 const SELF = 'summary';
 
-/** 日志文本 → 最后 N 行（去掉 Actions 的时间戳前缀和终端颜色码） */
+/** 日志文本 → 失败位置（最后一个 ##[error]）之前的 N 行，没有 ##[error] 就是最后 N 行（去掉 Actions 的时间戳前缀和终端颜色码） */
 function tailLog(text, lines = LOG_TAIL_LINES) {
     const cleaned = String(text || '').replace(ANSI, '').split('\n').map(line => line.replace(TIMESTAMP, ''));
     while (cleaned.length > 0 && cleaned[cleaned.length - 1] === '') cleaned.pop();
-    return cleaned.slice(-lines).join('\n');
+    // 整个 job 日志的末尾几十行几乎都是收尾清理；失败的原因在最后一个 ##[error] 附近，所以截到那里
+    const lastError = cleaned.map(line => line.startsWith('##[error]')).lastIndexOf(true);
+    const end = lastError >= 0 ? lastError + 1 : cleaned.length;
+    return cleaned.slice(Math.max(0, end - lines), end).join('\n');
 }
 
 function stageResult(conclusions) {
@@ -34,7 +37,7 @@ function stageResult(conclusions) {
  * @param {{jobs: object[], version: string, sha: string, runUrl: string}} input  jobs 是 Actions API 的 jobs 数组
  * 复用 workflow 的 job 名形如 “packages / build-macos (…)”，按 “ / ” 前面的调用方 job id 归成一个阶段
  */
-function buildReport({ jobs, version, sha, runUrl }) {
+function buildReport({ jobs, version, sha, runUrl, now = Date.now() }) {
     const groups = new Map();
     for (const item of jobs) {
         // 复用 workflow 的 job 名是 “调用方 id / job 名”；顶层 matrix job 的名字带 “(参数…)” 后缀，也不属于阶段 id
@@ -47,9 +50,11 @@ function buildReport({ jobs, version, sha, runUrl }) {
     const failedJobs = [];
     for (const [id, items] of groups) {
         const started = items.map(item => item.started_at).filter(Boolean).sort();
-        const finished = items.map(item => item.completed_at).filter(Boolean).sort();
+        // 还在跑的 job，接口给的完成时间是 0001-01-01：当作没有，耗时算到现在
+        const finished = items.map(item => item.completed_at).filter(value => value && Date.parse(value) > Date.parse('2000-01-01')).sort();
         const startedAt = started[0] || null;
-        const completedAt = finished[finished.length - 1] || null;
+        const stillRunning = items.some(item => item.started_at && !(item.completed_at && Date.parse(item.completed_at) > Date.parse('2000-01-01')));
+        const completedAt = stillRunning ? new Date(now).toISOString() : (finished[finished.length - 1] || null);
         const result = stageResult(items.map(item => item.conclusion));
         // 跳过的 job 没有真正运行，API 给的时间戳甚至会出现结束早于开始
         const ran = result !== 'skipped';

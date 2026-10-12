@@ -58,6 +58,12 @@ describe('pipeline report', () => {
         expect(skipped).toMatchObject({ result: 'skipped', startedAt: null, durationSec: 0 });
     });
 
+    test('a running stage shows how long it has been running (the API gives a zero completion date for jobs still in progress)', () => {
+        const now = Date.parse('2026-10-13T10:05:00Z');
+        const report = buildReport({ version: 'v', sha: 's', runUrl: 'u', now, jobs: [job('a', { status: 'in_progress', conclusion: '', started_at: '2026-10-13T10:00:00Z', completed_at: '0001-01-01T00:00:00Z' })] });
+        expect(report.stages[0]).toMatchObject({ result: 'running', durationSec: 300 });
+    });
+
     test('an all-skipped / cancelled run is not reported as success', () => {
         expect(buildReport({ version: 'v', sha: 's', runUrl: 'u', jobs: [job('a', { conclusion: 'cancelled' })] }).result).toBe('cancelled');
     });
@@ -69,6 +75,15 @@ describe('pipeline report', () => {
         expect(lines[0]).toBe('line 100');
         expect(lines[199]).toBe('line 299');
         expect(tailLog('', 200)).toBe('');
+    });
+
+    test('tailLog ends at the failing step (##[error]) instead of the post-job cleanup noise that follows it', () => {
+        const lines = [...Array.from({ length: 30 }, (_, i) => `2026-10-13T10:00:00.0000000Z step line ${i}`), '2026-10-13T10:01:00.0000000Z curl: (22) The requested URL returned error: 403', '2026-10-13T10:01:00.0000000Z ##[error]Process completed with exit code 22.', ...Array.from({ length: 80 }, (_, i) => `2026-10-13T10:01:01.0000000Z Post job cleanup ${i}`)];
+        const tail = tailLog(lines.join('\n'), 200).split('\n');
+        expect(tail[tail.length - 1]).toContain('##[error]Process completed with exit code 22.');
+        expect(tail.some(line => line.includes('Post job cleanup'))).toBe(false);
+        // 没有 ##[error] 时仍是整份日志的最后 N 行
+        expect(tailLog(['a', 'b', 'c'].join('\n'), 2)).toBe('b\nc');
     });
 
     test('markdown table lists every stage with a link; writeReport writes summary json and one log per failed stage', () => {
