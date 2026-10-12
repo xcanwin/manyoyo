@@ -13,6 +13,8 @@ const { STAGES, computeStages } = require('./stages');
 const { ReleaseError } = require('./actions');
 
 const EVENT_BUFFER = 3000;
+// eslint-disable-next-line no-control-regex
+const ANSI_ESCAPE = /\u001b\[[0-9;?]*[A-Za-z]/g;
 
 class JobRunner extends EventEmitter {
     /**
@@ -135,7 +137,8 @@ class JobRunner extends EventEmitter {
     async perform(job, id, facts) {
         const def = STAGES.find(stage => stage.id === id);
         this.emitEvent({ type: 'stage', stage: id, state: 'running' });
-        const ctx = this.deps.makeCtx(line => this.emitEvent({ type: 'log', stage: id, line }), job.controller.signal);
+        // 子进程输出带终端颜色码，网页和日志文件里都会显示成乱码，统一去掉
+        const ctx = this.deps.makeCtx(line => this.emitEvent({ type: 'log', stage: id, line: String(line).replace(ANSI_ESCAPE, '') }), job.controller.signal);
         await this.deps.actions[id](ctx, job.params[id] || {}, facts);
         if (job.controller.signal.aborted) throw new ReleaseError('CANCELLED', '已取消');
         // 外部状态（GitHub 的运行列表、npm 的 CDN）有传播延迟：刚做完立刻读可能还是旧的，多读几次再下结论

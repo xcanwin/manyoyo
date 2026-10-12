@@ -34,6 +34,28 @@ describe('collectFacts', () => {
     expect(facts.git.dirty.map(item => item.path)).toEqual(['.gitignore', 'a.js']);
   });
 
+  test('代码指纹只看文件内容：改动提交后（内容不变）指纹不变，预检不会因为“提交”这一步失效', async () => {
+    // 提交前：package.json 有未提交改动，工作区内容对应的 tree 是 T1
+    const before = await collectFacts({ repoRoot: root, read: reader({
+      'git rev-parse HEAD^{tree}': { stdout: 'T0\n' },
+      'git rev-parse HEAD': { stdout: 'H0\n' },
+      'git status --porcelain': { stdout: ' M package.json\n' },
+      'git diff HEAD': { stdout: 'diff --git a/package.json b/package.json\n' },
+      'git stash create': { stdout: 'S1\n' },
+      'git rev-parse S1^{tree}': { stdout: 'T1\n' }
+    }) });
+    // 提交后：工作区干净，新的 HEAD 的 tree 就是 T1
+    const after = await collectFacts({ repoRoot: root, read: reader({
+      'git rev-parse HEAD^{tree}': { stdout: 'T1\n' },
+      'git rev-parse HEAD': { stdout: 'H1\n' },
+      'git stash create': { stdout: '' }
+    }) });
+    expect(after.git.fingerprint).toBe(before.git.fingerprint);
+    // 内容真的变了，指纹也要变
+    const changed = await collectFacts({ repoRoot: root, read: reader({ 'git rev-parse HEAD^{tree}': { stdout: 'T2\n' }, 'git stash create': { stdout: '' } }) });
+    expect(changed.git.fingerprint).not.toBe(after.git.fingerprint);
+  });
+
   test('已提交未推送的文件：领先 origin 时按 name-status 列出，没领先时为空', async () => {
     const facts = await collectFacts({ repoRoot: root, read: reader({
       'git branch --show-current': { stdout: 'main\n' },

@@ -112,10 +112,11 @@ async function imageExists(ctx, imageVersion) {
 
 // 当前代码树的指纹（HEAD + 未提交改动 + 未跟踪文件的内容），预检结果只对同一份代码有效
 function treeFingerprint(read, repoRoot) {
-    const headSha = out(read('git', ['rev-parse', 'HEAD']));
-    const status = String(read('git', ['status', '--porcelain']).stdout || '');
-    const diffText = String(read('git', ['diff', 'HEAD']).stdout || '');
-    const hash = crypto.createHash('sha1').update(`${headSha}\n${status}\n${diffText}`);
+    // 只看内容、不看提交号：已跟踪文件取“工作区内容对应的 tree”（`git stash create` 只生成对象、不改任何引用；
+    // 没有改动时输出为空，就用 HEAD 的 tree）。这样把改动提交掉（内容不变）不会让预检失效
+    const stashSha = out(read('git', ['stash', 'create']));
+    const workTree = out(read('git', ['rev-parse', `${stashSha || 'HEAD'}^{tree}`]));
+    const hash = crypto.createHash('sha1').update(`${workTree}\n`);
     const untracked = String(read('git', ['ls-files', '-o', '--exclude-standard']).stdout || '').split('\n').filter(Boolean).sort();
     for (const file of untracked) {
         hash.update(`\n${file}\n`);

@@ -47,7 +47,7 @@ describe('JobRunner', () => {
         fs.writeFileSync(logFile, 'old job\n');
         const { runner } = makeWorld();
         runner.deps.logFile = logFile;
-        runner.deps.actions.merge = jest.fn(async ctx => { ctx.log('git push origin main'); throw new Error('push 被拒绝'); });
+        runner.deps.actions.merge = jest.fn(async ctx => { ctx.log('git push origin main'); ctx.log('\u001b[32m✓ built\u001b[39m'); throw new Error('push 被拒绝'); });
         const done = finished(runner);
         runner.start({ stages: ['merge'], mode: 'single', confirmed: true });
         expect((await done).status).toBe('failed');
@@ -55,6 +55,9 @@ describe('JobRunner', () => {
         expect(text).not.toContain('old job');
         expect(text).toContain('[merge] git push origin main');
         expect(text).toContain('push 被拒绝');
+        // 子进程输出里的终端颜色码不进日志（网页上会显示成乱码）
+        expect(text).toContain('[merge] ✓ built');
+        expect(text).not.toContain('\u001b');
         const last = readLastJobLog(logFile);
         expect(last.lines.join('\n')).toContain('[merge] git push origin main');
         expect(readLastJobLog(path.join(dir, 'missing.log'))).toBeNull();
