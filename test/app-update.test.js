@@ -35,23 +35,31 @@ function buildAppTarball(version, { arch = ARCH, kind = 'app', skip = [], osName
     return fs.readFileSync(tgz);
 }
 
-// 本地替身 Release：同一个 HTTP 服务既当 API 又当下载站；每个请求都记下来，便于断言“没发请求 / 请求头里没有本机信息”
+// 本地替身 GitHub 网页（不是 API）：releases/latest 302 跳到 releases/tag/v<版本>，releases/download/v<版本>/<文件> 是下载站。
+// 每个请求都记下来，便于断言“没发请求 / 没调 API / 请求头里没有本机信息”
 function startServer(handlerOverrides = {}) {
-    state = { hits: [], files: {}, release: null, rateLimit: false, status: null };
+    state = { hits: [], files: {}, latestTag: null, rateLimit: false, status: null };
     server = http.createServer((req, res) => {
-        state.hits.push({ url: req.url, headers: req.headers });
+        state.hits.push({ method: req.method, url: req.url, headers: req.headers });
         if (handlerOverrides.all) return handlerOverrides.all(req, res);
-        if (req.url === '/repos/xcanwin/manyoyo/releases/latest') {
-            if (state.rateLimit) {
-                res.writeHead(403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) + 600) });
-                return res.end('{"message":"API rate limit exceeded"}');
-            }
-            if (state.status) { res.writeHead(state.status); return res.end('{}'); }
-            res.writeHead(200, { 'content-type': 'application/json' });
-            return res.end(JSON.stringify(state.release));
+        if (req.url === '/xcanwin/manyoyo/releases/latest') {
+            if (state.rateLimit) { res.writeHead(429); return res.end('Too Many Requests'); }
+            if (state.status) { res.writeHead(state.status); return res.end(''); }
+            // 没有任何 Release 时，GitHub 把 latest 跳到 Release 列表页
+            const location = state.latestTag ? `${base}/xcanwin/manyoyo/releases/tag/${state.latestTag}` : `${base}/xcanwin/manyoyo/releases`;
+            res.writeHead(302, { location });
+            return res.end();
         }
-        const name = decodeURIComponent(req.url.replace(/^\/dl\//, ''));
-        if (state.files[name] !== undefined) { res.writeHead(200); return res.end(state.files[name]); }
+        // 已安装的旧客户端（≤8.6.3）仍然走 API：兼容性用例要用到
+        if (req.url === '/repos/xcanwin/manyoyo/releases/latest') {
+            if (!state.latestTag) { res.writeHead(404); return res.end('{}'); }
+            const assets = Object.keys(state.files).map(name => ({ name, browser_download_url: `${base}/xcanwin/manyoyo/releases/download/${state.latestTag}/${encodeURIComponent(name)}` }));
+            res.writeHead(200, { 'content-type': 'application/json' });
+            return res.end(JSON.stringify({ tag_name: state.latestTag, assets }));
+        }
+        const m = /^\/xcanwin\/manyoyo\/releases\/download\/[^/]+\/(.+)$/.exec(req.url);
+        const name = m ? decodeURIComponent(m[1]) : '';
+        if (name && state.files[name] !== undefined) { res.writeHead(200); return res.end(state.files[name]); }
         res.writeHead(404);
         return res.end();
     });
@@ -67,9 +75,8 @@ function publish(version, { tamperSums = false, tarball, extraAssets = {}, arch 
     state.files[names.app] = data;
     // 真实 Release 只有一个 SHA256SUMS，列出全部安装包与升级包
     state.files[names.sums] = `${'a'.repeat(64)}  manyoyo-${version}-macos-${arch}.run\n${tamperSums ? 'f'.repeat(64) : sha(data)}  ${names.app}\n`;
-    const assets = [names.app, names.sums, ...Object.keys(extraAssets)].map(name => ({ name, browser_download_url: `${base}/dl/${encodeURIComponent(name)}` }));
     Object.assign(state.files, extraAssets);
-    state.release = { tag_name: `v${version}`, assets };
+    state.latestTag = `v${version}`;
 }
 
 function seedInstalled(version) {
@@ -122,52 +129,50 @@ describe('versions', () => {
     });
 });
 
-describe('fetchLatestRelease asset URL allowlist', () => {
-    test('with the default API base, assets outside this repo\'s release path are ignored', async () => {
-        const body = { tag_name: 'v9.9.9', assets: [
-            { name: 'a.tar.gz', browser_download_url: 'https://github.com/xcanwin/manyoyo/releases/download/v9.9.9/a.tar.gz' },
-            { name: 'evil.tar.gz', browser_download_url: 'https://evil.example.com/evil.tar.gz' }
-        ] };
-        const fetchImpl = async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => body });
-        const release = await fetchLatestRelease({ fetchImpl });
-        expect(Object.keys(release.assets)).toEqual(['a.tar.gz']);
-    });
-});
-
 describe('fetchLatestRelease', () => {
-    test('reads the tag and assets with a fixed header set that carries no local information', async () => {
+    test('跟随 releases/latest 的跳转取版本，不调 GitHub API（匿名 API 按 IP 限流，共享出口的用户和 CI 经常撞上）；请求头不带本机信息', async () => {
         await startServer();
         publish('9.0.0');
-        const release = await fetchLatestRelease({ apiBase: base });
+        const release = await fetchLatestRelease({ webBase: base });
         expect(release.version).toBe('9.0.0');
-        expect(Object.keys(release.assets)).toContain(`manyoyo-9.0.0-macos-${ARCH}-app.tar.gz`);
+        expect(state.hits.map(hit => hit.url)).toEqual(['/xcanwin/manyoyo/releases/latest']);
+        expect(state.hits.some(hit => hit.url.startsWith('/repos/'))).toBe(false);
         const headers = state.hits[0].headers;
         expect(headers['user-agent']).toBe('manyoyo-update');
         expect(headers.authorization).toBeUndefined();
         expect(headers.cookie).toBeUndefined();
-        expect(Object.keys(headers).sort()).toEqual(['accept', 'accept-encoding', 'accept-language', 'connection', 'host', 'sec-fetch-mode', 'user-agent'].filter(k => k in headers).sort());
     });
 
-    test('rate limiting, missing releases, bad tags and server errors give friendly, coded errors', async () => {
+    test('下载地址按固定命名拼在本仓库的 Release 下载路径下，不会指向别处', async () => {
+        await startServer();
+        publish('9.0.0');
+        const release = await fetchLatestRelease({ webBase: base });
+        const names = appUpdate.releaseAssetNames('9.0.0', ARCH, 'macos');
+        expect(release.assets[names.app]).toBe(`${base}/xcanwin/manyoyo/releases/download/v9.0.0/${names.app}`);
+        expect(release.assets[names.sums]).toBe(`${base}/xcanwin/manyoyo/releases/download/v9.0.0/SHA256SUMS`);
+        expect(Object.values(release.assets).every(url => url.startsWith(`${base}/xcanwin/manyoyo/releases/download/v9.0.0/`))).toBe(true);
+    });
+
+    test('频率限制、没有 Release、版本号无法识别、服务端错误都给出带编码的友好提示', async () => {
         await startServer();
         publish('9.0.0');
         state.rateLimit = true;
-        await expect(fetchLatestRelease({ apiBase: base })).rejects.toMatchObject({ code: 'RATE_LIMIT', message: expect.stringContaining('频率限制') });
+        await expect(fetchLatestRelease({ webBase: base })).rejects.toMatchObject({ code: 'RATE_LIMIT', message: expect.stringContaining('频率') });
         state.rateLimit = false;
-        state.status = 404;
-        await expect(fetchLatestRelease({ apiBase: base })).rejects.toMatchObject({ code: 'NO_RELEASE' });
+        state.latestTag = null;
+        await expect(fetchLatestRelease({ webBase: base })).rejects.toMatchObject({ code: 'NO_RELEASE' });
         state.status = 500;
-        await expect(fetchLatestRelease({ apiBase: base })).rejects.toMatchObject({ code: 'HTTP', message: expect.stringContaining('500') });
+        await expect(fetchLatestRelease({ webBase: base })).rejects.toMatchObject({ code: 'HTTP', message: expect.stringContaining('500') });
         state.status = null;
-        state.release = { tag_name: 'nightly', assets: [] };
-        await expect(fetchLatestRelease({ apiBase: base })).rejects.toMatchObject({ code: 'HTTP', message: expect.stringContaining('无法识别') });
+        state.latestTag = 'nightly';
+        await expect(fetchLatestRelease({ webBase: base })).rejects.toMatchObject({ code: 'HTTP', message: expect.stringContaining('无法识别') });
     });
 
     test('a network failure explains what to check', async () => {
         await startServer();
         const dead = base;
         await new Promise(resolve => server.close(resolve));
-        await expect(fetchLatestRelease({ apiBase: dead })).rejects.toMatchObject({ code: 'NETWORK', message: expect.stringContaining('连不上') });
+        await expect(fetchLatestRelease({ webBase: dead })).rejects.toMatchObject({ code: 'NETWORK', message: expect.stringContaining('连不上') });
     });
 });
 
@@ -176,7 +181,7 @@ describe('installAppUpdate / rollbackApp', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('9.0.0');
-        const release = await fetchLatestRelease({ apiBase: base });
+        const release = await fetchLatestRelease({ webBase: base });
         const result = await installAppUpdate({ appRoot, release, fetchImpl: fetch, tmpRoot: root });
 
         expect(result).toEqual(expect.objectContaining({ version: '9.0.0', previous: '1.0.0' }));
@@ -186,7 +191,7 @@ describe('installAppUpdate / rollbackApp', () => {
         expect(fs.existsSync(path.join(appRoot, '1.0.0/manyoyo/bin/manyoyo.js'))).toBe(true); // 上一版本保留
         expect(JSON.parse(fs.readFileSync(path.join(appRoot, '.update.json'), 'utf8'))).toEqual(expect.objectContaining({ previous: '1.0.0', current: '9.0.0' }));
         // 只下载了 app 包与校验清单，没有碰完整包
-        const downloaded = state.hits.map(h => decodeURIComponent(h.url)).filter(u => u.startsWith('/dl/')).map(u => u.slice(4)).sort();
+        const downloaded = state.hits.filter(h => h.method === 'GET').map(h => decodeURIComponent(h.url)).filter(u => u.includes('/releases/download/')).map(u => u.replace(/^.*\/releases\/download\/[^/]+\//, '')).sort();
         expect(downloaded).toEqual(['SHA256SUMS', `manyoyo-9.0.0-macos-${ARCH}-app.tar.gz`].sort());
         expect(fs.readdirSync(appRoot).filter(n => n.startsWith('.tmp-') || n.startsWith('.current.'))).toEqual([]);
     });
@@ -202,10 +207,10 @@ describe('installAppUpdate / rollbackApp', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('9.0.0', { osName: 'linux' });
-        const release = await fetchLatestRelease({ apiBase: base });
+        const release = await fetchLatestRelease({ webBase: base });
         const result = await installAppUpdate({ appRoot, release, fetchImpl: fetch, tmpRoot: root, targetOs: 'linux' });
         expect(result.version).toBe('9.0.0');
-        const downloaded = state.hits.map(h => decodeURIComponent(h.url)).filter(u => u.startsWith('/dl/')).map(u => u.slice(4)).sort();
+        const downloaded = state.hits.filter(h => h.method === 'GET').map(h => decodeURIComponent(h.url)).filter(u => u.includes('/releases/download/')).map(u => u.replace(/^.*\/releases\/download\/[^/]+\//, '')).sort();
         expect(downloaded).toEqual(['SHA256SUMS', `manyoyo-9.0.0-linux-${ARCH}-app.tar.gz`].sort());
     });
 
@@ -213,7 +218,7 @@ describe('installAppUpdate / rollbackApp', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('9.0.0'); // 只有 macos 资产
-        const release = await fetchLatestRelease({ apiBase: base });
+        const release = await fetchLatestRelease({ webBase: base });
         await expect(installAppUpdate({ appRoot, release, fetchImpl: fetch, tmpRoot: root, targetOs: 'linux' }))
             .rejects.toMatchObject({ code: 'NO_ASSET', message: expect.stringContaining(`linux-${ARCH}`) });
 
@@ -222,8 +227,8 @@ describe('installAppUpdate / rollbackApp', () => {
         const wrong = buildAppTarball('9.0.1', { osName: 'macos' });
         state.files[names.app] = wrong;
         state.files[names.sums] = `${sha(wrong)}  ${names.app}\n`;
-        state.release = { tag_name: 'v9.0.1', assets: [names.app, names.sums].map(name => ({ name, browser_download_url: `${base}/dl/${encodeURIComponent(name)}` })) };
-        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root, targetOs: 'linux' }))
+        state.latestTag = 'v9.0.1';
+        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ webBase: base }), fetchImpl: fetch, tmpRoot: root, targetOs: 'linux' }))
             .rejects.toMatchObject({ code: 'BAD_PACKAGE' });
         expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe('1.0.0');
     });
@@ -234,7 +239,7 @@ describe('installAppUpdate / rollbackApp', () => {
         fs.mkdirSync(path.join(appRoot, '.tmp-8.0.0-1234'));
         await startServer();
         publish('9.0.0');
-        await installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root });
+        await installAppUpdate({ appRoot, release: await fetchLatestRelease({ webBase: base }), fetchImpl: fetch, tmpRoot: root });
         expect(fs.readdirSync(appRoot).filter(n => !n.startsWith('.update')).sort()).toEqual(['1.0.0', '9.0.0', 'current']);
     });
 
@@ -242,7 +247,7 @@ describe('installAppUpdate / rollbackApp', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('9.0.0', { tamperSums: true });
-        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root }))
+        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ webBase: base }), fetchImpl: fetch, tmpRoot: root }))
             .rejects.toMatchObject({ code: 'CHECKSUM', message: expect.stringContaining('当前版本不受影响') });
         expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe('1.0.0');
         expect(fs.existsSync(path.join(appRoot, '9.0.0'))).toBe(false);
@@ -254,7 +259,7 @@ describe('installAppUpdate / rollbackApp', () => {
         await startServer();
         publish('9.0.0');
         state.files.SHA256SUMS = `${'a'.repeat(64)}  something-else.tar.gz\n`;
-        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root }))
+        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ webBase: base }), fetchImpl: fetch, tmpRoot: root }))
             .rejects.toMatchObject({ code: 'CHECKSUM' });
         expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe('1.0.0');
     });
@@ -267,7 +272,7 @@ describe('installAppUpdate / rollbackApp', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('9.0.0', { tarball: buildAppTarball('9.0.0', options) });
-        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root }))
+        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ webBase: base }), fetchImpl: fetch, tmpRoot: root }))
             .rejects.toMatchObject({ code: 'BAD_PACKAGE', message: expect.stringMatching(message) });
         expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe('1.0.0');
         expect(fs.existsSync(path.join(appRoot, '9.0.0'))).toBe(false);
@@ -277,7 +282,7 @@ describe('installAppUpdate / rollbackApp', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('9.0.0', { tarball: buildAppTarball('8.5.0') });
-        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root }))
+        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ webBase: base }), fetchImpl: fetch, tmpRoot: root }))
             .rejects.toMatchObject({ code: 'BAD_PACKAGE' });
     });
 
@@ -285,7 +290,7 @@ describe('installAppUpdate / rollbackApp', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('9.0.0', { arch: ARCH === 'arm64' ? 'x64' : 'arm64' });
-        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root }))
+        await expect(installAppUpdate({ appRoot, release: await fetchLatestRelease({ webBase: base }), fetchImpl: fetch, tmpRoot: root }))
             .rejects.toMatchObject({ code: 'NO_ASSET', message: expect.stringContaining(ARCH) });
     });
 
@@ -293,7 +298,7 @@ describe('installAppUpdate / rollbackApp', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('9.0.0');
-        await installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root });
+        await installAppUpdate({ appRoot, release: await fetchLatestRelease({ webBase: base }), fetchImpl: fetch, tmpRoot: root });
 
         expect(rollbackApp({ appRoot })).toEqual({ from: '9.0.0', to: '1.0.0' });
         expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe('1.0.0');
@@ -313,9 +318,9 @@ describe('installAppUpdate / rollbackApp', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('2.0.0');
-        await installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root });
+        await installAppUpdate({ appRoot, release: await fetchLatestRelease({ webBase: base }), fetchImpl: fetch, tmpRoot: root });
         publish('3.0.0');
-        await installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root });
+        await installAppUpdate({ appRoot, release: await fetchLatestRelease({ webBase: base }), fetchImpl: fetch, tmpRoot: root });
         expect(fs.readdirSync(appRoot).filter(n => /^\d/.test(n)).sort()).toEqual(['2.0.0', '3.0.0']);
         expect(rollbackApp({ appRoot })).toEqual({ from: '3.0.0', to: '2.0.0' });
     });
@@ -353,7 +358,7 @@ describe('runtime change hint and outdated containers', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('9.0.0', { tarball: buildAppTarball('9.0.0', { runtime }) });
-        const result = await installAppUpdate({ appRoot, release: await fetchLatestRelease({ apiBase: base }), fetchImpl: fetch, tmpRoot: root });
+        const result = await installAppUpdate({ appRoot, release: await fetchLatestRelease({ webBase: base }), fetchImpl: fetch, tmpRoot: root });
         expect(result.manifest.runtime).toEqual(runtime);
         expect(describeRuntimeChange({ podmanVersion: '6.1.3', vmDiskSha256: '' }, result.manifest.runtime)).toContain('Podman 6.1.3 → 6.2.0');
     });
@@ -374,7 +379,7 @@ describe('update check (serve banner)', () => {
             currentVersion: '7.1.6',
             installMode: 'offline',
             enabled: true,
-            fetchLatest: () => fetchLatestRelease({ apiBase: base }),
+            fetchLatest: () => fetchLatestRelease({ webBase: base }),
             ...extra
         });
     }
@@ -535,10 +540,10 @@ describe('网络错误带地址与中文原因', () => {
         seedInstalled('1.0.0');
         await startServer();
         publish('9.0.0');
-        const release = await fetchLatestRelease({ apiBase: base });
-        const reset = (url, options) => (/\/dl\/manyoyo-/.test(url) ? Promise.reject(Object.assign(new Error('x'), { code: 'ECONNRESET' })) : fetch(url, options));
+        const release = await fetchLatestRelease({ webBase: base });
+        const reset = (url, options) => (/\/releases\/download\/[^/]+\/manyoyo-/.test(url) ? Promise.reject(Object.assign(new Error('x'), { code: 'ECONNRESET' })) : fetch(url, options));
         await expect(installAppUpdate({ appRoot, release, fetchImpl: reset, tmpRoot: root }))
-            .rejects.toMatchObject({ code: 'NETWORK', message: expect.stringContaining(`/dl/manyoyo-9.0.0-macos-${ARCH}-app.tar.gz`) });
+            .rejects.toMatchObject({ code: 'NETWORK', message: expect.stringContaining(`/releases/download/v9.0.0/manyoyo-9.0.0-macos-${ARCH}-app.tar.gz`) });
     });
 });
 
