@@ -9,9 +9,12 @@ on:
     branches-ignore:
       - main
   pull_request:
+  # 发布流水线（release-pipeline.yml）复用同一组检查
+  workflow_call:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # 带上 workflow 名：被发布流水线复用时 github.workflow 是流水线的名字，不会与同一 ref 上独立触发的 CI 互相取消
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:

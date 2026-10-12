@@ -1,0 +1,454 @@
+# 发布流水线：代码已合并到 main 之后，一次触发跑完 测试 → 镜像（需要时）→ 四平台安装包 → Release 草稿 → 挂资产 →
+# 公开前验证 → 公开 → npm 发布 ∥ 公开后验证，全程不需要人在场。本地用 `npm run release -- --remote`（或网页“一键发布”）触发。
+#
+# 要点：
+# - 幂等、可续跑：草稿已经钉在同一提交就复用，资产已齐全就不重传；失败后 `gh run rerun --failed` 接着跑。
+# - npm 发布必须用 workflow_dispatch 触发 npm-publish.yml：npm 的 trusted publisher 绑定的是 workflow 文件名，
+#   OIDC 里的 workflow_ref 是顶层调用方，所以 npm-publish.yml 不能被 workflow_call 调用。GITHUB_TOKEN 触发的事件不会启动新的 workflow，
+#   只有 workflow_dispatch / repository_dispatch 例外（需要 actions: write）。GITHUB_TOKEN 公开 Release 不会触发 release: published，也就不会重复发布。
+# - dryRun（非 main 的 ref 上强制）：做到“挂资产 + 公开前验证”为止，草稿用 v<版本>-dryrun-<run_id> 的名字并标为预发布，结束时删除；不公开、不发 npm。
+# - 每个阶段的结果、耗时和失败阶段的日志尾部由 summary job 汇总成 artifact release-report，排障先看它。
+
+name: Release Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: '要发布的提交（必须等于 main 的最新提交）'
+        required: true
+      dryRun:
+        description: '只做到公开前验证，不公开、不发 npm（非 main 的 ref 上强制开启）'
+        type: boolean
+        required: false
+        default: false
+
+# 同一时间只有一个真实发布，也不取消进行中的。排队中的运行同组最多保留一个，所以 --remote 触发前会先拒绝“已有发布在进行”；
+# 非 main 的 dryRun 用自己的组，不会把排队中的真实发布挤掉
+concurrency:
+  group: ${{ github.ref == 'refs/heads/main' && 'release' || format('release-dry-{0}', github.ref_name) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# 条件表达式一律写成“上游 job 的结果必须是 success”：GitHub 会把“上游被跳过”沿依赖链传下去，
+# 光靠默认的 success() 会让整条链在镜像 job 被跳过时全部跳过（第二次试跑实测）；!failure() 又会在 test 失败时放行，所以显式判断 result。
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      draftTag: ${{ steps.resolve.outputs.draftTag }}
+      imageVersion: ${{ steps.resolve.outputs.imageVersion }}
+      needImage: ${{ steps.resolve.outputs.needImage }}
+      dryRun: ${{ steps.resolve.outputs.dryRun }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate the commit and resolve what to release
+        id: resolve
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+          INPUT_DRY_RUN: ${{ inputs.dryRun }}
+        run: |
+          set -eu
+          sha="$(git rev-parse HEAD)"
+          if [ -n "$INPUT_SHA" ] && [ "$INPUT_SHA" != "$sha" ]; then
+            echo "输入的 sha（$INPUT_SHA）不是本次运行的提交（$sha）：请在 main 上触发（--ref main）"
+            exit 1
+          fi
+          dry=false
+          [ "$INPUT_DRY_RUN" = "true" ] && dry=true
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "当前 ref 不是 main（${GITHUB_REF}），强制 dryRun"
+            dry=true
+          fi
+          if [ "$dry" = false ]; then
+            main="$(git ls-remote origin refs/heads/main | cut -f1)"
+            [ "$main" = "$sha" ] || { echo "$sha 不是 main 的最新提交（$main）：先合并 / 同步，再触发"; exit 1; }
+          fi
+
+          version="$(node -p "require('./package.json').version")"
+          imageVersion="$(node -p "require('./package.json').imageVersion")"
+          printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "版本号格式错误: $version"; exit 1; }
+          printf '%s' "$imageVersion" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[A-Za-z0-9][A-Za-z0-9_.-]*$' || { echo "imageVersion 格式错误: $imageVersion"; exit 1; }
+          tag="v${version}"
+          latest="$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          if [ -n "$latest" ]; then
+            highest="$(printf '%s\n%s\n' "${latest#v}" "$version" | sort -V | tail -n 1)"
+            if [ "$version" = "${latest#v}" ] || [ "$highest" != "$version" ]; then
+              if [ "$dry" = false ]; then
+                echo "版本 ${version} 必须高于最近发布 ${latest}（先升版本并合并到 main）"
+                exit 1
+              fi
+              echo "::warning::dryRun：版本 ${version} 不高于最近发布 ${latest}（正式发布会被拒绝）"
+            fi
+          fi
+          if [ "$dry" = true ]; then draftTag="${tag}-dryrun-${GITHUB_RUN_ID}"; else draftTag="$tag"; fi
+
+          # 镜像：ghcr.io 上没有这个 imageVersion 才发布；docker/ 变了但 imageVersion 没升就拒绝（已有 tag 不会被覆盖）
+          token="$(curl -fsS --retry 3 "https://ghcr.io/token?scope=repository:xcanwin/manyoyo:pull" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).token")"
+          code="$(curl -s -o /dev/null -w '%{http_code}' --retry 3 -I \
+            -H "Authorization: Bearer ${token}" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+            "https://ghcr.io/v2/xcanwin/manyoyo/manifests/${imageVersion}")"
+          case "$code" in
+            200) need=false ;;
+            404) need=true ;;
+            *) echo "无法确认镜像 ${imageVersion} 是否存在（HTTP ${code}）"; exit 1 ;;
+          esac
+          if [ "$need" = true ] && [ "$dry" = true ]; then
+            echo "::warning::dryRun 不推送镜像，而安装包构建要拉 ghcr.io 上的 ${imageVersion}：packages 会失败，这次 dryRun 覆盖不到公开前验证"
+          fi
+          if [ "$need" = false ] && [ -n "$latest" ] && git diff --name-only "${latest}..HEAD" -- docker | grep -q .; then
+            old="$(git show "${latest}:package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).imageVersion")"
+            if [ "$old" = "$imageVersion" ]; then
+              echo "docker/ 自 ${latest} 以来有改动，但 imageVersion ${imageVersion} 没变：先升 imageVersion（已有 tag 不会被覆盖）"
+              exit 1
+            fi
+          fi
+
+          {
+            echo "sha=$sha"
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "draftTag=$draftTag"
+            echo "imageVersion=$imageVersion"
+            echo "needImage=$need"
+            echo "dryRun=$dry"
+          } >> "$GITHUB_OUTPUT"
+          echo "发布 ${tag}（提交 ${sha}，镜像 ${imageVersion}，需要发布镜像: ${need}，dryRun: ${dry}）"
+
+      # Release 说明全自动生成：中文更新内容（提交列表）+ 安装方式 + 一句固定的英文
+      - name: Generate the release notes
+        run: node scripts/release/notes.js . > "$RUNNER_TEMP/notes.md"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/notes.md
+          retention-days: 3
+          if-no-files-found: error
+
+  test:
+    needs: prepare
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  image:
+    needs: prepare
+    if: needs.prepare.outputs.needImage == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image-publish.yml
+    with:
+      imageVersion: ${{ needs.prepare.outputs.imageVersion }}
+      dryRun: ${{ needs.prepare.outputs.dryRun == 'true' }}
+
+  packages:
+    needs: [prepare, image]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && (needs.image.result == 'success' || needs.image.result == 'skipped') }}
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/build-packages.yml
+    with:
+      imageVersion: ${{ needs.prepare.outputs.imageVersion }}
+
+  draft:
+    needs: [prepare, test, packages]
+    if: ${{ !cancelled() && needs.test.result == 'success' && needs.packages.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DRAFT_TAG: ${{ needs.prepare.outputs.draftTag }}
+      SHA: ${{ needs.prepare.outputs.sha }}
+      DRY_RUN: ${{ needs.prepare.outputs.dryRun }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: notes
+      - name: Create the draft pinned to the tested commit (or reuse it)
+        run: |
+          set -eu
+          if info="$(gh release view "$DRAFT_TAG" --json isDraft,targetCommitish --jq '[.isDraft, .targetCommitish] | @tsv' 2>/dev/null)"; then
+            is_draft="$(printf '%s' "$info" | cut -f1)"
+            target="$(printf '%s' "$info" | cut -f2)"
+            if [ "$is_draft" != "true" ]; then
+              echo "$DRAFT_TAG 已经公开，不再处理"
+              exit 1
+            fi
+            if [ "$target" = "$SHA" ]; then
+              echo "草稿 $DRAFT_TAG 已存在并钉在 $SHA，复用（刷新说明）"
+              gh release edit "$DRAFT_TAG" --title "$DRAFT_TAG" --notes-file notes/notes.md
+              exit 0
+            fi
+            echo "草稿 $DRAFT_TAG 钉在别的提交（$target），删除后重建"
+            gh release delete "$DRAFT_TAG" --yes
+          fi
+          flags="--draft"
+          [ "$DRY_RUN" = "true" ] && flags="--draft --prerelease"
+          # 草稿不创建 tag、不会成为 latest；--target 钉在测试和构建过的提交上，tag、npm 包与安装包同源
+          # shellcheck disable=SC2086
+          gh release create "$DRAFT_TAG" $flags --target "$SHA" --title "$DRAFT_TAG" --notes-file notes/notes.md
+
+  attach:
+    needs: [prepare, draft]
+    if: ${{ !cancelled() && needs.draft.result == 'success' }}
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/release-offline.yml
+    with:
+      tag: ${{ needs.prepare.outputs.draftTag }}
+      version: ${{ needs.prepare.outputs.version }}
+
+  # macOS 安装包的冒烟安装（门禁）：Intel 上安装要六七分钟，放在构建 job 里会拖长关键路径；
+  # 放在这里与 草稿 / 挂资产 / 公开前验证 并行，只挡住 publish。用临时 HOME 安装刚构建的包（跳过虚拟机），查版本、卸载。
+  smoke-macos:
+    needs: [prepare, packages]
+    if: ${{ !cancelled() && needs.packages.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: manyoyo-${{ needs.prepare.outputs.version }}-macos-${{ matrix.arch }}
+          path: pkg
+      - name: Smoke install the built package (temp HOME, VM skipped)
+        run: |
+          set -eu
+          cd pkg
+          first="manyoyo-${VERSION}-macos-${{ matrix.arch }}.run"
+          [ -f "$first" ] || first="${first}.001"
+          export HOME="$RUNNER_TEMP/smoke-home"
+          mkdir -p "$HOME"
+          MANYOYO_TEST_SKIP_MACHINE=1 MANYOYO_TEST_FREE_MB=100000 sh "$first" --install-only
+          m="$HOME/.manyoyo/bin/manyoyo"
+          test "$("$m" -v)" = "$VERSION"
+          "$m" uninstall --yes
+          test ! -e "$HOME/.manyoyo/app" && test ! -e "$HOME/.manyoyo/bin"
+          echo "macOS ${{ matrix.arch }} 冒烟安装通过（未启动虚拟机）"
+
+  # 公开之前的验证（门禁）：下载草稿里的真实资产，走用户真正会敲的 scripts/install.sh（下载来源指向本机静态服务，校验清单照常校验），
+  # 再起 serve 走一遍网页冒烟。失败就不公开。
+  prepublish-verify:
+    needs: [prepare, attach]
+    if: ${{ !cancelled() && needs.attach.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DRAFT_TAG: ${{ needs.prepare.outputs.draftTag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Download the draft assets and serve them locally
+        run: |
+          set -eu
+          srv="$RUNNER_TEMP/srv/v${VERSION}"
+          mkdir -p "$srv"
+          gh release download "$DRAFT_TAG" -D "$srv" -p "manyoyo-${VERSION}-linux-x64.run" -p SHA256SUMS
+          ls -l "$srv"
+          nohup python3 -m http.server 8765 --bind 127.0.0.1 --directory "$RUNNER_TEMP/srv" > "$RUNNER_TEMP/static.log" 2>&1 &
+          for _ in $(seq 1 20); do curl -fsS -o /dev/null "http://127.0.0.1:8765/v${VERSION}/SHA256SUMS" && break; sleep 1; done
+
+      - name: Install with scripts/install.sh (checksums enforced), import the image, check update
+        run: |
+          set -eu
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          MANYOYO_VERSION="$VERSION" MANYOYO_DOWNLOAD_BASE="http://127.0.0.1:8765" MANYOYO_SUMS_BASE="http://127.0.0.1:8765" sh scripts/install.sh --install-only
+          m="$HOME/.manyoyo/bin/manyoyo"
+          test "$("$m" -v)" = "$VERSION"
+          for _ in $(seq 1 90); do
+            ls "$HOME"/.manyoyo/.install/image-loaded-* >/dev/null 2>&1 && break
+            sleep 5
+          done
+          ls "$HOME"/.manyoyo/.install/image-loaded-*
+          # 此时 Release 还是草稿，最新 Release 是上一个版本：update 应判断“已是最新版本 <本版本>”（compareReleaseVersions(上一版本, 本版本) <= 0）
+          "$m" update 2>&1 | tee "$RUNNER_TEMP/update.out"
+          grep -q "已是最新版本 ${VERSION}" "$RUNNER_TEMP/update.out"
+
+      - name: Web smoke (login, list, create a container session, run a command, remove)
+        run: |
+          set -eu
+          export HOME="$RUNNER_TEMP/home"
+          m="$HOME/.manyoyo/bin/manyoyo"
+          pass="$(openssl rand -hex 12)"
+          base="http://127.0.0.1:3911"
+          "$m" serve 127.0.0.1:3911 -U smoke -P "$pass" > "$RUNNER_TEMP/serve.log" 2>&1 &
+          serve_pid=$!
+          trap 'kill "$serve_pid" 2>/dev/null || true; cat "$RUNNER_TEMP/serve.log" | tail -n 40' EXIT
+          for _ in $(seq 1 60); do curl --noproxy '*' -fsS -o /dev/null "$base/auth/login" && break; sleep 1; done
+          jar="$RUNNER_TEMP/jar"
+          test "$(curl --noproxy '*' -s -o /dev/null -w '%{http_code}' "$base/api/sessions")" = 401
+          curl --noproxy '*' -fsS -c "$jar" -X POST "$base/auth/login" -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest' -d "{\"username\":\"smoke\",\"password\":\"$pass\"}" > /dev/null
+          curl --noproxy '*' -fsS -b "$jar" "$base/api/sessions" | node -e "JSON.parse(require('fs').readFileSync(0, 'utf8')).sessions.length >= 0"
+          name="smoke-${GITHUB_RUN_ID}"
+          curl --noproxy '*' -fsS -b "$jar" -X POST "$base/api/sessions" -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest' -d "{\"name\":\"$name\"}" --max-time 300
+          out="$(curl --noproxy '*' -fsS -b "$jar" -X POST "$base/api/sessions/$name/run" -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest' -d '{"command":"echo ok"}' --max-time 120)"
+          echo "$out"
+          printf '%s' "$out" | node -e "const r = JSON.parse(require('fs').readFileSync(0, 'utf8')); if (r.exitCode !== 0 || !String(r.output).includes('ok')) process.exit(1)"
+          curl --noproxy '*' -fsS -b "$jar" -X POST "$base/api/sessions/$name/remove" -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest' -d '{}' > /dev/null
+          echo "网页冒烟通过"
+
+      - name: Uninstall
+        if: always()
+        run: |
+          export HOME="$RUNNER_TEMP/home"
+          "$HOME/.manyoyo/bin/manyoyo" uninstall --yes || true
+
+  publish:
+    needs: [prepare, prepublish-verify, smoke-macos]
+    if: ${{ !cancelled() && needs.prepare.outputs.dryRun != 'true' && needs.prepublish-verify.result == 'success' && needs.smoke-macos.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Assets are complete and match SHA256SUMS
+        run: node scripts/release/assert-assets.js "$TAG" "$VERSION"
+      - name: Make the draft public (creates the tag, becomes latest)
+        run: |
+          set -eu
+          gh release edit "$TAG" --draft=false --latest
+          gh release view "$TAG" --json isDraft,tagName,targetCommitish,url --jq '.'
+
+  # npm：只能 workflow_dispatch 触发 npm-publish.yml（原因见文件开头）。skipTests：流水线已在同一提交上测试过，npm-publish 自己校验 tag 指向的提交与之一致
+  npm:
+    needs: [prepare, publish]
+    if: ${{ !cancelled() && needs.prepare.outputs.dryRun != 'true' && needs.publish.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      SHA: ${{ needs.prepare.outputs.sha }}
+    steps:
+      # 重跑安全：npm 上已经有这个版本就不再派发（再发一次会 403 并让这一阶段永远失败），直接去核对可见性
+      - name: Dispatch npm-publish.yml and wait for it (skipped when npm already has this version)
+        run: |
+          set -eu
+          if [ "$(npm view "@xcanwin/manyoyo@${VERSION}" version --registry https://registry.npmjs.org/ 2>/dev/null || true)" = "$VERSION" ]; then
+            echo "npm 上已经有 ${VERSION}，不再派发 npm-publish.yml"
+            exit 0
+          fi
+          since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh workflow run npm-publish.yml --ref main -f "tag=$TAG" -f skipTests=true -f "sha=$SHA"
+          # npm-publish.yml 的 run-name 带 tag：只认本次派发的那一个，不会跟到别人手动触发的运行
+          run_id=""
+          for _ in $(seq 1 40); do
+            run_id="$(gh run list --workflow npm-publish.yml --event workflow_dispatch -b main -L 10 --json databaseId,createdAt,displayTitle --jq "[.[] | select(.createdAt >= \"$since\" and (.displayTitle | endswith(\"$TAG\")))] | sort_by(.createdAt) | .[0].databaseId // empty")"
+            [ -n "$run_id" ] && break
+            sleep 3
+          done
+          [ -n "$run_id" ] || { echo "触发 npm-publish.yml 后 2 分钟内没有出现新的运行"; exit 1; }
+          echo "npm-publish 运行: https://github.com/${GH_REPO}/actions/runs/${run_id}"
+          gh run watch "$run_id" --exit-status --interval 10
+          # release: published 不应该再触发一次（GITHUB_TOKEN 公开 Release 的事件不启动 workflow）：记录自本流水线开始以来 release 事件触发的次数
+          dup="$(gh run list --workflow npm-publish.yml --event release -L 10 --json createdAt --jq "[.[] | select(.createdAt >= \"$since\")] | length")"
+          echo "release 事件触发的 npm-publish 运行数: ${dup}（期望 0）"
+          echo "npm-publish 由 workflow_dispatch 触发 1 次；release 事件触发 ${dup} 次" >> "$GITHUB_STEP_SUMMARY"
+      - name: npm shows the new version (3 consecutive reads, official registry)
+        run: |
+          set -eu
+          ok=0
+          for _ in $(seq 1 90); do
+            seen="$(npm view @xcanwin/manyoyo version --prefer-online --registry https://registry.npmjs.org/ 2>/dev/null || true)"
+            if [ "$seen" = "$VERSION" ]; then ok=$((ok + 1)); else ok=0; fi
+            [ "$ok" -ge 3 ] && { echo "npm 上已是 ${VERSION}"; exit 0; }
+            sleep 10
+          done
+          echo "npm 上 15 分钟内没有稳定出现 ${VERSION}"
+          exit 1
+
+  postpublish-verify:
+    needs: [prepare, publish]
+    if: ${{ !cancelled() && needs.prepare.outputs.dryRun != 'true' && needs.publish.result == 'success' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-verify.yml
+    with:
+      tag: ${{ needs.prepare.outputs.tag }}
+
+  # dryRun：不论成败都删掉试跑用的草稿（附带几个 GB 的资产）
+  cleanup-dryrun:
+    needs: [prepare, attach, smoke-macos, prepublish-verify]
+    if: ${{ always() && needs.prepare.outputs.dryRun == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DRAFT_TAG: ${{ needs.prepare.outputs.draftTag }}
+    steps:
+      - run: gh release delete "$DRAFT_TAG" --yes || echo "草稿 $DRAFT_TAG 不存在（可能没走到创建这一步）"
+
+  summary:
+    needs: [prepare, test, image, packages, draft, attach, smoke-macos, prepublish-verify, publish, npm, postpublish-verify, cleanup-dryrun]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - name: Collect per-stage results, timings and the tails of failed logs
+        run: |
+          node scripts/release/pipeline-report.js --run "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --version "$VERSION" --sha "$GITHUB_SHA" --out "$RUNNER_TEMP/release-report" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-report
+          path: ${{ runner.temp }}/release-report
+          retention-days: 30
+          if-no-files-found: error

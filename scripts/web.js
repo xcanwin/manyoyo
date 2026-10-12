@@ -30,6 +30,12 @@ if (!COMMANDS[action]) {
     process.exit(2);
 }
 
+// 流水线里前端只构建一次再分发给各构建 job：产物已在位时，打包用的 npm pack（prepack）不再重复构建
+if (action === 'build' && process.env.MANYOYO_SKIP_WEB_BUILD === '1' && fs.existsSync(path.join(__dirname, '..', 'lib', 'web', 'index.html'))) {
+    console.log('已有 lib/web/index.html，跳过前端构建（MANYOYO_SKIP_WEB_BUILD=1）');
+    process.exit(0);
+}
+
 if (!fs.existsSync(path.join(frontendDir, 'node_modules'))) {
     run(['ci']);
 }

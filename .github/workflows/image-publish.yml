@@ -20,6 +20,18 @@ on:
         required: false
         default: false
 
+  # 发布流水线复用：调用方需授予 packages: write；输入含义同上
+  workflow_call:
+    inputs:
+      imageVersion:
+        type: string
+        required: false
+        default: ''
+      dryRun:
+        type: boolean
+        required: false
+        default: false
+
 env:
   IMAGE_NAME: ghcr.io/xcanwin/manyoyo
 

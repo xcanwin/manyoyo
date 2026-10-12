@@ -250,6 +250,22 @@ describe('normalized tar', () => {
         expect(fs.readFileSync(path.join(dest, 'app/a.txt'), 'utf8')).toBe('a'.repeat(4096));
     });
 
+    test('MANYOYO_PIGZ=1 switches gzip-fast (GNU tar only) to multi-threaded pigz; the default stays gzip', () => {
+        const old = process.env.MANYOYO_PIGZ;
+        try {
+            process.env.MANYOYO_PIGZ = '1';
+            const gnu = buildNormalizedTarArgs({ output: 'o.tar.gz', cwd: '/c', entries: ['x'], flavor: 'gnu', compression: 'gzip-fast' }).args;
+            expect(gnu).toEqual(expect.arrayContaining(['--use-compress-program', 'pigz -n -1']));
+            // 其他压缩方式不受影响
+            const plain = buildNormalizedTarArgs({ output: 'o.tar.gz', cwd: '/c', entries: ['x'], flavor: 'gnu', compression: 'gzip' }).args;
+            expect(plain).toEqual(expect.arrayContaining(['gzip -n']));
+            delete process.env.MANYOYO_PIGZ;
+            expect(buildNormalizedTarArgs({ output: 'o.tar.gz', cwd: '/c', entries: ['x'], flavor: 'gnu', compression: 'gzip-fast' }).args).toEqual(expect.arrayContaining(['gzip -n -1']));
+        } finally {
+            if (old === undefined) delete process.env.MANYOYO_PIGZ; else process.env.MANYOYO_PIGZ = old;
+        }
+    });
+
     test('builds the expected flags for both tar flavors and validates input', () => {
         const gnu = buildNormalizedTarArgs({ output: 'o.tar', cwd: '/c', entries: ['x'], flavor: 'gnu' }).args;
         expect(gnu).toEqual(expect.arrayContaining(['--owner=0', '--group=0', '--numeric-owner', '--no-xattrs', '--sort=name', '--exclude=._*']));
