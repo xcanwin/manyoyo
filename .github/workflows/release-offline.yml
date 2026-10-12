@@ -17,6 +17,20 @@ on:
       runId:
         description: 'Build Packages 那次成功运行的 ID'
         required: true
+  # 发布流水线复用：安装包 artifact 就在调用方的这次运行里，runId 留空即可；dryRun 的草稿 tag 带 -dryrun-<id> 后缀，版本号单独用 version 给
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+      version:
+        type: string
+        required: false
+        default: ''
+      runId:
+        type: string
+        required: false
+        default: ''
 
 jobs:
   attach:
@@ -28,14 +42,23 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ inputs.tag }}
       RUN_ID: ${{ inputs.runId }}
+      INPUT_VERSION: ${{ inputs.version }}
     steps:
       - name: Validate inputs
         run: |
-          printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "tag 格式错误，应为 vX.Y.Z: $TAG"; exit 1; }
-          printf '%s' "$RUN_ID" | grep -Eq '^[0-9]+$' || { echo "runId 必须是数字: $RUN_ID"; exit 1; }
-          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+          printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-dryrun-[0-9]+)?$' || { echo "tag 格式错误，应为 vX.Y.Z（dryRun 草稿允许 -dryrun-<数字> 后缀）: $TAG"; exit 1; }
+          if [ -n "$RUN_ID" ]; then printf '%s' "$RUN_ID" | grep -Eq '^[0-9]+$' || { echo "runId 必须是数字: $RUN_ID"; exit 1; }; fi
+          VERSION="${INPUT_VERSION:-${TAG#v}}"
+          printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "版本号格式错误: $VERSION"; exit 1; }
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      # runId 留空：安装包就是这次运行（发布流水线）里刚构建的，成功与否由调用方的 needs 保证，提交就是本次运行的提交
+      - name: Source is this very run (called from the release pipeline)
+        if: env.RUN_ID == ''
+        run: echo "RUN_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
 
       - name: Check the source run is a successful Build Packages run
+        if: env.RUN_ID != ''
         run: |
           gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json workflowName,conclusion,headSha \
             --jq '[.workflowName, .conclusion, .headSha] | @tsv' | tee run.tsv
@@ -56,7 +79,7 @@ jobs:
       - name: Download the macOS offline package artifacts
         uses: actions/download-artifact@v8
         with:
-          run-id: ${{ inputs.runId }}
+          run-id: ${{ inputs.runId || github.run_id }}
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           pattern: manyoyo-*-macos-*
@@ -66,7 +89,7 @@ jobs:
       - name: Download the Linux offline package artifacts
         uses: actions/download-artifact@v8
         with:
-          run-id: ${{ inputs.runId }}
+          run-id: ${{ inputs.runId || github.run_id }}
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           pattern: manyoyo-*-linux-*
@@ -106,7 +129,23 @@ jobs:
           listed="$(awk '{print $2}' SHA256SUMS | sed 's/^\*//' | sort)"
           [ "$expected" = "$listed" ] || { echo "SHA256SUMS 与待上传文件不一致"; printf '待上传:\n%s\n清单:\n%s\n' "$expected" "$listed"; exit 1; }
 
+      # 重跑安全：Release 里已经是同一份清单、同一组文件，就不重复上传（几个 GB）
+      - name: Compare with what the Release already holds
+        id: existing
+        run: |
+          cd assets
+          if gh release download "$TAG" -p SHA256SUMS -O existing.sums --clobber --repo "$GITHUB_REPOSITORY" 2>/dev/null && cmp -s existing.sums SHA256SUMS; then
+            remote="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)"
+            expected="$( { awk '{print $2}' SHA256SUMS | sed 's/^\*//'; echo SHA256SUMS; } | sort)"
+            if [ "$remote" = "$expected" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "Release 已经有同一份 SHA256SUMS 和同一组资产，跳过上传"
+            fi
+          fi
+          rm -f existing.sums
+
       - name: Upload to the Release (explicit file list, no wildcards)
+        if: steps.existing.outputs.skip != 'true'
         run: |
           cd assets
           FILES="SHA256SUMS"

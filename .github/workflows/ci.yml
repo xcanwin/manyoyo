@@ -9,6 +9,8 @@ on:
     branches-ignore:
       - main
   pull_request:
+  # 发布流水线（release-pipeline.yml）复用同一组检查
+  workflow_call:
 
 concurrency:
   group: ci-${{ github.ref }}

@@ -9,13 +9,15 @@ describe('release-offline workflow', () => {
     test('is manual only and can neither build, publish to npm nor create/publish a Release or tag', () => {
         const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\njobs:'));
         expect(onBlock).toContain('workflow_dispatch:');
+        expect(onBlock).toContain('workflow_call:'); // 发布流水线复用
         expect(onBlock).not.toMatch(/^\s*(push|pull_request|schedule|release):/m);
         expect(text).not.toMatch(/gh release create|gh release edit|--draft=false|npm publish|git push|git tag|docker push|docker build/);
         expect(text).toContain('gh release upload');
     });
 
     test('validates the tag and the single run id, and only takes a successful Build Packages run', () => {
-        expect(text).toContain("'^v[0-9]+\\.[0-9]+\\.[0-9]+$'");
+        // dryRun 的草稿 tag 带 -dryrun-<数字> 后缀；其余必须是 vX.Y.Z
+        expect(text).toContain("'^v[0-9]+\\.[0-9]+\\.[0-9]+(-dryrun-[0-9]+)?$'");
         expect(text).toContain("'^[0-9]+$'");
         expect(text).toContain("grep -qx 'Build Packages'");
         expect(text).toContain("grep -qx 'success'");
@@ -48,7 +50,8 @@ describe('release-offline workflow', () => {
     test('one run feeds both platforms, merges the per-platform sums into the single SHA256SUMS and uploads the expected assets', () => {
         expect(text).toContain('pattern: manyoyo-*-macos-*');
         expect(text).toContain('pattern: manyoyo-*-linux-*');
-        expect(text.match(/run-id: \$\{\{ inputs\.runId \}\}/g) || []).toHaveLength(2);
+        // 单独触发时用传入的 runId；被流水线调用（runId 留空）时用本次运行自己的 artifact
+        expect(text.match(/run-id: \$\{\{ inputs\.runId \|\| github\.run_id \}\}/g) || []).toHaveLength(2);
         expect(text).toContain('cat SHA256SUMS-macos-arm64 SHA256SUMS-macos-x64 SHA256SUMS-linux-arm64 SHA256SUMS-linux-x64 > SHA256SUMS');
         // 上传清单：SHA256SUMS + 每个平台/架构的 .run（分卷仅超限兜底）与 -app.tar.gz；分平台清单与 lite 都不上传
         expect(text).toContain('FILES="SHA256SUMS"');
@@ -64,6 +67,13 @@ describe('release-offline workflow', () => {
         const check = text.indexOf('SHA256SUMS 与待上传文件不一致');
         expect(check).toBeGreaterThan(-1);
         expect(check).toBeLessThan(text.indexOf('gh release upload'));
+    });
+
+    test('re-run safe: skips the upload when the Release already holds the same SHA256SUMS and the same files', () => {
+        const compare = text.indexOf('cmp -s existing.sums SHA256SUMS');
+        expect(compare).toBeGreaterThan(-1);
+        expect(compare).toBeLessThan(text.indexOf('gh release upload'));
+        expect(text).toContain("if: steps.existing.outputs.skip != 'true'");
     });
 
     test('uses least privilege and no secrets other than the built-in token', () => {

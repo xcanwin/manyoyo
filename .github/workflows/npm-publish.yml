@@ -13,13 +13,22 @@ on:
       tag:
         description: '要发布到 npm 的 tag，如 v8.3.2（对应 Release 已公开）'
         required: true
+      skipTests:
+        description: '跳过 npm test（发布流水线已在同一提交上测试过）；必须同时给 sha，且 tag 指向的提交要与它一致'
+        type: boolean
+        required: false
+        default: false
+      sha:
+        description: '流水线测试过的提交；skipTests 为 true 时必填，tag 指向别的提交就拒绝发布'
+        required: false
+        default: ''
 
 env:
   TAG: ${{ inputs.tag || github.event.release.tag_name }}
 
 jobs:
   build:
-    if: github.event_name != 'release' || !github.event.release.prerelease
+    if: (github.event_name != 'release' || !github.event.release.prerelease) && inputs.skipTests != true
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -45,6 +54,8 @@ jobs:
 
   publish-npm:
     needs: build
+    # build 被 skipTests 跳过时也要继续；build 失败 / 取消、或 release 是预发布时不发布
+    if: ${{ !failure() && !cancelled() && (github.event_name != 'release' || !github.event.release.prerelease) }}
     runs-on: ubuntu-24.04
     permissions:
       id-token: write  # Required for OIDC
@@ -53,6 +64,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ env.TAG }}
+      - name: With skipTests the tag must point at the commit the pipeline tested
+        if: inputs.skipTests == true
+        env:
+          TESTED_SHA: ${{ inputs.sha }}
+        run: |
+          printf '%s' "$TESTED_SHA" | grep -Eq '^[0-9a-f]{40}$' || { echo "skipTests 需要 sha（40 位提交号）: $TESTED_SHA"; exit 1; }
+          [ "$(git rev-parse HEAD)" = "$TESTED_SHA" ] || { echo "tag $TAG 指向 $(git rev-parse HEAD)，不是流水线测试过的 $TESTED_SHA，拒绝发布"; exit 1; }
       - uses: actions/setup-node@v7
         with:
           node-version: 24

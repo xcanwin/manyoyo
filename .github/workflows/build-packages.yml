@@ -15,6 +15,13 @@ on:
         description: '镜像版本，格式 x.y.z-后缀（留空则读取 package.json 的 imageVersion，必须已发布到 ghcr.io）'
         required: false
         default: ''
+  # 发布流水线（release-pipeline.yml）复用：产物 artifact 留在调用方的这次运行里，挂资产的 job 直接下载
+  workflow_call:
+    inputs:
+      imageVersion:
+        type: string
+        required: false
+        default: ''
 
 env:
   IMAGE_NAME: ghcr.io/xcanwin/manyoyo
@@ -92,8 +99,28 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
+  # 前端只构建一次，作为 artifact 发给各平台构建 job（打包时 npm pack 的 prepack 靠 MANYOYO_SKIP_WEB_BUILD 跳过重复构建）
+  web:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm run build:web
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-index
+          path: lib/web/index.html
+          retention-days: 1
+          if-no-files-found: error
+
   build-macos:
-    needs: image-archive
+    needs: [image-archive, web]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -108,10 +135,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # 构建脚本只用 Node 内置模块，不需要 npm ci；前端由 web job 构建一次后下发
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       # 产物名带版本号：manyoyo-<version>-macos-<arch>，下载下来的 zip 一眼能认
       - name: Resolve versions
@@ -130,30 +157,52 @@ jobs:
             echo "week=$(date -u +%G-W%V)"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Install GNU tar (reproducible, normalized archives)
+      # pigz：规范化打包的 gzip 压缩改成多线程（输出仍是标准 gzip，安装端 tar -xzf 照常解开）
+      - name: Install GNU tar (reproducible, normalized archives) and pigz
         run: |
-          brew install gnu-tar
+          brew install gnu-tar pigz
           echo "MANYOYO_TAR=$(brew --prefix)/opt/gnu-tar/libexec/gnubin/tar" >> "$GITHUB_ENV"
+          echo "MANYOYO_PIGZ=1" >> "$GITHUB_ENV"
 
-      - run: npm ci --include=optional
-      - run: npm run build:web
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-index
+          path: lib/web
 
       - uses: actions/download-artifact@v8
         with:
           name: manyoyo-image-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}
           path: image
 
-      # 官方 machine-os 磁盘每次 `podman machine init` 都要重新下载（约 2.5 分钟）。
-      # key = Podman 版本 + 架构 + ISO 周：每周刷新一次，不会长期错过 machine-os 的安全修复。
+      # 官方 machine-os 磁盘每次 `podman machine init` 都要重新下载（约 2.5–4.5 分钟）。
+      # key = Podman 版本 + 架构 + 上游 machine-os 镜像（tag 取 Podman 的 主.次 版本）当前的 digest：
+      # 上游真的重推了（含安全修复）才会不命中，不再按周白白失效；查不到 digest 时退回按周的 key。
+      - name: Resolve the upstream machine-os digest
+        id: machineos
+        run: |
+          tag="$(printf '%s' '${{ steps.version.outputs.podman }}' | cut -d. -f1,2)"
+          digest="$(curl -fsSI --retry 3 --max-time 30 \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+            "https://quay.io/v2/podman/machine-os/manifests/${tag}" \
+            | tr -d '\r' | awk 'tolower($1)=="docker-content-digest:" {print $2}' | sed 's/^sha256://' | cut -c1-16 || true)"
+          if [ -n "$digest" ]; then
+            echo "key=digest-${tag}-${digest}" >> "$GITHUB_OUTPUT"
+            echo "machine-os:${tag} digest ${digest}"
+          else
+            echo "key=week-${{ steps.version.outputs.week }}" >> "$GITHUB_OUTPUT"
+            echo "查不到上游 machine-os 的 digest，退回按周的缓存 key"
+          fi
+
       - name: Restore VM disk cache
         uses: actions/cache@v5
         with:
           path: vm-disk-cache
-          key: vm-disk-podman-${{ steps.version.outputs.podman }}-${{ matrix.arch }}-week-${{ steps.version.outputs.week }}
+          key: vm-disk-podman-${{ steps.version.outputs.podman }}-${{ matrix.arch }}-${{ steps.machineos.outputs.key }}
 
       - name: Build packages
         env:
           MANYOYO_VM_DISK_CACHE_DIR: ${{ github.workspace }}/vm-disk-cache
+          MANYOYO_SKIP_WEB_BUILD: '1'
         run: |
           node scripts/offline/build.js --arch "${{ matrix.arch }}" \
             --image-archive "$(ls image/manyoyo-*-${{ matrix.arch }}.tar.gz)" \
@@ -168,6 +217,23 @@ jobs:
             --allowlist scripts/offline/scan-allowlist.json \
             --exclude '^full/images(/|$)' --exclude '^full/vm(/|$)' \
             dist-offline/work/staging/full
+
+      # 冒烟安装（门禁）：用临时 HOME 安装刚打好的包（跳过虚拟机），再查版本、卸载。失败就不上传产物，也不会走到公开。
+      - name: Smoke install the built package (temp HOME, VM skipped)
+        run: |
+          set -eu
+          ver="${{ steps.version.outputs.version }}"
+          cd dist-offline
+          first="manyoyo-${ver}-macos-${{ matrix.arch }}.run"
+          [ -f "$first" ] || first="${first}.001"
+          export HOME="$RUNNER_TEMP/smoke-home"
+          mkdir -p "$HOME"
+          MANYOYO_TEST_SKIP_MACHINE=1 MANYOYO_TEST_FREE_MB=100000 sh "$first" --install-only
+          m="$HOME/.manyoyo/bin/manyoyo"
+          test "$("$m" -v)" = "$ver"
+          "$m" uninstall --yes
+          test ! -e "$HOME/.manyoyo/app" && test ! -e "$HOME/.manyoyo/bin"
+          echo "macOS ${{ matrix.arch }} 冒烟安装通过（未启动虚拟机）"
 
       # 上传按构建脚本输出的显式文件清单，不用通配符，避免带上多余文件
       - name: List deliverables
@@ -190,7 +256,7 @@ jobs:
           if-no-files-found: error
 
   build-linux:
-    needs: image-archive
+    needs: [image-archive, web]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -205,10 +271,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # 构建脚本只用 Node 内置模块，不需要 npm ci；前端由 web job 构建一次后下发
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       # 产物名带版本号：manyoyo-<version>-linux-<arch>
       - name: Resolve versions
@@ -223,8 +289,10 @@ jobs:
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
           echo "imageVersion=$IMAGE_VERSION" >> "$GITHUB_OUTPUT"
 
-      - run: npm ci --include=optional
-      - run: npm run build:web
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-index
+          path: lib/web
 
       - uses: actions/download-artifact@v8
         with:
@@ -232,6 +300,8 @@ jobs:
           path: image
 
       - name: Build package
+        env:
+          MANYOYO_SKIP_WEB_BUILD: '1'
         run: |
           node scripts/offline/build.js --platform linux --arch "${{ matrix.arch }}" \
             --image-archive "image/manyoyo-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}.tar.gz" \
@@ -245,6 +315,26 @@ jobs:
             --allowlist scripts/offline/scan-allowlist-linux.json \
             --exclude '^lite/images(/|$)' \
             dist-offline/work/staging/lite
+
+      # 冒烟安装（门禁）：临时 HOME 安装刚打好的包，等后台导入镜像完成（真实 docker load），查版本、卸载。
+      - name: Smoke install the built package (temp HOME, real image import)
+        run: |
+          set -eu
+          ver="${{ steps.version.outputs.version }}"
+          cd dist-offline
+          export HOME="$RUNNER_TEMP/smoke-home"
+          mkdir -p "$HOME"
+          sh "manyoyo-${ver}-linux-${{ matrix.arch }}.run" --install-only
+          m="$HOME/.manyoyo/bin/manyoyo"
+          test "$("$m" -v)" = "$ver"
+          for _ in $(seq 1 90); do
+            ls "$HOME"/.manyoyo/.install/image-loaded-* >/dev/null 2>&1 && break
+            sleep 5
+          done
+          ls "$HOME"/.manyoyo/.install/image-loaded-*
+          "$m" uninstall --yes
+          test ! -e "$HOME/.manyoyo/app" && test ! -e "$HOME/.manyoyo/bin"
+          echo "Linux ${{ matrix.arch }} 冒烟安装通过"
 
       # 上传按构建脚本输出的显式文件清单，不用通配符，避免带上多余文件
       - name: List deliverables
