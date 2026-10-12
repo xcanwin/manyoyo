@@ -210,6 +210,44 @@ jobs:
       tag: ${{ needs.prepare.outputs.draftTag }}
       version: ${{ needs.prepare.outputs.version }}
 
+  # macOS 安装包的冒烟安装（门禁）：Intel 上安装要六七分钟，放在构建 job 里会拖长关键路径；
+  # 放在这里与 草稿 / 挂资产 / 公开前验证 并行，只挡住 publish。用临时 HOME 安装刚构建的包（跳过虚拟机），查版本、卸载。
+  smoke-macos:
+    needs: [prepare, packages]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: manyoyo-${{ needs.prepare.outputs.version }}-macos-${{ matrix.arch }}
+          path: pkg
+      - name: Smoke install the built package (temp HOME, VM skipped)
+        run: |
+          set -eu
+          cd pkg
+          first="manyoyo-${VERSION}-macos-${{ matrix.arch }}.run"
+          [ -f "$first" ] || first="${first}.001"
+          export HOME="$RUNNER_TEMP/smoke-home"
+          mkdir -p "$HOME"
+          MANYOYO_TEST_SKIP_MACHINE=1 MANYOYO_TEST_FREE_MB=100000 sh "$first" --install-only
+          m="$HOME/.manyoyo/bin/manyoyo"
+          test "$("$m" -v)" = "$VERSION"
+          "$m" uninstall --yes
+          test ! -e "$HOME/.manyoyo/app" && test ! -e "$HOME/.manyoyo/bin"
+          echo "macOS ${{ matrix.arch }} 冒烟安装通过（未启动虚拟机）"
+
   # 公开之前的验证（门禁）：下载草稿里的真实资产，走用户真正会敲的 scripts/install.sh（下载来源指向本机静态服务，校验清单照常校验），
   # 再起 serve 走一遍网页冒烟。失败就不公开。
   prepublish-verify:
@@ -285,7 +323,7 @@ jobs:
           "$HOME/.manyoyo/bin/manyoyo" uninstall --yes || true
 
   publish:
-    needs: [prepare, prepublish-verify]
+    needs: [prepare, prepublish-verify, smoke-macos]
     if: needs.prepare.outputs.dryRun != 'true'
     runs-on: ubuntu-24.04
     permissions:
@@ -365,7 +403,7 @@ jobs:
 
   # dryRun：不论成败都删掉试跑用的草稿（附带几个 GB 的资产）
   cleanup-dryrun:
-    needs: [prepare, attach, prepublish-verify]
+    needs: [prepare, attach, smoke-macos, prepublish-verify]
     if: ${{ always() && needs.prepare.outputs.dryRun == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -378,7 +416,7 @@ jobs:
       - run: gh release delete "$DRAFT_TAG" --yes || echo "草稿 $DRAFT_TAG 不存在（可能没走到创建这一步）"
 
   summary:
-    needs: [prepare, test, image, packages, draft, attach, prepublish-verify, publish, npm, postpublish-verify, cleanup-dryrun]
+    needs: [prepare, test, image, packages, draft, attach, smoke-macos, prepublish-verify, publish, npm, postpublish-verify, cleanup-dryrun]
     if: always()
     runs-on: ubuntu-24.04
     permissions:

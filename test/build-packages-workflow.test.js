@@ -115,16 +115,14 @@ describe('build-packages workflow (macOS + Linux in one run)', () => {
         }
     });
 
-    test('every platform job smoke-installs the package it just built, before uploading it (a gate that does not queue again)', () => {
-        for (const name of ['build-macos', 'build-linux']) {
-            const job = jobBlock(name);
-            expect(job).toContain('Smoke install');
-            expect(job).toContain('--install-only');
-            expect(job).toContain('uninstall --yes');
-            expect(job.indexOf('Smoke install')).toBeLessThan(job.indexOf('actions/upload-artifact@v7'));
-            expect(job.indexOf('Smoke install')).toBeGreaterThan(job.indexOf('Scan packaged tree'));
-        }
-        expect(jobBlock('build-macos')).toContain('MANYOYO_TEST_SKIP_MACHINE=1');
+    test('Linux jobs smoke-install the package they just built, before uploading it; macOS does it in the pipeline (Intel takes minutes: not on the critical path)', () => {
+        const job = jobBlock('build-linux');
+        expect(job).toContain('Smoke install');
+        expect(job).toContain('--install-only');
+        expect(job).toContain('uninstall --yes');
+        expect(job.indexOf('Smoke install')).toBeLessThan(job.indexOf('actions/upload-artifact@v7'));
+        expect(job.indexOf('Smoke install')).toBeGreaterThan(job.indexOf('Scan packaged tree'));
+        expect(jobBlock('build-macos')).not.toContain('Smoke install');
     });
 
     test('the macOS packaging compresses with pigz (multi-threaded, still standard gzip for the installer)', () => {

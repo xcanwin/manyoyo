@@ -2,6 +2,8 @@
 # 目的：把原来需要人在新用户 / 新机器上手工做的验证交给 CI。不需要任何 secret，也不会修改 Release。
 # 覆盖：Linux x64 / arm64 完整安装（真实 docker、真实镜像导入）；macOS arm64 / Intel 用真实 macOS 的 sh（bash 3.2）跑安装器，
 # 跳过虚拟机（GitHub 的 macOS runner 没有嵌套虚拟化，MANYOYO_TEST_SKIP_MACHINE），其余步骤（校验、解压、PATH、包装脚本、update、卸载）都是真的。
+# 另有 vm-intel 任务（不阻断）：macos-15-intel 上 Podman 虚拟机能真实启动（实测），所以在这里完整安装、启动私有虚拟机、导入镜像并跑一个容器；
+# macos-15（arm64）是 Apple M1 虚拟机，没有嵌套虚拟化（实测 podman machine start 报 vfkit exited unexpectedly），只能跳过虚拟机。
 # 另有 upgrade 任务：安装上一个版本 → manyoyo update 升到新版 → update --rollback → 再 update（替代原来的发布后真机检查）。
 # 不覆盖：macOS 上真正启动 Podman 虚拟机（runner 没有嵌套虚拟化）、浏览器向导、Agent 对话。
 # 前提：tag 必须是 Release 的“最新版本”（update 用例断言“已是最新版本”）；release-offline 已上传（一次含两个平台）。
@@ -230,3 +232,45 @@ jobs:
           "$m" uninstall --yes
           test ! -e "$HOME/.manyoyo/app" && test ! -e "$HOME/.manyoyo/bin"
           if [ "$warned" = 1 ]; then echo "${{ matrix.os }} ${{ matrix.arch }} 升级 / 回滚验证通过（有限流警告，已用 --file 完成）"; else echo "${{ matrix.os }} ${{ matrix.arch }} 升级 / 回滚验证通过"; fi
+
+  # 不阻断（continue-on-error）：Intel macOS runner 上真实启动私有 Podman 虚拟机，等镜像导入完成，再起一个容器执行命令。
+  # 版本公开后才跑，失败只在汇总里标出来，不挡发布；虚拟机冷启动与镜像导入合计可能要十几分钟。
+  vm-intel:
+    runs-on: macos-15-intel
+    continue-on-error: true
+    timeout-minutes: 45
+    steps:
+      - name: Download and verify (anonymous)
+        run: |
+          set -eu
+          ver="${TAG#v}"
+          base="https://github.com/xcanwin/manyoyo/releases/download/${TAG}"
+          mkdir -p "$RUNNER_TEMP/vm" && cd "$RUNNER_TEMP/vm"
+          curl -sSL -f --retry 3 --retry-all-errors -O "${base}/SHA256SUMS"
+          files="$(awk '{print $2}' SHA256SUMS | grep -E "^manyoyo-${ver}-macos-x64\.run(\.[0-9]{3})?$")"
+          for f in $files; do
+            curl -sSL -f --retry 3 --retry-all-errors -O "${base}/${f}"
+            grep -q "$(shasum -a 256 "$f" | cut -d' ' -f1)  ${f}" SHA256SUMS
+          done
+          echo "$files" > files.txt
+      - name: Install for real (private Podman machine), wait for the image, run a container
+        run: |
+          set -eu
+          ver="${TAG#v}"
+          cd "$RUNNER_TEMP/vm"
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          MANYOYO_TEST_FREE_MB=100000 sh "$(head -n 1 files.txt)" --install-only
+          m="$HOME/.manyoyo/bin/manyoyo"
+          test "$("$m" -v)" = "$ver"
+          "$m" podman machine list || true
+          for _ in $(seq 1 240); do
+            ls "$HOME"/.manyoyo/.install/image-loaded-* >/dev/null 2>&1 && break
+            sleep 5
+          done
+          ls "$HOME"/.manyoyo/.install/image-loaded-*
+          "$m" doctor || true
+          "$m" run -n "vm-smoke-${GITHUB_RUN_ID}" --rm-on-exit -x /bin/sh -c 'echo vm-ok' 2>&1 | tee run.out
+          grep -q vm-ok run.out
+          "$m" uninstall --yes || true
+          echo "macOS Intel 虚拟机验证通过"

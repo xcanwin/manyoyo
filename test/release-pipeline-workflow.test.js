@@ -49,6 +49,12 @@ describe('release-pipeline workflow', () => {
         expect(needs('attach')).toContain('draft');
         expect(needs('prepublish-verify')).toContain('attach');
         expect(needs('publish')).toContain('prepublish-verify');
+        // macOS 冒烟安装与草稿 / 挂资产并行，只挡住 publish（Intel 上要六七分钟，不能放在 draft 之前）
+        expect(needs('publish')).toContain('smoke-macos');
+        expect(needs('smoke-macos')).toContain('packages');
+        expect(needs('draft')).not.toContain('smoke-macos');
+        expect(job('smoke-macos')).toContain('MANYOYO_TEST_SKIP_MACHINE=1');
+        expect(job('smoke-macos')).toContain('uninstall --yes');
         expect(needs('npm')).toContain('publish');
         expect(needs('postpublish-verify')).toContain('publish');
         // 只有 draft 创建 Release；只有 publish 公开它

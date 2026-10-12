@@ -47,6 +47,15 @@ describe('release-verify workflow', () => {
         expect(text).toContain('::warning::');
     });
 
+    test('the Intel macOS VM check really starts the private machine but never blocks the release', () => {
+        const job = text.slice(text.indexOf('\n  vm-intel:'));
+        expect(job).toContain('runs-on: macos-15-intel');
+        expect(job).toContain('continue-on-error: true');
+        // 与 macOS 游客验证不同：这里不跳过虚拟机
+        expect(job).not.toContain('MANYOYO_TEST_SKIP_MACHINE');
+        expect(job).toContain('--rm-on-exit');
+    });
+
     test('every download retries transient network errors', () => {
         const curls = text.split('\n').filter(line => /\bcurl\b/.test(line) && !line.trim().startsWith('#'));
         expect(curls.length).toBeGreaterThanOrEqual(4);
