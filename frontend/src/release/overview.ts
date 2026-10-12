@@ -15,7 +15,7 @@ export function buildOverview(status: OverviewStatus, next: NextStage): Overview
     return {
       title: `下一步：${next.title}`,
       description: next.detail,
-      primary: next.id === "manual" || next.id === "device" ? null : { kind: "stage", label: `执行「${next.title}」` },
+      primary: { kind: "stage", label: `执行「${next.title}」` },
       showRunAll: true,
       historyNote: "",
     }

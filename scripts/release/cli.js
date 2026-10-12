@@ -4,17 +4,15 @@
 //   --status [--json]             各阶段状态
 //   --notes-draft                 输出 Release 说明草稿
 //   --run <阶段,阶段…> [--yes]    执行；含对外动作且没有 --yes 时只打印将执行的命令，退出码 2
-//   --check <id>                  真机检查确认（必须有终端，agent 不能代替用户勾选）
 
 const fs = require('fs');
 const path = require('path');
 const { collectFacts } = require('./facts');
-const { STAGES, MANUAL_CHECKLIST, computeStages, nextStage, isPublished } = require('./stages');
+const { STAGES, computeStages, nextStage, isPublished } = require('./stages');
 const { ACTIONS, describeCommands } = require('./actions');
 const { JobRunner } = require('./jobs');
 const { createBaseContext, createJobContext } = require('./context');
 const { acquireJobLock } = require('./lock');
-const { checkKind, allCheckIds, recordCheck } = require('./checks');
 const { buildNotesDraft } = require('./notes');
 
 const ICON = { done: '✓', todo: '○', blocked: '✗', warn: '!' };
@@ -68,19 +66,8 @@ async function printStatus(engine, io, json) {
     const next = nextStage(stages);
     if (summary.published && !next) io.out(`\n${facts.tag} 已发布 ✓；下一次发布需要先升版本（--run version --version <x.y.z>）`);
     else if (!next) io.out('\n全部完成');
-    else if (next.id === 'manual' || next.id === 'device') {
-        // 只能由人确认的阶段：提示还没勾的检查项，而不是一条没有动作（manual）或只会列清单（device）的 --run
-        const left = pendingCheckIds(next, facts, engine.base.state.load());
-        io.out(`\n下一步：${next.title}（人工确认：npm run release -- --check ${left.join(' 或 ') || '<id>'}，需要终端；或在网页勾选）`);
-    } else io.out(`\n下一步：${next.title}（npm run release -- --run ${next.id}${next.external ? ' --yes' : ''}）`);
+    else io.out(`\n下一步：${next.title}（npm run release -- --run ${next.id}${next.external ? ' --yes' : ''}）`);
     return undefined;
-}
-
-// 还没确认的真机检查项 id
-function pendingCheckIds(stage, facts, state) {
-    if (stage.id === 'device') return (stage.items || []).filter(item => !item.done).map(item => item.id);
-    const checks = (state.checklists || {})[facts.tag] || {};
-    return MANUAL_CHECKLIST.filter(item => !checks[item.id]).map(item => item.id);
 }
 
 function buildParams(args) {
@@ -95,12 +82,6 @@ function buildParams(args) {
 /** @returns {Promise<number>} 退出码 */
 async function runStages(engine, args, io) {
     const stages = stageList(args.run);
-    // 没有动作的阶段（manual）在启动任务前就拒绝，不要等 JobRunner 抛内部错误
-    const noAction = stages.filter(id => typeof ACTIONS[id] !== 'function');
-    if (noAction.length > 0) {
-        io.err(`${noAction.join('、')} 没有可执行的动作：这类检查只能由人确认，在网页勾选，或在有终端的命令行运行 npm run release -- --check <id>`);
-        return EXIT.NEEDS_YES;
-    }
     if (stages.includes('release') && !args.notesFile) throw new Error('--run release 需要 --notes-file <路径>（先 --notes-draft > notes.md 生成并编辑）');
     const params = buildParams(args);
     await engine.base.readAsync('git', ['fetch', '--quiet', 'origin', '--tags']);
@@ -132,11 +113,11 @@ async function runStages(engine, args, io) {
     process.once('SIGINT', onSigint);
     const result = await done;
     process.removeListener('SIGINT', onSigint);
-    // 单步模式不检查“执行完是否真的 done”；这里补上，免得 device 这类只能由人完成的阶段以退出码 0 结束
+    // 单步模式不检查“执行完是否真的 done”；这里补上
     let unfinished = '';
     if (result.status === 'succeeded' && !engine.base.dryRun) {
         const after = await engine.collect();
-        const left = computeStages(after, engine.base.state.load()).filter(stage => stages.includes(stage.id) && stage.id !== 'manual' && stage.state !== 'done');
+        const left = computeStages(after, engine.base.state.load()).filter(stage => stages.includes(stage.id) && stage.state !== 'done');
         unfinished = left.map(stage => `「${stage.title}」${stage.state}：${stage.detail}`).join('；');
     }
     if (args.json) {
@@ -151,15 +132,4 @@ async function printNotesDraft(engine, io) {
     io.out(buildNotesDraft(await engine.collect()));
 }
 
-/** 真机检查确认：没有终端直接拒绝；有终端则要求手输 yes */
-async function checkItem(engine, id, io, { isTTY, ask }) {
-    if (!checkKind(id)) throw new Error(`未知的检查项: ${id}（可用: ${allCheckIds().join(', ')}）`);
-    if (!isTTY) throw new Error('真机检查只能由人确认：请在有终端的命令行里运行，或在网页上勾选（agent 不能代替用户勾选）');
-    const facts = await engine.collect();
-    const answer = await ask(`确认你已在真机上完成「${id}」这一项检查？输入 yes 确认: `);
-    if (String(answer).trim().toLowerCase() !== 'yes') throw new Error('未确认，没有勾选');
-    recordCheck(engine.base.state, facts.tag, id, true, '终端确认', facts.git.originMainSha);
-    io.out(`已记录 ${facts.tag} 的 ${id}`);
-}
-
-module.exports = { createEngine, printStatus, runStages, printNotesDraft, checkItem, stageList, EXIT };
+module.exports = { createEngine, printStatus, runStages, printNotesDraft, stageList, EXIT };

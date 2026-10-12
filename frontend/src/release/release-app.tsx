@@ -19,7 +19,7 @@ type Dialog =
   | { kind: "runAll" }
   | null
 
-const PUBLISH_STAGES = ["merge", "image", "packages", "device", "release", "assets", "publish", "verify", "npm"]
+const PUBLISH_STAGES = ["merge", "image", "packages", "release", "assets", "publish", "verify", "npm"]
 const STATE_LABEL: Record<string, string> = { done: "已完成", todo: "待办", blocked: "被阻塞", warn: "需确认" }
 const STATE_STYLE: Record<string, string> = {
   done: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
@@ -131,11 +131,6 @@ export function ReleaseApp() {
     setError("控制台已结束，可以关闭这个页面。")
   }
 
-  async function toggleCheck(id: string, done: boolean) {
-    await api("/api/checklist", { id, done })
-    await refresh(false)
-  }
-
   if (!status) {
     return <div className="p-8 text-muted-foreground">{error || "读取状态…"}</div>
   }
@@ -234,7 +229,7 @@ export function ReleaseApp() {
                   <span className={`rounded px-2 py-0.5 text-xs ${STATE_STYLE[stage.state]}`}>{STATE_LABEL[stage.state]}</span>
                   {stage.external && <Badge variant="outline">对外动作</Badge>}
                   {status.job?.currentStage === stage.id && running && <Spinner />}
-                  {stage.id !== "manual" && stage.id !== "device" && !(status.published && stage.state === "done") && (
+                  {!(status.published && stage.state === "done") && (
                     <Button
                       className="ml-auto"
                       size="sm"
@@ -251,34 +246,6 @@ export function ReleaseApp() {
                   <a className="text-sm underline" href={stage.url} target="_blank" rel="noreferrer">
                     {stage.url}
                   </a>
-                )}
-                {stage.id === "device" && stage.items && stage.items.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">用 CI 产物在真实 Mac 上安装检查：gh run download &lt;安装包构建 runId&gt; -n manyoyo-{status.version}-macos-&lt;arm64|x64&gt;。检查完才勾选，勾选代表你亲自确认过。</p>
-                    {stage.items.map((item) => (
-                      <label key={item.id} className="flex items-start gap-2 text-sm">
-                        <input type="checkbox" className="mt-1" checked={item.done} onChange={(event) => void toggleCheck(item.id, event.target.checked)} />
-                        <span>
-                          {item.title}
-                          <span className="block text-xs text-muted-foreground">
-                            命中：{item.files.slice(0, 3).join("、")}
-                            {item.files.length > 3 ? " 等" : ""}
-                            {item.done && item.by ? ` · ${item.by}` : ""}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {stage.id === "manual" && (
-                  <div className="space-y-2">
-                    {status.checklist.map((item) => (
-                      <label key={item.id} className="flex items-start gap-2 text-sm">
-                        <input type="checkbox" className="mt-1" checked={item.done} onChange={(event) => void toggleCheck(item.id, event.target.checked)} />
-                        <span>{item.title}</span>
-                      </label>
-                    ))}
-                  </div>
                 )}
               </CardContent>
             </Card>

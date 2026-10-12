@@ -10,7 +10,7 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const { collectFacts } = require('./facts');
-const { STAGES, MANUAL_CHECKLIST, computeStages, nextStage, isPublished } = require('./stages');
+const { STAGES, computeStages, nextStage, isPublished } = require('./stages');
 const { ACTIONS, describeCommands, ReleaseError } = require('./actions');
 const { JobRunner } = require('./jobs');
 const { createBaseContext, createJobContext } = require('./context');
@@ -19,7 +19,6 @@ const { buildVersionSuggestions } = require('./versions');
 const { acquireJobLock } = require('./lock');
 const { readLastJobLog } = require('./jobs');
 const { buildNotesDraft } = require('./notes');
-const { checkKind, recordCheck } = require('./checks');
 
 const DEFAULT_PORT = 3900;
 const HOST = '127.0.0.1';
@@ -96,7 +95,6 @@ function createReleaseServer(options = {}) {
         const state = base.state.load();
         const stages = computeStages(facts, state);
         const next = nextStage(stages);
-        const checklist = (state.checklists || {})[facts.tag] || {};
         return {
             version: facts.pkg.version,
             imageVersion: facts.pkg.imageVersion,
@@ -114,7 +112,6 @@ function createReleaseServer(options = {}) {
             unpushedFiles: facts.git.unpushedFiles || [],
             // 本进程还没跑过任务时，给出上次（可能是重启前、或命令行跑的）任务日志
             lastJobLog: runner.events.length ? null : readLastJobLog(path.join(repoRoot, '.release', 'last-job.log')),
-            checklist: MANUAL_CHECKLIST.map(item => ({ ...item, done: Boolean(checklist[item.id]) })),
             published: isPublished(facts),
             job: runner.snapshot(),
             gh: facts.gh.ok
@@ -149,13 +146,6 @@ function createReleaseServer(options = {}) {
             if (body.mode === 'agent') return sendJson(res, 200, await (options.agentCommitMessage || agentCommitMessage)({ repoRoot }));
             const message = ruleCommitMessage(body.files || []);
             return sendJson(res, 200, { message, reason: message ? '' : '没有选择文件' });
-        }
-        if (req.method === 'POST' && pathname === '/api/checklist') {
-            const body = await readBody(req);
-            if (!checkKind(body.id)) throw new ReleaseError('BAD_REQUEST', '未知的检查项');
-            const known = cache.facts || await collect();
-            recordCheck(base.state, known.tag, body.id, body.done === true, '网页勾选', known.git.originMainSha);
-            return sendJson(res, 200, { ok: true });
         }
         if (req.method === 'POST' && pathname === '/api/quit') {
             sendJson(res, 200, { ok: true });

@@ -85,7 +85,7 @@ describe('release server security', () => {
 describe('release server API', () => {
     test('status lists the stages, next step, dirty files, rule message, version suggestions and a notes draft', async () => {
         const status = await (await call('GET', '/api/status')).json();
-        expect(status.stages.map(stage => stage.id)).toEqual(['preflight', 'version', 'commit', 'merge', 'image', 'packages', 'device', 'release', 'assets', 'publish', 'verify', 'npm', 'manual']);
+        expect(status.stages.map(stage => stage.id)).toEqual(['preflight', 'version', 'commit', 'merge', 'image', 'packages', 'release', 'assets', 'publish', 'verify', 'npm']);
         expect(status.nextStage).toBe('preflight');
         expect(status.dirty).toEqual([{ code: 'M', path: 'lib/a.js' }]);
         expect(status.ruleMessage).toBe('feat: 调整 lib');
@@ -99,7 +99,7 @@ describe('release server API', () => {
         expect(status.unpushedFiles).toEqual([{ code: 'M', path: 'lib/b.js' }]);
         // 还没有跑过任务时，返回上次（重启前）的任务日志，没有就是 null
         expect(status).toHaveProperty('lastJobLog');
-        expect(status.checklist.every(item => item.done === false)).toBe(true);
+        expect(status).not.toHaveProperty('checklist');
     });
 
     test('external stages need confirmed:true; with it the job runs and streams events', async () => {
@@ -133,15 +133,11 @@ describe('release server API', () => {
         expect((await (await call('POST', '/api/cancel', { body: {} })).json()).cancelled).toBe(false);
     });
 
-    test('commit message: rule and agent modes, and the manual checklist persists', async () => {
+    test('commit message: rule and agent modes; the checklist route is gone', async () => {
         expect(await (await call('POST', '/api/commit-message', { body: { mode: 'rule', files: ['docs/a.md'] } })).json()).toEqual({ message: 'docs: 更新 docs 文档', reason: '' });
         expect((await (await call('POST', '/api/commit-message', { body: { mode: 'rule', files: [] } })).json()).reason).toContain('没有选择文件');
         expect((await (await call('POST', '/api/commit-message', { body: { mode: 'agent' } })).json()).message).toBe('feat: from agent');
-        expect((await call('POST', '/api/checklist', { body: { id: 'nope', done: true } })).status).toBe(400);
-        await call('POST', '/api/checklist', { body: { id: 'mac-upgrade', done: true } });
-        const status = await (await call('GET', '/api/status')).json();
-        expect(status.checklist.find(item => item.id === 'mac-upgrade').done).toBe(true);
-        expect(JSON.parse(fs.readFileSync(path.join(root, '.release', 'state.json'), 'utf-8')).checklists['v8.2.0']['mac-upgrade']).toBe(true);
+        expect((await call('POST', '/api/checklist', { body: { id: 'mac-upgrade', done: true } })).status).toBe(404);
     });
 });
 

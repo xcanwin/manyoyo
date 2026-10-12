@@ -1,6 +1,6 @@
 'use strict';
 
-const { computeStages, nextStage, MANUAL_CHECKLIST } = require('../scripts/release/stages');
+const { computeStages, nextStage } = require('../scripts/release/stages');
 
 
 const run = (id, sha, conclusion = 'success') => ({ databaseId: id, status: 'completed', conclusion, headSha: sha });
@@ -69,11 +69,7 @@ describe('release stages', () => {
         }
     });
 
-    test('manual checklist is done only when every item is ticked; nextStage skips done and blocked stages', () => {
-        const all = Object.fromEntries(MANUAL_CHECKLIST.map(item => [item.id, true]));
-        expect(byId(computeStages(facts(), { checklists: { 'v8.2.0': all } })).manual.state).toBe('done');
-        // 上一个版本勾选过的清单不会带到新版本
-        expect(byId(computeStages(facts(), { checklists: { 'v8.1.0': all } })).manual.state).toBe('todo');
+    test('nextStage skips done and blocked stages', () => {
         const stages = computeStages(facts({ git: { dirty: [{ code: 'M', path: 'a' }] } }));
         expect(nextStage(stages).id).toBe('preflight');
         expect(nextStage(stages.map(stage => ({ ...stage, state: 'done' })))).toBeNull();

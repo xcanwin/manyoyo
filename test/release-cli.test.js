@@ -4,11 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { runStages, checkItem, stageList, createEngine, EXIT } = require('../scripts/release/cli');
+const { runStages, stageList, createEngine, EXIT } = require('../scripts/release/cli');
 const { parseArgs } = require('../scripts/release/index');
 const { acquireJobLock } = require('../scripts/release/lock');
 const { JobRunner } = require('../scripts/release/jobs');
-const { createStateStore } = require('../scripts/release/state');
 
 let root;
 beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-relcli-')); });
@@ -62,8 +61,8 @@ describe('command line driver', () => {
         });
         engine.collect = engine.runner.deps.collect;
         const output = io();
-        const code = await runStages(engine, { run: 'device,publish', yes: true }, output);
-        expect(output.lines.out.join('\n')).toContain('[device] skipped');
+        const code = await runStages(engine, { run: 'merge,publish', yes: true }, output);
+        expect(output.lines.out.join('\n')).toContain('[merge] skipped');
         expect(actions.publish).toHaveBeenCalledTimes(1);
         expect(code).toBe(EXIT.OK);
 
@@ -83,18 +82,6 @@ describe('command line driver', () => {
         expect(parseArgs(['--run', 'merge,packages', '--yes', '--json', '--notes-file', 'n.md', '--version', '8.3.2', '--npm-dispatch'])).toMatchObject({ run: 'merge,packages', yes: true, json: true, notesFile: 'n.md', version: '8.3.2', npmDispatch: true });
         expect(() => parseArgs(['--run'])).toThrow(/需要一个值/);
         expect(() => parseArgs(['--run', '--yes'])).toThrow(/需要一个值/);
-    });
-});
-
-describe('device checks can only be ticked by a person', () => {
-    test('no TTY refuses; a TTY needs the typed confirmation; the entry records who confirmed', async () => {
-        const engine = fakeEngine({});
-        await expect(checkItem(engine, 'plugin', io(), { isTTY: false, ask: async () => 'yes' })).rejects.toThrow(/只能由人确认/);
-        await expect(checkItem(engine, 'plugin', io(), { isTTY: true, ask: async () => 'y' })).rejects.toThrow(/未确认/);
-        await expect(checkItem(engine, 'nope', io(), { isTTY: true, ask: async () => 'yes' })).rejects.toThrow(/未知的检查项/);
-        expect(createStateStore(root).load().devices).toBeUndefined();
-        await checkItem(engine, 'plugin', io(), { isTTY: true, ask: async () => 'yes' });
-        expect(createStateStore(root).load().devices['v8.2.0'].plugin).toMatchObject({ done: true, by: '终端确认' });
     });
 });
 
@@ -161,40 +148,5 @@ describe('single stage runs even when already done', () => {
         const code = await runStages(engine, { run: 'version', version: '8.2.1' }, io());
         expect(code).toBe(EXIT.OK);
         expect(actions.version).toHaveBeenCalledWith(expect.anything(), { version: '8.2.1', imageVersion: undefined }, expect.anything());
-    });
-});
-
-describe('an unfinished human-only stage is not a success', () => {
-    test('--run device exits 1 while checks are pending and 0 once ticked', async () => {
-        const hit = worldFacts({ git: { ...worldFacts().git, changedFiles: ['lib/plugin/a.js'] } });
-        const engine = fakeEngine({ device: async () => {} }, hit);
-        const output = io();
-        expect(await runStages(engine, { run: 'device' }, output)).toBe(EXIT.FAILED);
-        expect(output.lines.err.join('\n')).toContain('未完成');
-        await checkItem(engine, 'plugin', io(), { isTTY: true, ask: async () => 'yes' });
-        expect(await runStages(engine, { run: 'device' }, io())).toBe(EXIT.OK);
-    });
-});
-
-describe('human-only stages are not offered as --run', () => {
-    const published = () => worldFacts({ release: { exists: true, draft: false, assets: ['SHA256SUMS', ...['macos', 'linux'].flatMap(o => ['arm64', 'x64'].flatMap(a => [`manyoyo-8.2.0-${o}-${a}.run`, `manyoyo-8.2.0-${o}-${a}-app.tar.gz`]))].sort(), sums: null, createdAt: '2026-10-04T00:00:00Z', url: '' }, npm: { version: '8.2.0' }, runs: { ci: [], packages: [], image: [], npm: [], assets: [], verify: [{ databaseId: 9, status: 'completed', conclusion: 'success', headSha: 'm', createdAt: '2026-10-04T01:00:00Z' }] } });
-
-    test('--status with manual as the next step suggests --check, never --run manual', async () => {
-        const engine = fakeEngine({}, published());
-        const output = io();
-        await require('../scripts/release/cli').printStatus(engine, output, false);
-        const text = output.lines.out.join('\n');
-        expect(text).toContain('--check mac-upgrade');
-        expect(text).not.toContain('--run manual');
-    });
-
-    test('--run manual is refused before any job starts: exit 2, Chinese explanation, no internal error', async () => {
-        const engine = fakeEngine(require('../scripts/release/actions').ACTIONS, published());
-        const output = io();
-        expect(await runStages(engine, { run: 'manual' }, output)).toBe(EXIT.NEEDS_YES);
-        const text = output.lines.err.join('\n');
-        expect(text).toContain('没有可执行的动作');
-        expect(text).not.toContain('is not a function');
-        expect(engine.runner.current).toBeNull();
     });
 });

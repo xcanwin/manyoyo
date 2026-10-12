@@ -4,10 +4,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { computeStages, STAGES, MANUAL_CHECKLIST } = require('../scripts/release/stages');
+const { computeStages, STAGES } = require('../scripts/release/stages');
 const { checkAssets, treeFingerprint } = require('../scripts/release/facts');
 const { ACTIONS, describeCommands } = require('../scripts/release/actions');
-const { matchDeviceRules } = require('../scripts/release/device-rules');
 
 const run = (id, sha, conclusion = 'success') => ({ databaseId: id, status: 'completed', conclusion, headSha: sha });
 const names = (version, volumes = false) => {
@@ -71,8 +70,8 @@ describe('asset set (B1)', () => {
 });
 
 describe('stage order and gates', () => {
-    test('stage order puts the real-device gate before the release and publishes only after the assets (B6/B11)', () => {
-        expect(STAGES.map(stage => stage.id)).toEqual(['preflight', 'version', 'commit', 'merge', 'image', 'packages', 'device', 'release', 'assets', 'publish', 'verify', 'npm', 'manual']);
+    test('stage order has no human gate and publishes only after the assets (B6/B11)', () => {
+        expect(STAGES.map(stage => stage.id)).toEqual(['preflight', 'version', 'commit', 'merge', 'image', 'packages', 'release', 'assets', 'publish', 'verify', 'npm']);
     });
 
     test('merge is blocked until preflight passed on this tree, or CI passed on this very commit (B2)', () => {
@@ -124,42 +123,12 @@ describe('published version (B7)', () => {
             npm: { version: '8.2.0' },
             release: { exists: true, draft: false, assets: names('8.2.0', true), createdAt: '2026-10-02T10:00:00Z' },
             runs: { packages: [run(1, 'mmm')], verify: [{ ...run(9, 'mmm'), createdAt: '2026-10-02T11:00:00Z' }] }
-        }), { checklists: { 'v8.2.0': Object.fromEntries(MANUAL_CHECKLIST.map(item => [item.id, true])) } }));
+        }), {}));
         expect(computeStages(facts({ release: { exists: true, draft: false, assets: names('8.2.0') } })).map(stage => stage.id)).toEqual(STAGES.map(stage => stage.id));
-        for (const id of ['preflight', 'version', 'commit', 'merge', 'image', 'packages', 'device', 'release', 'assets', 'publish', 'verify', 'npm', 'manual']) {
+        for (const id of ['preflight', 'version', 'commit', 'merge', 'image', 'packages', 'release', 'assets', 'publish', 'verify', 'npm']) {
             expect(s[id].state).toBe('done');
         }
         expect(s.version.detail).toContain('已发布');
-    });
-});
-
-describe('device gate', () => {
-    test('rules fire by changed area and ignore CI-only build scripts and workflows', () => {
-        const hit = files => matchDeviceRules(files).map(rule => rule.id);
-        expect(hit(['lib/plugin/playwright-relay.js'])).toEqual(['plugin']);
-        expect(hit(['docker/res/playwright/browser.json'])).toEqual(['plugin']);
-        expect(hit(['scripts/install.sh'])).toEqual(['install']);
-        expect(hit(['scripts/offline/install.sh', 'lib/post-install.js'])).toEqual(['install']);
-        expect(hit(['lib/runtime-heal.js'])).toEqual(['runtime']);
-        expect(hit(['lib/web/server.js', 'frontend/src/app.tsx'])).toEqual(['web']);
-        expect(hit(['scripts/offline/build.js', 'scripts/offline/stage.js', 'scripts/normalized-tar.js', '.github/workflows/build-packages.yml', 'frontend/src/release/release-app.tsx', 'frontend/release.html', 'docs/a.md', 'test/a.test.js'])).toEqual([]);
-    });
-
-    test('no rule hit means the device gate is done; hits block until ticked for this tag', () => {
-        let s = byId(computeStages(facts({ ...merged, ...built }), pre));
-        expect(s.device.state).toBe('done');
-        const hitFacts = facts({ ...merged, ...built, git: { ...merged.git, changedFiles: ['lib/plugin/a.js', 'lib/web/b.js'] } });
-        s = byId(computeStages(hitFacts, pre));
-        expect(s.device.state).toBe('todo');
-        expect(s.release.state).toBe('blocked');
-        s = byId(computeStages(hitFacts, { ...pre, devices: { 'v8.2.0': { plugin: { done: true, by: 'u', sha: 'mmm' } } } }));
-        expect(s.device.state).toBe('todo');
-        s = byId(computeStages(hitFacts, { ...pre, devices: { 'v8.2.0': { plugin: { done: true, sha: 'mmm' }, web: { done: true, sha: 'mmm' } } } }));
-        expect(s.device.state).toBe('done');
-        expect(s.release.state).toBe('todo');
-        // 别的版本勾选过的不算
-        s = byId(computeStages(hitFacts, { ...pre, devices: { 'v8.1.0': { plugin: { done: true, sha: 'mmm' }, web: { done: true, sha: 'mmm' } } } }));
-        expect(s.device.state).toBe('todo');
     });
 });
 
@@ -169,18 +138,6 @@ describe('review findings', () => {
         expect(byId(drafting).version.state).toBe('done');
         expect(byId(drafting).preflight.state).toBe('done');
         expect(drafting.find(stage => stage.state === 'todo').id).toBe('assets');
-    });
-
-    test('a real-device tick is only valid for the main commit it was made on', () => {
-        const hitFacts = facts({ ...merged, ...built, git: { ...merged.git, changedFiles: ['lib/plugin/a.js'] } });
-        const ticked = { ...pre, devices: { 'v8.2.0': { plugin: { done: true, sha: 'mmm' } } } };
-        expect(byId(computeStages(hitFacts, ticked)).device.state).toBe('done');
-        const moved = facts({ ...merged, ...built, git: { ...merged.git, originMainSha: 'newer', changedFiles: ['lib/plugin/a.js'] } });
-        const stage = byId(computeStages(moved, ticked)).device;
-        expect(stage.state).toBe('todo');
-        expect(stage.detail).toContain('重新确认');
-        // 没有记录提交的旧格式勾选同样不算
-        expect(byId(computeStages(hitFacts, { ...pre, devices: { 'v8.2.0': { plugin: { done: true } } } })).device.state).toBe('todo');
     });
 
     test('--npm-dispatch re-runs a failed npm-publish instead of waiting on the dead run', async () => {

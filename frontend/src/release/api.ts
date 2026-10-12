@@ -8,14 +8,10 @@ export type Stage = {
   state: StageState
   detail: string
   url?: string
-  items?: DeviceItem[]
 }
-
-export type DeviceItem = { id: string; title: string; files: string[]; done: boolean; by: string }
 
 export type DirtyFile = { code: string; path: string }
 export type Suggestion = { key: string; label: string; version: string; recommended: boolean }
-export type ChecklistItem = { id: string; title: string; done: boolean }
 
 export type JobSnapshot = {
   id: string
@@ -43,7 +39,6 @@ export type Status = {
   pendingCommits: string[]
   unpushedFiles: DirtyFile[]
   lastJobLog: { at: string; lines: string[] } | null
-  checklist: ChecklistItem[]
   published: boolean
   job: JobSnapshot
 }
