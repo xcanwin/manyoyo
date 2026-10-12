@@ -151,6 +151,11 @@ async function collectFacts(ctx) {
     const originMainSha = hasOrigin ? out(read('git', ['rev-parse', '--verify', '-q', 'origin/main'])) : '';
     const mergedIntoOriginMain = Boolean(originMainSha) && read('git', ['merge-base', '--is-ancestor', 'HEAD', 'origin/main']).status === 0;
     const ahead = hasOrigin && branch ? Number(out(read('git', ['rev-list', '--count', `origin/${branch}..HEAD`])) || 0) : 0;
+    // 已提交、还没推送到 origin 同名分支的文件（推送 / 合并时会带上的内容）
+    const unpushedFiles = ahead > 0
+        ? out(read('git', ['diff', '--name-status', '--no-renames', `origin/${branch}..HEAD`])).split('\n').filter(Boolean)
+            .map(line => { const [code, ...rest] = line.split('\t'); return { code, path: rest.join('\t') }; })
+        : [];
 
     const tags = out(read('git', ['tag', '--list', 'v*'])).split('\n').filter(item => parseReleaseVersion(item.replace(/^v/, '')));
     tags.sort((a, b) => compareReleaseVersions(b.replace(/^v/, ''), a.replace(/^v/, '')));
@@ -176,7 +181,7 @@ async function collectFacts(ctx) {
     const facts = {
         pkg: { version, imageVersion: pkg.imageVersion },
         tag,
-        git: { branch, headSha, dirty, fingerprint, hasOrigin, originMainSha, mergedIntoOriginMain, ahead, latestTag, imageChangedSinceTag, dockerChangedSinceTag, imageVersionChanged, changedFiles, commitsSinceTag },
+        git: { branch, headSha, dirty, fingerprint, hasOrigin, originMainSha, mergedIntoOriginMain, ahead, unpushedFiles, latestTag, imageChangedSinceTag, dockerChangedSinceTag, imageVersionChanged, changedFiles, commitsSinceTag },
         gh: { ok: ghOk },
         release: { exists: false, draft: false, assets: [], sums: null, createdAt: '', url: '' },
         npm: { version: null },

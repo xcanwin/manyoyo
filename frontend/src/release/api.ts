@@ -41,6 +41,8 @@ export type Status = {
   suggestions: Suggestion[]
   notesDraft: string
   pendingCommits: string[]
+  unpushedFiles: DirtyFile[]
+  lastJobLog: { at: string; lines: string[] } | null
   checklist: ChecklistItem[]
   published: boolean
   job: JobSnapshot

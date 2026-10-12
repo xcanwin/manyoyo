@@ -17,6 +17,7 @@ const { createBaseContext, createJobContext } = require('./context');
 const { ruleCommitMessage, agentCommitMessage } = require('./commit-message');
 const { buildVersionSuggestions } = require('./versions');
 const { acquireJobLock } = require('./lock');
+const { readLastJobLog } = require('./jobs');
 const { buildNotesDraft } = require('./notes');
 const { checkKind, recordCheck } = require('./checks');
 
@@ -71,6 +72,7 @@ function createReleaseServer(options = {}) {
         describe: describeCommands,
         getState: () => base.state.load(),
         acquireLock: options.acquireLock === undefined ? () => acquireJobLock(repoRoot, 'web') : options.acquireLock,
+        logFile: path.join(repoRoot, '.release', 'last-job.log'),
         dryRun: base.dryRun
     });
 
@@ -109,6 +111,9 @@ function createReleaseServer(options = {}) {
             notesDraft: buildNotesDraft(facts),
             // 自上个 tag 以来的提交（合并提交不列），页面上展示“这次要发布的改动”
             pendingCommits: facts.git.commitsSinceTag.filter(subject => !/^合并 /.test(subject)),
+            unpushedFiles: facts.git.unpushedFiles || [],
+            // 本进程还没跑过任务时，给出上次（可能是重启前、或命令行跑的）任务日志
+            lastJobLog: runner.events.length ? null : readLastJobLog(path.join(repoRoot, '.release', 'last-job.log')),
             checklist: MANUAL_CHECKLIST.map(item => ({ ...item, done: Boolean(checklist[item.id]) })),
             published: isPublished(facts),
             job: runner.snapshot(),

@@ -30,6 +30,25 @@ const STATE_STYLE: Record<string, string> = {
 
 type LogLine = { seq: number; stage: string; line: string }
 
+const FILE_CODE: Record<string, string> = { M: "修改", A: "新增", D: "删除", R: "重命名", "?": "新文件" }
+
+// 一组改动：为空不显示；较长时限高滚动
+function ChangeList({ title, items }: { title: string; items: string[] }) {
+  if (items.length === 0) return null
+  return (
+    <div className="space-y-1">
+      <div className="font-medium">{title}</div>
+      <ul className="max-h-48 list-disc space-y-0.5 overflow-auto pl-5 text-muted-foreground">
+        {items.map((item, index) => (
+          <li key={`${index}-${item}`} className="break-all">
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function ReleaseApp() {
   const [status, setStatus] = React.useState<Status | null>(null)
   const [error, setError] = React.useState("")
@@ -181,19 +200,24 @@ export function ReleaseApp() {
         </CardContent>
       </Card>
 
-      {status.pendingCommits.length > 0 && (
+      {(status.pendingCommits.length > 0 || status.unpushedFiles.length > 0 || status.dirty.length > 0) && (
         <Card size="sm">
           <CardHeader>
-            <CardTitle className="text-sm">
-              这次要发布的改动（{status.latestTag ? `${status.latestTag} 之后` : "全部"}，共 {status.pendingCommits.length} 个）
-            </CardTitle>
+            <CardTitle className="text-sm">这次要发布的改动</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ul className="list-disc space-y-1 pl-5 text-sm">
-              {status.pendingCommits.map((subject, index) => (
-                <li key={`${index}-${subject}`}>{subject}</li>
-              ))}
-            </ul>
+          <CardContent className="space-y-3 text-sm">
+            <ChangeList
+              title={`提交（${status.latestTag ? `${status.latestTag} 之后` : "全部"}，${status.pendingCommits.length} 个）`}
+              items={status.pendingCommits}
+            />
+            <ChangeList
+              title={`已提交、准备推送的文件（${status.unpushedFiles.length} 个）`}
+              items={status.unpushedFiles.map((file) => `${FILE_CODE[file.code[0]] ?? file.code} ${file.path}`)}
+            />
+            <ChangeList
+              title={`还没提交的文件（${status.dirty.length} 个，要先在「提交」这一步提交）`}
+              items={status.dirty.map((file) => `${FILE_CODE[file.code.trim()[0]] ?? file.code.trim()} ${file.path}`)}
+            />
           </CardContent>
         </Card>
       )}
@@ -270,7 +294,11 @@ export function ReleaseApp() {
         </CardHeader>
         <CardContent>
           <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs leading-relaxed whitespace-pre-wrap">
-            {logs.length === 0 ? "（还没有输出）" : logs.map((entry) => `[${entry.stage}] ${entry.line}`).join("\n")}
+            {logs.length > 0
+              ? logs.map((entry) => `[${entry.stage}] ${entry.line}`).join("\n")
+              : status.lastJobLog
+                ? `上次任务的日志（${new Date(status.lastJobLog.at).toLocaleString("zh-CN", { hour12: false })}）：\n${status.lastJobLog.lines.join("\n")}`
+                : "（还没有输出）"}
             <div ref={logEnd} />
           </pre>
         </CardContent>

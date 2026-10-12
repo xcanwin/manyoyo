@@ -34,6 +34,18 @@ describe('collectFacts', () => {
     expect(facts.git.dirty.map(item => item.path)).toEqual(['.gitignore', 'a.js']);
   });
 
+  test('已提交未推送的文件：领先 origin 时按 name-status 列出，没领先时为空', async () => {
+    const facts = await collectFacts({ repoRoot: root, read: reader({
+      'git branch --show-current': { stdout: 'main\n' },
+      'git remote': { stdout: 'origin\n' },
+      'git rev-list --count origin/main..HEAD': { stdout: '2\n' },
+      'git diff --name-status --no-renames origin/main..HEAD': { stdout: 'M\tlib/a.js\nA\tdocs/b.md\n' }
+    }) });
+    expect(facts.git.unpushedFiles).toEqual([{ code: 'M', path: 'lib/a.js' }, { code: 'A', path: 'docs/b.md' }]);
+    const clean = await collectFacts({ repoRoot: root, read: reader() });
+    expect(clean.git.unpushedFiles).toEqual([]);
+  });
+
   test.each([[200, true], [404, false], [401, null], [429, null], [503, null]])('ghcr manifest status %s means image exists = %s', async (status, expected) => {
     const facts = await collectFacts({
       repoRoot: root,

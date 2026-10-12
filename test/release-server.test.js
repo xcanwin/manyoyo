@@ -10,7 +10,7 @@ const { parseArgs } = require('../scripts/release/index');
 function fakeFacts(over = {}) {
     return {
         pkg: { version: '8.2.0', imageVersion: '2.1.0-common' }, tag: 'v8.2.0',
-        git: { branch: 'feat/x', headSha: 'a', dirty: [{ code: 'M', path: 'lib/a.js' }], fingerprint: 'f', hasOrigin: true, originMainSha: 'm', mergedIntoOriginMain: false, ahead: 0, latestTag: 'v8.1.0', imageChangedSinceTag: false, dockerChangedSinceTag: false, changedFiles: [], commitsSinceTag: ['feat: 新增 A', '合并 feat/y：8.1.0', 'fix: 修 B'], ...(over.git || {}) },
+        git: { branch: 'feat/x', headSha: 'a', dirty: [{ code: 'M', path: 'lib/a.js' }], fingerprint: 'f', hasOrigin: true, originMainSha: 'm', mergedIntoOriginMain: false, ahead: 0, latestTag: 'v8.1.0', imageChangedSinceTag: false, dockerChangedSinceTag: false, changedFiles: [], unpushedFiles: [{ code: 'M', path: 'lib/b.js' }], commitsSinceTag: ['feat: 新增 A', '合并 feat/y：8.1.0', 'fix: 修 B'], ...(over.git || {}) },
         gh: { ok: true }, release: { exists: false, draft: false, assets: [], sums: null, createdAt: '', url: '' }, npm: { version: '8.1.0' }, image: { exists: true },
         runs: { ci: [{ databaseId: 3, status: 'completed', conclusion: 'success', headSha: 'a' }], packages: [], image: [], npm: [], assets: [], verify: [] }
     };
@@ -95,6 +95,10 @@ describe('release server API', () => {
         expect(status.notesDraft).not.toContain('合并 feat/y');
         // 页面要列出“这次要发布的改动”：自上个 tag 以来的提交，合并提交不列
         expect(status.pendingCommits).toEqual(['feat: 新增 A', 'fix: 修 B']);
+        // 已提交、还没推送的文件（相对 origin 上的同名分支）
+        expect(status.unpushedFiles).toEqual([{ code: 'M', path: 'lib/b.js' }]);
+        // 还没有跑过任务时，返回上次（重启前）的任务日志，没有就是 null
+        expect(status).toHaveProperty('lastJobLog');
         expect(status.checklist.every(item => item.done === false)).toBe(true);
     });
 

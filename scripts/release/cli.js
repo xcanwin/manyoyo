@@ -7,6 +7,7 @@
 //   --check <id>                  真机检查确认（必须有终端，agent 不能代替用户勾选）
 
 const fs = require('fs');
+const path = require('path');
 const { collectFacts } = require('./facts');
 const { STAGES, MANUAL_CHECKLIST, computeStages, nextStage, isPublished } = require('./stages');
 const { ACTIONS, describeCommands } = require('./actions');
@@ -29,6 +30,7 @@ function createEngine({ repoRoot, dryRun = false, fetchImpl, actions = ACTIONS, 
         describe: describeCommands,
         getState: () => base.state.load(),
         acquireLock: acquireLock === undefined ? () => acquireJobLock(repoRoot, 'cli') : acquireLock,
+        logFile: path.join(repoRoot, '.release', 'last-job.log'),
         dryRun
     });
     return { base, collect, runner };

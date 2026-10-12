@@ -6,6 +6,8 @@
 //   mode = auto    一键执行整段，开始前一次性确认，之后不再询问
 // 事件流（SSE）：log / stage / confirm / done，保留最近一批供晚加入的页面回放。
 
+const fs = require('fs');
+const path = require('path');
 const { EventEmitter } = require('events');
 const { STAGES, computeStages } = require('./stages');
 const { ReleaseError } = require('./actions');
@@ -37,7 +39,30 @@ class JobRunner extends EventEmitter {
         this.events.push(full);
         if (this.events.length > EVENT_BUFFER) this.events.shift();
         this.emit('event', full);
+        this.persist(full);
         return full;
+    }
+
+    // 任务日志落盘（deps.logFile）：页面或进程重启后还能看到上次失败的原因。新任务开始时覆盖旧日志
+    persist(event) {
+        const file = this.deps.logFile;
+        if (!file) return;
+        let line = '';
+        if (event.type === 'start') line = `# ${new Date(event.at).toISOString()} 开始：${event.stages.join(', ')}（${event.mode}）`;
+        else if (event.type === 'log') line = `[${event.stage}] ${event.line}`;
+        else if (event.type === 'stage' && event.state !== 'running') line = `[${event.stage}] ${event.state}${event.result ? ` → ${event.result}` : ''}${event.detail ? `：${event.detail}` : ''}`;
+        else if (event.type === 'done') line = `# 结束：${event.status}${event.error ? `：${event.error}` : ''}`;
+        if (!line) return;
+        try {
+            if (event.type === 'start') {
+                fs.mkdirSync(path.dirname(file), { recursive: true });
+                fs.writeFileSync(file, `${line}\n`);
+            } else {
+                fs.appendFileSync(file, `${line}\n`);
+            }
+        } catch (e) {
+            // 写日志失败不影响发布本身
+        }
     }
 
     snapshot() {
@@ -173,4 +198,17 @@ class JobRunner extends EventEmitter {
     }
 }
 
-module.exports = { JobRunner };
+const LAST_JOB_LOG_LINES = 400;
+
+// 读上次任务的日志（只取最后 LAST_JOB_LOG_LINES 行）；没有就返回 null
+function readLastJobLog(file) {
+    try {
+        const stat = fs.statSync(file);
+        const lines = fs.readFileSync(file, 'utf-8').split('\n').filter(Boolean);
+        return { at: stat.mtime.toISOString(), lines: lines.slice(-LAST_JOB_LOG_LINES) };
+    } catch (e) {
+        return null;
+    }
+}
+
+module.exports = { JobRunner, readLastJobLog };
