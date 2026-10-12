@@ -17,6 +17,14 @@ describe('rule commit message', () => {
         expect(ruleCommitMessage(files)).toMatch(pattern);
     });
 
+    test('only package.json and package-lock.json with a pending version bump: "升级版本到 x.y.z"', () => {
+        expect(ruleCommitMessage(['package.json', 'package-lock.json'], { version: '8.7.0' })).toBe('升级版本到 8.7.0');
+        // 带了别的文件就不是纯升版本
+        expect(ruleCommitMessage(['package.json', 'lib/a.js'], { version: '8.7.0' })).toMatch(/^feat: /);
+        // 没有待发布的新版本（版本号没升）时仍是依赖更新
+        expect(ruleCommitMessage(['package.json', 'package-lock.json'], {})).toMatch(/^chore: /);
+    });
+
     test('empty selection gives an empty message, objects with path are accepted, length stays short', () => {
         expect(ruleCommitMessage([])).toBe('');
         expect(ruleCommitMessage([{ code: 'M', path: 'lib/a.js' }])).toBe('feat: 调整 lib');

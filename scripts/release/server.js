@@ -15,15 +15,21 @@ const { ACTIONS, describeCommands, ReleaseError } = require('./actions');
 const { JobRunner } = require('./jobs');
 const { createBaseContext, createJobContext } = require('./context');
 const { ruleCommitMessage, agentCommitMessage } = require('./commit-message');
-const { buildVersionSuggestions } = require('./versions');
+const { buildVersionSuggestions, compareReleaseVersions } = require('./versions');
 const { acquireJobLock } = require('./lock');
-const { readLastJobLog } = require('./jobs');
-const { buildNotesDraft } = require('./notes');
+const { readLatestRun, readStageLog } = require('./job-log');
+const { buildNotes, releaseCommits } = require('./notes');
 
 const DEFAULT_PORT = 3900;
 const HOST = '127.0.0.1';
 const FACTS_TTL_MS = 20000;
 const CONSOLE_HTML = path.join(__dirname, 'console.html');
+
+// 版本号已高于最近发布：规则生成的提交说明才写“升级版本到 x.y.z”
+function versionBump(facts) {
+    const latest = facts.git.latestTag ? facts.git.latestTag.replace(/^v/, '') : null;
+    return !latest || compareReleaseVersions(facts.pkg.version, latest) > 0 ? { version: facts.pkg.version } : {};
+}
 
 function sendJson(res, status, body) {
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -57,6 +63,7 @@ function createReleaseServer(options = {}) {
     const token = options.token || crypto.randomBytes(16).toString('hex');
     const base = createBaseContext({ repoRoot, dryRun: Boolean(options.dryRun), fetchImpl: options.fetchImpl });
     if (options.read) base.read = options.read;
+    const logDir = path.join(repoRoot, '.release', 'logs');
     const htmlFile = options.htmlFile || CONSOLE_HTML;
 
     let cache = { at: 0, facts: null };
@@ -71,7 +78,7 @@ function createReleaseServer(options = {}) {
         describe: describeCommands,
         getState: () => base.state.load(),
         acquireLock: options.acquireLock === undefined ? () => acquireJobLock(repoRoot, 'web') : options.acquireLock,
-        logFile: path.join(repoRoot, '.release', 'last-job.log'),
+        logDir,
         dryRun: base.dryRun
     });
 
@@ -104,14 +111,14 @@ function createReleaseServer(options = {}) {
             stages: stages.map(stage => ({ ...stage, commands: describeCommands(stage.id, facts, {}) })),
             nextStage: next ? next.id : null,
             dirty: facts.git.dirty,
-            ruleMessage: ruleCommitMessage(facts.git.dirty),
+            ruleMessage: ruleCommitMessage(facts.git.dirty, versionBump(facts)),
             suggestions: buildVersionSuggestions((facts.git.latestTag || `v${facts.pkg.version}`).replace(/^v/, '')),
-            notesDraft: buildNotesDraft(facts),
-            // 自上个 tag 以来的提交（合并提交不列），页面上展示“这次要发布的改动”
-            pendingCommits: facts.git.commitsSinceTag.filter(subject => !/^合并 /.test(subject)),
+            notesDraft: buildNotes(facts),
+            // 自上个 tag 以来的提交（合并提交、docs: 与升版本提交不列），页面上展示“这次要发布的改动”
+            pendingCommits: releaseCommits(facts),
             unpushedFiles: facts.git.unpushedFiles || [],
-            // 本进程还没跑过任务时，给出上次（可能是重启前、或命令行跑的）任务日志
-            lastJobLog: runner.events.length ? null : readLastJobLog(path.join(repoRoot, '.release', 'last-job.log')),
+            // 最近一次任务（可能是重启前、或命令行跑的）：各阶段的结果与耗时，点开某个阶段再读它的日志
+            lastRun: readLatestRun(logDir),
             published: isPublished(facts),
             job: runner.snapshot(),
             gh: facts.gh.ok
@@ -130,6 +137,11 @@ function createReleaseServer(options = {}) {
             req.on('close', () => { clearInterval(ping); runner.off('event', send); });
             return undefined;
         }
+        if (req.method === 'GET' && pathname === '/api/stage-log') {
+            const log = readStageLog(logDir, url.searchParams.get('run'), url.searchParams.get('stage'));
+            if (!log) throw new ReleaseError('NOT_FOUND', '没有这个阶段的日志');
+            return sendJson(res, 200, log);
+        }
         if (req.method === 'POST' && pathname === '/api/run') {
             const body = await readBody(req);
             const snapshot = runner.start({ stages: body.stages, mode: body.mode, params: body.params || {}, confirmed: body.confirmed === true });
@@ -144,7 +156,7 @@ function createReleaseServer(options = {}) {
         if (req.method === 'POST' && pathname === '/api/commit-message') {
             const body = await readBody(req);
             if (body.mode === 'agent') return sendJson(res, 200, await (options.agentCommitMessage || agentCommitMessage)({ repoRoot }));
-            const message = ruleCommitMessage(body.files || []);
+            const message = ruleCommitMessage(body.files || [], versionBump(cache.facts || await collect()));
             return sendJson(res, 200, { message, reason: message ? '' : '没有选择文件' });
         }
         if (req.method === 'POST' && pathname === '/api/quit') {
@@ -201,4 +213,4 @@ function createReleaseServer(options = {}) {
     };
 }
 
-module.exports = { createReleaseServer, buildNotesDraft, DEFAULT_PORT, HOST };
+module.exports = { createReleaseServer, DEFAULT_PORT, HOST };

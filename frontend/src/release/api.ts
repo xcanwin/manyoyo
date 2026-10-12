@@ -1,3 +1,5 @@
+import type { LastRun } from "./last-run"
+
 export type StageState = "done" | "todo" | "blocked" | "warn"
 
 export type Stage = {
@@ -38,7 +40,7 @@ export type Status = {
   notesDraft: string
   pendingCommits: string[]
   unpushedFiles: DirtyFile[]
-  lastJobLog: { at: string; lines: string[] } | null
+  lastRun: LastRun | null
   published: boolean
   job: JobSnapshot
 }

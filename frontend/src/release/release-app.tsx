@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/spinner"
 
 import { api, subscribeEvents, type ReleaseEvent, type Stage, type Status } from "./api"
 import { CommitDialog, ConfirmDialog, ReleaseDialog, RunAllDialog, VersionDialog } from "./dialogs"
+import { LastRunPanel } from "./last-run-panel"
 import { buildOverview } from "./overview"
 
 type StageView = Stage & { commands?: string[] }
@@ -261,13 +262,14 @@ export function ReleaseApp() {
         </CardHeader>
         <CardContent>
           <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs leading-relaxed whitespace-pre-wrap">
-            {logs.length > 0
-              ? logs.map((entry) => `[${entry.stage}] ${entry.line}`).join("\n")
-              : status.lastJobLog
-                ? `上次任务的日志（${new Date(status.lastJobLog.at).toLocaleString("zh-CN", { hour12: false })}）：\n${status.lastJobLog.lines.join("\n")}`
-                : "（还没有输出）"}
+            {logs.length > 0 ? logs.map((entry) => `[${entry.stage}] ${entry.line}`).join("\n") : "（任务运行时在这里显示实时输出）"}
             <div ref={logEnd} />
           </pre>
+          {logs.length === 0 && status.lastRun && (
+            <div className="mt-3">
+              <LastRunPanel lastRun={status.lastRun} />
+            </div>
+          )}
         </CardContent>
       </Card>
 

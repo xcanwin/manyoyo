@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { createReleaseServer, buildNotesDraft } = require('../scripts/release/server');
+const { createReleaseServer } = require('../scripts/release/server');
 const { parseArgs } = require('../scripts/release/index');
 
 function fakeFacts(over = {}) {
@@ -98,7 +98,7 @@ describe('release server API', () => {
         // 已提交、还没推送的文件（相对 origin 上的同名分支）
         expect(status.unpushedFiles).toEqual([{ code: 'M', path: 'lib/b.js' }]);
         // 还没有跑过任务时，返回上次（重启前）的任务日志，没有就是 null
-        expect(status).toHaveProperty('lastJobLog');
+        expect(status).toHaveProperty('lastRun');
         expect(status).not.toHaveProperty('checklist');
     });
 
@@ -116,6 +116,22 @@ describe('release server API', () => {
         const first = new TextDecoder().decode((await reader.read()).value);
         expect(first).toContain('"type":"start"');
         await reader.cancel();
+    });
+
+    test('the page reads one stage log of the latest run; bad names are 404', async () => {
+        facts.git.dirty = [];
+        await call('POST', '/api/run', { body: { stages: ['merge'], mode: 'single', confirmed: true } });
+        // 假世界里 merge 永远不会变成 done，执行器会等待重查：日志出现后直接取消，也能验证“被中断的阶段”如何记录
+        for (let i = 0; i < 100 && !app.runner.events.some(event => event.type === 'log' && event.line === 'merging'); i += 1) await new Promise(resolve => setTimeout(resolve, 20));
+        await call('POST', '/api/cancel', { body: {} });
+        await waitDone();
+        const status = await (await call('GET', '/api/status')).json();
+        expect(status.lastRun.summary).toMatchObject({ result: 'cancelled' });
+        expect(status.lastRun.summary.stages[0]).toMatchObject({ id: 'merge', result: 'aborted' });
+        const log = await (await call('GET', `/api/stage-log?run=${status.lastRun.dir}&stage=merge`)).json();
+        expect(log.lines).toContain('merging');
+        expect((await call('GET', '/api/stage-log?run=..%2Fx&stage=merge')).status).toBe(404);
+        expect((await call('GET', `/api/stage-log?run=${status.lastRun.dir}&stage=nope`)).status).toBe(404);
     });
 
     test('step mode: the page confirms through /api/confirm; cancel works; a second job is refused with 409', async () => {
@@ -139,28 +155,6 @@ describe('release server API', () => {
         expect((await (await call('POST', '/api/commit-message', { body: { mode: 'agent' } })).json()).message).toBe('feat: from agent');
         expect((await call('POST', '/api/checklist', { body: { id: 'mac-upgrade', done: true } })).status).toBe(404);
     });
-});
-
-test('a commit title with $ replacement patterns cannot corrupt the notes draft', () => {
-    const file = path.join(os.tmpdir(), `manyoyo-notes2-${process.pid}.md`);
-    fs.writeFileSync(file, '## 更新内容\n\n…\n\n## What\n\n…\n');
-    try {
-        const draft = buildNotesDraft(fakeFacts({ git: { commitsSinceTag: ["fix: 处理 $' 与 $& 展开"] } }), file);
-        expect(draft).toBe("## 更新内容\n\n- fix: 处理 $' 与 $& 展开\n\n## What\n\n…\n");
-    } finally {
-        fs.rmSync(file, { force: true });
-    }
-});
-
-test('notes draft fills the template with commit subjects and keeps the English placeholder', () => {
-    const file = path.join(os.tmpdir(), `manyoyo-notes-${process.pid}.md`);
-    fs.writeFileSync(file, '## 更新内容\n\n…\n\n## What\n\n…\n');
-    try {
-        const draft = buildNotesDraft(fakeFacts(), file);
-        expect(draft).toBe('## 更新内容\n\n- feat: 新增 A\n- fix: 修 B\n\n## What\n\n…\n');
-    } finally {
-        fs.rmSync(file, { force: true });
-    }
 });
 
 test('CLI argument parsing', () => {

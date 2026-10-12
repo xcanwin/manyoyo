@@ -6,15 +6,25 @@
 //   mode = auto    一键执行整段，开始前一次性确认，之后不再询问
 // 事件流（SSE）：log / stage / confirm / done，保留最近一批供晚加入的页面回放。
 
-const fs = require('fs');
-const path = require('path');
 const { EventEmitter } = require('events');
 const { STAGES, computeStages } = require('./stages');
 const { ReleaseError } = require('./actions');
+const { createJobLog } = require('./job-log');
 
 const EVENT_BUFFER = 3000;
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE = /\u001b\[[0-9;?]*[A-Za-z]/g;
+
+// 取消后立刻醒来，不要把用户按下“取消”的响应拖到整个等待结束
+function abortableSleep(ms, signal) {
+    return new Promise(resolve => {
+        if (signal.aborted) return resolve();
+        const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); };
+        const timer = setTimeout(done, ms);
+        signal.addEventListener('abort', done, { once: true });
+        return undefined;
+    });
+}
 
 class JobRunner extends EventEmitter {
     /**
@@ -32,6 +42,8 @@ class JobRunner extends EventEmitter {
         this.events = [];
         this.seq = 0;
         this.pending = null;
+        // 任务日志按阶段落盘（deps.logDir）：页面或进程重启后还能看到上次失败的原因
+        this.jobLog = deps.logDir ? createJobLog(deps.logDir) : null;
         this.recheckTimes = deps.recheckTimes === undefined ? 4 : deps.recheckTimes;
         this.recheckDelayMs = deps.recheckDelayMs === undefined ? 10000 : deps.recheckDelayMs;
     }
@@ -41,30 +53,8 @@ class JobRunner extends EventEmitter {
         this.events.push(full);
         if (this.events.length > EVENT_BUFFER) this.events.shift();
         this.emit('event', full);
-        this.persist(full);
+        if (this.jobLog) this.jobLog.record(full);
         return full;
-    }
-
-    // 任务日志落盘（deps.logFile）：页面或进程重启后还能看到上次失败的原因。新任务开始时覆盖旧日志
-    persist(event) {
-        const file = this.deps.logFile;
-        if (!file) return;
-        let line = '';
-        if (event.type === 'start') line = `# ${new Date(event.at).toISOString()} 开始：${event.stages.join(', ')}（${event.mode}）`;
-        else if (event.type === 'log') line = `[${event.stage}] ${event.line}`;
-        else if (event.type === 'stage' && event.state !== 'running') line = `[${event.stage}] ${event.state}${event.result ? ` → ${event.result}` : ''}${event.detail ? `：${event.detail}` : ''}`;
-        else if (event.type === 'done') line = `# 结束：${event.status}${event.error ? `：${event.error}` : ''}`;
-        if (!line) return;
-        try {
-            if (event.type === 'start') {
-                fs.mkdirSync(path.dirname(file), { recursive: true });
-                fs.writeFileSync(file, `${line}\n`);
-            } else {
-                fs.appendFileSync(file, `${line}\n`);
-            }
-        } catch (e) {
-            // 写日志失败不影响发布本身
-        }
     }
 
     snapshot() {
@@ -135,6 +125,15 @@ class JobRunner extends EventEmitter {
     }
 
     async perform(job, id, facts) {
+        try {
+            await this.runStage(job, id, facts);
+        } catch (error) {
+            this.emitEvent({ type: 'stage', stage: id, state: error.code === 'CANCELLED' ? 'aborted' : 'failed', detail: error.message });
+            throw error;
+        }
+    }
+
+    async runStage(job, id, facts) {
         const def = STAGES.find(stage => stage.id === id);
         this.emitEvent({ type: 'stage', stage: id, state: 'running' });
         // 子进程输出带终端颜色码，网页和日志文件里都会显示成乱码，统一去掉
@@ -148,8 +147,9 @@ class JobRunner extends EventEmitter {
             stage = computeStages(fresh, this.deps.getState()).find(item => item.id === id);
             if (stage.state === 'done' || attempt >= this.recheckTimes || job.controller.signal.aborted || this.deps.dryRun) break;
             this.emitEvent({ type: 'log', stage: id, line: `状态还没更新（${stage.state}），${this.recheckDelayMs / 1000} 秒后再确认（${attempt + 1}/${this.recheckTimes}）…` });
-            await (this.deps.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms))))(this.recheckDelayMs);
+            await (this.deps.sleep || (ms => abortableSleep(ms, job.controller.signal)))(this.recheckDelayMs);
         }
+        if (job.controller.signal.aborted) throw new ReleaseError('CANCELLED', '已取消');
         this.emitEvent({ type: 'stage', stage: id, state: 'finished', result: stage.state, detail: stage.detail });
         if (!this.deps.dryRun && job.mode !== 'single' && stage.state !== 'done') {
             throw new ReleaseError('NOT_DONE', `「${def.title}」执行完但状态仍是 ${stage.state}：${stage.detail}`);
@@ -201,17 +201,4 @@ class JobRunner extends EventEmitter {
     }
 }
 
-const LAST_JOB_LOG_LINES = 400;
-
-// 读上次任务的日志（只取最后 LAST_JOB_LOG_LINES 行）；没有就返回 null
-function readLastJobLog(file) {
-    try {
-        const stat = fs.statSync(file);
-        const lines = fs.readFileSync(file, 'utf-8').split('\n').filter(Boolean);
-        return { at: stat.mtime.toISOString(), lines: lines.slice(-LAST_JOB_LOG_LINES) };
-    } catch (e) {
-        return null;
-    }
-}
-
-module.exports = { JobRunner, readLastJobLog };
+module.exports = { JobRunner };

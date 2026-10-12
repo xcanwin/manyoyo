@@ -13,7 +13,7 @@ const { ACTIONS, describeCommands } = require('./actions');
 const { JobRunner } = require('./jobs');
 const { createBaseContext, createJobContext } = require('./context');
 const { acquireJobLock } = require('./lock');
-const { buildNotesDraft } = require('./notes');
+const { buildNotes } = require('./notes');
 
 const ICON = { done: '✓', todo: '○', blocked: '✗', warn: '!' };
 const EXIT = { OK: 0, FAILED: 1, NEEDS_YES: 2 };
@@ -28,7 +28,7 @@ function createEngine({ repoRoot, dryRun = false, fetchImpl, actions = ACTIONS, 
         describe: describeCommands,
         getState: () => base.state.load(),
         acquireLock: acquireLock === undefined ? () => acquireJobLock(repoRoot, 'cli') : acquireLock,
-        logFile: path.join(repoRoot, '.release', 'last-job.log'),
+        logDir: path.join(repoRoot, '.release', 'logs'),
         dryRun
     });
     return { base, collect, runner };
@@ -82,7 +82,6 @@ function buildParams(args) {
 /** @returns {Promise<number>} 退出码 */
 async function runStages(engine, args, io) {
     const stages = stageList(args.run);
-    if (stages.includes('release') && !args.notesFile) throw new Error('--run release 需要 --notes-file <路径>（先 --notes-draft > notes.md 生成并编辑）');
     const params = buildParams(args);
     await engine.base.readAsync('git', ['fetch', '--quiet', 'origin', '--tags']);
     const facts = await engine.collect();
@@ -129,7 +128,7 @@ async function runStages(engine, args, io) {
 }
 
 async function printNotesDraft(engine, io) {
-    io.out(buildNotesDraft(await engine.collect()));
+    io.out(buildNotes(await engine.collect()));
 }
 
 module.exports = { createEngine, printStatus, runStages, printNotesDraft, stageList, EXIT };

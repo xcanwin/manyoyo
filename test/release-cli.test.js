@@ -44,8 +44,7 @@ describe('command line driver', () => {
         expect(actions.release).not.toHaveBeenCalled();
     });
 
-    test('--run release needs --notes-file, unknown stages are rejected', async () => {
-        await expect(runStages(fakeEngine({}), { run: 'release', yes: true }, io())).rejects.toThrow(/--notes-file/);
+    test('unknown stages are rejected', async () => {
         expect(() => stageList('merge,nope')).toThrow(/未知阶段/);
     });
 

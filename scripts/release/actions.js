@@ -11,6 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { parseReleaseVersion, compareReleaseVersions, normalizeCommitMessage } = require('./versions');
+const { buildNotes } = require('./notes');
 const { WORKFLOWS, NPM_PACKAGE, NPM_VIEW_ARGS, checkAssets, parseSums, treeFingerprint } = require('./facts');
 
 const POLL_MS = 15000;
@@ -221,8 +222,8 @@ const ACTIONS = {
     },
 
     async release(ctx, params, facts) {
-        const notes = String(params.notes || '').trim();
-        if (!notes) throw new ReleaseError('NO_NOTES', 'Release 说明不能为空');
+        // 没传说明就按提交列表自动生成，不再需要人编辑
+        const notes = String(params.notes || '').trim() || buildNotes(facts).trim();
         const run = packagesRunFor(facts);
         if (!run) throw new ReleaseError('NO_BUILD', 'main 当前提交上没有成功的安装包构建');
         const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-release-')), 'notes.md');
