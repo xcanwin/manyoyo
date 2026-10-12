@@ -41,7 +41,7 @@ describe('build-packages workflow (macOS + Linux in one run)', () => {
         expect(text.match(/docker save/g) || []).toHaveLength(1);
         for (const name of ['build-macos', 'build-linux']) {
             const job = jobBlock(name);
-            expect(job).toContain('needs: image-archive');
+            expect(job).toContain('needs: [image-archive, web]');
             expect(job).toContain('actions/download-artifact@v8');
             expect(job).not.toMatch(/docker (pull|save)/);
             expect(job).not.toContain('scan-allowlist-image.json');
@@ -62,8 +62,9 @@ describe('build-packages workflow (macOS + Linux in one run)', () => {
 
     test('artifacts holding already-compressed files are uploaded with compression-level: 0', () => {
         const uploads = text.split('actions/upload-artifact@v7').slice(1);
-        expect(uploads).toHaveLength(3);
-        uploads.forEach(chunk => expect(chunk.split('\n\n')[0]).toContain('compression-level: 0'));
+        expect(uploads).toHaveLength(4);
+        // web-index 只是一个 2 MB 的 html，其余三个装的都是已压缩的安装包 / 镜像归档
+        uploads.filter(chunk => !chunk.includes('name: web-index')).forEach(chunk => expect(chunk.split('\n\n')[0]).toContain('compression-level: 0'));
     });
 
     test('the packaged tree is still scanned in every platform job, before the upload', () => {
@@ -87,12 +88,54 @@ describe('build-packages workflow (macOS + Linux in one run)', () => {
         expect(jobBlock('build-linux')).not.toMatch(/podman/);
     });
 
-    test('the macOS VM disk is cached by podman version + arch + ISO week', () => {
+    test('the macOS VM disk is cached by podman version + arch + the upstream machine-os digest (ISO week only as the fallback)', () => {
         const job = jobBlock('build-macos');
         expect(job).toContain('MANYOYO_VM_DISK_CACHE_DIR');
-        expect(job).toMatch(/key: vm-disk-[^\n]*matrix\.arch[^\n]*week/);
+        expect(job).toMatch(/key: vm-disk-podman-[^\n]*matrix\.arch[^\n]*steps\.machineos\.outputs\.key/);
+        expect(job).toContain('https://quay.io/v2/podman/machine-os/manifests/');
+        expect(job).toContain('docker-content-digest');
+        // 查不到 digest 时退回按周的 key，不能因此让构建失败
+        expect(job).toContain('key=week-${{ steps.version.outputs.week }}');
         expect(job).toContain('date -u +%G-W%V');
         expect(job).toContain('scripts/offline/lock.js');
+        // digest 步骤必须在缓存恢复之前
+        expect(job.indexOf('id: machineos')).toBeLessThan(job.indexOf('actions/cache@v5'));
+    });
+
+    test('the web UI is built once and handed to the platform jobs (no per-job npm ci / build:web, prepack must not rebuild)', () => {
+        const web = jobBlock('web');
+        expect(web).toContain('npm run build:web');
+        expect(web).toContain('name: web-index');
+        for (const name of ['build-macos', 'build-linux']) {
+            const job = jobBlock(name);
+            expect(job).not.toContain('npm ci');
+            expect(job).not.toContain('npm run build:web');
+            expect(job).toContain('name: web-index');
+            expect(job).toContain("MANYOYO_SKIP_WEB_BUILD: '1'");
+        }
+    });
+
+    test('Linux jobs smoke-install the package they just built, before uploading it; macOS does it in the pipeline (Intel takes minutes: not on the critical path)', () => {
+        const job = jobBlock('build-linux');
+        expect(job).toContain('Smoke install');
+        expect(job).toContain('--install-only');
+        expect(job).toContain('uninstall --yes');
+        expect(job.indexOf('Smoke install')).toBeLessThan(job.indexOf('actions/upload-artifact@v7'));
+        expect(job.indexOf('Smoke install')).toBeGreaterThan(job.indexOf('Scan packaged tree'));
+        expect(jobBlock('build-macos')).not.toContain('Smoke install');
+    });
+
+    test('the macOS packaging compresses with pigz (multi-threaded, still standard gzip for the installer)', () => {
+        const job = jobBlock('build-macos');
+        expect(job).toContain('brew install gnu-tar pigz');
+        expect(job).toContain('MANYOYO_PIGZ=1');
+        expect(jobBlock('build-linux')).not.toContain('pigz');
+    });
+
+    test('can be called by the release pipeline (workflow_call) and stays manually dispatchable', () => {
+        const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\nenv:'));
+        expect(onBlock).toContain('workflow_call:');
+        expect(onBlock).toContain('workflow_dispatch:');
     });
 
     test('only needs read permissions (packages: read for the pull)', () => {

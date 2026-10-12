@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 
 import { api, type DirtyFile, type Suggestion } from "./api"
@@ -58,58 +57,58 @@ export function ConfirmDialog({
   )
 }
 
-/** 一键发布：选择确认方式；一次确认需要输入 publish */
-export function RunAllDialog({
-  stages,
-  notesDraft,
-  needsNotes = true,
+/** 一键发布：推送 main 并交给 GitHub Actions 自动完成，只需点一次「开始」 */
+export function RemoteDialog({
+  version,
+  willBump,
+  commits,
+  notes,
+  problem,
   onStart,
   onCancel,
 }: {
-  stages: string[]
-  notesDraft: string
-  needsNotes?: boolean
-  onStart: (mode: "step" | "auto", notes: string) => void
+  version: string
+  willBump: boolean
+  commits: string[]
+  notes: string
+  problem: string
+  onStart: () => void
   onCancel: () => void
 }) {
-  const [mode, setMode] = React.useState<"step" | "auto">("step")
-  const [phrase, setPhrase] = React.useState("")
-  const [notes, setNotes] = React.useState(notesDraft)
-  const ready = (!needsNotes || notes.trim() !== "") && (mode === "step" || phrase.trim() === "publish")
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>一键发布</DialogTitle>
-          <DialogDescription>将依次执行：{stages.join(" → ")}。已完成的阶段会自动跳过，出错立即停止。</DialogDescription>
+          <DialogTitle>一键发布 v{version}</DialogTitle>
+          <DialogDescription>
+            {willBump ? `版本号还没升，会自动升到 ${version} 并提交。` : ""}
+            会推送 main 并交给 GitHub Actions 自动完成（测试、构建、验证、公开、发 npm），之后可以关掉页面和电脑。
+          </DialogDescription>
         </DialogHeader>
-        {needsNotes && (
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Release 说明（发布前请看一遍，可直接改）</p>
-            <Textarea rows={8} value={notes} onChange={(event) => setNotes(event.target.value)} className="font-mono text-xs" />
-          </div>
+        {problem && (
+          <Alert variant="destructive">
+            <AlertDescription>{problem}</AlertDescription>
+          </Alert>
         )}
-        <Tabs value={mode} onValueChange={(value) => setMode(value as "step" | "auto")}>
-          <TabsList>
-            <TabsTrigger value="step">逐步确认</TabsTrigger>
-            <TabsTrigger value="auto">一次确认</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {mode === "step" ? (
-          <p className="text-sm text-muted-foreground">每个对外动作开始前都会弹出将执行的命令，由你逐个确认。</p>
-        ) : (
-          <div className="space-y-2">
-            <Alert>
-              <AlertDescription>一次确认后不再询问，会连续推送、触发构建、创建 Release 草稿并公开、发布 npm。输入 publish 以确认。</AlertDescription>
-            </Alert>
-            <Input value={phrase} onChange={(event) => setPhrase(event.target.value)} placeholder="输入 publish" />
-          </div>
-        )}
+        <div className="space-y-1 text-sm">
+          <p className="font-medium">这次的改动（{commits.length} 个提交）</p>
+          <ul className="max-h-40 list-disc space-y-0.5 overflow-auto pl-5 text-muted-foreground">
+            {commits.map((commit, index) => (
+              <li key={`${index}-${commit}`} className="break-all">
+                {commit}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="space-y-1 text-sm">
+          <p className="font-medium">Release 说明（自动生成）</p>
+          <pre className="max-h-48 overflow-auto rounded-md bg-muted p-3 text-xs leading-relaxed whitespace-pre-wrap">{notes}</pre>
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>
             取消
           </Button>
-          <Button disabled={!ready} onClick={() => onStart(mode, notes)}>
+          <Button disabled={Boolean(problem)} onClick={onStart}>
             开始
           </Button>
         </DialogFooter>

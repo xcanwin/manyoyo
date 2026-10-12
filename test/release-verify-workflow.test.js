@@ -16,7 +16,8 @@ describe('release-verify workflow', () => {
 
     test('matrix runners are pinned (Ubuntu 24.04 x64/arm64, macOS 15 arm64/Intel)', () => {
         const runners = [...text.matchAll(/runner:\s*(\S+)/g)].map(m => m[1]);
-        expect(runners.sort()).toEqual(['macos-15', 'macos-15-intel', 'ubuntu-24.04', 'ubuntu-24.04-arm']);
+        // 四平台验证各一个，升级 / 回滚验证（upgrade 任务）再用 ubuntu-24.04 与 macos-15 各一个
+        expect(runners.sort()).toEqual(['macos-15', 'macos-15', 'macos-15-intel', 'ubuntu-24.04', 'ubuntu-24.04', 'ubuntu-24.04-arm']);
         expect(text).not.toMatch(/-latest/);
     });
 
@@ -35,6 +36,24 @@ describe('release-verify workflow', () => {
         expect(text).toContain('MANYOYO_VERSION="$ver" sh scripts/install.sh --install-only');
         expect(text).not.toMatch(/raw\.githubusercontent|raw\/main/);
         expect(text).not.toMatch(/^\s*! ls /m); // set -e 对 `! cmd` 不生效，检查会变成空操作
+    });
+
+    test('can be called by the release pipeline, and upgrade/rollback replaces the old by-hand device check', () => {
+        expect(text).toMatch(/workflow_call:\s*\n\s+inputs:\s*\n\s+tag:/);
+        expect(text).toContain('update --rollback');
+        // 旧版本（≤8.6.3）查最新版本走 GitHub API：限流时重试 3 次、间隔 60 秒，仍不行改用 update --file，并标成警告而不是失败
+        expect(text).toContain('sleep 60');
+        expect(text).toContain('update --file');
+        expect(text).toContain('::warning::');
+    });
+
+    test('the Intel macOS VM check really starts the private machine but never blocks the release', () => {
+        const job = text.slice(text.indexOf('\n  vm-intel:'));
+        expect(job).toContain('runs-on: macos-15-intel');
+        expect(job).toContain('continue-on-error: true');
+        // 与 macOS 游客验证不同：这里不跳过虚拟机
+        expect(job).not.toContain('MANYOYO_TEST_SKIP_MACHINE');
+        expect(job).toContain('--rm-on-exit');
     });
 
     test('every download retries transient network errors', () => {

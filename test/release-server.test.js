@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { createReleaseServer, buildNotesDraft } = require('../scripts/release/server');
+const { createReleaseServer } = require('../scripts/release/server');
 const { parseArgs } = require('../scripts/release/index');
 
 function fakeFacts(over = {}) {
@@ -20,6 +20,7 @@ let root;
 let app;
 let url;
 let facts;
+let holdRemote = null;
 const waitDone = async () => { for (let i = 0; i < 100 && !app.runner.events.some(event => event.type === 'done'); i += 1) await new Promise(resolve => setTimeout(resolve, 20)); };
 beforeEach(async () => {
     facts = fakeFacts();
@@ -29,7 +30,9 @@ beforeEach(async () => {
         repoRoot: root, port: 0, token: 'tok123', htmlFile: path.join(root, 'page.html'),
         collect: async () => facts, read: () => ({ status: 0, stdout: '' }),
         actions: { merge: async ctx => ctx.log('merging'), preflight: async () => {} },
-        agentCommitMessage: async () => ({ message: 'feat: from agent', reason: '' })
+        agentCommitMessage: async () => ({ message: 'feat: from agent', reason: '' }),
+        startRemote: async (ctx, f, params) => { ctx.log('pushing'); if (holdRemote) await holdRemote; return { runId: 55, url: 'https://github.com/x/y/actions/runs/55', version: params.version || '8.2.1', sha: 'a'.repeat(40) }; },
+        fetchRemoteRun: async (ctx, id) => ({ runId: Number(id) || 55, status: 'in_progress', conclusion: '', url: 'https://github.com/x/y/actions/runs/55', stages: [{ id: 'prepare', result: 'success', durationSec: 5 }] })
     });
     const info = await app.listen();
     url = `http://127.0.0.1:${info.port}`;
@@ -85,7 +88,7 @@ describe('release server security', () => {
 describe('release server API', () => {
     test('status lists the stages, next step, dirty files, rule message, version suggestions and a notes draft', async () => {
         const status = await (await call('GET', '/api/status')).json();
-        expect(status.stages.map(stage => stage.id)).toEqual(['preflight', 'version', 'commit', 'merge', 'image', 'packages', 'device', 'release', 'assets', 'publish', 'verify', 'npm', 'manual']);
+        expect(status.stages.map(stage => stage.id)).toEqual(['preflight', 'version', 'commit', 'merge', 'image', 'packages', 'release', 'assets', 'publish', 'verify', 'npm']);
         expect(status.nextStage).toBe('preflight');
         expect(status.dirty).toEqual([{ code: 'M', path: 'lib/a.js' }]);
         expect(status.ruleMessage).toBe('feat: 调整 lib');
@@ -98,8 +101,8 @@ describe('release server API', () => {
         // 已提交、还没推送的文件（相对 origin 上的同名分支）
         expect(status.unpushedFiles).toEqual([{ code: 'M', path: 'lib/b.js' }]);
         // 还没有跑过任务时，返回上次（重启前）的任务日志，没有就是 null
-        expect(status).toHaveProperty('lastJobLog');
-        expect(status.checklist.every(item => item.done === false)).toBe(true);
+        expect(status).toHaveProperty('lastRun');
+        expect(status).not.toHaveProperty('checklist');
     });
 
     test('external stages need confirmed:true; with it the job runs and streams events', async () => {
@@ -118,6 +121,49 @@ describe('release server API', () => {
         await reader.cancel();
     });
 
+    test('the page reads one stage log of the latest run; bad names are 404', async () => {
+        facts.git.dirty = [];
+        await call('POST', '/api/run', { body: { stages: ['merge'], mode: 'single', confirmed: true } });
+        // 假世界里 merge 永远不会变成 done，执行器会等待重查：日志出现后直接取消，也能验证“被中断的阶段”如何记录
+        for (let i = 0; i < 100 && !app.runner.events.some(event => event.type === 'log' && event.line === 'merging'); i += 1) await new Promise(resolve => setTimeout(resolve, 20));
+        await call('POST', '/api/cancel', { body: {} });
+        await waitDone();
+        const status = await (await call('GET', '/api/status')).json();
+        expect(status.lastRun.summary).toMatchObject({ result: 'cancelled' });
+        expect(status.lastRun.summary.stages[0]).toMatchObject({ id: 'merge', result: 'aborted' });
+        const log = await (await call('GET', `/api/stage-log?run=${status.lastRun.dir}&stage=merge`)).json();
+        expect(log.lines).toContain('merging');
+        expect((await call('GET', '/api/stage-log?run=..%2Fx&stage=merge')).status).toBe(404);
+        expect((await call('GET', `/api/stage-log?run=${status.lastRun.dir}&stage=nope`)).status).toBe(404);
+    });
+
+    test('one-click release goes through the remote pipeline: needs confirmed:true, no stage job, and the page can poll the run', async () => {
+        expect((await call('POST', '/api/remote', { body: {} })).status).toBe(400);
+        const started = await (await call('POST', '/api/remote', { body: { confirmed: true, version: '8.2.1' } })).json();
+        expect(started).toMatchObject({ runId: 55, version: '8.2.1', url: 'https://github.com/x/y/actions/runs/55' });
+        expect(started.log).toContain('pushing');
+        // 和分步任务互不影响：没有占着任务执行器
+        expect(app.runner.snapshot()).toBeNull();
+        const polled = await (await call('GET', '/api/remote/status?run=55')).json();
+        expect(polled.run).toMatchObject({ runId: 55, status: 'in_progress' });
+        expect((await call('GET', '/api/remote/status?run=abc')).status).toBe(400);
+        const status = await (await call('GET', '/api/status')).json();
+        expect(status.remotePlan).toMatchObject({ version: expect.any(String), willBump: expect.any(Boolean) });
+    });
+
+    test('a second one-click request, or a stage job, while a remote start is in flight is refused with 409 (the cross-process lock does not stop the same process)', async () => {
+        let release;
+        holdRemote = new Promise(resolve => { release = resolve; });
+        const first = call('POST', '/api/remote', { body: { confirmed: true } });
+        await new Promise(resolve => setTimeout(resolve, 100));
+        expect((await call('POST', '/api/remote', { body: { confirmed: true } })).status).toBe(409);
+        expect((await call('POST', '/api/run', { body: { stages: ['merge'], mode: 'single', confirmed: true } })).status).toBe(409);
+        release();
+        expect((await first).status).toBe(200);
+        holdRemote = null;
+        expect((await call('POST', '/api/remote', { body: { confirmed: true } })).status).toBe(200);
+    });
+
     test('step mode: the page confirms through /api/confirm; cancel works; a second job is refused with 409', async () => {
         facts.git.dirty = [];
         await call('POST', '/api/run', { body: { stages: ['merge'], mode: 'step' } });
@@ -133,38 +179,12 @@ describe('release server API', () => {
         expect((await (await call('POST', '/api/cancel', { body: {} })).json()).cancelled).toBe(false);
     });
 
-    test('commit message: rule and agent modes, and the manual checklist persists', async () => {
+    test('commit message: rule and agent modes; the checklist route is gone', async () => {
         expect(await (await call('POST', '/api/commit-message', { body: { mode: 'rule', files: ['docs/a.md'] } })).json()).toEqual({ message: 'docs: 更新 docs 文档', reason: '' });
         expect((await (await call('POST', '/api/commit-message', { body: { mode: 'rule', files: [] } })).json()).reason).toContain('没有选择文件');
         expect((await (await call('POST', '/api/commit-message', { body: { mode: 'agent' } })).json()).message).toBe('feat: from agent');
-        expect((await call('POST', '/api/checklist', { body: { id: 'nope', done: true } })).status).toBe(400);
-        await call('POST', '/api/checklist', { body: { id: 'mac-upgrade', done: true } });
-        const status = await (await call('GET', '/api/status')).json();
-        expect(status.checklist.find(item => item.id === 'mac-upgrade').done).toBe(true);
-        expect(JSON.parse(fs.readFileSync(path.join(root, '.release', 'state.json'), 'utf-8')).checklists['v8.2.0']['mac-upgrade']).toBe(true);
+        expect((await call('POST', '/api/checklist', { body: { id: 'mac-upgrade', done: true } })).status).toBe(404);
     });
-});
-
-test('a commit title with $ replacement patterns cannot corrupt the notes draft', () => {
-    const file = path.join(os.tmpdir(), `manyoyo-notes2-${process.pid}.md`);
-    fs.writeFileSync(file, '## 更新内容\n\n…\n\n## What\n\n…\n');
-    try {
-        const draft = buildNotesDraft(fakeFacts({ git: { commitsSinceTag: ["fix: 处理 $' 与 $& 展开"] } }), file);
-        expect(draft).toBe("## 更新内容\n\n- fix: 处理 $' 与 $& 展开\n\n## What\n\n…\n");
-    } finally {
-        fs.rmSync(file, { force: true });
-    }
-});
-
-test('notes draft fills the template with commit subjects and keeps the English placeholder', () => {
-    const file = path.join(os.tmpdir(), `manyoyo-notes-${process.pid}.md`);
-    fs.writeFileSync(file, '## 更新内容\n\n…\n\n## What\n\n…\n');
-    try {
-        const draft = buildNotesDraft(fakeFacts(), file);
-        expect(draft).toBe('## 更新内容\n\n- feat: 新增 A\n- fix: 修 B\n\n## What\n\n…\n');
-    } finally {
-        fs.rmSync(file, { force: true });
-    }
 });
 
 test('CLI argument parsing', () => {

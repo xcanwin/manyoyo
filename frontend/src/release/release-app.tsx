@@ -7,8 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Spinner } from "@/components/ui/spinner"
 
 import { api, subscribeEvents, type ReleaseEvent, type Stage, type Status } from "./api"
-import { CommitDialog, ConfirmDialog, ReleaseDialog, RunAllDialog, VersionDialog } from "./dialogs"
+import { CommitDialog, ConfirmDialog, ReleaseDialog, RemoteDialog, VersionDialog } from "./dialogs"
+import { LastRunPanel } from "./last-run-panel"
 import { buildOverview } from "./overview"
+import { RemotePanel } from "./remote-panel"
 
 type StageView = Stage & { commands?: string[] }
 type Dialog =
@@ -16,10 +18,9 @@ type Dialog =
   | { kind: "commit" }
   | { kind: "release"; stage: StageView }
   | { kind: "confirm"; stage: StageView }
-  | { kind: "runAll" }
+  | { kind: "remote" }
   | null
 
-const PUBLISH_STAGES = ["merge", "image", "packages", "device", "release", "assets", "publish", "verify", "npm"]
 const STATE_LABEL: Record<string, string> = { done: "已完成", todo: "待办", blocked: "被阻塞", warn: "需确认" }
 const STATE_STYLE: Record<string, string> = {
   done: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
@@ -56,6 +57,7 @@ export function ReleaseApp() {
   const [logs, setLogs] = React.useState<LogLine[]>([])
   const [pending, setPending] = React.useState<{ stage: string; title: string; commands: string[] } | null>(null)
   const [refreshing, setRefreshing] = React.useState(false)
+  const [remoteTick, setRemoteTick] = React.useState(0)
   const logEnd = React.useRef<HTMLDivElement>(null)
 
   const refresh = React.useCallback(async (force = false) => {
@@ -131,11 +133,6 @@ export function ReleaseApp() {
     setError("控制台已结束，可以关闭这个页面。")
   }
 
-  async function toggleCheck(id: string, done: boolean) {
-    await api("/api/checklist", { id, done })
-    await refresh(false)
-  }
-
   if (!status) {
     return <div className="p-8 text-muted-foreground">{error || "读取状态…"}</div>
   }
@@ -188,8 +185,8 @@ export function ReleaseApp() {
             </Button>
           )}
           {overview.showRunAll && (
-            <Button variant="outline" disabled={running} onClick={() => setDialog({ kind: "runAll" })}>
-              一键发布（合并 main → 验证）
+            <Button variant="outline" disabled={running} onClick={() => setDialog({ kind: "remote" })}>
+              一键发布（交给 GitHub 自动完成）
             </Button>
           )}
           {running && (
@@ -222,6 +219,8 @@ export function ReleaseApp() {
         </Card>
       )}
 
+      <RemotePanel refreshKey={remoteTick} />
+
       {overview.historyNote && <p className="text-sm text-muted-foreground">{overview.historyNote}</p>}
       <ol className="space-y-2">
         {stages.map((stage, index) => (
@@ -234,7 +233,7 @@ export function ReleaseApp() {
                   <span className={`rounded px-2 py-0.5 text-xs ${STATE_STYLE[stage.state]}`}>{STATE_LABEL[stage.state]}</span>
                   {stage.external && <Badge variant="outline">对外动作</Badge>}
                   {status.job?.currentStage === stage.id && running && <Spinner />}
-                  {stage.id !== "manual" && stage.id !== "device" && !(status.published && stage.state === "done") && (
+                  {!(status.published && stage.state === "done") && (
                     <Button
                       className="ml-auto"
                       size="sm"
@@ -252,34 +251,6 @@ export function ReleaseApp() {
                     {stage.url}
                   </a>
                 )}
-                {stage.id === "device" && stage.items && stage.items.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">用 CI 产物在真实 Mac 上安装检查：gh run download &lt;安装包构建 runId&gt; -n manyoyo-{status.version}-macos-&lt;arm64|x64&gt;。检查完才勾选，勾选代表你亲自确认过。</p>
-                    {stage.items.map((item) => (
-                      <label key={item.id} className="flex items-start gap-2 text-sm">
-                        <input type="checkbox" className="mt-1" checked={item.done} onChange={(event) => void toggleCheck(item.id, event.target.checked)} />
-                        <span>
-                          {item.title}
-                          <span className="block text-xs text-muted-foreground">
-                            命中：{item.files.slice(0, 3).join("、")}
-                            {item.files.length > 3 ? " 等" : ""}
-                            {item.done && item.by ? ` · ${item.by}` : ""}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {stage.id === "manual" && (
-                  <div className="space-y-2">
-                    {status.checklist.map((item) => (
-                      <label key={item.id} className="flex items-start gap-2 text-sm">
-                        <input type="checkbox" className="mt-1" checked={item.done} onChange={(event) => void toggleCheck(item.id, event.target.checked)} />
-                        <span>{item.title}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
               </CardContent>
             </Card>
           </li>
@@ -294,13 +265,14 @@ export function ReleaseApp() {
         </CardHeader>
         <CardContent>
           <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs leading-relaxed whitespace-pre-wrap">
-            {logs.length > 0
-              ? logs.map((entry) => `[${entry.stage}] ${entry.line}`).join("\n")
-              : status.lastJobLog
-                ? `上次任务的日志（${new Date(status.lastJobLog.at).toLocaleString("zh-CN", { hour12: false })}）：\n${status.lastJobLog.lines.join("\n")}`
-                : "（还没有输出）"}
+            {logs.length > 0 ? logs.map((entry) => `[${entry.stage}] ${entry.line}`).join("\n") : "（任务运行时在这里显示实时输出）"}
             <div ref={logEnd} />
           </pre>
+          {logs.length === 0 && status.lastRun && (
+            <div className="mt-3">
+              <LastRunPanel lastRun={status.lastRun} />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -352,15 +324,23 @@ export function ReleaseApp() {
           }}
         />
       )}
-      {dialog?.kind === "runAll" && (
-        <RunAllDialog
-          stages={stages.filter((stage) => PUBLISH_STAGES.includes(stage.id) && stage.state !== "done").map((stage) => stage.title)}
-          notesDraft={status.notesDraft}
-          needsNotes={stages.find((stage) => stage.id === "release")?.state !== "done"}
+      {dialog?.kind === "remote" && (
+        <RemoteDialog
+          version={status.remotePlan.version}
+          willBump={status.remotePlan.willBump}
+          commits={status.pendingCommits}
+          notes={status.notesDraft}
+          problem={status.remotePlan.problem}
           onCancel={() => setDialog(null)}
-          onStart={(mode, notes) => {
+          onStart={() => {
             setDialog(null)
-            void start(PUBLISH_STAGES, mode, { release: { notes } }, mode === "auto")
+            setError("")
+            api<{ url: string }>("/api/remote", { confirmed: true, version: status.remotePlan.willBump ? status.remotePlan.version : undefined })
+              .then(() => {
+                setRemoteTick((value) => value + 1)
+                return refresh(true)
+              })
+              .catch((err) => setError(err instanceof Error ? err.message : "启动失败"))
           }}
         />
       )}

@@ -2,7 +2,10 @@
 # 目的：把原来需要人在新用户 / 新机器上手工做的验证交给 CI。不需要任何 secret，也不会修改 Release。
 # 覆盖：Linux x64 / arm64 完整安装（真实 docker、真实镜像导入）；macOS arm64 / Intel 用真实 macOS 的 sh（bash 3.2）跑安装器，
 # 跳过虚拟机（GitHub 的 macOS runner 没有嵌套虚拟化，MANYOYO_TEST_SKIP_MACHINE），其余步骤（校验、解压、PATH、包装脚本、update、卸载）都是真的。
-# 不覆盖：macOS 上真正启动 Podman 虚拟机、浏览器向导、Agent 对话——这些仍需维护者偶尔在真机验证。
+# 另有 vm-intel 任务（不阻断）：macos-15-intel 上 Podman 虚拟机能真实启动（实测），所以在这里完整安装、启动私有虚拟机、导入镜像并跑一个容器；
+# macos-15（arm64）是 Apple M1 虚拟机，没有嵌套虚拟化（实测 podman machine start 报 vfkit exited unexpectedly），只能跳过虚拟机。
+# 另有 upgrade 任务：安装上一个版本 → manyoyo update 升到新版 → update --rollback → 再 update（替代原来的发布后真机检查）。
+# 不覆盖：macOS 上真正启动 Podman 虚拟机（runner 没有嵌套虚拟化）、浏览器向导、Agent 对话。
 # 前提：tag 必须是 Release 的“最新版本”（update 用例断言“已是最新版本”）；release-offline 已上传（一次含两个平台）。
 
 name: Verify Release
@@ -12,6 +15,12 @@ on:
     inputs:
       tag:
         description: 'Release 的 tag，如 v8.0.1（必须是最新 Release）'
+        required: true
+  # 发布流水线公开 Release 之后复用
+  workflow_call:
+    inputs:
+      tag:
+        type: string
         required: true
 
 permissions:
@@ -57,7 +66,7 @@ jobs:
           m="$HOME/.manyoyo/bin/manyoyo"
           test "$("$m" -v)" = "$ver"
           # 后台导入镜像（真实 docker load）：等标记出现
-          for i in $(seq 1 90); do
+          for _ in $(seq 1 90); do
             ls "$HOME"/.manyoyo/.install/image-loaded-* >/dev/null 2>&1 && break
             sleep 5
           done
@@ -92,7 +101,7 @@ jobs:
           # 安装成功后下载的安装包应被删除（注意 set -e 对 `! cmd` 不生效，必须用 if）
           if ls "$HOME"/.manyoyo/downloads/*.run >/dev/null 2>&1; then echo "安装包没有被删除"; exit 1; fi
           # 后台导入镜像（真实 docker load）：等标记出现，再卸载，避免与导入进程竞争
-          for i in $(seq 1 90); do
+          for _ in $(seq 1 90); do
             ls "$HOME"/.manyoyo/.install/image-loaded-* >/dev/null 2>&1 && break
             sleep 5
           done
@@ -147,3 +156,121 @@ jobs:
           "$m" uninstall --yes
           test ! -e "$HOME/.manyoyo/app" && test ! -e "$HOME/.manyoyo/bin"
           echo "macOS ${{ matrix.arch }} 验证通过（未启动虚拟机）"
+
+  # 从上一个版本升级 / 回滚 / 再升级：已安装的旧版（≤8.6.3）查最新版本走 GitHub API，runner 共享出口偶尔被限流，
+  # 遇到限流重试 3 次（间隔 60 秒）；仍然不行就改用 update --file 完成升级，并标成警告（不算失败）
+  upgrade:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            os: linux
+            arch: x64
+          - runner: macos-15
+            os: macos
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - name: Install the previous release, update, roll back, update again
+        run: |
+          set -eu
+          ver="${TAG#v}"
+          repo="https://github.com/xcanwin/manyoyo"
+          prev="$(git ls-remote --tags --refs "${repo}.git" 'v*' | awk '{sub("refs/tags/", "", $2); print $2}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | awk -v t="$TAG" '$0 == t {print p; exit} {p = $0}')"
+          if [ -z "$prev" ]; then echo "没有比 ${TAG} 更早的版本，跳过升级验证"; exit 0; fi
+          pver="${prev#v}"
+          echo "上一个版本: ${prev}，升级到 ${TAG}"
+          mkdir -p "$RUNNER_TEMP/up" && cd "$RUNNER_TEMP/up"
+          run_file="manyoyo-${pver}-${{ matrix.os }}-${{ matrix.arch }}.run"
+          curl -sSL -f --retry 3 --retry-all-errors -O "${repo}/releases/download/${prev}/${run_file}"
+          curl -sSL -f --retry 3 --retry-all-errors -O "${repo}/releases/download/${prev}/SHA256SUMS"
+          grep -q "$(if [ "${{ matrix.os }}" = macos ]; then shasum -a 256 "$run_file"; else sha256sum "$run_file"; fi | cut -d' ' -f1)  ${run_file}" SHA256SUMS
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          if [ "${{ matrix.os }}" = macos ]; then
+            MANYOYO_TEST_SKIP_MACHINE=1 MANYOYO_TEST_FREE_MB=100000 sh "$run_file" --install-only
+          else
+            sh "$run_file" --install-only
+            for _ in $(seq 1 90); do
+              ls "$HOME"/.manyoyo/.install/image-loaded-* >/dev/null 2>&1 && break
+              sleep 5
+            done
+          fi
+          m="$HOME/.manyoyo/bin/manyoyo"
+          test "$("$m" -v)" = "$pver"
+
+          # update：限流重试，仍不行就用 --file（升级包与清单手动下载并校验）
+          warned=0
+          do_update() {
+            target="$1"
+            for attempt in 1 2 3; do
+              if "$m" update > update.out 2>&1; then cat update.out; return 0; fi
+              cat update.out
+              if grep -Eqi 'rate.?limit|限流|API rate' update.out && [ "$attempt" -lt 3 ]; then
+                echo "遇到限流，60 秒后重试（${attempt}/3）"
+                sleep 60
+              else
+                break
+              fi
+            done
+            echo "::warning::manyoyo update 没能通过（多半是旧版本走 GitHub API 被限流），改用 update --file 完成升级"
+            warned=1
+            app="manyoyo-${target}-${{ matrix.os }}-${{ matrix.arch }}-app.tar.gz"
+            curl -sSL -f --retry 3 --retry-all-errors -O "${repo}/releases/download/v${target}/${app}"
+            curl -sSL -f --retry 3 --retry-all-errors -o SHA256SUMS.target "${repo}/releases/download/v${target}/SHA256SUMS"
+            cp SHA256SUMS.target SHA256SUMS
+            "$m" update --file "$PWD/${app}"
+          }
+          do_update "$ver"
+          test "$("$m" -v)" = "$ver"
+          "$m" update --rollback
+          test "$("$m" -v)" = "$pver"
+          do_update "$ver"
+          test "$("$m" -v)" = "$ver"
+          "$m" uninstall --yes
+          test ! -e "$HOME/.manyoyo/app" && test ! -e "$HOME/.manyoyo/bin"
+          if [ "$warned" = 1 ]; then echo "${{ matrix.os }} ${{ matrix.arch }} 升级 / 回滚验证通过（有限流警告，已用 --file 完成）"; else echo "${{ matrix.os }} ${{ matrix.arch }} 升级 / 回滚验证通过"; fi
+
+  # 不阻断（continue-on-error）：Intel macOS runner 上真实启动私有 Podman 虚拟机，等镜像导入完成，再起一个容器执行命令。
+  # 版本公开后才跑，失败只在汇总里标出来，不挡发布；虚拟机冷启动与镜像导入合计约 20–25 分钟（试跑实测 24 分钟），所以不能挡发布。
+  vm-intel:
+    runs-on: macos-15-intel
+    continue-on-error: true
+    timeout-minutes: 35
+    steps:
+      - name: Download and verify (anonymous)
+        run: |
+          set -eu
+          ver="${TAG#v}"
+          base="https://github.com/xcanwin/manyoyo/releases/download/${TAG}"
+          mkdir -p "$RUNNER_TEMP/vm" && cd "$RUNNER_TEMP/vm"
+          curl -sSL -f --retry 3 --retry-all-errors -O "${base}/SHA256SUMS"
+          files="$(awk '{print $2}' SHA256SUMS | grep -E "^manyoyo-${ver}-macos-x64\.run(\.[0-9]{3})?$")"
+          for f in $files; do
+            curl -sSL -f --retry 3 --retry-all-errors -O "${base}/${f}"
+            grep -q "$(shasum -a 256 "$f" | cut -d' ' -f1)  ${f}" SHA256SUMS
+          done
+          echo "$files" > files.txt
+      - name: Install for real (private Podman machine), wait for the image, run a container
+        run: |
+          set -eu
+          ver="${TAG#v}"
+          cd "$RUNNER_TEMP/vm"
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          MANYOYO_TEST_FREE_MB=100000 sh "$(head -n 1 files.txt)" --install-only
+          m="$HOME/.manyoyo/bin/manyoyo"
+          test "$("$m" -v)" = "$ver"
+          "$m" podman machine list || true
+          for _ in $(seq 1 240); do
+            ls "$HOME"/.manyoyo/.install/image-loaded-* >/dev/null 2>&1 && break
+            sleep 5
+          done
+          ls "$HOME"/.manyoyo/.install/image-loaded-*
+          "$m" doctor || true
+          "$m" run -n "vm-smoke-${GITHUB_RUN_ID}" --rm-on-exit -x /bin/sh -c 'echo vm-ok' 2>&1 | tee run.out
+          grep -q vm-ok run.out
+          "$m" uninstall --yes || true
+          echo "macOS Intel 虚拟机验证通过"

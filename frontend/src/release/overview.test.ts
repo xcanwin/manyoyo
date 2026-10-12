@@ -35,9 +35,4 @@ describe("buildOverview", () => {
     expect(view.title).toBe("下一步：发版后验证")
     expect(view.primary).toEqual({ kind: "stage", label: "执行「发版后验证」" })
   })
-
-  test("下一步是真机检查：没有主按钮（只能在下面勾选）", () => {
-    const view = buildOverview({ ...base, version: "8.7.0" }, { id: "device", title: "发布前真机", detail: "" })
-    expect(view.primary).toBeNull()
-  })
 })

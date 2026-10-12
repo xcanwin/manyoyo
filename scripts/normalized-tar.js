@@ -28,7 +28,9 @@ function compressionArgs(compression, flavor) {
     }
     if (compression === 'gzip-fast') {
         // 内容大多已是压缩文件（镜像归档、VM 磁盘），默认级别白费 CPU：用 -1，解包端仍是普通 tar -xzf
-        return flavor === 'gnu' ? ['--use-compress-program', 'gzip -n -1'] : ['--gzip', '--options', 'gzip:compression-level=1'];
+        // CI 的 macOS 构建机装了 pigz（MANYOYO_PIGZ=1）：多线程压缩，输出仍是标准 gzip；块大小固定，结果与线程数无关
+        const program = process.env.MANYOYO_PIGZ === '1' ? 'pigz -n -1' : 'gzip -n -1';
+        return flavor === 'gnu' ? ['--use-compress-program', program] : ['--gzip', '--options', 'gzip:compression-level=1'];
     }
     if (compression === 'xz') return ['--xz'];
     throw new Error(`不支持的压缩方式: ${compression}`);
