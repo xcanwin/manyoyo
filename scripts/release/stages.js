@@ -56,12 +56,19 @@ function computeStages(facts, state = {}) {
     // 公开的 Release 之前的阶段对这个版本已经是历史：之后 main 再前进（文档提交等）也不会把它们翻回未完成
     const verifyRun = (state.verify && state.verify.tag === facts.tag ? (runs.verify || []).find(run => run.databaseId === state.verify.id) : null)
         || (release.exists && !release.draft ? (runs.verify || []).find(run => run.status === 'completed' && run.conclusion === 'success' && Date.parse(run.createdAt) >= Date.parse(release.createdAt)) : null);
-    const verifyOk = Boolean(verifyRun && verifyRun.status === 'completed' && verifyRun.conclusion === 'success');
+    // 远端流水线（--remote / 一键发布）发布的版本：公开后的验证就在那次运行里，运行成功（创建在公开之前、结束在公开之后）就算验证过
+    const pipelineRun = release.exists && !release.draft && release.publishedAt
+        ? (runs.pipeline || []).find(run => run.status === 'completed' && run.conclusion === 'success'
+            && Date.parse(run.createdAt) <= Date.parse(release.publishedAt) && Date.parse(run.updatedAt) >= Date.parse(release.publishedAt))
+        : null;
+    const verifyDone = Boolean(verifyRun && verifyRun.status === 'completed' && verifyRun.conclusion === 'success') || Boolean(pipelineRun);
+    const verifyOk = verifyDone;
+    const verifyDetail = pipelineRun && !(verifyRun && verifyRun.conclusion === 'success') ? `验证通过（流水线 #${pipelineRun.databaseId}）` : verifyRun ? `验证通过（run #${verifyRun.databaseId}）` : '';
     if (published) {
         const text = `v${V} 已发布`;
         for (const id of ['preflight', 'commit', 'merge', 'image', 'packages', 'release', 'assets', 'publish']) add(id, 'done', text, id === 'release' ? { url: release.url } : {});
         add('version', 'done', `${text}；下一次发布需要先升版本`);
-        add('verify', verifyOk ? 'done' : 'todo', verifyOk ? `验证通过（run #${verifyRun.databaseId}）` : verifyRun ? `上次验证 ${verifyRun.conclusion || verifyRun.status}` : '尚未验证');
+        add('verify', verifyOk ? 'done' : 'todo', verifyOk ? verifyDetail : verifyRun ? `上次验证 ${verifyRun.conclusion || verifyRun.status}` : '尚未验证');
         add('npm', npm.version === V || npmConfirmed ? 'done' : 'todo', npm.version === V || npmConfirmed ? `npm 上已是 ${V}` : `npm 上是 ${npm.version || '未知'}，等待 ${V}（发布后可能延迟几分钟）`);
         return result.sort((a, b) => STAGES.findIndex(item => item.id === a.id) - STAGES.findIndex(item => item.id === b.id));
     }
@@ -125,7 +132,7 @@ function computeStages(facts, state = {}) {
         publishDef.detail = release.draft ? `将把 v${V} 草稿公开（创建 tag、成为 latest、触发 npm 发布）` : `v${V} 已公开`;
     }
 
-    if (verifyOk && release.exists && !release.draft) add('verify', 'done', `验证通过（run #${verifyRun.databaseId}）`);
+    if (verifyOk && release.exists && !release.draft) add('verify', 'done', verifyDetail);
     else if (release.draft || !release.exists || !assetCheck.ok) add('verify', 'blocked', '先公开发布');
     else add('verify', 'todo', verifyRun ? `上次验证 ${verifyRun.conclusion || verifyRun.status}` : '尚未验证');
 

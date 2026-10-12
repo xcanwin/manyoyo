@@ -115,6 +115,23 @@ describe('stage order and gates', () => {
     });
 });
 
+describe('a release made by the remote pipeline counts as verified (its post-publish jobs ran inside that run)', () => {
+    const published = { exists: true, draft: false, assets: names('8.2.0', true), createdAt: '2026-10-02T10:00:00Z', publishedAt: '2026-10-02T10:30:00Z' };
+    const pipelineRun = over => ({ ...run(21, 'mmm'), createdAt: '2026-10-02T10:00:05Z', updatedAt: '2026-10-02T10:50:00Z', ...over });
+    const stages = pipeline => byId(computeStages(facts({ ...merged, ...built, npm: { version: '8.2.0' }, release: published, runs: { packages: [run(1, 'mmm')], pipeline } }), pre));
+
+    test('a successful pipeline run that spans the publish moment makes "verify" done', () => {
+        expect(stages([pipelineRun()]).verify).toMatchObject({ state: 'done', detail: expect.stringContaining('#21') });
+    });
+
+    test('a failed run, a run that ended before the release went public, or no run at all does not', () => {
+        expect(stages([pipelineRun({ conclusion: 'failure' })]).verify.state).toBe('todo');
+        expect(stages([pipelineRun({ updatedAt: '2026-10-02T10:10:00Z' })]).verify.state).toBe('todo');
+        expect(stages([pipelineRun({ createdAt: '2026-10-02T10:40:00Z' })]).verify.state).toBe('todo');
+        expect(stages([]).verify.state).toBe('todo');
+    });
+});
+
 describe('published version (B7)', () => {
     test('once the release is public with complete assets, earlier stages stay done even if main moved on', () => {
         const s = byId(computeStages(facts({

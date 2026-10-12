@@ -14,7 +14,8 @@ const WORKFLOWS = {
     image: 'image-publish.yml',
     npm: 'npm-publish.yml',
     assets: 'release-offline.yml',
-    verify: 'release-verify.yml'
+    verify: 'release-verify.yml',
+    pipeline: 'release-pipeline.yml'
 };
 const NPM_PACKAGE = '@xcanwin/manyoyo';
 // 必须明确查官方源：维护者本机常配了国内镜像（如 mirrors.tencent.com），同步滞后几十分钟，会让“发布后可见”一直判不过
@@ -89,7 +90,7 @@ function parseSums(text) {
 }
 
 async function latestRun(ctx, workflow, extra = []) {
-    const list = parseJson(out(await readAsync(ctx)('gh', ['run', 'list', '--workflow', workflow, '-L', '10', '--json', 'databaseId,status,conclusion,headSha,headBranch,createdAt', ...extra])), []);
+    const list = parseJson(out(await readAsync(ctx)('gh', ['run', 'list', '--workflow', workflow, '-L', '10', '--json', 'databaseId,status,conclusion,headSha,headBranch,createdAt,updatedAt', ...extra])), []);
     return Array.isArray(list) ? list : [];
 }
 
@@ -191,8 +192,8 @@ async function collectFacts(ctx) {
     };
     if (!ghOk) return facts;
 
-    const [releaseRaw, npmRaw, imageOk, ci, packages, image, npmRuns, assets, verify] = await Promise.all([
-        slow('gh', ['release', 'view', tag, '--json', 'assets,createdAt,url,isDraft']),
+    const [releaseRaw, npmRaw, imageOk, ci, packages, image, npmRuns, assets, verify, pipeline] = await Promise.all([
+        slow('gh', ['release', 'view', tag, '--json', 'assets,createdAt,publishedAt,url,isDraft']),
         slow('npm', NPM_VIEW_ARGS),
         imageExists(ctx, pkg.imageVersion),
         latestRun(ctx, WORKFLOWS.ci, ['-b', branch]),
@@ -200,11 +201,12 @@ async function collectFacts(ctx) {
         latestRun(ctx, WORKFLOWS.image, ['-b', 'main']),
         latestRun(ctx, WORKFLOWS.npm),
         latestRun(ctx, WORKFLOWS.assets, ['-b', 'main']),
-        latestRun(ctx, WORKFLOWS.verify, ['-b', 'main'])
+        latestRun(ctx, WORKFLOWS.verify, ['-b', 'main']),
+        latestRun(ctx, WORKFLOWS.pipeline, ['-b', 'main'])
     ]);
     const release = parseJson(out(releaseRaw), null);
     if (release) {
-        facts.release = { exists: true, draft: release.isDraft === true, assets: (release.assets || []).map(item => item.name).sort(), sums: null, createdAt: release.createdAt || '', url: release.url || '' };
+        facts.release = { exists: true, draft: release.isDraft === true, assets: (release.assets || []).map(item => item.name).sort(), sums: null, createdAt: release.createdAt || '', publishedAt: release.publishedAt || '', url: release.url || '' };
         // 结构齐全时再读 SHA256SUMS，核对清单与资产完全一致（草稿也能下载）
         if (facts.release.assets.includes('SHA256SUMS') && checkAssets(version, facts.release.assets).ok) {
             const sums = await slow('gh', ['release', 'download', tag, '-p', 'SHA256SUMS', '-O', '-']);
@@ -213,7 +215,7 @@ async function collectFacts(ctx) {
     }
     facts.npm.version = out(npmRaw) || null;
     facts.image.exists = imageOk;
-    facts.runs = { ci, packages, image, npm: npmRuns, assets, verify };
+    facts.runs = { ci, packages, image, npm: npmRuns, assets, verify, pipeline };
     return facts;
 }
 
