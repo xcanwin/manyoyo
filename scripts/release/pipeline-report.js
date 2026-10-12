@@ -105,6 +105,18 @@ function gh(args) {
     return { status: result.error ? 127 : result.status, stdout: result.stdout || '' };
 }
 
+const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/** 单个 job 的日志；刚结束的 job 日志还没归档好（空或 404），隔几秒重试，实在拿不到返回空串 */
+function fetchJobLog(ghImpl, repo, id, { attempts = 6, sleepMs = 10000, sleep = sleepSync } = {}) {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        const result = ghImpl(['api', `repos/${repo}/actions/jobs/${id}/logs`]);
+        if (result.status === 0 && String(result.stdout).trim()) return result.stdout;
+        if (attempt < attempts) sleep(sleepMs);
+    }
+    return '';
+}
+
 /** 一次运行的全部 job；读不到就报错（不能把“读不到”当成“没有 job”，否则会产出一份误导人的空报告） */
 function loadJobs(ghImpl, repo, run) {
     // --paginate 对每一页各输出一个 JSON 对象：用 --jq 展平成每行一个 job
@@ -119,10 +131,10 @@ function main(argv) {
     if (!run || !repo || !out) throw new Error('用法: pipeline-report.js --run <id> --repo <owner/repo> --version <v> --sha <sha> --out <目录>');
     const jobs = loadJobs(gh, repo, run);
     const report = buildReport({ jobs, version: get('version'), sha: get('sha'), runUrl: `https://github.com/${repo}/actions/runs/${run}` });
-    writeReport({ report, outDir: out, fetchLog: id => gh(['api', `repos/${repo}/actions/jobs/${id}/logs`]).stdout });
+    writeReport({ report, outDir: out, fetchLog: id => fetchJobLog(gh, repo, id) });
     process.stdout.write(renderMarkdown(report));
 }
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { buildReport, tailLog, renderMarkdown, writeReport, loadJobs, LOG_TAIL_LINES };
+module.exports = { buildReport, tailLog, renderMarkdown, writeReport, loadJobs, fetchJobLog, LOG_TAIL_LINES };

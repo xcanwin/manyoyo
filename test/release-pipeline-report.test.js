@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { buildReport, tailLog, renderMarkdown, writeReport, loadJobs } = require('../scripts/release/pipeline-report');
+const { buildReport, tailLog, renderMarkdown, writeReport, loadJobs, fetchJobLog } = require('../scripts/release/pipeline-report');
 
 const job = (name, over = {}) => ({ id: Math.floor(Math.random() * 1e6), name, status: 'completed', conclusion: 'success', started_at: '2026-10-13T10:00:00Z', completed_at: '2026-10-13T10:01:30Z', html_url: `https://github.com/x/y/actions/runs/1/job/${name.length}`, ...over });
 
@@ -90,5 +90,18 @@ describe('loadJobs', () => {
         const ok = loadJobs(() => ({ status: 0, stdout: '{"id":1,"name":"a"}\n{"id":2,"name":"b"}\n' }), 'x/y', '1');
         expect(ok.map(item => item.id)).toEqual([1, 2]);
         expect(() => loadJobs(() => ({ status: 1, stdout: '' }), 'x/y', '1')).toThrow(/读不到/);
+    });
+});
+
+describe('fetchJobLog', () => {
+    test('a job log that is not ready yet (just finished: empty or 404) is retried; gives up with an empty string after the attempts', () => {
+        const answers = [{ status: 1, stdout: '' }, { status: 0, stdout: '' }, { status: 0, stdout: 'real log\n' }];
+        const waits = [];
+        const log = fetchJobLog(() => answers.shift(), 'x/y', 7, { attempts: 5, sleepMs: 10, sleep: ms => waits.push(ms) });
+        expect(log).toBe('real log\n');
+        expect(waits).toEqual([10, 10]);
+        const never = [];
+        expect(fetchJobLog(() => ({ status: 1, stdout: '' }), 'x/y', 7, { attempts: 3, sleepMs: 1, sleep: ms => never.push(ms) })).toBe('');
+        expect(never).toHaveLength(2);
     });
 });

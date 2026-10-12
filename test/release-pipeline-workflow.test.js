@@ -128,6 +128,12 @@ describe('release-pipeline workflow', () => {
         }
     });
 
+    test('the web smoke sends X-Requested-With on every POST (the serve CSRF check rejects non-GET requests without it with 403 — found by a trial run)', () => {
+        const posts = job('prepublish-verify').split('\n').filter(line => line.includes('-X POST'));
+        expect(posts.length).toBeGreaterThanOrEqual(4);
+        posts.forEach(line => expect(line).toContain("X-Requested-With: XMLHttpRequest"));
+    });
+
     test('uses only the built-in token — no new secrets', () => {
         expect(new Set(pipeline.match(/secrets\.[A-Za-z_]+/g) || [])).toEqual(new Set());
     });

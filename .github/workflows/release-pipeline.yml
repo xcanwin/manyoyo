@@ -319,14 +319,14 @@ jobs:
           for _ in $(seq 1 60); do curl --noproxy '*' -fsS -o /dev/null "$base/auth/login" && break; sleep 1; done
           jar="$RUNNER_TEMP/jar"
           test "$(curl --noproxy '*' -s -o /dev/null -w '%{http_code}' "$base/api/sessions")" = 401
-          curl --noproxy '*' -fsS -c "$jar" -X POST "$base/auth/login" -H 'Content-Type: application/json' -d "{\"username\":\"smoke\",\"password\":\"$pass\"}" > /dev/null
+          curl --noproxy '*' -fsS -c "$jar" -X POST "$base/auth/login" -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest' -d "{\"username\":\"smoke\",\"password\":\"$pass\"}" > /dev/null
           curl --noproxy '*' -fsS -b "$jar" "$base/api/sessions" | node -e "JSON.parse(require('fs').readFileSync(0, 'utf8')).sessions.length >= 0"
           name="smoke-${GITHUB_RUN_ID}"
-          curl --noproxy '*' -fsS -b "$jar" -X POST "$base/api/sessions" -H 'Content-Type: application/json' -d "{\"name\":\"$name\"}" --max-time 300
-          out="$(curl --noproxy '*' -fsS -b "$jar" -X POST "$base/api/sessions/$name/run" -H 'Content-Type: application/json' -d '{"command":"echo ok"}' --max-time 120)"
+          curl --noproxy '*' -fsS -b "$jar" -X POST "$base/api/sessions" -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest' -d "{\"name\":\"$name\"}" --max-time 300
+          out="$(curl --noproxy '*' -fsS -b "$jar" -X POST "$base/api/sessions/$name/run" -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest' -d '{"command":"echo ok"}' --max-time 120)"
           echo "$out"
           printf '%s' "$out" | node -e "const r = JSON.parse(require('fs').readFileSync(0, 'utf8')); if (r.exitCode !== 0 || !String(r.output).includes('ok')) process.exit(1)"
-          curl --noproxy '*' -fsS -b "$jar" -X POST "$base/api/sessions/$name/remove" -H 'Content-Type: application/json' -d '{}' > /dev/null
+          curl --noproxy '*' -fsS -b "$jar" -X POST "$base/api/sessions/$name/remove" -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest' -d '{}' > /dev/null
           echo "网页冒烟通过"
 
       - name: Uninstall
