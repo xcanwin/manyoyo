@@ -4,6 +4,8 @@
 //   --status [--json]             各阶段状态
 //   --notes-draft                 输出 Release 说明草稿
 //   --run <阶段,阶段…> [--yes]    执行；含对外动作且没有 --yes 时只打印将执行的命令，退出码 2
+//   --remote [--version x.y.z] [--watch]   推送 main 并触发 GitHub Actions 流水线，之后可以关电脑（本身就是授权，不需要 --yes）
+//   --remote-status [runId]       流水线进度；结束后取回汇总，指出失败阶段的日志路径
 
 const fs = require('fs');
 const path = require('path');
@@ -14,6 +16,7 @@ const { JobRunner } = require('./jobs');
 const { createBaseContext, createJobContext } = require('./context');
 const { acquireJobLock } = require('./lock');
 const { buildNotes } = require('./notes');
+const { startRemote, fetchRemoteRun, downloadRemoteReport, remoteStatusText } = require('./remote');
 
 const ICON = { done: '✓', todo: '○', blocked: '✗', warn: '!' };
 const EXIT = { OK: 0, FAILED: 1, NEEDS_YES: 2 };
@@ -21,17 +24,18 @@ const EXIT = { OK: 0, FAILED: 1, NEEDS_YES: 2 };
 function createEngine({ repoRoot, dryRun = false, fetchImpl, actions = ACTIONS, acquireLock }) {
     const base = createBaseContext({ repoRoot, dryRun, fetchImpl });
     const collect = () => collectFacts(base);
+    const lock = acquireLock === undefined ? () => acquireJobLock(repoRoot, 'cli') : acquireLock;
     const runner = new JobRunner({
         collect,
         makeCtx: (log, signal) => createJobContext(base, log, signal),
         actions,
         describe: describeCommands,
         getState: () => base.state.load(),
-        acquireLock: acquireLock === undefined ? () => acquireJobLock(repoRoot, 'cli') : acquireLock,
+        acquireLock: lock,
         logDir: path.join(repoRoot, '.release', 'logs'),
         dryRun
     });
-    return { base, collect, runner };
+    return { base, collect, runner, acquireLock: lock };
 }
 
 function stageList(arg) {
@@ -127,8 +131,77 @@ async function runStages(engine, args, io) {
     return result.status === 'succeeded' && !unfinished ? EXIT.OK : EXIT.FAILED;
 }
 
+const sleepMs = ms => new Promise(resolve => setTimeout(resolve, ms));
+const WATCH_INTERVAL_MS = 15000;
+
+/**
+ * --remote：升版本（需要时）→ 推送 main → 触发流水线。加了这个参数本身就是授权，不需要 --yes。
+ * 不带 --watch 时打印运行地址后立刻返回；带 --watch 时跟到流水线结束，退出码反映结果。
+ */
+async function runRemote(engine, args, io, deps = {}) {
+    const start = deps.start || startRemote;
+    const fetchRun = deps.fetch || fetchRemoteRun;
+    const download = deps.download || downloadRemoteReport;
+    const sleep = deps.sleep || sleepMs;
+    let release = null;
+    let info;
+    try {
+        if (engine.acquireLock) release = engine.acquireLock();
+        await engine.base.readAsync('git', ['fetch', '--quiet', 'origin', '--tags']);
+        const facts = await engine.collect();
+        const ctx = createJobContext(engine.base, line => io.out(line), undefined);
+        info = await start(ctx, facts, args.version ? { version: args.version } : {});
+    } catch (error) {
+        io.err(`失败：${error.message}`);
+        return EXIT.FAILED;
+    } finally {
+        if (release) release();
+    }
+    io.out(`\n发布 ${info.version}（提交 ${String(info.sha).slice(0, 7)}）已交给 GitHub Actions：${info.url || '(dry-run)'}`);
+    if (!args.watch || engine.base.dryRun) {
+        io.out('可以关电脑了。查看进度和结果：npm run release -- --remote-status');
+        return EXIT.OK;
+    }
+    let last = '';
+    for (;;) {
+        const run = await fetchRun({ ...engine.base, readAsync: engine.base.readAsync }, String(info.runId));
+        if (run) {
+            const text = run.stages.map(stage => `${stage.id}:${stage.result}`).join(' ');
+            if (text !== last) {
+                io.out(`[${run.status}] ${text}`);
+                last = text;
+            }
+            if (run.status === 'completed') return finishRemote(engine, run, io, download);
+        }
+        await sleep(WATCH_INTERVAL_MS);
+    }
+}
+
+async function finishRemote(engine, run, io, download) {
+    let report = {};
+    if (run.conclusion !== 'success') report = await download(createJobContext(engine.base, line => io.out(line), undefined), run);
+    io.out(`\n${remoteStatusText(run, report)}`);
+    return run.conclusion === 'success' ? EXIT.OK : EXIT.FAILED;
+}
+
+/** --remote-status [runId]：最近一次（或指定的一次）流水线的进度；结束且没成功就取回汇总，指出失败阶段的日志在哪 */
+async function runRemoteStatus(engine, args, io, deps = {}) {
+    const fetchRun = deps.fetch || fetchRemoteRun;
+    const download = deps.download || downloadRemoteReport;
+    const run = await fetchRun(engine.base, args.remoteRunId || '');
+    if (!run) {
+        io.err('没有找到发布流水线的运行（先 npm run release -- --remote）');
+        return EXIT.FAILED;
+    }
+    if (run.status !== 'completed') {
+        io.out(remoteStatusText(run));
+        return EXIT.OK;
+    }
+    return finishRemote(engine, run, io, download);
+}
+
 async function printNotesDraft(engine, io) {
     io.out(buildNotes(await engine.collect()));
 }
 
-module.exports = { createEngine, printStatus, runStages, printNotesDraft, stageList, EXIT };
+module.exports = { createEngine, printStatus, runStages, runRemote, runRemoteStatus, printNotesDraft, stageList, EXIT };

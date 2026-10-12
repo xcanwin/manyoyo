@@ -42,8 +42,13 @@ export type Status = {
   unpushedFiles: DirtyFile[]
   lastRun: LastRun | null
   published: boolean
+  remotePlan: { version: string; willBump: boolean; problem: string }
   job: JobSnapshot
 }
+
+export type RemoteStage = { id: string; result: string; durationSec: number; url?: string }
+export type RemoteRun = { runId: number; status: string; conclusion: string; url: string; stages: RemoteStage[] }
+export type RemoteStatus = { run: RemoteRun | null; report?: { logDir: string; failedLogs: string[] } | null }
 
 export type ReleaseEvent =
   | { seq: number; type: "start"; mode: string; stages: string[] }

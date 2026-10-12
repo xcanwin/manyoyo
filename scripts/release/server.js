@@ -19,6 +19,7 @@ const { buildVersionSuggestions, compareReleaseVersions } = require('./versions'
 const { acquireJobLock } = require('./lock');
 const { readLatestRun, readStageLog } = require('./job-log');
 const { buildNotes, releaseCommits } = require('./notes');
+const { planRemote, startRemote, fetchRemoteRun, downloadRemoteReport } = require('./remote');
 
 const DEFAULT_PORT = 3900;
 const HOST = '127.0.0.1';
@@ -120,6 +121,8 @@ function createReleaseServer(options = {}) {
             // 最近一次任务（可能是重启前、或命令行跑的）：各阶段的结果与耗时，点开某个阶段再读它的日志
             lastRun: readLatestRun(logDir),
             published: isPublished(facts),
+            // 一键发布（远端流水线）要发布的版本、是否还要升版本、挡住发布的问题
+            remotePlan: planRemote(facts),
             job: runner.snapshot(),
             gh: facts.gh.ok
         };
@@ -146,6 +149,42 @@ function createReleaseServer(options = {}) {
             const body = await readBody(req);
             const snapshot = runner.start({ stages: body.stages, mode: body.mode, params: body.params || {}, confirmed: body.confirmed === true });
             return sendJson(res, 200, { job: snapshot });
+        }
+        // 一键发布 = 推送 main + 触发远端流水线（与命令行 --remote 同一段代码）；之后关掉页面也不影响
+        if (req.method === 'POST' && pathname === '/api/remote') {
+            const body = await readBody(req);
+            if (body.confirmed !== true) throw new ReleaseError('CONFIRM_REQUIRED', '对外动作需要明确确认');
+            if (runner.current && runner.current.status === 'running') throw new ReleaseError('BUSY', '已有任务在运行');
+            let release = null;
+            if (options.acquireLock !== null) {
+                try {
+                    release = (options.acquireLock || (() => acquireJobLock(repoRoot, 'web')))();
+                } catch (error) {
+                    throw new ReleaseError('BUSY', error.message);
+                }
+            }
+            try {
+                await base.readAsync('git', ['fetch', '--quiet', 'origin', '--tags']);
+                const facts = await collect();
+                const lines = [];
+                const ctx = createJobContext(base, line => lines.push(String(line)), undefined);
+                const info = await (options.startRemote || startRemote)(ctx, facts, body.version ? { version: String(body.version) } : {});
+                return sendJson(res, 200, { ...info, log: lines });
+            } finally {
+                if (release) release();
+            }
+        }
+        if (req.method === 'GET' && pathname === '/api/remote/status') {
+            const id = url.searchParams.get('run') || '';
+            if (id && !/^\d+$/.test(id)) throw new ReleaseError('BAD_REQUEST', 'run 必须是数字');
+            const run = await (options.fetchRemoteRun || fetchRemoteRun)(base, id);
+            if (!run) return sendJson(res, 200, { run: null });
+            // 结束且没成功：顺手取回汇总，页面直接给出失败阶段的日志位置
+            let report = null;
+            if (run.status === 'completed' && run.conclusion !== 'success' && !options.fetchRemoteRun) {
+                report = await downloadRemoteReport(createJobContext(base, () => {}, undefined), run);
+            }
+            return sendJson(res, 200, { run, report });
         }
         if (req.method === 'POST' && pathname === '/api/confirm') {
             const body = await readBody(req);

@@ -11,13 +11,13 @@ const fs = require('fs');
 const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const { createReleaseServer, DEFAULT_PORT, HOST } = require('./server');
-const { createEngine, printStatus, runStages, printNotesDraft, EXIT } = require('./cli');
+const { createEngine, printStatus, runStages, runRemote, runRemoteStatus, printNotesDraft, EXIT } = require('./cli');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const VALUE_FLAGS = { '--run': 'run', '--notes-file': 'notesFile', '--version': 'version', '--image-version': 'imageVersion', '--files': 'files', '--message': 'message' };
 
 function parseArgs(argv) {
-    const args = { status: false, dryRun: false, open: true, port: DEFAULT_PORT, help: false, json: false, yes: false, notesDraft: false, npmDispatch: false };
+    const args = { status: false, dryRun: false, open: true, port: DEFAULT_PORT, help: false, json: false, yes: false, notesDraft: false, npmDispatch: false, remote: false, watch: false, remoteStatus: false, remoteRunId: '' };
     for (let i = 0; i < argv.length; i += 1) {
         const arg = argv[i];
         if (arg === '--status') args.status = true;
@@ -27,6 +27,12 @@ function parseArgs(argv) {
         else if (arg === '--yes') args.yes = true;
         else if (arg === '--notes-draft') args.notesDraft = true;
         else if (arg === '--npm-dispatch') args.npmDispatch = true;
+        else if (arg === '--remote') args.remote = true;
+        else if (arg === '--watch') args.watch = true;
+        else if (arg === '--remote-status') {
+            args.remoteStatus = true;
+            if (argv[i + 1] !== undefined && /^\d+$/.test(argv[i + 1])) args.remoteRunId = argv[++i];
+        }
         else if (arg === '--help' || arg === '-h') args.help = true;
         else if (arg === '--port') args.port = Number(argv[++i]);
         else if (VALUE_FLAGS[arg]) {
@@ -93,6 +99,8 @@ function openBrowser(url) {
 async function cliMain(args) {
     const io = { out: line => console.log(line), err: line => console.error(line) };
     const engine = createEngine({ repoRoot: REPO_ROOT, dryRun: args.dryRun });
+    if (args.remote) return runRemote(engine, args, io);
+    if (args.remoteStatus) return runRemoteStatus(engine, args, io);
     if (args.notesDraft) {
         await printNotesDraft(engine, io);
         return EXIT.OK;
@@ -105,7 +113,7 @@ async function cliMain(args) {
 async function main() {
     const args = parseArgs(process.argv.slice(2));
     if (args.help) return console.log(helpText());
-    if (args.status || args.run || args.notesDraft) {
+    if (args.status || args.run || args.notesDraft || args.remote || args.remoteStatus) {
         process.exitCode = await cliMain(args);
         return undefined;
     }

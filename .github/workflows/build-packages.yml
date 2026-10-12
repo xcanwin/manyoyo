@@ -135,7 +135,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # 构建脚本只用 Node 内置模块，不需要 npm ci；前端由 web job 构建一次后下发
+      # 构建脚本只用 Node 内置模块，不需要安装依赖；前端由 web job 构建一次后下发
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -271,7 +271,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # 构建脚本只用 Node 内置模块，不需要 npm ci；前端由 web job 构建一次后下发
+      # 构建脚本只用 Node 内置模块，不需要安装依赖；前端由 web job 构建一次后下发
       - uses: actions/setup-node@v7
         with:
           node-version: 24

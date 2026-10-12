@@ -29,7 +29,9 @@ beforeEach(async () => {
         repoRoot: root, port: 0, token: 'tok123', htmlFile: path.join(root, 'page.html'),
         collect: async () => facts, read: () => ({ status: 0, stdout: '' }),
         actions: { merge: async ctx => ctx.log('merging'), preflight: async () => {} },
-        agentCommitMessage: async () => ({ message: 'feat: from agent', reason: '' })
+        agentCommitMessage: async () => ({ message: 'feat: from agent', reason: '' }),
+        startRemote: async (ctx, f, params) => { ctx.log('pushing'); return { runId: 55, url: 'https://github.com/x/y/actions/runs/55', version: params.version || '8.2.1', sha: 'a'.repeat(40) }; },
+        fetchRemoteRun: async (ctx, id) => ({ runId: Number(id) || 55, status: 'in_progress', conclusion: '', url: 'https://github.com/x/y/actions/runs/55', stages: [{ id: 'prepare', result: 'success', durationSec: 5 }] })
     });
     const info = await app.listen();
     url = `http://127.0.0.1:${info.port}`;
@@ -132,6 +134,20 @@ describe('release server API', () => {
         expect(log.lines).toContain('merging');
         expect((await call('GET', '/api/stage-log?run=..%2Fx&stage=merge')).status).toBe(404);
         expect((await call('GET', `/api/stage-log?run=${status.lastRun.dir}&stage=nope`)).status).toBe(404);
+    });
+
+    test('one-click release goes through the remote pipeline: needs confirmed:true, no stage job, and the page can poll the run', async () => {
+        expect((await call('POST', '/api/remote', { body: {} })).status).toBe(400);
+        const started = await (await call('POST', '/api/remote', { body: { confirmed: true, version: '8.2.1' } })).json();
+        expect(started).toMatchObject({ runId: 55, version: '8.2.1', url: 'https://github.com/x/y/actions/runs/55' });
+        expect(started.log).toContain('pushing');
+        // 和分步任务互不影响：没有占着任务执行器
+        expect(app.runner.snapshot()).toBeNull();
+        const polled = await (await call('GET', '/api/remote/status?run=55')).json();
+        expect(polled.run).toMatchObject({ runId: 55, status: 'in_progress' });
+        expect((await call('GET', '/api/remote/status?run=abc')).status).toBe(400);
+        const status = await (await call('GET', '/api/status')).json();
+        expect(status.remotePlan).toMatchObject({ version: expect.any(String), willBump: expect.any(Boolean) });
     });
 
     test('step mode: the page confirms through /api/confirm; cancel works; a second job is refused with 409', async () => {

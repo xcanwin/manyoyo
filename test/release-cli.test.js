@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { runStages, stageList, createEngine, EXIT } = require('../scripts/release/cli');
+const { runStages, runRemote, runRemoteStatus, stageList, createEngine, EXIT } = require('../scripts/release/cli');
 const { parseArgs } = require('../scripts/release/index');
 const { acquireJobLock } = require('../scripts/release/lock');
 const { JobRunner } = require('../scripts/release/jobs');
@@ -147,5 +147,68 @@ describe('single stage runs even when already done', () => {
         const code = await runStages(engine, { run: 'version', version: '8.2.1' }, io());
         expect(code).toBe(EXIT.OK);
         expect(actions.version).toHaveBeenCalledWith(expect.anything(), { version: '8.2.1', imageVersion: undefined }, expect.anything());
+    });
+});
+
+describe('--remote / --remote-status', () => {
+    const runInfo = { runId: 77, url: 'https://github.com/x/y/actions/runs/77', version: '8.7.0', sha: 'a'.repeat(40) };
+
+    test('flags parse; --remote-status takes an optional run id', () => {
+        expect(parseArgs(['--remote'])).toMatchObject({ remote: true, watch: false });
+        expect(parseArgs(['--remote', '--watch', '--version', '8.7.0', '--dry-run'])).toMatchObject({ remote: true, watch: true, version: '8.7.0', dryRun: true });
+        expect(parseArgs(['--remote-status'])).toMatchObject({ remoteStatus: true, remoteRunId: '' });
+        expect(parseArgs(['--remote-status', '12345'])).toMatchObject({ remoteStatus: true, remoteRunId: '12345' });
+        expect(parseArgs(['--remote-status', '--json'])).toMatchObject({ remoteStatus: true, remoteRunId: '', json: true });
+    });
+
+    test('--remote starts the pipeline without --yes (the flag itself is the authorization), prints the run address and returns at once', async () => {
+        const start = jest.fn(async () => runInfo);
+        const output = io();
+        const code = await runRemote(fakeEngine({}), { remote: true, version: '8.7.0' }, output, { start });
+        expect(code).toBe(EXIT.OK);
+        expect(start).toHaveBeenCalledWith(expect.anything(), expect.anything(), { version: '8.7.0' });
+        expect(output.lines.out.join('\n')).toContain('https://github.com/x/y/actions/runs/77');
+        expect(output.lines.out.join('\n')).toContain('--remote-status');
+    });
+
+    test('--remote reports why it refused (exit 1) and does not need the console lock when nothing ran', async () => {
+        const start = jest.fn(async () => { throw Object.assign(new Error('有 1 个文件未提交'), { code: 'DIRTY' }); });
+        const output = io();
+        expect(await runRemote(fakeEngine({}), { remote: true }, output, { start })).toBe(EXIT.FAILED);
+        expect(output.lines.err.join('\n')).toContain('有 1 个文件未提交');
+    });
+
+    test('--remote --watch follows the run and exits with its result', async () => {
+        const start = jest.fn(async () => runInfo);
+        const states = [
+            { runId: 77, status: 'in_progress', conclusion: '', url: 'u', stages: [{ id: 'prepare', result: 'success', durationSec: 5 }] },
+            { runId: 77, status: 'completed', conclusion: 'failure', url: 'u', stages: [{ id: 'packages', result: 'failure', durationSec: 9 }] }
+        ];
+        const fetch = jest.fn(async () => states.shift());
+        const output = io();
+        const code = await runRemote(fakeEngine({}), { remote: true, watch: true }, output, { start, fetch, sleep: async () => {} });
+        expect(code).toBe(EXIT.FAILED);
+        expect(output.lines.out.join('\n')).toContain('packages');
+    });
+
+    test('--remote-status prints the stages; a finished run downloads the report and names the failed stage logs; success exits 0, failure exits 1', async () => {
+        const failed = { runId: 9, status: 'completed', conclusion: 'failure', url: 'u', stages: [{ id: 'packages', result: 'failure', durationSec: 60 }] };
+        const download = jest.fn(async () => ({ logDir: '/tmp/r/remote-9', failedLogs: ['/tmp/r/remote-9/failed-packages.log'] }));
+        const output = io();
+        expect(await runRemoteStatus(fakeEngine({}), { remoteStatus: true, remoteRunId: '9' }, output, { fetch: async () => failed, download })).toBe(EXIT.FAILED);
+        expect(download).toHaveBeenCalled();
+        expect(output.lines.out.join('\n')).toContain('失败阶段的日志在：/tmp/r/remote-9/failed-packages.log');
+
+        const ok = { ...failed, conclusion: 'success', stages: [{ id: 'prepare', result: 'success', durationSec: 3 }] };
+        expect(await runRemoteStatus(fakeEngine({}), { remoteStatus: true, remoteRunId: '' }, io(), { fetch: async () => ok, download: async () => ({ logDir: 'd', failedLogs: [] }) })).toBe(EXIT.OK);
+
+        const running = { ...failed, status: 'in_progress', conclusion: '' };
+        const dl = jest.fn();
+        expect(await runRemoteStatus(fakeEngine({}), { remoteStatus: true, remoteRunId: '' }, io(), { fetch: async () => running, download: dl })).toBe(EXIT.OK);
+        expect(dl).not.toHaveBeenCalled();
+
+        const none = io();
+        expect(await runRemoteStatus(fakeEngine({}), { remoteStatus: true, remoteRunId: '' }, none, { fetch: async () => null })).toBe(EXIT.FAILED);
+        expect(none.lines.err.join('\n')).toContain('没有');
     });
 });

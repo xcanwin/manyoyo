@@ -44,6 +44,17 @@ describe('npm-publish workflow', () => {
         expect(text).toContain('Tag version mismatch');
     });
 
+    test('skipTests skips only the test job: the tag/version check is repeated in the publish job and the tag must point at the tested sha', () => {
+        const publish = text.slice(text.indexOf('\n  publish-npm:'));
+        expect(publish).toContain('Tag version mismatch');
+        expect(publish).toContain('inputs.skipTests == true');
+        expect(publish).toContain('不是流水线测试过的');
+        expect(text).toMatch(/build:\n\s+if: [^\n]*inputs\.skipTests != true/);
+        // build 被跳过时发布 job 仍要继续，但 build 失败 / 取消不能继续
+        expect(publish).toContain('!failure() && !cancelled()');
+        expect(text).toMatch(/skipTests:\s*\n\s+description:[^\n]*\n\s+type: boolean/);
+    });
+
     test('never publishes a pre-release to the latest dist-tag', () => {
         expect(text).toContain('!github.event.release.prerelease');
     });

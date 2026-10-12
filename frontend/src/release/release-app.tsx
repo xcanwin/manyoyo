@@ -7,9 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Spinner } from "@/components/ui/spinner"
 
 import { api, subscribeEvents, type ReleaseEvent, type Stage, type Status } from "./api"
-import { CommitDialog, ConfirmDialog, ReleaseDialog, RunAllDialog, VersionDialog } from "./dialogs"
+import { CommitDialog, ConfirmDialog, ReleaseDialog, RemoteDialog, VersionDialog } from "./dialogs"
 import { LastRunPanel } from "./last-run-panel"
 import { buildOverview } from "./overview"
+import { RemotePanel } from "./remote-panel"
 
 type StageView = Stage & { commands?: string[] }
 type Dialog =
@@ -17,10 +18,9 @@ type Dialog =
   | { kind: "commit" }
   | { kind: "release"; stage: StageView }
   | { kind: "confirm"; stage: StageView }
-  | { kind: "runAll" }
+  | { kind: "remote" }
   | null
 
-const PUBLISH_STAGES = ["merge", "image", "packages", "release", "assets", "publish", "verify", "npm"]
 const STATE_LABEL: Record<string, string> = { done: "已完成", todo: "待办", blocked: "被阻塞", warn: "需确认" }
 const STATE_STYLE: Record<string, string> = {
   done: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
@@ -57,6 +57,7 @@ export function ReleaseApp() {
   const [logs, setLogs] = React.useState<LogLine[]>([])
   const [pending, setPending] = React.useState<{ stage: string; title: string; commands: string[] } | null>(null)
   const [refreshing, setRefreshing] = React.useState(false)
+  const [remoteTick, setRemoteTick] = React.useState(0)
   const logEnd = React.useRef<HTMLDivElement>(null)
 
   const refresh = React.useCallback(async (force = false) => {
@@ -184,8 +185,8 @@ export function ReleaseApp() {
             </Button>
           )}
           {overview.showRunAll && (
-            <Button variant="outline" disabled={running} onClick={() => setDialog({ kind: "runAll" })}>
-              一键发布（合并 main → 验证）
+            <Button variant="outline" disabled={running} onClick={() => setDialog({ kind: "remote" })}>
+              一键发布（交给 GitHub 自动完成）
             </Button>
           )}
           {running && (
@@ -217,6 +218,8 @@ export function ReleaseApp() {
           </CardContent>
         </Card>
       )}
+
+      <RemotePanel refreshKey={remoteTick} />
 
       {overview.historyNote && <p className="text-sm text-muted-foreground">{overview.historyNote}</p>}
       <ol className="space-y-2">
@@ -321,15 +324,23 @@ export function ReleaseApp() {
           }}
         />
       )}
-      {dialog?.kind === "runAll" && (
-        <RunAllDialog
-          stages={stages.filter((stage) => PUBLISH_STAGES.includes(stage.id) && stage.state !== "done").map((stage) => stage.title)}
-          notesDraft={status.notesDraft}
-          needsNotes={stages.find((stage) => stage.id === "release")?.state !== "done"}
+      {dialog?.kind === "remote" && (
+        <RemoteDialog
+          version={status.remotePlan.version}
+          willBump={status.remotePlan.willBump}
+          commits={status.pendingCommits}
+          notes={status.notesDraft}
+          problem={status.remotePlan.problem}
           onCancel={() => setDialog(null)}
-          onStart={(mode, notes) => {
+          onStart={() => {
             setDialog(null)
-            void start(PUBLISH_STAGES, mode, { release: { notes } }, mode === "auto")
+            setError("")
+            api<{ url: string }>("/api/remote", { confirmed: true, version: status.remotePlan.willBump ? status.remotePlan.version : undefined })
+              .then(() => {
+                setRemoteTick((value) => value + 1)
+                return refresh(true)
+              })
+              .catch((err) => setError(err instanceof Error ? err.message : "启动失败"))
           }}
         />
       )}

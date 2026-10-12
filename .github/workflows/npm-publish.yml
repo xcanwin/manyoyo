@@ -14,7 +14,7 @@ on:
         description: '要发布到 npm 的 tag，如 v8.3.2（对应 Release 已公开）'
         required: true
       skipTests:
-        description: '跳过 npm test（发布流水线已在同一提交上测试过）；必须同时给 sha，且 tag 指向的提交要与它一致'
+        description: '跳过测试（发布流水线已在同一提交上测试过）；必须同时给 sha，且 tag 指向的提交要与它一致'
         type: boolean
         required: false
         default: false
@@ -64,6 +64,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ env.TAG }}
+      - name: Verify tag matches package version (also when build is skipped)
+        run: |
+          printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "tag 格式错误，应为 vX.Y.Z: $TAG"; exit 1; }
+          TAG_VERSION="${TAG#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag version mismatch: tag=$TAG_VERSION package.json=$PKG_VERSION"
+            exit 1
+          fi
       - name: With skipTests the tag must point at the commit the pipeline tested
         if: inputs.skipTests == true
         env:
