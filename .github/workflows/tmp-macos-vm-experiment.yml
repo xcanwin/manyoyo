@@ -27,7 +27,15 @@ jobs:
           sysctl kern.hv_support kern.hv_vmm_present 2>&1 || true
       - name: Install podman
         run: |
-          brew install podman
+          if [ "$(uname -m)" = arm64 ]; then
+            brew install podman
+          else
+            # Intel：brew 没有 podman 的 bottle，用官方 pkg（与安装包同一个版本）
+            curl -fsSL -o /tmp/podman.pkg "https://github.com/containers/podman/releases/download/v5.8.8/podman-installer-macos-amd64.pkg"
+            sudo installer -pkg /tmp/podman.pkg -target /
+            echo "/opt/podman/bin" >> "$GITHUB_PATH"
+            export PATH="/opt/podman/bin:$PATH"
+          fi
           podman --version
       - name: podman machine init + start (10 min limit)
         run: |
