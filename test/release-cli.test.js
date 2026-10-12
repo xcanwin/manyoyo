@@ -186,9 +186,11 @@ describe('--remote / --remote-status', () => {
         ];
         const fetch = jest.fn(async () => states.shift());
         const output = io();
-        const code = await runRemote(fakeEngine({}), { remote: true, watch: true }, output, { start, fetch, sleep: async () => {} });
+        const download = jest.fn(async () => ({ logDir: '/tmp/r/remote-77', failedLogs: ['/tmp/r/remote-77/failed-packages.log'] }));
+        const code = await runRemote(fakeEngine({}), { remote: true, watch: true }, output, { start, fetch, download, sleep: async () => {} });
         expect(code).toBe(EXIT.FAILED);
         expect(output.lines.out.join('\n')).toContain('packages');
+        expect(download).toHaveBeenCalled();
     });
 
     test('--remote-status prints the stages; a finished run downloads the report and names the failed stage logs; success exits 0, failure exits 1', async () => {
