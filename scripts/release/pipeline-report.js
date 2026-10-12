@@ -49,10 +49,13 @@ function buildReport({ jobs, version, sha, runUrl }) {
         const finished = items.map(item => item.completed_at).filter(Boolean).sort();
         const startedAt = started[0] || null;
         const completedAt = finished[finished.length - 1] || null;
-        const durationSec = startedAt && completedAt ? Math.round((Date.parse(completedAt) - Date.parse(startedAt)) / 1000) : 0;
+        const result = stageResult(items.map(item => item.conclusion));
+        // 跳过的 job 没有真正运行，API 给的时间戳甚至会出现结束早于开始
+        const ran = result !== 'skipped';
+        const durationSec = ran && startedAt && completedAt ? Math.max(0, Math.round((Date.parse(completedAt) - Date.parse(startedAt)) / 1000)) : 0;
         const failed = items.filter(item => item.conclusion === 'failure' || item.conclusion === 'timed_out');
         failedJobs.push(...failed.map(item => ({ id: item.id, name: item.name, stage: id, url: item.html_url })));
-        stages.push({ id, result: stageResult(items.map(item => item.conclusion)), startedAt, durationSec, url: (failed[0] || items[0]).html_url });
+        stages.push({ id, result, startedAt: ran ? startedAt : null, durationSec, url: (failed[0] || items[0]).html_url });
     }
     const results = stages.map(stage => stage.result);
     const result = results.includes('failure') ? 'failure' : results.includes('cancelled') ? 'cancelled' : results.every(item => item === 'skipped') ? 'cancelled' : 'success';

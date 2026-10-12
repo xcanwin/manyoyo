@@ -45,6 +45,12 @@ describe('pipeline report', () => {
         expect(report.failedJobs.map(item => item.name)).toEqual(['b / x']);
     });
 
+    test('skipped jobs report no start and zero duration even though the API gives them timestamps (completed may precede started)', () => {
+        const report = buildReport({ version: 'v', sha: 's', runUrl: 'u', jobs: [job('a'), job('b', { conclusion: 'skipped', started_at: '2026-10-13T10:00:13Z', completed_at: '2026-10-13T10:00:12Z' })] });
+        const skipped = report.stages.find(stage => stage.id === 'b');
+        expect(skipped).toMatchObject({ result: 'skipped', startedAt: null, durationSec: 0 });
+    });
+
     test('an all-skipped / cancelled run is not reported as success', () => {
         expect(buildReport({ version: 'v', sha: 's', runUrl: 'u', jobs: [job('a', { conclusion: 'cancelled' })] }).result).toBe('cancelled');
     });
