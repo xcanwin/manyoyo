@@ -34,7 +34,7 @@ function stageResult(conclusions) {
  * @param {{jobs: object[], version: string, sha: string, runUrl: string}} input  jobs 是 Actions API 的 jobs 数组
  * 复用 workflow 的 job 名形如 “packages / build-macos (…)”，按 “ / ” 前面的调用方 job id 归成一个阶段
  */
-function buildReport({ jobs, version, sha, runUrl }) {
+function buildReport({ jobs, version, sha, runUrl, now = Date.now() }) {
     const groups = new Map();
     for (const item of jobs) {
         // 复用 workflow 的 job 名是 “调用方 id / job 名”；顶层 matrix job 的名字带 “(参数…)” 后缀，也不属于阶段 id
@@ -47,9 +47,11 @@ function buildReport({ jobs, version, sha, runUrl }) {
     const failedJobs = [];
     for (const [id, items] of groups) {
         const started = items.map(item => item.started_at).filter(Boolean).sort();
-        const finished = items.map(item => item.completed_at).filter(Boolean).sort();
+        // 还在跑的 job，接口给的完成时间是 0001-01-01：当作没有，耗时算到现在
+        const finished = items.map(item => item.completed_at).filter(value => value && Date.parse(value) > Date.parse('2000-01-01')).sort();
         const startedAt = started[0] || null;
-        const completedAt = finished[finished.length - 1] || null;
+        const stillRunning = items.some(item => item.started_at && !(item.completed_at && Date.parse(item.completed_at) > Date.parse('2000-01-01')));
+        const completedAt = stillRunning ? new Date(now).toISOString() : (finished[finished.length - 1] || null);
         const result = stageResult(items.map(item => item.conclusion));
         // 跳过的 job 没有真正运行，API 给的时间戳甚至会出现结束早于开始
         const ran = result !== 'skipped';

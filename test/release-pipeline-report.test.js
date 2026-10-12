@@ -58,6 +58,12 @@ describe('pipeline report', () => {
         expect(skipped).toMatchObject({ result: 'skipped', startedAt: null, durationSec: 0 });
     });
 
+    test('a running stage shows how long it has been running (the API gives a zero completion date for jobs still in progress)', () => {
+        const now = Date.parse('2026-10-13T10:05:00Z');
+        const report = buildReport({ version: 'v', sha: 's', runUrl: 'u', now, jobs: [job('a', { status: 'in_progress', conclusion: '', started_at: '2026-10-13T10:00:00Z', completed_at: '0001-01-01T00:00:00Z' })] });
+        expect(report.stages[0]).toMatchObject({ result: 'running', durationSec: 300 });
+    });
+
     test('an all-skipped / cancelled run is not reported as success', () => {
         expect(buildReport({ version: 'v', sha: 's', runUrl: 'u', jobs: [job('a', { conclusion: 'cancelled' })] }).result).toBe('cancelled');
     });
