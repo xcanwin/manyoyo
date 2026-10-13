@@ -22,10 +22,10 @@ jobs:
           dd if=/dev/urandom of=big.bin bs=1m count=2000 2>/dev/null
           ls -l big.bin
           t() { s=$(date +%s); "$@" > /tmp/out.txt 2>&1; e=$(date +%s); echo "$* => $((e - s)) 秒 $(cut -c1-70 /tmp/out.txt | head -1)"; }
-          t shasum -a 256 big.bin
-          t /usr/bin/openssl dgst -sha256 big.bin
-          which openssl sha256sum python3 || true
-          openssl version || true
-          t python3 -c "import hashlib;print(hashlib.sha256(open('big.bin','rb').read()).hexdigest())"
-          t cat big.bin
-          t /usr/bin/shasum -a 256 big.bin
+          printf '#!/bin/sh\nheader line\n__MARK__\n' > run.bin; cat big.bin >> run.bin
+          t sh -c "tail -n +\$(awk '/^__MARK__\$/ { print NR + 1; exit }' run.bin) run.bin | shasum -a 256"
+          t sh -c "tail -n +\$(awk '/^__MARK__\$/ { print NR + 1; exit }' run.bin) run.bin | /usr/bin/openssl dgst -sha256"
+          line=$(awk '/^__MARK__$/ { print NR + 1; exit }' run.bin); skip=$(head -n "$((line - 1))" run.bin | wc -c | tr -d ' ')
+          t sh -c "tail -c +$((skip + 1)) run.bin | shasum -a 256"
+          t sh -c "tail -c +$((skip + 1)) run.bin | /usr/bin/openssl dgst -sha256"
+          t sh -c "tail -c +$((skip + 1)) run.bin | wc -c"
