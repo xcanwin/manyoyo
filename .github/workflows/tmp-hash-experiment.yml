@@ -1,0 +1,31 @@
+# TEMP 实验（交付前删除）：macOS 上 shasum 与 openssl 对 2GB 文件算 SHA256 的耗时
+name: TMP hash experiment
+on:
+  push:
+    branches:
+      - feat/autopilot-2
+    paths:
+      - '.release-hash-experiment'
+permissions:
+  contents: read
+jobs:
+  hash:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - run: |
+          set -u
+          dd if=/dev/urandom of=big.bin bs=1m count=2000 2>/dev/null
+          ls -l big.bin
+          t() { s=$(date +%s); "$@" > /tmp/out.txt 2>&1; e=$(date +%s); echo "$* => $((e - s)) 秒 $(cut -c1-70 /tmp/out.txt | head -1)"; }
+          t shasum -a 256 big.bin
+          t /usr/bin/openssl dgst -sha256 big.bin
+          which openssl sha256sum python3 || true
+          openssl version || true
+          t python3 -c "import hashlib;print(hashlib.sha256(open('big.bin','rb').read()).hexdigest())"
+          t cat big.bin
+          t /usr/bin/shasum -a 256 big.bin
