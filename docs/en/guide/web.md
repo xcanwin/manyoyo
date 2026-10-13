@@ -69,6 +69,18 @@ Current anonymous allowlist:
 
 Unauthenticated requests to any page path redirect to `/auth/login`; API and `/auth/*` requests get a plain `401`.
 
+## Adding Prompts While a Task Runs
+
+The input box stays enabled while an Agent is working. Use the arrow next to "Send" to choose when the new prompt takes effect (your last choice is remembered):
+
+- Insert now: interrupts the current round and continues right away with the new prompt (finished work is kept).
+- Insert after the current step: waits for the current tool call or message to finish, then interrupts; if nothing finishes within 2 minutes it falls back to "insert now".
+- Send after this round: queues the prompt and sends it automatically when the round ends (default).
+
+Queued prompts appear at the bottom of the conversation and can be cancelled or edited. "Stop" only stops the current round: queued prompts are kept, and you can cancel them or click "Continue sending". Command mode does not support this.
+
+Sub-agents and task lists show up in the "execution process": a sub-agent is collapsed into one line by default (click to see what it did), and the task list shows a single block with the latest status.
+
 ## Web Frontend
 
 The `serve` web UI is built with React and shadcn/ui.
