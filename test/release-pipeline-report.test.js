@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { buildReport, tailLog, renderMarkdown, writeReport, loadJobs, fetchJobLog } = require('../scripts/release/pipeline-report');
+const { buildReport, tailLog, renderMarkdown, writeReport, loadJobs, fetchJobLog, generateReport } = require('../scripts/release/pipeline-report');
 
 const job = (name, over = {}) => ({ id: Math.floor(Math.random() * 1e6), name, status: 'completed', conclusion: 'success', started_at: '2026-10-13T10:00:00Z', completed_at: '2026-10-13T10:01:30Z', html_url: `https://github.com/x/y/actions/runs/1/job/${name.length}`, ...over });
 
@@ -101,6 +101,24 @@ describe('pipeline report', () => {
             expect(written.stages.find(stage => stage.id === 'prepare').logArtifact).toBeUndefined();
             expect(fs.readFileSync(path.join(out, 'failed-packages.log'), 'utf-8')).toContain('boom');
             expect(fs.existsSync(path.join(out, 'failed-prepare.log'))).toBe(false);
+        } finally {
+            fs.rmSync(out, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('generateReport', () => {
+    test('loads the jobs and the failed job logs of a finished run and writes summary + failed-<stage>.log', () => {
+        const ghImpl = args => {
+            if (args[1].includes('/jobs?')) return { status: 0, stdout: `${JSON.stringify({ id: 1, name: 'prepare', status: 'completed', conclusion: 'success', started_at: '2026-10-13T10:00:00Z', completed_at: '2026-10-13T10:00:05Z', html_url: 'u' })}\n${JSON.stringify({ id: 2, name: 'test / test', status: 'completed', conclusion: 'failure', started_at: '2026-10-13T10:00:00Z', completed_at: '2026-10-13T10:01:00Z', html_url: 'u2' })}\n` };
+            return { status: 0, stdout: '2026-10-13T10:00:59.0000000Z boom\n2026-10-13T10:01:00.0000000Z ##[error]Process completed with exit code 1.\n' };
+        };
+        const out = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-gen-'));
+        try {
+            const report = generateReport({ ghImpl, repo: 'x/y', runId: 9, version: '8.7.0', sha: 'abc', outDir: out, sleep: () => {} });
+            expect(report.result).toBe('failure');
+            expect(fs.readFileSync(path.join(out, 'failed-test.log'), 'utf-8')).toContain('boom');
+            expect(JSON.parse(fs.readFileSync(path.join(out, 'release-summary.json'), 'utf-8')).stages.find(stage => stage.id === 'test').logArtifact).toBe('failed-test.log');
         } finally {
             fs.rmSync(out, { recursive: true, force: true });
         }

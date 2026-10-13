@@ -177,6 +177,34 @@ describe('downloadRemoteReport', () => {
     });
 });
 
+describe('failed stage logs come from the finished run, not from the summary job', () => {
+    // 同一次运行还没结束时，接口读不到它里面 job 的日志（实测：流水线 summary job 里拉到的失败日志是空的）；
+    // 所以本地取回汇总后，对没成功的运行用已结束运行的日志重新生成 failed-<阶段>.log
+    test('a failed run: the report is regenerated locally (summary.json + failed logs), a successful one is not', async () => {
+        const regenerate = jest.fn(({ outDir }) => {
+            fs.mkdirSync(outDir, { recursive: true });
+            fs.writeFileSync(path.join(outDir, 'release-summary.json'), JSON.stringify({ stages: [{ id: 'test', result: 'failure', logArtifact: 'failed-test.log' }] }));
+            fs.writeFileSync(path.join(outDir, 'failed-test.log'), 'real failure text\n');
+        });
+        const ctx = makeCtx({});
+        ctx.run = async () => ({ status: 0 }); // 汇总 artifact 里的日志是空的（或下载不到）
+        ctx.generateReport = regenerate;
+        const result = await downloadRemoteReport(ctx, { runId: 5, status: 'completed', conclusion: 'failure', headSha: 'abc' });
+        expect(regenerate).toHaveBeenCalledWith(expect.objectContaining({ runId: 5 }));
+        expect(fs.readFileSync(result.failedLogs[0], 'utf-8')).toContain('real failure text');
+        // 网页每 10 秒轮询一次：生成过就不再重新生成
+        await downloadRemoteReport(ctx, { runId: 5, status: 'completed', conclusion: 'failure', headSha: 'abc' });
+        expect(regenerate).toHaveBeenCalledTimes(1);
+
+        const ok = jest.fn();
+        const ctx2 = makeCtx({});
+        ctx2.generateReport = ok;
+        ctx2.run = async () => ({ status: 0 });
+        await downloadRemoteReport(ctx2, { runId: 6, status: 'completed', conclusion: 'success', headSha: 'abc' });
+        expect(ok).not.toHaveBeenCalled();
+    });
+});
+
 describe('remoteStatusText without a report', () => {
     test('a failed or cancelled run whose summary artifact could not be fetched says so and points at gh', () => {
         const run = { runId: 9, status: 'completed', conclusion: 'cancelled', url: 'https://r/9', stages: [] };
