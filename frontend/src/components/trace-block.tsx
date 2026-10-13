@@ -4,6 +4,8 @@ import {
   ArrowDownToLineIcon,
   ArrowUpToLineIcon,
   ChevronRightIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
   CopyIcon,
   MessageSquareIcon,
   OctagonAlertIcon,
@@ -17,6 +19,7 @@ import { cn } from "@/lib/utils"
 import {
   apiGet,
   buildToolArgumentParts,
+  compactToolArguments,
   mergeToolTraceEvents,
   summarizeTraceFlow,
   type ChatMessage,
@@ -37,7 +40,8 @@ const KIND_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   error: OctagonAlertIcon,
 }
 
-type BodyPart = { label: string; value: string }
+// compact：只给“工具参数”用——单行 键=值，点一下展开全文（value 是缩进好的全文）
+type BodyPart = { label: string; value: string; compact?: string }
 
 // 列表里的 trace 长字段被服务端截断过（traceTruncated）：展开时才按需下载完整内容，
 // 同一条消息（id + 事件数相同）只下载一次；任务还在跑、事件数变了就重新拉
@@ -73,20 +77,19 @@ function buildBodyParts(event: TraceEvent): BodyPart[] {
     push("结果", event.result)
     push("错误", event.error)
   }
-  if (event.kind === "mcp") {
-    // 描述放最前：紧跟在命令后面会被误当成命令的输出
+  if (event.kind === "mcp" || event.kind === "tool") {
+    // 顺序：描述 → 工具 → 工具参数 → 命令 → 结果 / 错误。描述放最前：紧跟在命令后面会被误当成命令的输出；
+    // 工具参数（Agent 调用工具时传的参数）紧跟在“工具”后面，一行展示
     const argParts = buildToolArgumentParts(event)
-    argParts.filter((part) => part.label === "描述").forEach((part) => push(part.label, part.value))
-    push("工具", [event.server, event.toolName].filter(Boolean).join("."))
-    argParts.filter((part) => part.label !== "描述").forEach((part) => push(part.label, part.value))
-    push("结果", event.result)
-    push("错误", event.error)
-  }
-  if (event.kind === "tool") {
-    const argParts = buildToolArgumentParts(event)
-    argParts.filter((part) => part.label === "描述").forEach((part) => push(part.label, part.value))
-    push("工具", event.toolName)
-    argParts.filter((part) => part.label !== "描述").forEach((part) => push(part.label, part.value))
+    const pick = (label: string) => argParts.filter((part) => part.label === label)
+    pick("描述").forEach((part) => push(part.label, part.value))
+    push("工具", event.kind === "mcp" ? [event.server, event.toolName].filter(Boolean).join(".") : event.toolName)
+    pick("工具参数").forEach((part) => {
+      const text = stringifyPretty(part.value).trim()
+      const compact = compactToolArguments(part.value)
+      if (text) parts.push({ label: "工具参数", value: text, compact })
+    })
+    argParts.filter((part) => !["描述", "工具参数"].includes(part.label)).forEach((part) => push(part.label, part.value))
     push("结果", event.result)
     push("错误", event.error)
   }
@@ -123,7 +126,35 @@ function CopyBodyButton({ text }: { text: string }) {
 }
 
 // "结果" 用代码块包裹并带复制按钮，其余字段（参数/命令等）只需要代码块展示
+function CompactParams({ part }: { part: BodyPart }) {
+  const [full, setFull] = React.useState(false)
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground">{part.label}</span>
+      {full ? (
+        <pre
+          onClick={() => setFull(false)}
+          title="点一下收成一行"
+          className="cursor-pointer overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs leading-[1.6] whitespace-pre-wrap text-foreground"
+        >
+          {part.value}
+        </pre>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setFull(true)}
+          title="点一下看全文"
+          className="truncate rounded-md bg-muted px-2 py-1 text-left font-mono text-xs text-foreground"
+        >
+          {part.compact}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function TraceBodySection({ part, copyable }: { part: BodyPart; copyable: boolean }) {
+  if (part.compact !== undefined) return <CompactParams part={part} />
   // 截断版本只能看，不能复制：复制按钮只给完整内容
   const isResult = part.label === "结果" && copyable
   return (
@@ -139,8 +170,37 @@ function TraceBodySection({ part, copyable }: { part: BodyPart; copyable: boolea
   )
 }
 
-function TraceEventRow({ event, complete }: { event: TraceEvent; complete: boolean }) {
-  const [open, setOpen] = React.useState(false)
+// 能展开的行：说明、以及有详情字段的行；原始输出行只有一行文字，不能展开
+function isExpandableEvent(event: TraceEvent): boolean {
+  return event.kind === "agent_message" || (event.kind !== "output" && buildBodyParts(event).length > 0)
+}
+
+// 默认状态：说明展开，工具行只露标题和描述；mode=all 全展开，mode=none 全收起
+function defaultRowOpen(event: TraceEvent, mode: ExpandMode): boolean {
+  if (mode === "all") return true
+  if (mode === "none") return false
+  return event.kind === "agent_message"
+}
+
+type ExpandMode = "default" | "all" | "none"
+
+function traceRowKey(event: TraceEvent, index: number): string {
+  return event.toolId ? `${event.kind}:${event.toolId}` : `${event.kind}-${index}`
+}
+
+function TraceEventRow({
+  event,
+  complete,
+  open,
+  showDescription,
+  onOpenChange,
+}: {
+  event: TraceEvent
+  complete: boolean
+  open: boolean
+  showDescription: boolean
+  onOpenChange: (next: boolean) => void
+}) {
   const isRawOutput = event.kind === "output"
   const isStderr = isRawOutput && event.stream === "stderr"
   const Icon = isStderr
@@ -151,6 +211,7 @@ function TraceEventRow({ event, complete }: { event: TraceEvent; complete: boole
   const isNarration = event.kind === "agent_message"
   const bodyParts = React.useMemo(() => buildBodyParts(event), [event])
   const expandable = isNarration || bodyParts.length > 0
+  const description = bodyParts.find((part) => part.label === "描述")?.value
 
   if (!expandable) {
     return (
@@ -178,7 +239,7 @@ function TraceEventRow({ event, complete }: { event: TraceEvent; complete: boole
   }
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={onOpenChange}>
       <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[13px] hover:bg-muted">
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="flex-1 truncate text-foreground">
@@ -191,6 +252,10 @@ function TraceEventRow({ event, complete }: { event: TraceEvent; complete: boole
           )}
         />
       </CollapsibleTrigger>
+      {/* 没点开这一行时，标题下面直接露出“描述”；点开后描述在详情里，不重复显示 */}
+      {!open && !isNarration && showDescription && description ? (
+        <p className="truncate px-1.5 pb-1 pl-6 text-xs text-muted-foreground">{description}</p>
+      ) : null}
       <CollapsibleContent className="flex flex-col gap-2 px-1.5 pt-1 pb-1.5 pl-6">
         {isNarration && !bodyParts.length ? (
           <p className="text-[13px] leading-[1.75] whitespace-pre-wrap text-foreground">{event.detail || event.text}</p>
@@ -208,6 +273,10 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
   // 不会因为后续又来一条 error 事件把面板重新掰开
   const [userOpen, setUserOpen] = React.useState<boolean | null>(null)
   const wrapperRef = React.useRef<HTMLDivElement>(null)
+  // 展开整段后每一行的开合：mode 是“展开全部 / 收起全部”的整体状态，rowOverrides 是用户手动开合过的行
+  // （以 toolId 或序号为 key，新事件到来时不会被改回默认）
+  const [mode, setMode] = React.useState<ExpandMode>("default")
+  const [rowOverrides, setRowOverrides] = React.useState<Record<string, boolean>>({})
   const listEvents = trace.traceEvents || NO_EVENTS
   const truncated = trace.traceTruncated === true
   const cacheKey = traceCacheKey(sessionName, trace.id, listEvents.length)
@@ -237,6 +306,15 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
   }, [needFetch, cacheKey, sessionName, trace.id])
 
   if (!merged.length) return null
+  const rowKeys = merged.map((event, index) => traceRowKey(event, index))
+  const rowOpen = (event: TraceEvent, key: string) => rowOverrides[key] ?? defaultRowOpen(event, mode)
+  const expandableRows = merged.map((event, index) => ({ event, key: rowKeys[index] })).filter((row) => isExpandableEvent(row.event))
+  const allOpen = expandableRows.length > 0 && expandableRows.every((row) => rowOpen(row.event, row.key))
+  function toggleAll() {
+    // 点一下整体切换，并清掉各行手动状态：“全部”就是全部
+    setMode(allOpen ? "none" : "all")
+    setRowOverrides({})
+  }
   const summary = summarizeTraceFlow(merged, trace.pending === true)
   const complete = !truncated || full !== undefined
   const loadFailed = !complete && loadState?.key === cacheKey && loadState.failed
@@ -288,7 +366,14 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
           </p>
         ) : null}
         {merged.map((event, index) => (
-          <TraceEventRow key={`${event.kind}-${index}`} event={event} complete={complete} />
+          <TraceEventRow
+            key={rowKeys[index]}
+            event={event}
+            complete={complete}
+            open={rowOpen(event, rowKeys[index])}
+            showDescription={mode !== "none"}
+            onOpenChange={(next) => setRowOverrides((previous) => ({ ...previous, [rowKeys[index]]: next }))}
+          />
         ))}
       </CollapsibleContent>
       </Collapsible>
@@ -303,6 +388,15 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
             className="rounded-md border bg-muted/40 p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <ArrowUpToLineIcon className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={toggleAll}
+            title={allOpen ? "收起全部细节" : "展开全部细节"}
+            aria-label={allOpen ? "收起全部细节" : "展开全部细节"}
+            className="rounded-md border bg-muted/40 p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {allOpen ? <ChevronsDownUpIcon className="size-3.5" /> : <ChevronsUpDownIcon className="size-3.5" />}
           </button>
           <button
             type="button"

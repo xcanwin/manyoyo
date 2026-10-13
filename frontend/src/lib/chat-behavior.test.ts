@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { buildDocumentTitle, computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier } from "./chat-behavior"
+import { buildDocumentTitle, computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier, shouldFollowBottom } from "./chat-behavior"
 
 describe("isNearBottom", () => {
   test("返回 true：滚动条已经在底部（distance = 0）", () => {
@@ -73,5 +73,30 @@ describe("computeScrollRestore", () => {
   })
   test("高度没增加：不变", () => {
     expect(computeScrollRestore({ prevScrollHeight: 1000, nextScrollHeight: 1000, scrollTop: 20 })).toBe(20)
+  })
+})
+
+describe("shouldFollowBottom（B1：用户在看执行过程时不能被自动滚走）", () => {
+  const base = { stick: true, scrollTop: 0, prevScrollHeight: 0, clientHeight: 600, interacting: false, hasSelection: false }
+
+  test("首次进入（上一次高度还是 0）：跟随到底部", () => {
+    expect(shouldFollowBottom(base)).toBe(true)
+  })
+
+  test("更新之前视野就贴着底部：跟随", () => {
+    expect(shouldFollowBottom({ ...base, scrollTop: 1400, prevScrollHeight: 2000 })).toBe(true)
+  })
+
+  test("没有滚动事件但视野其实不在底部（展开了很长的执行过程、停在过程顶部）：不跟随（复现：旧代码这里会被拉到底）", () => {
+    expect(shouldFollowBottom({ ...base, scrollTop: 0, prevScrollHeight: 1921 })).toBe(false)
+  })
+
+  test("用户已经往上翻过（stick 为 false）：不跟随", () => {
+    expect(shouldFollowBottom({ ...base, stick: false, scrollTop: 1400, prevScrollHeight: 2000 })).toBe(false)
+  })
+
+  test("正在滚轮 / 触摸 / 点击展开 / 选中文字：即使贴着底部也不跟随", () => {
+    expect(shouldFollowBottom({ ...base, scrollTop: 1400, prevScrollHeight: 2000, interacting: true })).toBe(false)
+    expect(shouldFollowBottom({ ...base, scrollTop: 1400, prevScrollHeight: 2000, hasSelection: true })).toBe(false)
   })
 })
