@@ -1,8 +1,10 @@
 import * as React from "react"
-import { CheckIcon, CopyIcon, EllipsisIcon, SendIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, CopyIcon, EllipsisIcon, SendIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
+  apiDelete,
+  apiErrorData,
   apiGet,
   apiPost,
   apiStream,
@@ -61,6 +63,16 @@ import {
   type SendErrorKind,
 } from "@/lib/send-flow"
 import { markdownToPlainText } from "@/lib/markdown-text"
+import {
+  loadQueueWhen,
+  parseQueue,
+  QUEUE_WHEN_LABELS,
+  QUEUE_WHEN_ORDER,
+  saveQueueWhen,
+  type QueueItem,
+  type QueueWhen,
+} from "@/lib/queue"
+import { QueuedPrompts } from "@/components/queued-prompts"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AgentTemplateDialog } from "@/components/agent-template-dialog"
@@ -257,6 +269,7 @@ function ActivityView({
   loadingEarlier,
   onLoadEarlier,
   followSignal,
+  tail,
 }: {
   session: SessionSummary | null
   messages: ChatMessage[]
@@ -267,6 +280,8 @@ function ActivityView({
   onLoadEarlier: () => void
   // 用户发送消息时加 1：发出去的消息和随后的回复一律跟到底部
   followSignal: number
+  // 消息流底部的额外内容（排队中的提示词）
+  tail?: React.ReactNode
 }) {
   const displayMessages = React.useMemo(() => mergeTraceIntoReply(messages), [messages])
   const scrollRef = React.useRef<HTMLDivElement>(null)
@@ -516,6 +531,7 @@ function ActivityView({
             </div>
           )
         })}
+        {tail}
       </div>
     </div>
   )
@@ -675,7 +691,7 @@ function DetailView({ detail }: { detail: SessionDetail | null }) {
   )
 }
 
-function Composer({
+export function Composer({
   draft,
   onDraftChange,
   onSend,
@@ -687,6 +703,8 @@ function Composer({
   session,
   onOpenCliTemplate,
   onModelChanged,
+  queueWhen,
+  onQueueWhenChange,
 }: {
   draft: string
   onDraftChange: (value: string) => void
@@ -699,6 +717,8 @@ function Composer({
   session: SessionSummary | null
   onOpenCliTemplate: () => void
   onModelChanged: () => void
+  queueWhen: QueueWhen
+  onQueueWhenChange: (value: QueueWhen) => void
 }) {
   const isMobile = useIsMobile()
   // 拦截理由集中在 resolveComposerBlockReason 里算（含容器级运行锁：同容器别的
@@ -707,7 +727,8 @@ function Composer({
   const archived = Boolean(session?.archived)
   const inputDisabled = disabled || blockReason !== ""
   // 空输入/纯空白时发送按钮直接置灰，而不是点了没反应
-  const sendDisabled = inputDisabled || draft.trim() === ""
+  // 任务进行中输入框仍可用：agent 对话可以追加提示词（选插入时机）；系统命令不支持追加
+  const sendDisabled = inputDisabled || draft.trim() === "" || (sending && mode === "command")
 
   // 底部内边距按安全区取大值：加到主屏幕全屏运行时，iOS 的 home 指示条会压在
   // 输入框上；桌面端 env() 取值为 0，等价于原来的 p-3
@@ -745,7 +766,7 @@ function Composer({
           // Shift+Enter / Alt+Enter 换行，其余 Enter 发送
           if (event.shiftKey || event.altKey) return
           event.preventDefault()
-          if (!sending && !inputDisabled) onSend()
+          if (!sendDisabled) onSend()
         }}
       />
       <div className="mt-2 flex items-center justify-between gap-2">
@@ -795,9 +816,49 @@ function Composer({
           </DropdownMenu>
         </div>
         {sending ? (
-          <Button variant="destructive" className="px-4" onClick={onStop}>
-            停止
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button variant="destructive" className="px-4" onClick={onStop}>
+              停止
+            </Button>
+            {mode === "agent" ? (
+              <div className="flex items-center">
+                <Button
+                  className="rounded-r-none px-3"
+                  onClick={onSend}
+                  disabled={sendDisabled}
+                  title={QUEUE_WHEN_LABELS[queueWhen]}
+                >
+                  发送
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        className="rounded-l-none border-l border-primary-foreground/30 px-2"
+                        aria-label="选择插入时机"
+                        disabled={inputDisabled}
+                      />
+                    }
+                  >
+                    <ChevronDownIcon />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuGroup>
+                      {QUEUE_WHEN_ORDER.map((when) => (
+                        <DropdownMenuItem
+                          key={when}
+                          className={when === queueWhen ? "bg-accent" : undefined}
+                          onClick={() => onQueueWhenChange(when)}
+                        >
+                          {QUEUE_WHEN_LABELS[when]}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : null}
+          </div>
         ) : (
           <Button className="px-4" onClick={onSend} disabled={sendDisabled}>
             <SendIcon data-icon="inline-start" />
@@ -868,6 +929,16 @@ export function WorkspacePanel({
   // 按会话名记录"本标签页正在为哪些会话跑 stream"，而不是单个全局布尔值——
   // 否则切到另一个 agent 时，输入框/发送按钮会继续显示上一个 agent 的状态
   const [sendingNames, setSendingNames] = React.useState<Set<string>>(() => new Set())
+  // 任务进行中追加的提示词（来自服务端 /messages 的 queue，按会话）与上次选的插入时机
+  const [queueBySession, setQueueBySession] = React.useState<Record<string, QueueItem[]>>({})
+  const [queueWhen, setQueueWhen] = React.useState<QueueWhen>(() => loadQueueWhen())
+  const setQueueFor = React.useCallback((name: string, items: QueueItem[]) => {
+    setQueueBySession((prev) => {
+      const old = prev[name] ?? []
+      if (old.length === items.length && old.every((item, index) => item.id === items[index].id && item.when === items[index].when)) return prev
+      return { ...prev, [name]: items }
+    })
+  }, [])
   const [loadError, setLoadError] = React.useState("")
   // 当前这条 loadError 是不是"连接断了但服务端还在跑"——是的话等 pending 消失
   // （useAgentRecoveryPoll 把这一轮收尾）就自动撤掉提示，不要一直挂在输入框上方
@@ -1075,6 +1146,7 @@ export function WorkspacePanel({
         syncMetaRef.current[name] = { epoch: applied.epoch, hasMore: applied.hasMore }
         setHasMoreBySession((prev) => (prev[name] === applied.hasMore ? prev : { ...prev, [name]: applied.hasMore }))
         setSessionMessages(name, () => applied.messages)
+        setQueueFor(name, parseQueue((data as { queue?: unknown }).queue) ?? [])
         messagesSyncTickRef.current += 1
         setMessagesSyncTick(messagesSyncTickRef.current)
         checkOutbox(name, applied.messages)
@@ -1088,7 +1160,7 @@ export function WorkspacePanel({
         if (!silent && activeSessionNameRef.current === name) setMessagesLoading(false)
       }
     },
-    [setSessionMessages, showLoadError, checkOutbox]
+    [setSessionMessages, setQueueFor, showLoadError, checkOutbox]
   )
 
   const loadDetailFor = React.useCallback((name: string, signal?: AbortSignal) => {
@@ -1207,8 +1279,10 @@ export function WorkspacePanel({
 
   async function handleSend() {
     const text = draft.trim()
-    if (!text || !activeSession || sendingNames.has(activeSession.name)) return
+    if (!text || !activeSession) return
     const name = activeSession.name
+    // 任务进行中只有 agent 对话能追加提示词；系统命令仍要等上一条跑完
+    if ((sendingNames.has(name) || activeAgentRunning) && mode === "command") return
     // 流式回调是异步触发的，期间用户可能已经切换到别的 agent。消息状态按会话
     // 隔离（setSessionMessages 按 name 定位），切走后回调仍持续维护原会话的
     // 实时状态；只有 loadError 这类"只属于当前视图"的提示才需要 isStillActive
@@ -1274,6 +1348,25 @@ export function WorkspacePanel({
       if (outcome.action === "restore") putBack()
       else if (outcome.action === "unknown") setRestoreNotice({ kind: "unknown", outbox })
     }
+    // 任务进行中：不开新的流，把提示词交给服务端排队，按所选时机插入
+    if (mode === "agent" && (sendingNames.has(name) || activeAgentRunning)) {
+      setSendTick((value) => value + 1)
+      try {
+        const data = await apiPost(`/api/sessions/${encodeURIComponent(name)}/agent/queue`, {
+          prompt: text,
+          when: queueWhen,
+          clientMessageId: clientId,
+        })
+        clearOutbox(name, clientId)
+        setQueueFor(name, parseQueue(data.queue) ?? [])
+      } catch (err) {
+        if (isStillActive()) showLoadError(err instanceof Error ? err.message : "追加失败")
+        await handleUnsent(classifySendError(err))
+      }
+      // 服务端可能刚好空闲、已经直接开跑：对一次账，让新一轮的 pending 交给恢复轮询
+      if (isStillActive()) void requestSync(true, true)
+      return
+    }
     setSessionMessages(name, (prev) => [
       ...prev,
       {
@@ -1328,6 +1421,7 @@ export function WorkspacePanel({
     let traceMessageId: string | number = STREAMING_TRACE_ID
     // 收到 meta 说明服务端已经存下了 user 消息：待发箱的使命完成。meta 之前失败才需要放回输入框
     let metaReceived = false
+    let sawQueueNext = false
     setSessionMessages(name, (prev) => [
       ...prev,
       {
@@ -1422,6 +1516,9 @@ export function WorkspacePanel({
               { replyMessageId: event.replyMessageId }
             )
           )
+        } else if (event.type === "queue_next") {
+          // 服务端接着发排队的下一条：这条流到此为止，后面由恢复轮询跟随下一轮
+          sawQueueNext = true
         } else if (event.type === "error") {
           if (isStillActive()) showLoadError(event.error)
           setSessionMessages(name, (prev) => removeLocalPendingPlaceholders(prev))
@@ -1456,11 +1553,46 @@ export function WorkspacePanel({
       // 流结束（成功或中断）后立刻用服务端的最近一页对账，主动触发不能被在途请求吞掉
       if (isStillActive()) {
         void requestSync(true, true)
+        // 下一轮由服务端稍后才开跑：隔一会儿再对一次账，让它的 pending 交给恢复轮询
+        if (sawQueueNext) {
+          for (const delay of [700, 2000]) window.setTimeout(() => void requestSync(true, true), delay)
+        }
       } else {
         // 流结束时用户已切到别的会话：本地留的是流式拼出来的内容，下次回来先按最近一页对账
         syncMetaRef.current[name] = { epoch: null, hasMore: syncMetaRef.current[name]?.hasMore ?? false }
       }
     }
+  }
+
+  // 取消一条排队中的提示词；edit=true 时把它放回输入框（编辑 = 取消后放回）
+  async function handleCancelQueued(item: QueueItem, edit: boolean) {
+    if (!activeSession) return
+    const name = activeSession.name
+    try {
+      const data = await apiDelete(`/api/sessions/${encodeURIComponent(name)}/agent/queue/${encodeURIComponent(item.id)}`)
+      setQueueFor(name, parseQueue(data.queue) ?? [])
+      if (edit) {
+        const current = draftRef.current
+        updateDraft(current.trim() ? `${item.text}\n\n${current}` : item.text)
+      }
+    } catch (err) {
+      if (apiErrorData(err).status === 404) {
+        showLoadError("这条提示词已经发出或已取消")
+        void requestSync(true, true)
+      } else {
+        showLoadError(err instanceof Error ? err.message : "取消失败")
+      }
+    }
+  }
+
+  async function handleContinueQueued() {
+    if (!activeSession) return
+    try {
+      await apiPost(`/api/sessions/${encodeURIComponent(activeSession.name)}/agent/queue/continue`, {})
+    } catch (err) {
+      showLoadError(err instanceof Error ? err.message : "继续发送失败")
+    }
+    void requestSync(true, true)
   }
 
   async function handleStop() {
@@ -1567,6 +1699,15 @@ export function WorkspacePanel({
               loadingEarlier={loadingEarlier}
               onLoadEarlier={() => void loadEarlier()}
               followSignal={sendTick}
+              tail={
+                <QueuedPrompts
+                  items={activeSession ? queueBySession[activeSession.name] ?? [] : []}
+                  idle={!activeAgentRunning}
+                  onCancel={(item) => void handleCancelQueued(item, false)}
+                  onEdit={(item) => void handleCancelQueued(item, true)}
+                  onContinue={() => void handleContinueQueued()}
+                />
+              }
             />
           )
         ) : null}
@@ -1655,6 +1796,11 @@ export function WorkspacePanel({
           sending={activeAgentRunning}
           session={activeSession}
           onOpenCliTemplate={() => setCliDialogOpen(true)}
+          queueWhen={queueWhen}
+          onQueueWhenChange={(value) => {
+            setQueueWhen(value)
+            saveQueueWhen(value)
+          }}
           onModelChanged={() => {
             onAfterSend()
             loadDetail()

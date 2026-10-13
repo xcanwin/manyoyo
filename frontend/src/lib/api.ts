@@ -607,6 +607,8 @@ export type StreamEvent =
   | { type: "content_chunk"; text: string; reset?: boolean }
   // 服务端保活心跳，仅用于喂饱反向代理的空闲读超时，前端忽略即可
   | { type: "ping" }
+  // 这一轮结束后服务端接着发排队的下一条：本条流到此为止，前端改为跟随下一轮
+  | { type: "queue_next" }
   | { type: "result"; exitCode: number; output: string; interrupted?: boolean; replyMessageId?: string }
   | { type: "error"; error: string }
 
