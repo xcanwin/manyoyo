@@ -1395,6 +1395,7 @@ https://github.com/xcanwin/manyoyo
     [
         ['down', '停止当前模式，回到默认模式'],
         ['status', '查看当前模式并真实探测浏览器是否可用（不可用时退出码非 0）'],
+        ['probe', '真实探测当前模式（只读，不改状态；默认模式会起一次性容器，失败退出码非 0）'],
         ['logs', '查看当前模式的浏览器服务日志'],
         ['mcp-add', '输出在容器内注册 Playwright MCP（stdio，随当前模式自动切换）的命令']
     ].forEach(([action, description]) => {

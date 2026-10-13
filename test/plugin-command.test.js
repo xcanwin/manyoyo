@@ -419,6 +419,63 @@ describe('容器集成参数', () => {
     });
 });
 
+describe('probe（真实探测当前模式，发布流水线用）', () => {
+    let home;
+    beforeEach(() => { home = makeHome(); });
+    afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
+
+    function stubRuntime(plugin, answers) {
+        const calls = [];
+        plugin.runtimeCall = jest.fn((args, options) => {
+            calls.push({ args, options });
+            if (args[0] === 'image') return answers.image || { status: 0, stdout: 'sha256:x', stderr: '' };
+            return answers.run || { status: 0, stdout: '"manyoyo-ok"\n', stderr: '' };
+        });
+        return calls;
+    }
+
+    test('默认模式（容器内浏览器）：起一次性容器，挂 current 目录，真的打开页面并读回标题；读到才算通过', async () => {
+        const { plugin, sink } = newPlugin(home);
+        const calls = stubRuntime(plugin, {});
+        expect(await plugin.probe()).toBe(0);
+        const run = calls.find(call => call.args[0] === 'run');
+        expect(run.args).toEqual(expect.arrayContaining(['--rm', '--volume', `${plugin.currentDir}:/run/manyoyo-playwright:ro`]));
+        expect(run.args).toEqual(expect.arrayContaining(['--env', 'PLAYWRIGHT_MCP_CONFIG=/run/manyoyo-playwright/config.json']));
+        expect(run.args).toEqual(expect.arrayContaining(['--add-host', 'host.docker.internal:host-gateway']));
+        const script = run.args[run.args.length - 1];
+        expect(script).toContain('playwright-cli');
+        expect(script).toContain('manyoyo-ok');
+        expect(run.options.timeout).toBeGreaterThan(0);
+        expect(sink.out).toContain('真实探测: 通过');
+    });
+
+    test('默认模式：容器里没读到标题 / 镜像不存在 → 退出码 1 并给一句原因；不改任何状态', async () => {
+        const { plugin, sink } = newPlugin(home);
+        stubRuntime(plugin, { run: { status: 1, stdout: 'Error: browser launch failed\n', stderr: '' } });
+        expect(await plugin.probe()).toBe(1);
+        expect(sink.err).toContain('真实探测: 失败');
+        const missing = newPlugin(home);
+        stubRuntime(missing.plugin, { image: { status: 1, stdout: '', stderr: '' } });
+        expect(await missing.plugin.probe()).toBe(1);
+        expect(missing.sink.err).toContain('不存在');
+        expect(plugin.readState().mode).toBe('default');
+    });
+
+    test('宿主机模式（headed / chrome / vnc）：进程已不在 → 退出码 1，但与 status 不同，不回退默认模式', async () => {
+        const { plugin, sink } = newPlugin(home);
+        plugin.writeState({ mode: 'headed', port: await freePort(), pid: 2 ** 22 + 9 });
+        expect(await plugin.probe()).toBe(1);
+        expect(sink.err).toContain('真实探测: 失败');
+        expect(plugin.readState().mode).toBe('headed');
+    });
+
+    test('命令行：playwright probe 已注册，帮助里有它', () => {
+        const help = cli(home, ['playwright', '--help']).stdout;
+        expect(help).toContain('probe');
+        expect(cli(home, ['playwright', 'probe', '--help']).status).toBe(0);
+    });
+});
+
 describe('命令行', () => {
     let home;
     beforeEach(() => { home = makeHome(); });
