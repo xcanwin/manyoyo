@@ -288,6 +288,10 @@ jobs:
             runner: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+      # TEMP-FAIL（试跑用，交付前删除）
+      - name: TEMP-FAIL build
+        if: matrix.arch == 'x64' && contains(github.event.head_commit.message, 'FAIL-BUILD')
+        run: exit 1
 
       # 构建脚本只用 Node 内置模块，不需要安装依赖；前端由 web job 构建一次后下发
       - uses: actions/setup-node@v7
