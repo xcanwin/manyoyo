@@ -65,6 +65,43 @@ describe('downloadVerified', () => {
     });
 });
 
+describe('downloadVerified 重试（CI 里 nodejs.org 偶发 502 曾让整次发布构建失败）', () => {
+    const body = Buffer.from('retry bytes');
+    const flaky = failures => {
+        let n = 0;
+        return jest.fn(async () => {
+            n += 1;
+            const f = failures[n - 1];
+            if (f === 'throw') throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } });
+            if (typeof f === 'number') return new Response('bad', { status: f });
+            return new Response(body);
+        });
+    };
+
+    test('5xx、429 与网络错误会退避重试，成功后照常校验落盘', async () => {
+        const fetchImpl = flaky([502, 'throw', 429]);
+        const dest = path.join(root, 'retry/a.bin');
+        await downloadVerified({ url: 'https://x/a', sha256: sha(body), dest, fetchImpl, retryDelayMs: 0 });
+        expect(fetchImpl).toHaveBeenCalledTimes(4);
+        expect(fs.readFileSync(dest).equals(body)).toBe(true);
+    });
+
+    test('最多重试 3 次（共 4 次请求），之后把最后一次的错误抛出', async () => {
+        const fetchImpl = flaky([503, 503, 503, 503, 503]);
+        await expect(downloadVerified({ url: 'https://x/b', sha256: sha(body), dest: path.join(root, 'retry/b.bin'), fetchImpl, retryDelayMs: 0 })).rejects.toThrow(/503/);
+        expect(fetchImpl).toHaveBeenCalledTimes(4);
+    });
+
+    test('404 等 4xx 和 SHA256 不符不重试', async () => {
+        const notFound = flaky([404]);
+        await expect(downloadVerified({ url: 'https://x/c', sha256: sha(body), dest: path.join(root, 'retry/c.bin'), fetchImpl: notFound, retryDelayMs: 0 })).rejects.toThrow(/404/);
+        expect(notFound).toHaveBeenCalledTimes(1);
+        const ok = flaky([]);
+        await expect(downloadVerified({ url: 'https://x/d', sha256: 'a'.repeat(64), dest: path.join(root, 'retry/d.bin'), fetchImpl: ok, retryDelayMs: 0 })).rejects.toThrow(/SHA256 校验失败/);
+        expect(ok).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('.run packaging', () => {
     async function makeRun(name = 'pkg', volumeBytes = 0, bulkBytes = 0) {
         const src = path.join(root, 'src');
