@@ -105,12 +105,16 @@ async function waitFor(fn, timeoutMs = 8000) {
 }
 
 // 第一次 exec 是长任务（5 秒，收到 SIGTERM 退出 143；withTool 时 0.3 秒后先完成一次工具调用），之后的 exec 立刻结束
-function writeFakeDocker(tempHost, { withTool = false, firstMs = 5000 } = {}) {
+function writeFakeDocker(tempHost, { withTool = false, firstMs = 5000, exitZeroOnTerm = false } = {}) {
     const file = path.join(tempHost, 'fake-docker.js');
     fs.writeFileSync(file, `#!/usr/bin/env node
 const fs = require('fs');
 const args = process.argv.slice(2);
-if (args[0] === 'exec' && args.includes('/bin/sh')) process.exit(0);
+if (args[0] === 'exec' && args.includes('/bin/sh')) {
+  // 停止 / 打断时进容器发信号的 exec：exitZeroOnTerm 时模拟真实 claude 收到 SIGINT 后正常收尾、退出码 0
+  if (${exitZeroOnTerm}) { try { process.kill(Number(fs.readFileSync(${JSON.stringify(path.join(tempHost, 'long.pid'))}, 'utf8')), 'SIGUSR1'); } catch (e) {} }
+  process.exit(0);
+}
 if (args[0] === 'exec' && args.includes('/bin/bash')) {
   const counter = ${JSON.stringify(path.join(tempHost, 'count'))};
   const n = fs.existsSync(counter) ? Number(fs.readFileSync(counter, 'utf8')) : 0;
@@ -124,7 +128,9 @@ if (args[0] === 'exec' && args.includes('/bin/bash')) {
   process.stdout.write('{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"long","status":"in_progress"}}\\n');
   if (${withTool}) setTimeout(() => process.stdout.write('{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"long","status":"completed","aggregated_output":"x","exit_code":0}}\\n'), 300);
   const timer = setTimeout(() => { process.stdout.write('{"type":"item.completed","item":{"type":"agent_message","text":"一轮完成"}}\\n'); process.exit(0); }, ${firstMs});
-  process.on('SIGTERM', () => { clearTimeout(timer); process.exit(143); });
+  fs.writeFileSync(${JSON.stringify(path.join(tempHost, 'long.pid'))}, String(process.pid));
+  process.on('SIGUSR1', () => { clearTimeout(timer); process.exit(0); });
+  process.on('SIGTERM', () => { clearTimeout(timer); process.exit(${exitZeroOnTerm ? 0 : 143}); });
   return;
 }
 process.exit(0);
@@ -339,6 +345,24 @@ describe('Web agent queue', () => {
             });
             expect(view.queue).toEqual([]);
             expect(userTexts(view.messages)).toEqual(['IDLE']);
+        });
+    }, 20000);
+
+    test('now：真实 claude 收到 SIGINT 后退出码为 0，也要算被打断', async () => {
+        await withServer({ exitZeroOnTerm: true }, async ({ call, messages, startFirst }) => {
+            let queued = false;
+            const { events } = await startFirst(async event => {
+                if (event.type === 'meta' && !queued) {
+                    queued = true;
+                    await call('POST', '/api/sessions/demo/agent/queue', { prompt: 'AFTER0', when: 'now', clientMessageId: 'queue-msg-0008' });
+                }
+            });
+            expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'result', interrupted: true, exitCode: 0 })]));
+            const view = await waitFor(async () => {
+                const m = await messages();
+                return userTexts(m.messages).length === 2 && m.messages.every(x => x.pending !== true) ? m : null;
+            });
+            expect(view.messages.find(m => m.streamTrace === true).content).toContain('已打断，继续执行新的提示词');
         });
     }, 20000);
 });
