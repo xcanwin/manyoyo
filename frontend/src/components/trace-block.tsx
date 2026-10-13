@@ -257,7 +257,8 @@ function TraceEventRow({
         <p className="truncate px-1.5 pb-1 pl-6 text-xs text-muted-foreground">{description}</p>
       ) : null}
       <CollapsibleContent className="flex flex-col gap-2 px-1.5 pt-1 pb-1.5 pl-6">
-        {isNarration && !bodyParts.length ? (
+        {isNarration ? (
+          // 说明的详情就是正文：不再套一层“详情”小标题
           <p className="text-[13px] leading-[1.75] whitespace-pre-wrap text-foreground">{event.detail || event.text}</p>
         ) : (
           bodyParts.map((part) => <TraceBodySection key={part.label} part={part} copyable={complete} />)
