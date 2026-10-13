@@ -384,6 +384,15 @@ jobs:
           curl --noproxy '*' -fsS -b "$jar" -X POST "$base/api/sessions/$name/remove" -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest' -d '{}' > /dev/null
           echo "网页冒烟通过"
 
+      # 插件冒烟：一次性容器里用默认模式的浏览器（Xvfb 里的有头 Chrome）真的打开页面并读回标题。限时 6 分钟；
+      # 超时或不稳定就挪到 postpublish（不阻断）——挪不挪看试跑数据，见 FEEDBACK
+      - name: Plugin smoke (real browser in a throwaway container)
+        timeout-minutes: 6
+        run: |
+          set -eu
+          export HOME="$RUNNER_TEMP/home"
+          "$HOME/.manyoyo/bin/manyoyo" playwright probe
+
       - name: Uninstall
         if: always()
         run: |

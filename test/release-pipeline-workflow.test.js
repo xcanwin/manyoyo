@@ -137,6 +137,14 @@ describe('release-pipeline workflow', () => {
         posts.forEach(line => expect(line).toContain("X-Requested-With: XMLHttpRequest"));
     });
 
+    test('the plugin is smoke-tested before publishing, with a time limit', () => {
+        const verify = job('prepublish-verify');
+        expect(verify).toContain('manyoyo" playwright probe');
+        const step = verify.slice(verify.indexOf('Plugin smoke'));
+        expect(step.slice(0, step.indexOf('run:'))).toContain('timeout-minutes: 6');
+        expect(verify.indexOf('Plugin smoke')).toBeGreaterThan(verify.indexOf('Web smoke'));
+    });
+
     test('uses only the built-in token — no new secrets', () => {
         expect(new Set(pipeline.match(/secrets\.[A-Za-z_]+/g) || [])).toEqual(new Set());
     });
