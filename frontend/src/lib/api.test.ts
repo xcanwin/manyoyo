@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 
 import {
   buildToolArgumentParts,
+  compactToolArguments,
   apiStream,
   applyServerMessageIds,
   applyTraceEventUpdate,
@@ -645,20 +646,33 @@ describe("buildToolArgumentParts", () => {
     ])
   })
 
-  test("还有其它参数时单列“其他参数”", () => {
+  test("还有其它参数时单列“工具参数”（Agent 调用工具时传的参数）", () => {
     const parts = buildToolArgumentParts({ arguments: { command: "sleep 1", timeout: 5000 } })
     expect(parts).toEqual([
       { label: "命令", value: "sleep 1" },
-      { label: "其他参数", value: { timeout: 5000 } },
+      { label: "工具参数", value: { timeout: 5000 } },
     ])
   })
 
-  test("没有 command 的工具给“参数”，不给摘要；没有结构化参数才退回摘要", () => {
+  test("没有 command 的工具给“工具参数”，不给摘要；没有结构化参数才退回摘要", () => {
     expect(buildToolArgumentParts({ arguments: { file_path: "/a" }, argumentSummary: "file_path=/a" })).toEqual([
-      { label: "参数", value: { file_path: "/a" } },
+      { label: "工具参数", value: { file_path: "/a" } },
     ])
     expect(buildToolArgumentParts({ argumentSummary: "x=1" })).toEqual([{ label: "参数摘要", value: "x=1" }])
     expect(buildToolArgumentParts({})).toEqual([])
+  })
+})
+
+describe("compactToolArguments（B5：工具参数一行展示）", () => {
+  test("对象按 键=值 排成一行，值里的换行折成一个空格，不缩进", () => {
+    expect(compactToolArguments({ timeout: 12000, pattern: "a\nb", flag: true })).toBe("timeout=12000 pattern=a b flag=true")
+  })
+
+  test("嵌套值给单行 JSON；字符串直接返回；空值给空串", () => {
+    expect(compactToolArguments({ opts: { a: 1, b: [2] } })).toBe('opts={"a":1,"b":[2]}')
+    expect(compactToolArguments("x=1")).toBe("x=1")
+    expect(compactToolArguments(undefined)).toBe("")
+    expect(compactToolArguments({})).toBe("")
   })
 })
 

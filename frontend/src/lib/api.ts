@@ -320,12 +320,25 @@ export function buildToolArgumentParts(event: Pick<TraceEvent, "arguments" | "ar
     if (hasDescription) parts.push({ label: "描述", value: description })
     else if (description !== undefined) (rest as Record<string, unknown>).description = description
     if (Object.keys(rest).length > 0) {
-      parts.push({ label: hasCommand || hasDescription ? "其他参数" : "参数", value: rest })
+      parts.push({ label: "工具参数", value: rest })
     }
     return parts
   }
-  if (args !== undefined && args !== null && args !== "") return [{ label: "参数", value: args }]
+  if (args !== undefined && args !== null && args !== "") return [{ label: "工具参数", value: args }]
   return event.argumentSummary ? [{ label: "参数摘要", value: event.argumentSummary }] : []
+}
+
+// 工具参数压成一行：键=值，值里的换行折成空格，嵌套值给单行 JSON（不缩进）；过长由界面截断
+export function compactToolArguments(value: unknown): string {
+  if (value === undefined || value === null || value === "") return ""
+  if (typeof value === "string") return value.replace(/\s*\n\s*/g, " ")
+  if (typeof value !== "object" || Array.isArray(value)) return JSON.stringify(value) ?? ""
+  return Object.entries(value as Record<string, unknown>)
+    .map(([key, item]) => {
+      const text = typeof item === "string" ? item.replace(/\s*\n\s*/g, " ") : JSON.stringify(item)
+      return `${key}=${text}`
+    })
+    .join(" ")
 }
 
 export function mergeToolTraceEvents(events: TraceEvent[]): TraceEvent[] {

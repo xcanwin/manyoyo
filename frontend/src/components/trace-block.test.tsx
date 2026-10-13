@@ -145,3 +145,117 @@ describe("TraceBlock 复制只给完整内容", () => {
     expect(writeText).toHaveBeenCalledWith(FULL_RESULT)
   })
 })
+
+describe("TraceBlock 默认展开与全部开合（B2–B4）", () => {
+  const mk = (extra: unknown[] = []): ChatMessage =>
+    ({
+      id: "1700000000000-eeeeee",
+      role: "assistant",
+      content: "[执行过程]",
+      timestamp: "2026-01-01T00:00:00Z",
+      streamTrace: true,
+      traceEvents: [
+        { kind: "agent_message", text: "说明", detail: "先看看目录结构" },
+        {
+          kind: "tool",
+          toolName: "Bash",
+          toolId: "t1",
+          text: "Bash: ls",
+          arguments: { command: "ls -la", description: "列出目录", timeout: 12000 },
+          result: "total 8",
+        },
+        ...extra,
+      ],
+    }) as ChatMessage
+
+  const button = (label: string) => container.querySelector(`[aria-label="${label}"]`) as HTMLElement | null
+  const click = async (el: HTMLElement) => {
+    await act(async () => {
+      el.click()
+    })
+  }
+  const toolRow = () => Array.from(container.querySelectorAll("button[data-slot='collapsible-trigger']")).find((el) => el.textContent?.includes("Bash: ls")) as HTMLElement
+
+  test("展开整段后：说明默认展开，工具行直接显示描述，其余（命令 / 结果）点开这一行才显示", async () => {
+    await mount(mk())
+    await expand()
+    expect(container.textContent).toContain("先看看目录结构")
+    expect(container.textContent).toContain("列出目录")
+    expect(container.textContent).not.toContain("total 8")
+    expect(container.textContent).not.toContain("ls -la")
+    await click(toolRow())
+    expect(container.textContent).toContain("total 8")
+    expect(container.textContent).toContain("ls -la")
+  })
+
+  test("展开全部细节 / 收起全部细节：按钮在两个对齐按钮之间，标题随状态切换", async () => {
+    await mount(mk())
+    await expand()
+    const labels = Array.from(container.querySelectorAll("button[aria-label]")).map((el) => el.getAttribute("aria-label"))
+    const up = labels.indexOf("执行过程对齐到顶部")
+    const down = labels.indexOf("执行过程对齐到底部")
+    const all = labels.indexOf("展开全部细节")
+    expect(up).toBeLessThan(all)
+    expect(all).toBeLessThan(down)
+
+    await click(button("展开全部细节")!)
+    expect(container.textContent).toContain("total 8")
+    expect(button("收起全部细节")).not.toBeNull()
+    expect(button("展开全部细节")).toBeNull()
+
+    await click(button("收起全部细节")!)
+    expect(container.textContent).not.toContain("total 8")
+    expect(container.textContent).not.toContain("先看看目录结构")
+    expect(container.textContent).not.toContain("列出目录")
+    expect(button("展开全部细节")).not.toBeNull()
+  })
+
+  test("用户手动开合过的行，后续新事件到来时不会被改回默认", async () => {
+    await mount(mk())
+    await expand()
+    await click(toolRow())
+    expect(container.textContent).toContain("total 8")
+    await act(async () => {
+      root.render(<TraceBlock trace={mk([{ kind: "tool", toolName: "Read", toolId: "t2", text: "Read: a", result: "新结果" }])} sessionName="c~a" />)
+    })
+    expect(container.textContent).toContain("total 8")
+    expect(container.textContent).not.toContain("新结果")
+  })
+})
+
+describe("TraceBlock 工具参数（B5）", () => {
+  const msg = {
+    id: "1700000000000-ffffff",
+    role: "assistant",
+    content: "[执行过程]",
+    timestamp: "2026-01-01T00:00:00Z",
+    streamTrace: true,
+    traceEvents: [
+      {
+        kind: "tool",
+        toolName: "Bash",
+        toolId: "t1",
+        text: "Bash: ls",
+        arguments: { command: "ls -la", description: "列出目录", timeout: 12000, note: "a\nb" },
+        result: "ok",
+      },
+    ],
+  } as ChatMessage
+
+  test("叫“工具参数”，紧跟在“工具”后面、在命令之前，单行 键=值；点一下展开全文；不再出现“其他参数”", async () => {
+    await mount(msg)
+    await expand()
+    const row = Array.from(container.querySelectorAll("button[data-slot='collapsible-trigger']")).find((el) => el.textContent?.includes("Bash: ls")) as HTMLElement
+    await act(async () => {
+      row.click()
+    })
+    const text = container.textContent || ""
+    expect(text).not.toContain("其他参数")
+    expect(text).toContain("工具参数")
+    expect(text).toContain("timeout=12000 note=a b")
+    const order = ["描述", "工具", "工具参数", "命令", "结果"].map((label) => text.indexOf(label))
+    expect(order.every((value) => value >= 0)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+    expect(container.querySelector("pre")?.textContent).not.toContain("{")
+  })
+})
