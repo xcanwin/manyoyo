@@ -153,19 +153,24 @@ jobs:
       imageVersion: ${{ needs.prepare.outputs.imageVersion }}
       dryRun: ${{ needs.prepare.outputs.dryRun == 'true' }}
 
+  # 各平台构建 job 通过扫描和冒烟后，把本平台的文件直接传到 draft 草稿（draftTag），不再整体下载 6GB 产物再上传
   packages:
-    needs: [prepare, image]
-    if: ${{ !cancelled() && needs.prepare.result == 'success' && (needs.image.result == 'success' || needs.image.result == 'skipped') }}
+    needs: [prepare, image, draft]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.draft.result == 'success' && (needs.image.result == 'success' || needs.image.result == 'skipped') }}
     permissions:
-      contents: read
+      contents: write
       packages: read
     uses: ./.github/workflows/build-packages.yml
     with:
       imageVersion: ${{ needs.prepare.outputs.imageVersion }}
+      draftTag: ${{ needs.prepare.outputs.draftTag }}
 
+  # 草稿在 prepare 之后立刻创建（钉在 sha 上，不创建 tag、不会成为 latest）：构建 job 要往里传文件。
+  # 所以测试失败时草稿里可能已经有资产——它不会被公开（publish 要求 test 成功）；dryRun 结束时删除，
+  # 正式运行失败时保留，续跑或下一次运行按幂等规则复用（同一提交）或删掉重建（别的提交）
   draft:
-    needs: [prepare, test, packages]
-    if: ${{ !cancelled() && needs.test.result == 'success' && needs.packages.result == 'success' }}
+    needs: [prepare]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -204,19 +209,61 @@ jobs:
           # shellcheck disable=SC2086
           gh release create "$DRAFT_TAG" $flags --target "$SHA" --title "$DRAFT_TAG" --notes-file notes/notes.md
 
-  attach:
-    needs: [prepare, draft]
-    if: ${{ !cancelled() && needs.draft.result == 'success' }}
+  # 合并清单并核对：各平台的文件已经在草稿里。这里只下载 4 份小清单，合并成唯一的 SHA256SUMS 上传，
+  # 再核对草稿里的资产与清单完全一致，且每个文件已上传完成、大小与构建 job 记录的一致（上传中途中断会留下同名的残缺资产）
+  finalize:
+    needs: [prepare, test, packages]
+    if: ${{ !cancelled() && needs.test.result == 'success' && needs.packages.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write
-      actions: read
-    uses: ./.github/workflows/release-offline.yml
-    with:
-      tag: ${{ needs.prepare.outputs.draftTag }}
-      version: ${{ needs.prepare.outputs.version }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DRAFT_TAG: ${{ needs.prepare.outputs.draftTag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: meta-*
+          merge-multiple: true
+          path: meta
+      - name: Merge the per-platform checksum lists into the single SHA256SUMS
+        run: |
+          set -eu
+          cd meta
+          for os in macos linux; do
+            for arch in arm64 x64; do
+              [ -f "SHA256SUMS-${os}-${arch}" ] || { echo "缺少 SHA256SUMS-${os}-${arch}"; exit 1; }
+              [ -f "SIZES-${os}-${arch}.txt" ] || { echo "缺少 SIZES-${os}-${arch}.txt"; exit 1; }
+            done
+          done
+          cat SHA256SUMS-macos-arm64 SHA256SUMS-macos-x64 SHA256SUMS-linux-arm64 SHA256SUMS-linux-x64 > SHA256SUMS
+          # 清单里的每个文件都必须属于这个版本，并且恰好是各平台记下的那些文件
+          awk '{print $2}' SHA256SUMS | sed 's/^\*//' | while read -r name; do
+            case "$name" in "manyoyo-${VERSION}-macos-"*|"manyoyo-${VERSION}-linux-"*) ;; *) echo "文件 $name 不属于版本 $VERSION"; exit 1 ;; esac
+          done
+          listed="$(awk '{print $2}' SHA256SUMS | sed 's/^\*//' | sort)"
+          recorded="$(cat SIZES-*.txt | awk '{print $1}' | sort)"
+          [ "$listed" = "$recorded" ] || { echo "SHA256SUMS 与各平台上传的文件不一致"; printf '清单:\n%s\n上传:\n%s\n' "$listed" "$recorded"; exit 1; }
+      - name: Upload SHA256SUMS (skipped when the draft already holds the same one)
+        run: |
+          set -eu
+          cd meta
+          if gh release download "$DRAFT_TAG" -p SHA256SUMS -O existing.sums --clobber 2>/dev/null && cmp -s existing.sums SHA256SUMS; then
+            echo "草稿里已经是同一份 SHA256SUMS，不重传"
+          else
+            gh release upload "$DRAFT_TAG" SHA256SUMS --clobber
+          fi
+      - name: The draft holds exactly the expected assets (names, uploaded state, sizes)
+        run: node scripts/release/assert-assets.js "$DRAFT_TAG" "$VERSION" meta
 
   # macOS 安装包的冒烟安装（门禁）：Intel 上安装要六七分钟，放在构建 job 里会拖长关键路径；
-  # 放在这里与 草稿 / 挂资产 / 公开前验证 并行，只挡住 publish。用临时 HOME 安装刚构建的包（跳过虚拟机），查版本、卸载。
+  # 放在这里与 合并清单 / 公开前验证 并行，只挡住 publish。用临时 HOME 安装刚构建的包（跳过虚拟机），查版本、卸载。
   smoke-macos:
     needs: [prepare, packages]
     if: ${{ !cancelled() && needs.packages.result == 'success' }}
@@ -231,14 +278,22 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     permissions:
-      contents: read
+      contents: write # 草稿只有有写权限的令牌才看得到
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DRAFT_TAG: ${{ needs.prepare.outputs.draftTag }}
     steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: manyoyo-${{ needs.prepare.outputs.version }}-macos-${{ matrix.arch }}
-          path: pkg
+      # 产物已经在草稿里：直接从草稿下载本平台的文件（不再经过 artifact）。分段记时间，哪一段慢一目了然
+      - name: Download this platform's package from the draft
+        run: |
+          set -eu
+          start=$(date +%s)
+          mkdir pkg
+          gh release download "$DRAFT_TAG" -D pkg -p "manyoyo-${VERSION}-macos-${{ matrix.arch }}.run*"
+          ls -l pkg
+          echo "下载耗时 $(( $(date +%s) - start )) 秒"
       - name: Smoke install the built package (temp HOME, VM skipped)
         run: |
           set -eu
@@ -247,7 +302,13 @@ jobs:
           [ -f "$first" ] || first="${first}.001"
           export HOME="$RUNNER_TEMP/smoke-home"
           mkdir -p "$HOME"
+          # 先单独量一次自校验（--check 只校验 SHA256），再完整安装：看 .run 自校验在总耗时里占多少
+          t0=$(date +%s)
+          sh "$first" --check
+          t1=$(date +%s)
+          echo "自校验（--check）耗时 $((t1 - t0)) 秒"
           MANYOYO_TEST_SKIP_MACHINE=1 MANYOYO_TEST_FREE_MB=100000 sh "$first" --install-only
+          echo "完整安装耗时 $(( $(date +%s) - t1 )) 秒（含一次自校验）"
           m="$HOME/.manyoyo/bin/manyoyo"
           test "$("$m" -v)" = "$VERSION"
           "$m" uninstall --yes
@@ -257,8 +318,8 @@ jobs:
   # 公开之前的验证（门禁）：下载草稿里的真实资产，走用户真正会敲的 scripts/install.sh（下载来源指向本机静态服务，校验清单照常校验），
   # 再起 serve 走一遍网页冒烟。失败就不公开。
   prepublish-verify:
-    needs: [prepare, attach]
-    if: ${{ !cancelled() && needs.attach.result == 'success' }}
+    needs: [prepare, finalize]
+    if: ${{ !cancelled() && needs.finalize.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
@@ -416,7 +477,7 @@ jobs:
 
   # dryRun：不论成败都删掉试跑用的草稿（附带几个 GB 的资产）
   cleanup-dryrun:
-    needs: [prepare, attach, smoke-macos, prepublish-verify]
+    needs: [prepare, finalize, smoke-macos, prepublish-verify]
     if: ${{ always() && needs.prepare.outputs.dryRun == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -429,7 +490,7 @@ jobs:
       - run: gh release delete "$DRAFT_TAG" --yes || echo "草稿 $DRAFT_TAG 不存在（可能没走到创建这一步）"
 
   summary:
-    needs: [prepare, test, image, packages, draft, attach, smoke-macos, prepublish-verify, publish, npm, postpublish-verify, cleanup-dryrun]
+    needs: [prepare, test, image, packages, draft, finalize, smoke-macos, prepublish-verify, publish, npm, postpublish-verify, cleanup-dryrun]
     if: always()
     runs-on: ubuntu-24.04
     permissions:

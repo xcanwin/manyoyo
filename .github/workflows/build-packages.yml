@@ -16,9 +16,15 @@ on:
         required: false
         default: ''
   # 发布流水线（release-pipeline.yml）复用：产物 artifact 留在调用方的这次运行里，挂资产的 job 直接下载
+  # draftTag 只有流水线调用时才有（单独手动触发没有这个输入，所以永远不会上传到任何 Release）：
+  # 各平台构建 job 通过扫描和冒烟后，把本平台的 .run / -app.tar.gz 直接上传到这个草稿，后面不再需要整体下载 6GB 产物再上传
   workflow_call:
     inputs:
       imageVersion:
+        type: string
+        required: false
+        default: ''
+      draftTag:
         type: string
         required: false
         default: ''
@@ -123,7 +129,7 @@ jobs:
     needs: [image-archive, web]
     runs-on: ${{ matrix.runner }}
     permissions:
-      contents: read
+      contents: write # 仅 draftTag 不为空时的上传步骤用到；单独手动触发没有该输入，不会上传
     strategy:
       fail-fast: false
       matrix:
@@ -229,8 +235,37 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           cat "dist-offline/FILES-macos-${{ matrix.arch }}.txt"
 
-      # .run / .tar.gz 都已压缩：artifact 不再压缩
+      # 流水线调用（draftTag 不为空）：本平台的文件直接传到草稿，并记下每个文件的大小，合并清单的 finalize 据此核对（只比名字挡不住上传中途中断留下的残缺资产）。
+      # 单独手动触发时这一步不执行，行为与以前完全一样。
+      - name: Upload this platform's files to the draft Release
+        if: inputs.draftTag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRAFT_TAG: ${{ inputs.draftTag }}
+        run: |
+          set -eu
+          cd dist-offline
+          shasum -a 256 -c "SHA256SUMS-macos-${{ matrix.arch }}"
+          files="$(sed 's#^dist-offline/##' "FILES-macos-${{ matrix.arch }}.txt" | grep -v '^SHA256SUMS-')"
+          : > "SIZES-macos-${{ matrix.arch }}.txt"
+          for f in $files; do echo "$f $(wc -c < "$f" | tr -d ' ')" >> "SIZES-macos-${{ matrix.arch }}.txt"; done
+          # shellcheck disable=SC2086
+          gh release upload "$DRAFT_TAG" $files --clobber --repo "$GITHUB_REPOSITORY"
+          cat "SIZES-macos-${{ matrix.arch }}.txt"
+
       - uses: actions/upload-artifact@v7
+        if: inputs.draftTag != ''
+        with:
+          name: meta-macos-${{ matrix.arch }}
+          path: |
+            dist-offline/SHA256SUMS-macos-${{ matrix.arch }}
+            dist-offline/SIZES-macos-${{ matrix.arch }}.txt
+          retention-days: 7
+          if-no-files-found: error
+
+      # .run / .tar.gz 都已压缩：artifact 不再压缩。流水线调用时产物已在草稿里，不再传这份大 artifact
+      - uses: actions/upload-artifact@v7
+        if: inputs.draftTag == ''
         with:
           name: manyoyo-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}
           path: ${{ steps.files.outputs.list }}
@@ -242,7 +277,7 @@ jobs:
     needs: [image-archive, web]
     runs-on: ${{ matrix.runner }}
     permissions:
-      contents: read
+      contents: write # 同 build-macos
     strategy:
       fail-fast: false
       matrix:
@@ -330,7 +365,36 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           cat "dist-offline/FILES-linux-${{ matrix.arch }}.txt"
 
+      # 流水线调用（draftTag 不为空）：本平台的文件直接传到草稿，并记下每个文件的大小，合并清单的 finalize 据此核对（只比名字挡不住上传中途中断留下的残缺资产）。
+      # 单独手动触发时这一步不执行，行为与以前完全一样。
+      - name: Upload this platform's files to the draft Release
+        if: inputs.draftTag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRAFT_TAG: ${{ inputs.draftTag }}
+        run: |
+          set -eu
+          cd dist-offline
+          sha256sum -c "SHA256SUMS-linux-${{ matrix.arch }}"
+          files="$(sed 's#^dist-offline/##' "FILES-linux-${{ matrix.arch }}.txt" | grep -v '^SHA256SUMS-')"
+          : > "SIZES-linux-${{ matrix.arch }}.txt"
+          for f in $files; do echo "$f $(wc -c < "$f" | tr -d ' ')" >> "SIZES-linux-${{ matrix.arch }}.txt"; done
+          # shellcheck disable=SC2086
+          gh release upload "$DRAFT_TAG" $files --clobber --repo "$GITHUB_REPOSITORY"
+          cat "SIZES-linux-${{ matrix.arch }}.txt"
+
       - uses: actions/upload-artifact@v7
+        if: inputs.draftTag != ''
+        with:
+          name: meta-linux-${{ matrix.arch }}
+          path: |
+            dist-offline/SHA256SUMS-linux-${{ matrix.arch }}
+            dist-offline/SIZES-linux-${{ matrix.arch }}.txt
+          retention-days: 7
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        if: inputs.draftTag == ''
         with:
           name: manyoyo-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}
           path: ${{ steps.files.outputs.list }}
