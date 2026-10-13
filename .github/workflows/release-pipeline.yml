@@ -22,6 +22,12 @@ on:
         type: boolean
         required: false
         default: false
+  # TEMP-BRANCH-TRIGGER
+  push:
+    branches:
+      - feat/autopilot-2
+    paths:
+      - '.release-dryrun-trigger'
 
 # 同一时间只有一个真实发布，也不取消进行中的。排队中的运行同组最多保留一个，所以 --remote 触发前会先拒绝“已有发布在进行”；
 # 非 main 的 dryRun 用自己的组，不会把排队中的真实发布挤掉
