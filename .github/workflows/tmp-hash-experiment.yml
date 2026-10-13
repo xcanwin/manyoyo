@@ -31,14 +31,12 @@ jobs:
           line=$(awk '/^__MANYOYO_PAYLOAD_BELOW__$/ { print NR; exit }' "$f"); skip=$(head -n "$line" "$f" | wc -c | tr -d ' ')
           echo "header lines $line bytes $skip"
           t() { label="$1"; shift; s=$(date +%s); sh -c "$*" > /tmp/out.txt 2>&1; e=$(date +%s); echo "[$label] $((e - s)) 秒  $(cut -c1-60 /tmp/out.txt | head -1)"; }
-          t "shasum file" "shasum -a 256 $f"
-          t "openssl file" "/usr/bin/openssl dgst -sha256 $f"
-          t "cat | shasum" "cat $f | shasum -a 256"
-          t "tail -c | shasum" "tail -c +$((skip + 1)) $f | shasum -a 256"
-          t "tail -c | openssl" "tail -c +$((skip + 1)) $f | /usr/bin/openssl dgst -sha256"
-          t "tail -c | wc" "tail -c +$((skip + 1)) $f | wc -c"
-          t "tail -n | wc" "tail -n +$((line + 1)) $f | wc -c"
+          t "tail -c | wc (baseline)" "tail -c +$((skip + 1)) $f | wc -c"
+          t "dd+cat | wc" "( dd bs=$skip count=1 of=/dev/null 2>/dev/null; cat ) < $f | wc -c"
+          t "dd+cat | shasum" "( dd bs=$skip count=1 of=/dev/null 2>/dev/null; cat ) < $f | shasum -a 256"
+          t "dd+cat | gzip -dc | wc" "( dd bs=$skip count=1 of=/dev/null 2>/dev/null; cat ) < $f | gzip -dc | wc -c"
           mkdir -p ex
-          t "tail -c | tar -xzf" "tail -c +$((skip + 1)) $f | tar -xzf - -C ex"
-          t "tail -c | gzip -dc | wc" "tail -c +$((skip + 1)) $f | gzip -dc | wc -c"
-          du -sh ex | tail -1
+          t "dd+cat | tar -xzf" "( dd bs=$skip count=1 of=/dev/null 2>/dev/null; cat ) < $f | tar -xzf - -C ex"
+          ( dd bs=$skip count=1 of=/dev/null 2>/dev/null; cat ) < $f | shasum -a 256 | cut -c1-16
+          tail -c +$((skip + 1)) $f | head -c 100 | shasum -a 256 | cut -c1-16
+          ( dd bs=$skip count=1 of=/dev/null 2>/dev/null; cat ) < $f | head -c 100 | shasum -a 256 | cut -c1-16
