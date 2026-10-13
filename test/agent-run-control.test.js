@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const { spawn, spawnSync } = require('child_process');
-const { wrapAgentCommand, buildRunKillCommand, terminateRun, isValidRunId, createRunId, pidFilePath } = require('../lib/web/agent-run-control');
+const { wrapAgentCommand, buildRunKillCommand, buildLiveRunsCommand, terminateRun, isValidRunId, createRunId, pidFilePath } = require('../lib/web/agent-run-control');
 
 const alive = pid => { try { process.kill(pid, 0); return true; } catch (error) { return false; } };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -113,6 +113,39 @@ describe('RUN_KILL_SCRIPT 按不可信输入处理 PID 文件', () => {
         expect(isValidRunId('a'.repeat(65))).toBe(false);
         expect(() => buildRunKillCommand(createRunId(), 'HUP')).toThrow(/信号/);
         expect(() => buildRunKillCommand('../../etc', 'INT')).toThrow(/runId/);
+    });
+});
+
+describe('buildLiveRunsCommand：列出容器里还活着的运行（serve 重启后据此决定是否自动发送排队）', () => {
+    const children = [];
+    afterEach(() => {
+        children.splice(0).forEach(child => { try { process.kill(-child.pid, 'SIGKILL'); } catch (e) { try { child.kill('SIGKILL'); } catch (e2) { /* 已退出 */ } } });
+    });
+    const liveRuns = () => { const [cmd, ...args] = buildLiveRunsCommand(); return spawnSync(cmd, args, { encoding: 'utf8' }).stdout.split('\n').filter(Boolean); };
+
+    test('还在跑的运行会列出；已经退出的、伪造（指向没有标记的进程）的、非法 PID 的不列', async () => {
+        const id = createRunId();
+        const child = spawn('/bin/bash', ['-lc', wrapAgentCommand('sleep 64; true', id)], { stdio: 'ignore', detached: true });
+        children.push(child);
+        for (let i = 0; i < 50 && !fs.existsSync(pidFilePath(id)); i += 1) await sleep(40);
+        await sleep(200);
+        const innocent = spawn('sleep', ['60'], { stdio: 'ignore' });
+        children.push(innocent);
+        const forged = createRunId();
+        fs.writeFileSync(pidFilePath(forged), String(innocent.pid));
+        const bad = createRunId();
+        fs.writeFileSync(pidFilePath(bad), '12; reboot');
+        const dead = createRunId();
+        fs.writeFileSync(pidFilePath(dead), '999999');
+        const listed = liveRuns();
+        expect(listed).toContain(id);
+        expect(listed).not.toContain(forged);
+        expect(listed).not.toContain(bad);
+        expect(listed).not.toContain(dead);
+        process.kill(-child.pid, 'SIGKILL');
+        await sleep(300);
+        expect(liveRuns()).not.toContain(id);
+        [id, forged, bad, dead].forEach(x => fs.rmSync(pidFilePath(x), { force: true }));
     });
 });
 

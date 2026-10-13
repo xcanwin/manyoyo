@@ -51,6 +51,21 @@ describe('agent-queue', () => {
         expect(q.isStepBoundary({ type: 'trace', text: 'x' })).toBe(false);
     });
 
+    test('暂停：用户停止后不自动发（重启后、下一轮结束后都一样），继续发送才恢复；队列清空时暂停一并解除', () => {
+        const session = { queue: [] };
+        expect(q.shouldAutoDispatch(session)).toBe(false);
+        q.enqueue(session, { clientMessageId: 'a-0000001', text: 'A', when: 'turn' });
+        expect(q.shouldAutoDispatch(session)).toBe(true);
+        q.pauseQueue(session);
+        expect(q.shouldAutoDispatch(session)).toBe(false);
+        expect(q.isPaused(session)).toBe(true);
+        q.resumeQueue(session);
+        expect(q.shouldAutoDispatch(session)).toBe(true);
+        q.pauseQueue(session);
+        q.removeFromQueue(session, session.queue[0].id);
+        expect(q.isPaused(session)).toBe(false);
+    });
+
     test('when 白名单', () => {
         expect(q.normalizeWhen('now')).toBe('now');
         expect(q.normalizeWhen('later')).toBeNull();

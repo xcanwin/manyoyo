@@ -295,6 +295,41 @@ describe('Web agent queue', () => {
         });
     }, 20000);
 
+    test('用户停止后再正常发一条：这一轮结束后，停止前留下的排队仍然不自动发（暂停要落盘，不只记在这一轮的内存里）', async () => {
+        await withServer({}, async ({ call, messages, startFirst, baseUrl, cookie }) => {
+            let queued = false;
+            await startFirst(async event => {
+                if (event.type === 'meta' && !queued) {
+                    queued = true;
+                    await call('POST', '/api/sessions/demo/agent/queue', { prompt: 'KEEP', when: 'turn', clientMessageId: 'queue-msg-0010' });
+                    await call('POST', '/api/sessions/demo/agent/stop', {});
+                }
+            });
+            await new Promise(resolve => setTimeout(resolve, 300));
+            const paused = await messages();
+            expect(paused.queuePaused).toBe(true);
+            const { events } = await readNdjson(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: 'SECOND', clientMessageId: 'second-msg-0010' })
+            }, () => {});
+            expect(events.map(e => e.type)).not.toContain('queue_next');
+            await new Promise(resolve => setTimeout(resolve, 800));
+            const view = await messages();
+            expect(userTexts(view.messages)).toEqual(['FIRST', 'SECOND']);
+            expect(view.queue.map(item => item.text)).toEqual(['KEEP']);
+            expect(view.queuePaused).toBe(true);
+            // 点“继续发送”才恢复，并清掉暂停
+            expect((await call('POST', '/api/sessions/demo/agent/queue/continue', {})).json.started).toBe(true);
+            const done = await waitFor(async () => {
+                const m = await messages();
+                return userTexts(m.messages).length === 3 && m.messages.every(x => x.pending !== true) ? m : null;
+            });
+            expect(done.queue).toEqual([]);
+            expect(done.queuePaused).toBe(false);
+        });
+    }, 25000);
+
     test('step：等到下一个工具调用结束才打断', async () => {
         await withServer({ withTool: true }, async ({ call, messages, startFirst }) => {
             let queuedAt = 0;
