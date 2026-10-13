@@ -341,6 +341,22 @@ export function compactToolArguments(value: unknown): string {
     .join(" ")
 }
 
+// 工具行的标题：一行写清 工具名 + 结果（✅ 成功 / ❎ 失败，执行中不显示）+ 描述。
+// 合并后的事件 text 是服务端的“[工具完成] Bash (success)”，信息量少，这里改由结构化字段拼出；
+// 描述缺省时依次用参数摘要、命令。其他种类的事件照旧用 text
+export function formatTraceRowTitle(event: TraceEvent): string {
+  if (event.kind !== "tool") return event.text
+  const args = event.arguments && typeof event.arguments === "object" && !Array.isArray(event.arguments)
+    ? (event.arguments as Record<string, unknown>)
+    : {}
+  const failed = event.status === "error" || Boolean(event.error)
+  const done = event.phase === "completed" || event.status === "success" || event.status === "completed"
+  const icon = failed ? "❎" : done ? "✅" : ""
+  const pick = (value: unknown) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "")
+  const detail = pick(args.description) || pick(event.argumentSummary) || pick(args.command)
+  return ["[工具]", event.toolName || "tool", icon, detail].filter(Boolean).join(" ")
+}
+
 export function mergeToolTraceEvents(events: TraceEvent[]): TraceEvent[] {
   const result: TraceEvent[] = []
   const indexByKey = new Map<string, number>()

@@ -29,7 +29,7 @@ import { useAgentRecoveryPoll } from "@/hooks/use-agent-recovery-poll"
 import { useSessionSync } from "@/hooks/use-session-sync"
 import { useSyncLoop } from "@/hooks/use-sync-loop"
 import { formatDateTime } from "@/lib/format"
-import { computeScrollRestore, getBubbleState, isNearBottom, shouldFollowBottom, shouldLoadEarlier } from "@/lib/chat-behavior"
+import { anchoredScrollTop, computeScrollAnchor, computeScrollRestore, getBubbleState, shouldLoadEarlier, type ScrollAnchor } from "@/lib/chat-behavior"
 import {
   clearOutbox,
   createClientMessageId,
@@ -256,6 +256,7 @@ function ActivityView({
   hasMore,
   loadingEarlier,
   onLoadEarlier,
+  followSignal,
 }: {
   session: SessionSummary | null
   messages: ChatMessage[]
@@ -264,13 +265,16 @@ function ActivityView({
   hasMore: boolean
   loadingEarlier: boolean
   onLoadEarlier: () => void
+  // 用户发送消息时加 1：发出去的消息和随后的回复一律跟到底部
+  followSignal: number
 }) {
   const displayMessages = React.useMemo(() => mergeTraceIntoReply(messages), [messages])
   const scrollRef = React.useRef<HTMLDivElement>(null)
-  // 只有用户本来就停留在底部时，新消息/流式增量才会带着滚动条一起走；
-  // 一旦用户往上翻看历史，这里会记为 false，后续更新不再打断阅读
-  const stickToBottomRef = React.useRef(true)
-  // 用户正在滚轮 / 触摸 / 点击 / 按键时（最近 1.5 秒内），内容更新不能把视野拉走
+  // 内容变化时贴着哪里（规则见 computeScrollAnchor）：默认固定不动，只往下追加；
+  // 视野贴着内容底部或最新执行过程的底部时才跟随。只在滚动事件里重新判断——内容增长不改 scrollTop，
+  // 所以“上一次滚动停下时贴着哪里”就是用户的意图
+  const anchorRef = React.useRef<ScrollAnchor>("bottom")
+  // 用户正在滚轮 / 触摸 / 点击 / 按键时（最近 1.5 秒内），内容变化不能把视野拉走
   const lastInteractionRef = React.useRef(0)
 
   // 加载更早的消息会在列表前面插入内容：记下插入前的内容高度，插入后把滚动位置补上
@@ -286,10 +290,46 @@ function ActivityView({
     lastInteractionRef.current = Date.now()
   }
 
+  // 最新一段已展开的执行过程的底部（滚动内容坐标系）；没有就是 null
+  function latestTraceBottom(el: HTMLDivElement): number | null {
+    const blocks = el.querySelectorAll<HTMLElement>("[data-trace-block][data-open='true']")
+    const last = blocks[blocks.length - 1]
+    if (!last) return null
+    return last.getBoundingClientRect().bottom - el.getBoundingClientRect().top + el.scrollTop
+  }
+
+  function measureAnchor(el: HTMLDivElement) {
+    anchorRef.current = computeScrollAnchor({
+      scrollTop: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+      traceBottom: latestTraceBottom(el),
+    })
+  }
+
+  // 内容或视野尺寸变了：按贴着的位置补滚动。用户正在操作（例如点开某一行）或选中了文字时不动，
+  // 并按操作后的位置重新判断贴着哪里
+  function applyAnchor(force = false) {
+    const el = scrollRef.current
+    if (!el) return
+    const selection = typeof window !== "undefined" ? window.getSelection() : null
+    const hasSelection = Boolean(selection && !selection.isCollapsed && selection.anchorNode && el.contains(selection.anchorNode))
+    if (!force && (hasSelection || Date.now() - lastInteractionRef.current < 1500)) {
+      measureAnchor(el)
+      return
+    }
+    const target = anchoredScrollTop(anchorRef.current, {
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+      traceBottom: latestTraceBottom(el),
+    })
+    if (target !== null && Math.abs(el.scrollTop - target) >= 1) el.scrollTop = target
+  }
+
   function handleScroll() {
     const el = scrollRef.current
     if (!el) return
-    stickToBottomRef.current = isNearBottom(el.scrollTop, el.scrollHeight, el.clientHeight)
+    measureAnchor(el)
     if (shouldLoadEarlier({ scrollTop: el.scrollTop, hasMore, loading: loadingEarlier })) {
       earlierRequestedRef.current = true
       onLoadEarlier()
@@ -313,31 +353,33 @@ function ActivityView({
       lastHeightRef.current = el.scrollHeight
       return
     }
-    const selection = typeof window !== "undefined" ? window.getSelection() : null
-    const hasSelection = Boolean(selection && !selection.isCollapsed && selection.anchorNode && el.contains(selection.anchorNode))
-    const follow = shouldFollowBottom({
-      stick: stickToBottomRef.current,
-      scrollTop: el.scrollTop,
-      // 上一次布局之后的内容高度（ResizeObserver 在布局之后才更新它，这里读到的是更新前的值）；还没记录过就当贴着底部
-      prevScrollHeight: lastHeightRef.current || 0,
-      clientHeight: el.clientHeight,
-      interacting: Date.now() - lastInteractionRef.current < 1500,
-      hasSelection,
-    })
-    if (!follow) return
-    el.scrollTop = el.scrollHeight
+    applyAnchor()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayMessages])
+
+  // 用户发送了消息：贴底并滚过去（发出去的消息、随后的执行过程和回复都要看得见）
+  React.useLayoutEffect(() => {
+    if (!followSignal) return
+    anchorRef.current = "bottom"
+    applyAnchor(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followSignal])
 
   React.useEffect(() => {
     const content = contentRef.current
     const el = scrollRef.current
     if (!content || !el || typeof ResizeObserver === "undefined") return
     lastHeightRef.current = el.scrollHeight
+    // 内容变高（执行过程补全、点开某一行、流式增长）和视野变矮（输入框变高、软键盘弹出）都要按贴着的位置补滚动，
+    // 否则贴底时底部内容会被输入框挡住
     const observer = new ResizeObserver(() => {
+      applyAnchor()
       lastHeightRef.current = el.scrollHeight
     })
     observer.observe(content)
+    observer.observe(el)
     return () => observer.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.name, hasContent])
 
   if (!session) {
@@ -808,6 +850,8 @@ export function WorkspacePanel({
   const loadingEarlierRef = React.useRef(false)
   const [messagesLoading, setMessagesLoading] = React.useState(false)
   const [draft, setDraft] = React.useState("")
+  // 每发送一次加 1，通知消息流贴底（见 ActivityView 的 followSignal）
+  const [sendTick, setSendTick] = React.useState(0)
   const draftRef = React.useRef("")
   const [restoreNotice, setRestoreNotice] = React.useState<RestoreNotice | null>(null)
   // 刚放回输入框的内容和它原来的 clientId：原样重发就沿用，服务端按 clientId 去重
@@ -1233,6 +1277,7 @@ export function WorkspacePanel({
         clientMessageId: clientId,
       },
     ])
+    setSendTick((value) => value + 1)
 
     if (mode === "command") {
       setSendingFor(name, true)
@@ -1513,6 +1558,7 @@ export function WorkspacePanel({
               hasMore={activeSession ? hasMoreBySession[activeSession.name] === true : false}
               loadingEarlier={loadingEarlier}
               onLoadEarlier={() => void loadEarlier()}
+              followSignal={sendTick}
             />
           )
         ) : null}

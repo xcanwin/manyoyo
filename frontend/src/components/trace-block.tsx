@@ -20,6 +20,7 @@ import {
   apiGet,
   buildToolArgumentParts,
   compactToolArguments,
+  formatTraceRowTitle,
   mergeToolTraceEvents,
   summarizeTraceFlow,
   type ChatMessage,
@@ -192,13 +193,11 @@ function TraceEventRow({
   event,
   complete,
   open,
-  showDescription,
   onOpenChange,
 }: {
   event: TraceEvent
   complete: boolean
   open: boolean
-  showDescription: boolean
   onOpenChange: (next: boolean) => void
 }) {
   const isRawOutput = event.kind === "output"
@@ -211,7 +210,6 @@ function TraceEventRow({
   const isNarration = event.kind === "agent_message"
   const bodyParts = React.useMemo(() => buildBodyParts(event), [event])
   const expandable = isNarration || bodyParts.length > 0
-  const description = bodyParts.find((part) => part.label === "描述")?.value
 
   if (!expandable) {
     return (
@@ -243,7 +241,7 @@ function TraceEventRow({
       <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[13px] hover:bg-muted">
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="flex-1 truncate text-foreground">
-          {isNarration ? "说明" : event.text}
+          {isNarration ? "说明" : formatTraceRowTitle(event)}
         </span>
         <ChevronRightIcon
           className={cn(
@@ -252,10 +250,6 @@ function TraceEventRow({
           )}
         />
       </CollapsibleTrigger>
-      {/* 没点开这一行时，标题下面直接露出“描述”；点开后描述在详情里，不重复显示 */}
-      {!open && !isNarration && showDescription && description ? (
-        <p className="truncate px-1.5 pb-1 pl-6 text-xs text-muted-foreground">{description}</p>
-      ) : null}
       <CollapsibleContent className="flex flex-col gap-2 px-1.5 pt-1 pb-1.5 pl-6">
         {isNarration ? (
           // 说明的详情就是正文：不再套一层“详情”小标题
@@ -333,7 +327,8 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
   }
 
   return (
-    <div ref={wrapperRef} className="flex w-full max-w-full items-stretch gap-1 @3xl:max-w-[75%]">
+    // data-trace-block / data-open：消息流据此找到“最新一段已展开的执行过程”，判断视野是否贴着它的底部
+    <div ref={wrapperRef} data-trace-block data-open={open ? "true" : "false"} className="flex w-full max-w-full items-stretch gap-1 @3xl:max-w-[75%]">
       <Collapsible
         open={open}
         onOpenChange={(next) => {
@@ -372,7 +367,6 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
             event={event}
             complete={complete}
             open={rowOpen(event, rowKeys[index])}
-            showDescription={mode !== "none"}
             onOpenChange={(next) => setRowOverrides((previous) => ({ ...previous, [rowKeys[index]]: next }))}
           />
         ))}

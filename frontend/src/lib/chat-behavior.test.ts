@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { buildDocumentTitle, computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier, shouldFollowBottom } from "./chat-behavior"
+import { buildDocumentTitle, computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier, computeScrollAnchor, anchoredScrollTop } from "./chat-behavior"
 
 describe("isNearBottom", () => {
   test("返回 true：滚动条已经在底部（distance = 0）", () => {
@@ -76,27 +76,36 @@ describe("computeScrollRestore", () => {
   })
 })
 
-describe("shouldFollowBottom（B1：用户在看执行过程时不能被自动滚走）", () => {
-  const base = { stick: true, scrollTop: 0, prevScrollHeight: 0, clientHeight: 600, interacting: false, hasSelection: false }
+describe("computeScrollAnchor：内容更新时贴着哪里（默认固定不动，只往下追加）", () => {
+  const box = { scrollHeight: 3000, clientHeight: 600 }
 
-  test("首次进入（上一次高度还是 0）：跟随到底部", () => {
-    expect(shouldFollowBottom(base)).toBe(true)
+  test("视野底部贴着内容底部（没滑过或滑到最底）：贴底", () => {
+    expect(computeScrollAnchor({ ...box, scrollTop: 2400, traceBottom: null })).toBe("bottom")
+    expect(computeScrollAnchor({ ...box, scrollTop: 2399, traceBottom: null })).toBe("bottom")
   })
 
-  test("更新之前视野就贴着底部：跟随", () => {
-    expect(shouldFollowBottom({ ...base, scrollTop: 1400, prevScrollHeight: 2000 })).toBe(true)
+  test("离底部只差 30px（正在看执行过程的末尾）也不算贴底：固定不动（旧逻辑 48px 阈值会把视野拉走）", () => {
+    expect(computeScrollAnchor({ ...box, scrollTop: 2370, traceBottom: null })).toBe("none")
   })
 
-  test("没有滚动事件但视野其实不在底部（展开了很长的执行过程、停在过程顶部）：不跟随（复现：旧代码这里会被拉到底）", () => {
-    expect(shouldFollowBottom({ ...base, scrollTop: 0, prevScrollHeight: 1921 })).toBe(false)
+  test("最新执行过程的底部贴着视野底部（点了“对齐到底部”）：贴住执行过程", () => {
+    expect(computeScrollAnchor({ ...box, scrollTop: 1400, traceBottom: 2000 })).toBe("trace")
+    expect(computeScrollAnchor({ ...box, scrollTop: 1400, traceBottom: 2030 })).toBe("none")
   })
 
-  test("用户已经往上翻过（stick 为 false）：不跟随", () => {
-    expect(shouldFollowBottom({ ...base, stick: false, scrollTop: 1400, prevScrollHeight: 2000 })).toBe(false)
+  test("内容不满一屏：贴底", () => {
+    expect(computeScrollAnchor({ scrollHeight: 500, clientHeight: 600, scrollTop: 0, traceBottom: null })).toBe("bottom")
+  })
+})
+
+describe("anchoredScrollTop：按贴住的位置算出新的 scrollTop", () => {
+  test("贴底：滚到最底；贴执行过程：让它的底部对齐视野底部；不贴：不动", () => {
+    expect(anchoredScrollTop("bottom", { scrollHeight: 4000, clientHeight: 600, traceBottom: null })).toBe(3400)
+    expect(anchoredScrollTop("trace", { scrollHeight: 4000, clientHeight: 600, traceBottom: 2500 })).toBe(1900)
+    expect(anchoredScrollTop("none", { scrollHeight: 4000, clientHeight: 600, traceBottom: 2500 })).toBeNull()
   })
 
-  test("正在滚轮 / 触摸 / 点击展开 / 选中文字：即使贴着底部也不跟随", () => {
-    expect(shouldFollowBottom({ ...base, scrollTop: 1400, prevScrollHeight: 2000, interacting: true })).toBe(false)
-    expect(shouldFollowBottom({ ...base, scrollTop: 1400, prevScrollHeight: 2000, hasSelection: true })).toBe(false)
+  test("贴执行过程但它已经收起（找不到）：不动", () => {
+    expect(anchoredScrollTop("trace", { scrollHeight: 4000, clientHeight: 600, traceBottom: null })).toBeNull()
   })
 })

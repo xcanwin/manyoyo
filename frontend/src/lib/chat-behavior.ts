@@ -12,20 +12,33 @@ export function isNearBottom(
   return distance <= thresholdPx
 }
 
-// 内容更新后要不要把滚动条带到底部。只有同时满足才跟随：
-// 1. 用户没往上翻过（stick）；2. 更新之前视野确实贴着底部——展开很长的执行过程后视野停在过程顶部，
-// 没有任何滚动事件，stick 仍是 true，只看 stick 会被一次次拉到底（B1 的根因）；
-// 3. 用户此刻没在滚轮 / 触摸 / 点击 / 选中文字
-export function shouldFollowBottom(params: {
-  stick: boolean
+// 消息流的滚动规则：默认固定不动，新内容只往下追加；只有两种情况跟随——
+// 1. 视野底部贴着内容底部（一开始没滑过、或滑到了最底）：继续贴底；
+// 2. 视野底部贴着最新一段执行过程的底部（一般是点了“对齐到底部”）：让这段过程的底部一直贴着。
+// “贴着”只容许 2px 的取整误差：离底部还差几十像素，说明用户正在看上面的内容，不能被拉走
+export type ScrollAnchor = "bottom" | "trace" | "none"
+const ANCHOR_TOLERANCE_PX = 2
+
+export function computeScrollAnchor(params: {
   scrollTop: number
-  prevScrollHeight: number
+  scrollHeight: number
   clientHeight: number
-  interacting: boolean
-  hasSelection: boolean
-}): boolean {
-  if (!params.stick || params.interacting || params.hasSelection) return false
-  return isNearBottom(params.scrollTop, params.prevScrollHeight, params.clientHeight)
+  // 最新一段（已展开的）执行过程的底部，在滚动内容坐标系里的位置；没有就是 null
+  traceBottom: number | null
+}): ScrollAnchor {
+  const viewBottom = params.scrollTop + params.clientHeight
+  if (viewBottom >= params.scrollHeight - ANCHOR_TOLERANCE_PX) return "bottom"
+  if (params.traceBottom !== null && Math.abs(viewBottom - params.traceBottom) <= ANCHOR_TOLERANCE_PX) return "trace"
+  return "none"
+}
+
+export function anchoredScrollTop(
+  anchor: ScrollAnchor,
+  params: { scrollHeight: number; clientHeight: number; traceBottom: number | null }
+): number | null {
+  if (anchor === "bottom") return Math.max(0, params.scrollHeight - params.clientHeight)
+  if (anchor === "trace" && params.traceBottom !== null) return Math.max(0, params.traceBottom - params.clientHeight)
+  return null
 }
 
 // 按当前 AGENT 名拼接页面标题，未传/空白时回退默认标题

@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 
 import {
   buildToolArgumentParts,
+  formatTraceRowTitle,
   compactToolArguments,
+  type TraceEvent,
   apiStream,
   applyServerMessageIds,
   applyTraceEventUpdate,
@@ -695,5 +697,28 @@ describe("apiStream 的 HTTP 错误", () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch") }))
     const error = await apiStream("/x", {}, () => {}).catch((e) => e)
     expect(error.status).toBeUndefined()
+  })
+})
+
+describe("formatTraceRowTitle：工具行一行写清 工具名 + 结果 + 描述", () => {
+  test("成功：[工具] Bash ✅ 描述（合并后的 text 是“[工具完成] Bash (success)”也不再显示它）", () => {
+    expect(
+      formatTraceRowTitle({ kind: "tool", toolName: "Bash", text: "[工具完成] Bash (success)", phase: "completed", status: "success", arguments: { command: "ls -la", description: "列出目录" } } as TraceEvent)
+    ).toBe("[工具] Bash ✅ 列出目录")
+  })
+  test("失败：[工具] Bash ❎ 描述", () => {
+    expect(formatTraceRowTitle({ kind: "tool", toolName: "Bash", text: "[工具完成] Bash (error)", phase: "completed", status: "error", arguments: { description: "跑测试" } } as TraceEvent)).toBe("[工具] Bash ❎ 跑测试")
+  })
+  test("还在执行：没有结果图标", () => {
+    expect(formatTraceRowTitle({ kind: "tool", toolName: "Read", text: "[工具开始] Read", phase: "started", status: "in_progress", arguments: { description: "读配置" } } as TraceEvent)).toBe("[工具] Read 读配置")
+  })
+  test("没有描述时用参数摘要，再没有就用命令；都没有只剩工具名和图标", () => {
+    expect(formatTraceRowTitle({ kind: "tool", toolName: "Read", phase: "completed", status: "success", argumentSummary: "file_path=/a.txt" } as TraceEvent)).toBe("[工具] Read ✅ file_path=/a.txt")
+    expect(formatTraceRowTitle({ kind: "tool", toolName: "Bash", phase: "completed", status: "success", arguments: { command: "npm test" } } as TraceEvent)).toBe("[工具] Bash ✅ npm test")
+    expect(formatTraceRowTitle({ kind: "tool", toolName: "Glob", phase: "completed", status: "success" } as TraceEvent)).toBe("[工具] Glob ✅")
+  })
+  test("多行描述折成一行；其他种类的事件照旧用 text", () => {
+    expect(formatTraceRowTitle({ kind: "tool", toolName: "Bash", status: "success", phase: "completed", arguments: { description: "第一行\n第二行" } } as TraceEvent)).toBe("[工具] Bash ✅ 第一行 第二行")
+    expect(formatTraceRowTitle({ kind: "command", text: "[命令完成] ls (0)" } as TraceEvent)).toBe("[命令完成] ls (0)")
   })
 })
