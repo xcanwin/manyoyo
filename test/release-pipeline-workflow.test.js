@@ -137,6 +137,14 @@ describe('release-pipeline workflow', () => {
         posts.forEach(line => expect(line).toContain("X-Requested-With: XMLHttpRequest"));
     });
 
+    test('a reused draft is emptied first (assets of the previous attempt must not mix with the new build), and finalize refuses empty lists', () => {
+        const draft = job('draft');
+        expect(draft).toContain('delete-asset');
+        expect(draft.indexOf('delete-asset')).toBeGreaterThan(draft.indexOf('复用'));
+        expect(job('finalize')).toContain('|| { echo "$f 是空的"; exit 1; }');
+        expect(job('finalize')).toContain('assert-assets.js "$DRAFT_TAG" "$VERSION" meta');
+    });
+
     test('the plugin is smoke-tested before publishing, with a time limit', () => {
         const verify = job('prepublish-verify');
         expect(verify).toContain('manyoyo" playwright probe');

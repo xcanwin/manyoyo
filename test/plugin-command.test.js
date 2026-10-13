@@ -446,14 +446,18 @@ describe('probe（真实探测当前模式，发布流水线用）', () => {
         expect(script).toContain('playwright-cli');
         expect(script).toContain('manyoyo-ok');
         expect(run.options.timeout).toBeGreaterThan(0);
+        // 超时后客户端被杀，容器不能留着：加 --init（让 PID 1 能响应 SIGTERM）和固定前缀的名字，失败时按名字强删
+        expect(run.args).toEqual(expect.arrayContaining(['--init', '--name']));
+        expect(run.args[run.args.indexOf('--name') + 1]).toMatch(/^manyoyo-probe-\d+$/);
         expect(sink.out).toContain('真实探测: 通过');
     });
 
     test('默认模式：容器里没读到标题 / 镜像不存在 → 退出码 1 并给一句原因；不改任何状态', async () => {
         const { plugin, sink } = newPlugin(home);
-        stubRuntime(plugin, { run: { status: 1, stdout: 'Error: browser launch failed\n', stderr: '' } });
+        const calls = stubRuntime(plugin, { run: { status: 1, stdout: 'Error: browser launch failed\n', stderr: '' } });
         expect(await plugin.probe()).toBe(1);
         expect(sink.err).toContain('真实探测: 失败');
+        expect(calls.some(call => call.args[0] === 'rm' && call.args.includes('-f'))).toBe(true);
         const missing = newPlugin(home);
         stubRuntime(missing.plugin, { image: { status: 1, stdout: '', stderr: '' } });
         expect(await missing.plugin.probe()).toBe(1);

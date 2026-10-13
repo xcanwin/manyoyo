@@ -8,8 +8,9 @@ const path = require('path');
 const names = version => ['SHA256SUMS', ...['macos', 'linux'].flatMap(os => ['arm64', 'x64'].flatMap(arch => [`manyoyo-${version}-${os}-${arch}.run`, `manyoyo-${version}-${os}-${arch}-app.tar.gz`]))];
 const sumsText = list => list.filter(name => name !== 'SHA256SUMS').map(name => `${'a'.repeat(64)}  ${name}`).join('\n');
 
-function fakeGh({ assets, sums, draft = true, states = {} }) {
+function fakeGh({ assets, sums, draft = true, states = {}, digests = null }) {
     return args => {
+        if (args[0] === 'api') return digests === 'fail' ? { status: 1, stdout: '' } : { status: 0, stdout: JSON.stringify([{ tag_name: 'v8.7.0', draft, assets: assets.map(name => ({ name, digest: digests && digests[name] })) }]) };
         if (args[0] === 'release' && args[1] === 'view') return { status: 0, stdout: JSON.stringify({ isDraft: draft, assets: assets.map(name => ({ name, state: states[name] || 'uploaded', size: 10 })) }) };
         if (args[0] === 'release' && args[1] === 'download') return sums === null ? { status: 1, stdout: '' } : { status: 0, stdout: sums };
         return { status: 1, stdout: '' };
@@ -46,6 +47,20 @@ describe('assertReleaseAssets (the gate in front of publish)', () => {
         expect(bad).toMatchObject({ ok: false, reason: expect.stringContaining('manyoyo-8.7.0-linux-x64.run') });
         const missing = assertReleaseAssets({ tag: 'v8.7.0', version: '8.7.0', gh: fakeGh({ assets: list.filter(name => name !== 'manyoyo-8.7.0-linux-x64.run'), sums: sumsText(list.filter(name => name !== 'manyoyo-8.7.0-linux-x64.run')) }), sizes });
         expect(missing.ok).toBe(false);
+    });
+
+    test('with the API digests (sha256 of what GitHub really stores): they must equal SHA256SUMS — a same-sized file from another build is caught', () => {
+        const list = names('8.7.0');
+        const sumsOf = name => `${'a'.repeat(64)}`;
+        const digests = Object.fromEntries(list.filter(name => name !== 'SHA256SUMS').map(name => [name, `sha256:${sumsOf(name)}`]));
+        const call = extra => assertReleaseAssets({ tag: 'v8.7.0', version: '8.7.0', repo: 'x/y', gh: fakeGh({ assets: list, sums: sumsText(list), digests, ...extra }) });
+        expect(call({}).ok).toBe(true);
+        const other = call({ digests: { ...digests, 'manyoyo-8.7.0-macos-arm64.run': `sha256:${'b'.repeat(64)}` } });
+        expect(other).toMatchObject({ ok: false, reason: expect.stringContaining('manyoyo-8.7.0-macos-arm64.run') });
+        // 接口没给 digest（旧接口）就跳过这一项，不当成失败
+        expect(call({ digests: {} }).ok).toBe(true);
+        // 读不到 digest 列表本身也不挡发布（其余核对照常）
+        expect(call({ digests: 'fail' }).ok).toBe(true);
     });
 
     test('readSizes reads every SIZES-*.txt in a folder (name and size per line)', () => {

@@ -202,8 +202,9 @@ jobs:
               exit 1
             fi
             if [ "$target" = "$SHA" ]; then
-              echo "草稿 $DRAFT_TAG 已存在并钉在 $SHA，复用（刷新说明）"
+              echo "草稿 $DRAFT_TAG 已存在并钉在 $SHA，复用（刷新说明，并清掉上一次留下的资产：大小不同的新旧文件会混在一起，比如旧的 .run.002 与新的单文件 .run）"
               gh release edit "$DRAFT_TAG" --title "$DRAFT_TAG" --notes-file notes/notes.md
+              gh release view "$DRAFT_TAG" --json assets --jq '.assets[].name' | while read -r asset; do gh release delete-asset "$DRAFT_TAG" "$asset" --yes; done
               exit 0
             fi
             echo "草稿 $DRAFT_TAG 钉在别的提交（$target），删除后重建"
@@ -248,6 +249,7 @@ jobs:
               [ -f "SIZES-${os}-${arch}.txt" ] || { echo "缺少 SIZES-${os}-${arch}.txt"; exit 1; }
             done
           done
+          for f in SHA256SUMS-* SIZES-*; do [ -s "$f" ] || { echo "$f 是空的"; exit 1; }; done
           cat SHA256SUMS-macos-arm64 SHA256SUMS-macos-x64 SHA256SUMS-linux-arm64 SHA256SUMS-linux-x64 > SHA256SUMS
           # 清单里的每个文件都必须属于这个版本，并且恰好是各平台记下的那些文件
           awk '{print $2}' SHA256SUMS | sed 's/^\*//' | while read -r name; do
