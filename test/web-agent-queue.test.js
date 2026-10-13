@@ -365,4 +365,40 @@ describe('Web agent queue', () => {
             expect(view.messages.find(m => m.streamTrace === true).content).toContain('已打断，继续执行新的提示词');
         });
     }, 20000);
+
+    test('step 项在边界前被取消：不再打断正在跑的任务', async () => {
+        await withServer({ withTool: true, firstMs: 1500 }, async ({ call, messages, startFirst }) => {
+            let queued = false;
+            const { events } = await startFirst(async event => {
+                if (event.type === 'meta' && !queued) {
+                    queued = true;
+                    const res = await call('POST', '/api/sessions/demo/agent/queue', { prompt: 'CANCELME', when: 'step', clientMessageId: 'queue-msg-0009' });
+                    expect((await call('DELETE', `/api/sessions/demo/agent/queue/${res.json.item.id}`)).response.status).toBe(200);
+                }
+            });
+            expect(events.find(e => e.type === 'result').interrupted).toBe(false);
+            expect(events.map(e => e.type)).not.toContain('queue_next');
+            expect(userTexts((await messages()).messages)).toEqual(['FIRST']);
+        });
+    }, 20000);
+
+    test('排队中的 clientMessageId 也算收到过：直接走 /agent/stream 重发返回 409 duplicate', async () => {
+        await withServer({}, async ({ baseUrl, cookie, call, startFirst }) => {
+            let status = 0;
+            let dup = null;
+            await startFirst(async event => {
+                if (event.type !== 'meta' || status) return;
+                await call('POST', '/api/sessions/demo/agent/queue', { prompt: 'TWICE', when: 'turn', clientMessageId: 'queue-msg-0010' });
+                const again = await request(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                    method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: 'TWICE', clientMessageId: 'queue-msg-0010' })
+                });
+                status = again.response.status;
+                dup = again.json;
+                await call('POST', '/api/sessions/demo/agent/stop', {});
+            });
+            expect(status).toBe(409);
+            expect(dup.duplicate).toBe(true);
+        });
+    }, 20000);
 });
