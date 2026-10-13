@@ -29,7 +29,7 @@ import { useAgentRecoveryPoll } from "@/hooks/use-agent-recovery-poll"
 import { useSessionSync } from "@/hooks/use-session-sync"
 import { useSyncLoop } from "@/hooks/use-sync-loop"
 import { formatDateTime } from "@/lib/format"
-import { anchoredScrollTop, computeScrollAnchor, computeScrollRestore, getBubbleState, shouldLoadEarlier, type ScrollAnchor } from "@/lib/chat-behavior"
+import { anchoredScrollTop, computeScrollAnchor, computeScrollRestore, isOwnScroll, getBubbleState, shouldLoadEarlier, type ScrollAnchor } from "@/lib/chat-behavior"
 import {
   clearOutbox,
   createClientMessageId,
@@ -274,6 +274,8 @@ function ActivityView({
   // 视野贴着内容底部或最新执行过程的底部时才跟随。只在滚动事件里重新判断——内容增长不改 scrollTop，
   // 所以“上一次滚动停下时贴着哪里”就是用户的意图
   const anchorRef = React.useRef<ScrollAnchor>("bottom")
+  // 上次自己补滚动设置的位置：它引起的滚动事件不重新判断贴着哪里（见 isOwnScroll）
+  const ownScrollTopRef = React.useRef<number | null>(null)
   // 用户正在滚轮 / 触摸 / 点击 / 按键时（最近 1.5 秒内），内容变化不能把视野拉走
   const lastInteractionRef = React.useRef(0)
 
@@ -323,13 +325,19 @@ function ActivityView({
       clientHeight: el.clientHeight,
       traceBottom: latestTraceBottom(el),
     })
-    if (target !== null && Math.abs(el.scrollTop - target) >= 1) el.scrollTop = target
+    if (target !== null && Math.abs(el.scrollTop - target) >= 1) {
+      el.scrollTop = target
+      ownScrollTopRef.current = el.scrollTop
+    }
   }
 
   function handleScroll() {
     const el = scrollRef.current
     if (!el) return
-    measureAnchor(el)
+    if (!isOwnScroll(el.scrollTop, ownScrollTopRef.current)) {
+      ownScrollTopRef.current = null
+      measureAnchor(el)
+    }
     if (shouldLoadEarlier({ scrollTop: el.scrollTop, hasMore, loading: loadingEarlier })) {
       earlierRequestedRef.current = true
       onLoadEarlier()

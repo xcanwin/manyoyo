@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { buildDocumentTitle, computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier, computeScrollAnchor, anchoredScrollTop } from "./chat-behavior"
+import { buildDocumentTitle, computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier, computeScrollAnchor, anchoredScrollTop, isOwnScroll } from "./chat-behavior"
 
 describe("isNearBottom", () => {
   test("返回 true：滚动条已经在底部（distance = 0）", () => {
@@ -107,5 +107,16 @@ describe("anchoredScrollTop：按贴住的位置算出新的 scrollTop", () => {
 
   test("贴执行过程但它已经收起（找不到）：不动", () => {
     expect(anchoredScrollTop("trace", { scrollHeight: 4000, clientHeight: 600, traceBottom: null })).toBeNull()
+  })
+})
+
+describe("isOwnScroll：自己补滚动引起的滚动事件不重新判断贴着哪里", () => {
+  test("滚动位置等于上次自己设置的值：是自己引起的（快速输入多行时，输入框在这期间又变高，按新尺寸判断会误判成“不贴底”）", () => {
+    expect(isOwnScroll(5450, 5450)).toBe(true)
+    expect(isOwnScroll(5450.4, 5450)).toBe(true)
+  })
+  test("位置不同或从没自己设置过：是用户滚的", () => {
+    expect(isOwnScroll(5300, 5450)).toBe(false)
+    expect(isOwnScroll(5450, null)).toBe(false)
   })
 })

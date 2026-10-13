@@ -41,6 +41,13 @@ export function anchoredScrollTop(
   return null
 }
 
+// 滚动事件是不是我们自己补滚动引起的：设置 scrollTop 后浏览器到下一帧才派发滚动事件，
+// 这期间视野可能又变矮（快速输入多行时输入框连续变高），按新尺寸判断会误判成“不贴底”、从此不再跟随。
+// 位置等于上次自己设置的值，就当作自己引起的，不重新判断
+export function isOwnScroll(scrollTop: number, lastProgrammaticTop: number | null): boolean {
+  return lastProgrammaticTop !== null && Math.abs(scrollTop - lastProgrammaticTop) < 1
+}
+
 // 按当前 AGENT 名拼接页面标题，未传/空白时回退默认标题
 export function buildDocumentTitle(agentName?: string | null): string {
   const trimmed = String(agentName || "").trim()
