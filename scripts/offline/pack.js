@@ -62,7 +62,11 @@ check_volumes() {
     done
 }
 payload() {
-    tail -n +"$(awk '/^${PAYLOAD_MARKER}$/ { print NR + 1; exit }' "$self")" "$self"
+    # 按字节偏移取负载：macOS（BSD）的 tail -n 在 2GB 的二进制文件上逐行扫描，Intel runner 上光校验就要 5 分钟；
+    # tail -c 直接定位。偏移 = 头部（到标记行为止）的字节数，只读头部几行
+    marker_line="$(awk '/^${PAYLOAD_MARKER}$/ { print NR; exit }' "$self")"
+    skip="$(head -n "$marker_line" "$self" | wc -c | tr -d ' ')"
+    tail -c +"$((skip + 1))" "$self"
     if [ "$split_mode" = 1 ]; then
         i=2
         while [ "$i" -le "$vol_count" ]; do
