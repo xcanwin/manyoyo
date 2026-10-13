@@ -33,6 +33,7 @@ Only one mode is active at a time. After switching, **running containers follow 
 
 ```bash
 manyoyo playwright status   # current mode; headed / chrome / vnc get a real probe (opens a page); non-zero exit when unusable
+manyoyo playwright probe    # real probe only, changes no state; default mode starts a throwaway container and opens a page (for scripts / CI)
 manyoyo playwright down     # back to the default mode
 manyoyo playwright logs     # browser service logs
 ```

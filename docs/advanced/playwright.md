@@ -33,6 +33,7 @@ manyoyo rm demo                              # 用完删掉容器
 
 ```bash
 manyoyo playwright status   # 当前模式；headed / chrome / vnc 会真实探测（打开一个页面），不可用时退出码非 0
+manyoyo playwright probe    # 只做真实探测，不改任何状态；默认模式会起一次性容器打开页面（脚本 / CI 用）
 manyoyo playwright down     # 回到默认模式
 manyoyo playwright logs     # 浏览器服务日志
 ```

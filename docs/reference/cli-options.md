@@ -122,6 +122,7 @@ manyoyo
 | `manyoyo playwright down` | 停止当前模式，回到默认模式 |
 | `manyoyo playwright status` | 当前模式 + 真实探测，不可用时退出码非 0 |
 | `manyoyo playwright logs` | 查看浏览器服务日志 |
+| `manyoyo playwright probe` | 只做真实探测，不改状态；默认模式起一次性容器打开页面，失败退出码非 0 |
 | `manyoyo playwright mcp-add` | 输出在容器内注册 MCP（stdio）的命令 |
 | `manyoyo playwright ext-download` | 下载内置扩展到本地目录 |
 

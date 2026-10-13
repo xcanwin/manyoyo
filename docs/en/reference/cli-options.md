@@ -122,6 +122,7 @@ These commands share the same core runtime options:
 | `manyoyo playwright down` | Stop the current mode and return to the default |
 | `manyoyo playwright status` | Current mode + real probe; non-zero exit when unusable |
 | `manyoyo playwright logs` | Show browser service logs |
+| `manyoyo playwright probe` | Real probe only, changes no state; default mode starts a throwaway container and opens a page; non-zero exit on failure |
 | `manyoyo playwright mcp-add` | Print the in-container MCP (stdio) registration commands |
 | `manyoyo playwright ext-download` | Download built-in extensions locally |
 
