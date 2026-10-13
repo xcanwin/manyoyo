@@ -125,6 +125,26 @@ describe('generateReport', () => {
     });
 });
 
+describe('generateReport with logs: false (the summary job inside the running pipeline)', () => {
+    test('does not call the log API at all (it would return nothing) and writes no empty failed-<stage>.log; the failed stages are still listed', () => {
+        const calls = [];
+        const ghImpl = args => {
+            calls.push(args[1]);
+            return { status: 0, stdout: `${JSON.stringify({ id: 2, name: 'test / test', status: 'completed', conclusion: 'failure', started_at: '2026-10-13T10:00:00Z', completed_at: '2026-10-13T10:01:00Z', html_url: 'u2' })}\n` };
+        };
+        const out = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-gen2-'));
+        try {
+            const report = generateReport({ ghImpl, repo: 'x/y', runId: 9, outDir: out, logs: false });
+            expect(calls.every(call => call.includes('/jobs?'))).toBe(true);
+            expect(fs.existsSync(path.join(out, 'failed-test.log'))).toBe(false);
+            expect(report.stages.find(stage => stage.id === 'test').result).toBe('failure');
+            expect(report.stages.find(stage => stage.id === 'test').logArtifact).toBeUndefined();
+        } finally {
+            fs.rmSync(out, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('loadJobs', () => {
     test('parses the paginated jobs listing; a failing gh call is an error, not an empty report', () => {
         const ok = loadJobs(() => ({ status: 0, stdout: '{"id":1,"name":"a"}\n{"id":2,"name":"b"}\n' }), 'x/y', '1');

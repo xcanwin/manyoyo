@@ -523,7 +523,7 @@ jobs:
       - name: Collect per-stage results, timings and the tails of failed logs
         run: |
           node scripts/release/pipeline-report.js --run "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
-            --version "$VERSION" --sha "$GITHUB_SHA" --out "$RUNNER_TEMP/release-report" | tee -a "$GITHUB_STEP_SUMMARY"
+            --version "$VERSION" --sha "$GITHUB_SHA" --out "$RUNNER_TEMP/release-report" --no-logs | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: release-report
