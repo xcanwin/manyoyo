@@ -1,4 +1,4 @@
-# TEMP 实验（交付前删除）：macOS 上 shasum 与 openssl 对 2GB 文件算 SHA256 的耗时
+# TEMP 实验（交付前删除）：.run 自校验为什么慢——文件 / 管道 / tail / openssl / 解包 各自耗时
 name: TMP hash experiment
 on:
   push:
@@ -15,17 +15,30 @@ jobs:
       matrix:
         runner: [macos-15, macos-15-intel]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
-      - run: |
+      - name: Real package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          gh release download v8.6.4 -R xcanwin/manyoyo -p 'manyoyo-8.6.4-macos-arm64.run' -D .
+          ls -l manyoyo-8.6.4-macos-arm64.run
+      - name: Timings
+        run: |
           set -u
-          dd if=/dev/urandom of=big.bin bs=1m count=2000 2>/dev/null
-          ls -l big.bin
-          t() { s=$(date +%s); "$@" > /tmp/out.txt 2>&1; e=$(date +%s); echo "$* => $((e - s)) 秒 $(cut -c1-70 /tmp/out.txt | head -1)"; }
-          printf '#!/bin/sh\nheader line\n__MARK__\n' > run.bin; cat big.bin >> run.bin
-          t sh -c "tail -n +\$(awk '/^__MARK__\$/ { print NR + 1; exit }' run.bin) run.bin | shasum -a 256"
-          t sh -c "tail -n +\$(awk '/^__MARK__\$/ { print NR + 1; exit }' run.bin) run.bin | /usr/bin/openssl dgst -sha256"
-          line=$(awk '/^__MARK__$/ { print NR + 1; exit }' run.bin); skip=$(head -n "$((line - 1))" run.bin | wc -c | tr -d ' ')
-          t sh -c "tail -c +$((skip + 1)) run.bin | shasum -a 256"
-          t sh -c "tail -c +$((skip + 1)) run.bin | /usr/bin/openssl dgst -sha256"
-          t sh -c "tail -c +$((skip + 1)) run.bin | wc -c"
+          f=manyoyo-8.6.4-macos-arm64.run
+          line=$(awk '/^__MANYOYO_PAYLOAD_BELOW__$/ { print NR; exit }' "$f"); skip=$(head -n "$line" "$f" | wc -c | tr -d ' ')
+          echo "header lines $line bytes $skip"
+          t() { label="$1"; shift; s=$(date +%s); sh -c "$*" > /tmp/out.txt 2>&1; e=$(date +%s); echo "[$label] $((e - s)) 秒  $(cut -c1-60 /tmp/out.txt | head -1)"; }
+          t "shasum file" "shasum -a 256 $f"
+          t "openssl file" "/usr/bin/openssl dgst -sha256 $f"
+          t "cat | shasum" "cat $f | shasum -a 256"
+          t "tail -c | shasum" "tail -c +$((skip + 1)) $f | shasum -a 256"
+          t "tail -c | openssl" "tail -c +$((skip + 1)) $f | /usr/bin/openssl dgst -sha256"
+          t "tail -c | wc" "tail -c +$((skip + 1)) $f | wc -c"
+          t "tail -n | wc" "tail -n +$((line + 1)) $f | wc -c"
+          mkdir -p ex
+          t "tail -c | tar -xzf" "tail -c +$((skip + 1)) $f | tar -xzf - -C ex"
+          t "tail -c | gzip -dc | wc" "tail -c +$((skip + 1)) $f | gzip -dc | wc -c"
+          du -sh ex | tail -1
