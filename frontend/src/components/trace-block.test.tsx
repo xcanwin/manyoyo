@@ -272,3 +272,52 @@ describe("TraceBlock 工具参数（B5）", () => {
     expect(container.querySelector("pre")?.textContent).not.toContain("{")
   })
 })
+
+describe("TraceBlock 子 Agent 与任务清单", () => {
+  const msg = (traceEvents: unknown[], pending = false): ChatMessage =>
+    ({
+      id: "1700000000000-ffffff",
+      role: "assistant",
+      content: "[执行过程]",
+      timestamp: "2026-01-01T00:00:00Z",
+      streamTrace: true,
+      pending,
+      traceEvents,
+    }) as ChatMessage
+  const sub = { kind: "subagent", text: "x", toolId: "toolu_A", toolName: "Agent", subagentType: "Explore", description: "列文件", phase: "completed", status: "success", result: "共 3 个文件", prompt: "请列出文件" }
+  const inner = { kind: "tool", text: "x", toolId: "t1", toolName: "Bash", parentToolId: "toolu_A", phase: "completed", status: "success", arguments: { description: "ls 一下" }, result: "a b c" }
+  const rowByText = (text: string) =>
+    Array.from(container.querySelectorAll("button[data-slot='collapsible-trigger']")).find((el) => el.textContent?.includes(text)) as HTMLElement | undefined
+
+  test("子 Agent 默认收起，一行标题带步数；点开后才显示它里面的事件，执行过程只数顶层步数", async () => {
+    await mount(msg([sub, inner]))
+    expect(container.textContent).toContain("执行过程 · 1 步")
+    await expand()
+    expect(rowByText("[子 Agent] Explore ✅ 列文件 · 1 步")).toBeDefined()
+    expect(container.textContent).not.toContain("ls 一下")
+    await act(async () => rowByText("[子 Agent]")!.click())
+    expect(container.textContent).toContain("ls 一下")
+    expect(container.textContent).toContain("共 3 个文件")
+  })
+
+  test("展开全部细节覆盖嵌套的行", async () => {
+    await mount(msg([sub, inner]))
+    await expand()
+    await act(async () => (container.querySelector('[aria-label="展开全部细节"]') as HTMLElement).click())
+    expect(container.textContent).toContain("a b c")
+    expect(container.textContent).toContain("请列出文件")
+  })
+
+  test("任务清单区块显示最新状态，超过 8 项折叠", async () => {
+    const todos = Array.from({ length: 10 }, (_, i) => ({ content: `任务${i + 1}`, status: i < 2 ? "completed" : "pending" }))
+    await mount(msg([{ kind: "tool", text: "x", toolId: "w1", toolName: "TodoWrite", arguments: { todos } }]))
+    await expand()
+    const block = container.querySelector("[data-task-list]") as HTMLElement
+    expect(block.textContent).toContain("任务清单 · 2/10")
+    expect(block.textContent).toContain("任务8")
+    expect(block.textContent).not.toContain("任务9")
+    expect(block.textContent).toContain("还有 2 项")
+    expect(rowByText("[任务清单] 更新 10 项")).toBeDefined()
+    expect(container.textContent).toContain("[任务清单] 更新 10 项")
+  })
+})

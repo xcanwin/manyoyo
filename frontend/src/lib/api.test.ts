@@ -2,6 +2,8 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 
 import {
   buildToolArgumentParts,
+  buildTraceTree,
+  buildTaskList,
   formatTraceRowTitle,
   compactToolArguments,
   type TraceEvent,
@@ -720,5 +722,87 @@ describe("formatTraceRowTitle：工具行一行写清 工具名 + 结果 + 描�
   test("多行描述折成一行；其他种类的事件照旧用 text", () => {
     expect(formatTraceRowTitle({ kind: "tool", toolName: "Bash", status: "success", phase: "completed", arguments: { description: "第一行\n第二行" } } as TraceEvent)).toBe("[工具] Bash ✅ 第一行 第二行")
     expect(formatTraceRowTitle({ kind: "command", text: "[命令完成] ls (0)" } as TraceEvent)).toBe("[命令完成] ls (0)")
+  })
+})
+
+describe("子 Agent 事件树", () => {
+  const sub = (extra: Partial<TraceEvent> = {}): TraceEvent => ({
+    kind: "subagent", text: "[子 Agent] x", toolId: "toolu_A", toolName: "Agent", subagentType: "Explore", description: "列文件", phase: "started", ...extra,
+  })
+  const inner = (id: string, extra: Partial<TraceEvent> = {}): TraceEvent => ({
+    kind: "tool", text: "t", toolId: id, toolName: "Bash", parentToolId: "toolu_A", phase: "started", ...extra,
+  })
+
+  test("子 Agent 的事件挂在发起它的那一行下面，顶层只数主 Agent 的步数", () => {
+    const events = [
+      { kind: "agent_message", text: "好的" } as TraceEvent,
+      sub(),
+      inner("t1"),
+      inner("t1", { phase: "completed", status: "success" }),
+      inner("t2"),
+      sub({ phase: "completed", status: "success" }),
+    ]
+    const merged = mergeToolTraceEvents(events)
+    const tree = buildTraceTree(merged)
+    expect(tree.map((node) => node.event.kind)).toEqual(["agent_message", "subagent"])
+    expect(tree[1].children).toHaveLength(2)
+    expect(tree[1].stepCount).toBe(2)
+    expect(summarizeTraceFlow(merged, false)).toBe("2 步 · 已完成")
+  })
+
+  test("合并 key 含 parentToolId：不同层的同名 id 不撞", () => {
+    const merged = mergeToolTraceEvents([
+      { kind: "tool", text: "a", toolId: "same", phase: "started" },
+      { kind: "tool", text: "b", toolId: "same", parentToolId: "toolu_A", phase: "started" },
+      { kind: "tool", text: "c", toolId: "same", parentToolId: "toolu_A", phase: "completed" },
+    ])
+    expect(merged).toHaveLength(2)
+  })
+
+  test("找不到发起者的事件当顶层事件，不丢", () => {
+    const tree = buildTraceTree([inner("t9")])
+    expect(tree).toHaveLength(1)
+  })
+
+  test("嵌套子 Agent：步数向上累计，深度递增", () => {
+    const deeper = sub({ toolId: "toolu_B", parentToolId: "toolu_A" })
+    const leaf: TraceEvent = { kind: "tool", text: "t", toolId: "t5", parentToolId: "toolu_B" }
+    const tree = buildTraceTree([sub(), deeper, leaf])
+    expect(tree[0].stepCount).toBe(2)
+    expect(tree[0].children[0].depth).toBe(1)
+    expect(tree[0].children[0].stepCount).toBe(1)
+  })
+
+  test("子 Agent 行标题", () => {
+    expect(formatTraceRowTitle(sub(), 3)).toBe("[子 Agent] Explore 列文件 · 3 步")
+    expect(formatTraceRowTitle(sub({ phase: "completed", status: "success" }))).toBe("[子 Agent] Explore ✅ 列文件")
+    expect(formatTraceRowTitle(sub({ phase: "completed", status: "error", error: "x" }))).toBe("[子 Agent] Explore ❎ 列文件")
+  })
+})
+
+describe("任务清单", () => {
+  const tool = (toolName: string, args: Record<string, unknown>, extra: Partial<TraceEvent> = {}): TraceEvent => ({
+    kind: "tool", text: "x", toolName, arguments: args, toolId: `${toolName}-${Math.random()}`, ...extra,
+  })
+
+  test("TodoWrite 整份覆盖，标题写更新几项", () => {
+    const first = tool("TodoWrite", { todos: [{ content: "a", status: "pending" }, { content: "b", status: "pending" }] })
+    const second = tool("TodoWrite", { todos: [{ content: "a", status: "completed" }, { content: "b", status: "in_progress" }, { content: "c", status: "pending" }] })
+    expect(buildTaskList([first, second]).map((item) => item.status)).toEqual(["completed", "in_progress", "pending"])
+    expect(formatTraceRowTitle(second)).toBe("[任务清单] 更新 3 项")
+  })
+
+  test("TaskCreate 取结果里的编号，TaskUpdate 按编号改状态或删除", () => {
+    const list = buildTaskList([
+      tool("TaskCreate", { subject: "写代码" }, { result: "Task #1 created successfully" }),
+      tool("TaskCreate", { subject: "写测试" }, { result: "Task #2 created successfully" }),
+      tool("TaskUpdate", { taskId: "1", status: "completed" }),
+      tool("TaskUpdate", { taskId: "2", status: "deleted" }),
+    ])
+    expect(list).toEqual([{ id: "1", subject: "写代码", status: "completed" }])
+  })
+
+  test("子 Agent 里的任务清单调用不进主清单", () => {
+    expect(buildTaskList([tool("TodoWrite", { todos: [{ content: "a" }] }, { parentToolId: "toolu_A" })])).toEqual([])
   })
 })
