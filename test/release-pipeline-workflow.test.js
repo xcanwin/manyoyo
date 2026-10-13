@@ -60,19 +60,21 @@ describe('release-pipeline workflow', () => {
         expect(job('summary')).not.toMatch(/run: \|[\s\S]*\$\{\{ needs\./);
     });
 
-    test('order: tested + built → draft → attach → verify before publish → npm and post-publish verify only after publish', () => {
+    test('order: draft first → builds upload into it → finalize merges the checksum list → verify before publish → npm and post-publish verify only after publish', () => {
         const needs = name => (job(name).match(/^ {4}needs: (.+)$/m) || [, ''])[1];
-        expect(needs('draft')).toContain('test');
-        expect(needs('draft')).toContain('packages');
-        expect(needs('attach')).toContain('draft');
-        expect(needs('prepublish-verify')).toContain('attach');
+        expect(needs('draft')).toBe('[prepare]');
+        expect(needs('packages')).toContain('draft');
+        expect(needs('finalize')).toContain('test');
+        expect(needs('finalize')).toContain('packages');
+        expect(needs('prepublish-verify')).toContain('finalize');
         expect(needs('publish')).toContain('prepublish-verify');
-        // macOS 冒烟安装与草稿 / 挂资产并行，只挡住 publish（Intel 上要六七分钟，不能放在 draft 之前）
+        // macOS 冒烟安装与合并清单 / 公开前验证并行，只挡住 publish（Intel 上要六七分钟）
         expect(needs('publish')).toContain('smoke-macos');
         expect(needs('smoke-macos')).toContain('packages');
-        expect(needs('draft')).not.toContain('smoke-macos');
+        expect(needs('finalize')).not.toContain('smoke-macos');
         expect(job('smoke-macos')).toContain('MANYOYO_TEST_SKIP_MACHINE=1');
         expect(job('smoke-macos')).toContain('uninstall --yes');
+        expect(job('smoke-macos')).toContain('gh release download');
         expect(needs('npm')).toContain('publish');
         expect(needs('postpublish-verify')).toContain('publish');
         // 只有 draft 创建 Release；只有 publish 公开它
@@ -88,16 +90,18 @@ describe('release-pipeline workflow', () => {
         const condition = name => (job(name).match(/^ {4}if: (.+)$/m) || [, ''])[1];
         expect(condition('packages')).toContain("needs.prepare.result == 'success'");
         expect(condition('packages')).toContain("needs.image.result == 'skipped'");
-        expect(condition('draft')).toContain("needs.test.result == 'success'");
-        expect(condition('draft')).toContain("needs.packages.result == 'success'");
-        expect(condition('attach')).toContain("needs.draft.result == 'success'");
+        expect(condition('packages')).toContain("needs.draft.result == 'success'");
+        expect(condition('finalize')).toContain("needs.test.result == 'success'");
+        expect(condition('finalize')).toContain("needs.packages.result == 'success'");
         expect(condition('smoke-macos')).toContain("needs.packages.result == 'success'");
-        expect(condition('prepublish-verify')).toContain("needs.attach.result == 'success'");
+        // 测试失败时不再白跑十分钟的 macOS 冒烟（试跑 3 里它照跑了）；test 比 packages 早结束，不会拖慢关键路径
+        expect(condition('smoke-macos')).toContain("needs.test.result == 'success'");
+        expect(condition('prepublish-verify')).toContain("needs.finalize.result == 'success'");
         for (const upstream of ['prepublish-verify', 'smoke-macos']) expect(condition('publish')).toContain(`needs.${upstream}.result == 'success'`);
         expect(condition('npm')).toContain("needs.publish.result == 'success'");
         expect(condition('postpublish-verify')).toContain("needs.publish.result == 'success'");
         // 不能用会在 test 失败时放行的 !failure() 兜底
-        for (const name of ['draft', 'attach', 'publish', 'npm']) expect(condition(name)).not.toContain('!failure()');
+        for (const name of ['draft', 'finalize', 'publish', 'npm']) expect(condition(name)).not.toContain('!failure()');
     });
 
     test('dryRun never publishes: publish, npm and post-publish are skipped, and the dry-run draft is deleted whatever happens', () => {
@@ -120,7 +124,8 @@ describe('release-pipeline workflow', () => {
 
     test('every reusable workflow it calls can be called, and keeps its own workflow_dispatch for manual re-runs', () => {
         const called = [...pipeline.matchAll(/uses:\s*\.\/\.github\/workflows\/(\S+)/g)].map(m => m[1]);
-        expect(called.sort()).toEqual(['build-packages.yml', 'ci.yml', 'image-publish.yml', 'release-offline.yml', 'release-verify.yml']);
+        // release-offline.yml 不再被流水线调用（保留单独手动触发，用于修复时从某次运行补挂资产）
+        expect(called.sort()).toEqual(['build-packages.yml', 'ci.yml', 'image-publish.yml', 'release-verify.yml']);
         for (const name of called) {
             const text = read(name);
             expect(text).toContain('workflow_call:');
@@ -134,6 +139,22 @@ describe('release-pipeline workflow', () => {
         posts.forEach(line => expect(line).toContain("X-Requested-With: XMLHttpRequest"));
     });
 
+    test('a reused draft is emptied first (assets of the previous attempt must not mix with the new build), and finalize refuses empty lists', () => {
+        const draft = job('draft');
+        expect(draft).toContain('delete-asset');
+        expect(draft.indexOf('delete-asset')).toBeGreaterThan(draft.indexOf('复用'));
+        expect(job('finalize')).toContain('|| { echo "$f 是空的"; exit 1; }');
+        expect(job('finalize')).toContain('assert-assets.js "$DRAFT_TAG" "$VERSION" meta');
+    });
+
+    test('the plugin is smoke-tested before publishing, with a time limit', () => {
+        const verify = job('prepublish-verify');
+        expect(verify).toContain('manyoyo" playwright probe');
+        const step = verify.slice(verify.indexOf('Plugin smoke'));
+        expect(step.slice(0, step.indexOf('run:'))).toContain('timeout-minutes: 6');
+        expect(verify.indexOf('Plugin smoke')).toBeGreaterThan(verify.indexOf('Web smoke'));
+    });
+
     test('uses only the built-in token — no new secrets', () => {
         expect(new Set(pipeline.match(/secrets\.[A-Za-z_]+/g) || [])).toEqual(new Set());
     });
@@ -144,6 +165,8 @@ describe('release-pipeline workflow', () => {
         expect(on).not.toMatch(/^\s*push:/m);
         expect(on).not.toContain('feat/release-autopilot');
         expect(pipeline).not.toContain('TEMP-BRANCH-TRIGGER');
+        // 试跑用的失败注入步骤（提交信息含 FAIL-TEST / FAIL-BUILD 时让 ci / 构建失败）也不能留下
+        for (const name of fs.readdirSync(dir)) expect(read(name)).not.toMatch(/TEMP-FAIL|FAIL-TEST|FAIL-BUILD/);
         // 试跑期间临时加的触发文件与实验用 workflow 也不能留下
         expect(fs.existsSync(path.join(__dirname, '../.release-dryrun-trigger'))).toBe(false);
         expect(fs.readdirSync(dir).filter(name => /^tmp-|^temp-|-experiment/.test(name))).toEqual([]);

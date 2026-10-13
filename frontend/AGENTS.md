@@ -21,6 +21,8 @@
 - `html-preview-panel.tsx`：`Sheet` 里的沙箱 iframe 预览（`allow-scripts` 且不给 `allow-same-origin`）。
 - 弹窗类：`system-settings-dialog` / `create-container-dialog` / `agent-template-dialog` / `model-menu`（聊天输入框左下角的模型下拉，选项来自会话 env，CLI 内置目录后台补充）/ `logs-dialog` / `search-dialog` / `directory-picker-dialog` / `clone-name-dialog` / `prompt-dialog` / `quick-chat-setup-dialog`。
 - 消息渲染：`markdown-content.tsx` / `trace-block.tsx` + `lib/markdown-render.ts` / `lib/sanitize.ts`。
+- 执行过程（`trace-block.tsx`）：展开整段后“说明”默认展开、工具行标题下直接显示“描述”，命令 / 结果等点开那一行才显示；右侧三个按钮（对齐顶部 / 展开收起全部细节 / 对齐底部）。开合状态分两层：`mode`（默认 / 全展开 / 全收起）和用户手动开合过的行（`rowOverrides`，key 是 `kind:toolId` 或 `kind-序号`，新事件到来不会改回默认）。每行顺序：描述 → 工具 → 工具参数（Agent 调用工具时传的参数，`compactToolArguments` 单行 `键=值`，点一下看全文）→ 命令 → 结果 / 错误。
+- 聊天自动滚动（`workspace-panel.tsx` 的 `ChatView` + `lib/chat-behavior.ts` 的 `shouldFollowBottom`）：内容更新后只有**更新之前视野就贴着底部**、用户没往上翻、最近 1.5 秒没有滚轮 / 触摸 / 点击 / 按键、没有选中文字时才跟随到底。只看“有没有往上翻过”不够：展开很长的执行过程后视野停在过程顶部，没有任何滚动事件，旧逻辑会把人一次次拉到底（B1 的根因，真实浏览器复现：scrollTop 0 → 2655）。展开 / 收起某一行、懒加载补全内容不能让视野里的内容跳。
 - `lib/api.ts`：所有 HTTP 与流式调用的出口，`StreamEvent` 类型定义与会话/trace 相关纯函数也在这里。
 - `lib/sync-scheduler.ts`：同步调度纯函数。`decideSyncDelay`（有焦点 6s / 没焦点 30s / 隐藏或空闲 10 分钟暂停）、`createSingleFlight`（单飞）、`createCoalescer`（visibilitychange 与 focus 300ms 合并）。
 - `lib/message-sync.ts`：`/messages` 增量同步的纯函数——page / tail / reset / before 的合并、稳定前缀 anchor、内容没变的消息复用原对象（DOM 不重建）、流结束后用最近一页对账（`reconcileWithPage`）、trace 按需加载的缓存键与 LRU。

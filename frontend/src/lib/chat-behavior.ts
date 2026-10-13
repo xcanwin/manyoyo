@@ -12,6 +12,22 @@ export function isNearBottom(
   return distance <= thresholdPx
 }
 
+// 内容更新后要不要把滚动条带到底部。只有同时满足才跟随：
+// 1. 用户没往上翻过（stick）；2. 更新之前视野确实贴着底部——展开很长的执行过程后视野停在过程顶部，
+// 没有任何滚动事件，stick 仍是 true，只看 stick 会被一次次拉到底（B1 的根因）；
+// 3. 用户此刻没在滚轮 / 触摸 / 点击 / 选中文字
+export function shouldFollowBottom(params: {
+  stick: boolean
+  scrollTop: number
+  prevScrollHeight: number
+  clientHeight: number
+  interacting: boolean
+  hasSelection: boolean
+}): boolean {
+  if (!params.stick || params.interacting || params.hasSelection) return false
+  return isNearBottom(params.scrollTop, params.prevScrollHeight, params.clientHeight)
+}
+
 // 按当前 AGENT 名拼接页面标题，未传/空白时回退默认标题
 export function buildDocumentTitle(agentName?: string | null): string {
   const trimmed = String(agentName || "").trim()

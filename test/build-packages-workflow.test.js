@@ -25,7 +25,9 @@ describe('build-packages workflow (macOS + Linux in one run)', () => {
         expect(onBlock).toContain('workflow_dispatch:');
         expect(onBlock).not.toMatch(/^\s*(pull_request|schedule|release):/m);
         expect(text).not.toMatch(/secrets\./);
-        expect(text).not.toMatch(/gh release|softprops|action-gh-release|npm publish|docker push/);
+        // 只有流水线调用（draftTag 不为空）时才会往草稿上传；不创建 / 公开 Release，也不发 npm
+        expect(text).not.toMatch(/gh release (create|edit|delete)|softprops|action-gh-release|npm publish|docker push/);
+        expect(text.match(/gh release upload/g) || []).toHaveLength(2);
     });
 
     test('runners are pinned: macOS 15 arm64/Intel and Ubuntu 24.04 x64/arm64', () => {
@@ -62,9 +64,9 @@ describe('build-packages workflow (macOS + Linux in one run)', () => {
 
     test('artifacts holding already-compressed files are uploaded with compression-level: 0', () => {
         const uploads = text.split('actions/upload-artifact@v7').slice(1);
-        expect(uploads).toHaveLength(4);
+        expect(uploads).toHaveLength(6);
         // web-index 只是一个 2 MB 的 html，其余三个装的都是已压缩的安装包 / 镜像归档
-        uploads.filter(chunk => !chunk.includes('name: web-index')).forEach(chunk => expect(chunk.split('\n\n')[0]).toContain('compression-level: 0'));
+        uploads.filter(chunk => !chunk.includes('name: web-index') && !chunk.includes('name: meta-')).forEach(chunk => expect(chunk.split('\n\n')[0]).toContain('compression-level: 0'));
     });
 
     test('the packaged tree is still scanned in every platform job, before the upload', () => {
@@ -138,8 +140,27 @@ describe('build-packages workflow (macOS + Linux in one run)', () => {
         expect(onBlock).toContain('workflow_dispatch:');
     });
 
-    test('only needs read permissions (packages: read for the pull)', () => {
+    test('read permissions only, except the two platform jobs that may upload to the draft — and only when draftTag is given', () => {
         expect(text).toContain('packages: read');
-        expect(text).not.toMatch(/contents: write|packages: write/);
+        expect(text).not.toMatch(/packages: write/);
+        const writes = text.split('\n').filter(line => /contents: write/.test(line));
+        expect(writes).toHaveLength(2);
+        for (const name of ['build-macos', 'build-linux']) expect(jobBlock(name)).toContain('contents: write');
+        // 上传步骤都带 draftTag 条件；draftTag 只存在于 workflow_call，单独手动触发永远不会上传
+        const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\nenv:'));
+        const dispatch = onBlock.slice(onBlock.indexOf('workflow_dispatch:'), onBlock.indexOf('workflow_call:')).split('\n').filter(line => !line.trim().startsWith('#')).join('\n');
+        expect(dispatch).not.toContain('draftTag');
+        for (const name of ['build-macos', 'build-linux']) {
+            const job = jobBlock(name);
+            const upload = job.slice(job.indexOf("name: Upload this platform's files to the draft Release"));
+            expect(upload.slice(0, upload.indexOf('run:'))).toContain("if: inputs.draftTag != ''");
+            // 大 artifact 只在没有草稿（单独触发）时上传；有草稿时只传小清单
+            expect(job).toContain("if: inputs.draftTag == ''");
+            expect(job).toContain('name: meta-');
+            expect(job.indexOf('gh release upload')).toBeGreaterThan(job.indexOf('Scan packaged tree'));
+        }
+        // Linux 的冒烟安装在上传之前（失败就什么都不上传）
+        const linux = jobBlock('build-linux');
+        expect(linux.indexOf('Smoke install')).toBeLessThan(linux.indexOf('gh release upload'));
     });
 });

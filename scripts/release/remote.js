@@ -5,9 +5,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { ReleaseError, validateVersion, waitForNewRun } = require('./actions');
 const { compareReleaseVersions, buildVersionSuggestions } = require('./versions');
-const { buildReport } = require('./pipeline-report');
+const { buildReport, generateReport } = require('./pipeline-report');
 
 const PIPELINE = 'release-pipeline.yml';
 
@@ -142,6 +143,19 @@ async function downloadRemoteReport(ctx, run) {
         const result = await ctx.run('gh', ['run', 'download', String(run.runId), '-n', 'release-report', '-D', logDir], { safe: true });
         if (result.status !== 0) return { logDir, failedLogs: [], summary: null };
         summary = read();
+    }
+    // 流水线 summary job 在运行还没结束时拉不到 job 日志（失败日志是空的）：没成功的运行，用已结束运行的日志在本地重新生成
+    const marker = path.join(logDir, '.regenerated');
+    if (run.conclusion && run.conclusion !== 'success' && !fs.existsSync(marker)) {
+        try {
+            const regenerate = ctx.generateReport || generateReport;
+            const repo = process.env.GH_REPO || String(spawnSync('gh', ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'], { cwd: ctx.repoRoot, encoding: 'utf-8' }).stdout || '').trim();
+            regenerate({ repo, runId: run.runId, version: (summary && summary.version) || '', sha: run.headSha || '', outDir: logDir });
+            summary = read() || summary;
+            fs.writeFileSync(marker, '');
+        } catch (error) {
+            // 重新生成失败就保留 artifact 里的版本（日志可能是空的），不影响其余输出
+        }
     }
     const failedLogs = ((summary && summary.stages) || []).filter(stage => stage.logArtifact).map(stage => path.join(logDir, stage.logArtifact));
     return { logDir, failedLogs, summary };

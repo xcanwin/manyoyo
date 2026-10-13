@@ -29,7 +29,7 @@ import { useAgentRecoveryPoll } from "@/hooks/use-agent-recovery-poll"
 import { useSessionSync } from "@/hooks/use-session-sync"
 import { useSyncLoop } from "@/hooks/use-sync-loop"
 import { formatDateTime } from "@/lib/format"
-import { computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier } from "@/lib/chat-behavior"
+import { computeScrollRestore, getBubbleState, isNearBottom, shouldFollowBottom, shouldLoadEarlier } from "@/lib/chat-behavior"
 import {
   clearOutbox,
   createClientMessageId,
@@ -270,6 +270,8 @@ function ActivityView({
   // 只有用户本来就停留在底部时，新消息/流式增量才会带着滚动条一起走；
   // 一旦用户往上翻看历史，这里会记为 false，后续更新不再打断阅读
   const stickToBottomRef = React.useRef(true)
+  // 用户正在滚轮 / 触摸 / 点击 / 按键时（最近 1.5 秒内），内容更新不能把视野拉走
+  const lastInteractionRef = React.useRef(0)
 
   // 加载更早的消息会在列表前面插入内容：记下插入前的内容高度，插入后把滚动位置补上
   // 新增的高度，视野停在原来的内容上不跳动。高度由 ResizeObserver 持续记录
@@ -279,6 +281,10 @@ function ActivityView({
   const lastHeightRef = React.useRef(0)
   const firstIdRef = React.useRef<string | number | null>(null)
   const earlierRequestedRef = React.useRef(false)
+
+  function markInteraction() {
+    lastInteractionRef.current = Date.now()
+  }
 
   function handleScroll() {
     const el = scrollRef.current
@@ -307,7 +313,18 @@ function ActivityView({
       lastHeightRef.current = el.scrollHeight
       return
     }
-    if (!stickToBottomRef.current) return
+    const selection = typeof window !== "undefined" ? window.getSelection() : null
+    const hasSelection = Boolean(selection && !selection.isCollapsed && selection.anchorNode && el.contains(selection.anchorNode))
+    const follow = shouldFollowBottom({
+      stick: stickToBottomRef.current,
+      scrollTop: el.scrollTop,
+      // 上一次布局之后的内容高度（ResizeObserver 在布局之后才更新它，这里读到的是更新前的值）；还没记录过就当贴着底部
+      prevScrollHeight: lastHeightRef.current || 0,
+      clientHeight: el.clientHeight,
+      interacting: Date.now() - lastInteractionRef.current < 1500,
+      hasSelection,
+    })
+    if (!follow) return
     el.scrollTop = el.scrollHeight
   }, [displayMessages])
 
@@ -343,6 +360,10 @@ function ActivityView({
     <div
       ref={scrollRef}
       onScroll={handleScroll}
+      onWheel={markInteraction}
+      onTouchStart={markInteraction}
+      onPointerDown={markInteraction}
+      onKeyDown={markInteraction}
       data-chat-scroll
       className="h-full overflow-x-hidden overflow-y-auto overscroll-y-contain"
     >
