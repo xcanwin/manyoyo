@@ -2,6 +2,8 @@
 
 // 发布流水线（release-pipeline.yml）的汇总：每个阶段的结果、起止与耗时，失败阶段的日志尾部。
 // 排障顺序：先看 release-summary.json → 只打开失败阶段的 failed-<阶段>.log → 还要更多上下文再 gh run view --log-failed --job <id>。
+//   注意：同一次运行还没结束时，接口读不到它里面 job 的日志（summary job 里拉到的失败日志是空的）；
+//   所以失败阶段的 failed-<阶段>.log 由本地在运行结束后重新生成（--remote-status 会做；也可以手动运行本脚本）
 //   node scripts/release/pipeline-report.js --run <runId> --repo <owner/repo> --version <x.y.z> --sha <sha> --out <目录>
 //   （在流水线的 summary job 里运行，需要 GH_TOKEN）
 
@@ -81,7 +83,7 @@ function renderMarkdown(report) {
         '|---|---|---|---|---|',
         ...rows,
         '',
-        report.failedJobs.length ? `失败阶段的日志尾部在 artifact \`release-report\` 里：${[...new Set(report.failedJobs.map(item => `failed-${item.stage}.log`))].join('、')}` : '没有失败的阶段。',
+        report.failedJobs.length ? `失败的阶段：${[...new Set(report.failedJobs.map(item => item.stage))].join('、')}。它们的日志在运行结束后用 \`npm run release -- --remote-status\` 取回（本地生成 failed-<阶段>.log）` : '没有失败的阶段。',
         ''
     ].join('\n');
 }
@@ -95,6 +97,7 @@ function writeReport({ report, outDir, fetchLog }) {
         byStage.get(failed.stage).push(failed);
     }
     for (const [stage, jobs] of byStage) {
+        if (!fetchLog) continue; // 运行中的流水线读不到 job 日志：不写空文件
         const text = jobs.map(item => `===== ${item.name} (${item.url}) =====\n${tailLog(fetchLog(item.id))}`).join('\n\n');
         fs.writeFileSync(path.join(outDir, `failed-${stage}.log`), `${text}\n`);
         const entry = report.stages.find(item => item.id === stage);
@@ -131,16 +134,22 @@ function loadJobs(ghImpl, repo, run) {
     return result.stdout.split('\n').filter(Boolean).map(line => JSON.parse(line));
 }
 
+/** 一次已结束运行的报告：读 job 列表和失败 job 的日志，写 release-summary.json / summary.md / failed-<阶段>.log */
+function generateReport({ ghImpl = gh, repo, runId, version = '', sha = '', outDir, sleep, logs = true }) {
+    const jobs = loadJobs(ghImpl, repo, runId);
+    const report = buildReport({ jobs, version, sha, runUrl: `https://github.com/${repo}/actions/runs/${runId}` });
+    writeReport({ report, outDir, fetchLog: logs ? id => fetchJobLog(ghImpl, repo, id, sleep ? { sleep } : {}) : null });
+    return report;
+}
+
 function main(argv) {
     const get = name => { const i = argv.indexOf(`--${name}`); return i >= 0 ? argv[i + 1] : ''; };
     const [run, repo, out] = [get('run'), get('repo'), get('out')];
     if (!run || !repo || !out) throw new Error('用法: pipeline-report.js --run <id> --repo <owner/repo> --version <v> --sha <sha> --out <目录>');
-    const jobs = loadJobs(gh, repo, run);
-    const report = buildReport({ jobs, version: get('version'), sha: get('sha'), runUrl: `https://github.com/${repo}/actions/runs/${run}` });
-    writeReport({ report, outDir: out, fetchLog: id => fetchJobLog(gh, repo, id) });
+    const report = generateReport({ repo, runId: run, version: get('version'), sha: get('sha'), outDir: out, logs: !argv.includes('--no-logs') });
     process.stdout.write(renderMarkdown(report));
 }
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { buildReport, tailLog, renderMarkdown, writeReport, loadJobs, fetchJobLog, LOG_TAIL_LINES };
+module.exports = { buildReport, tailLog, renderMarkdown, writeReport, loadJobs, fetchJobLog, generateReport, LOG_TAIL_LINES };

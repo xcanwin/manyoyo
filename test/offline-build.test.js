@@ -87,6 +87,15 @@ describe('.run packaging', () => {
         expect(header).toContain('${PAYLOAD_SHA256}');
     });
 
+    test('the payload is read with dd + cat on one file descriptor, never with tail: macOS tail took 168–235 s on a 2 GB file (Intel runner), dd + cat 4 s', () => {
+        const header = renderRunHeader({ name: 'pkg', sha256: 'a'.repeat(64) });
+        expect(header).not.toMatch(/tail -[nc] \+/);
+        expect(header).toContain('dd bs="$skip" count=1 of=/dev/null');
+        expect(header).toMatch(/; cat \) < "\$self"/);
+        // 偏移用 head -n 数头部字节：只读头部几行，不会扫整个文件
+        expect(header).toContain('head -n');
+    });
+
     test('header validates its inputs', () => {
         expect(() => renderRunHeader({ name: 'x', sha256: 'bad' })).toThrow(/SHA256/);
         expect(() => renderRunHeader({ name: 'a b', sha256: 'a'.repeat(64) })).toThrow(/name/);

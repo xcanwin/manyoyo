@@ -62,7 +62,11 @@ check_volumes() {
     done
 }
 payload() {
-    tail -n +"$(awk '/^${PAYLOAD_MARKER}$/ { print NR + 1; exit }' "$self")" "$self"
+    # macOS 自带的 tail（-n 与 -c 都一样）读 2GB 文件极慢：Intel runner 上取一遍负载要 3–4 分钟，dd + cat 只要 4 秒（实测）。
+    # 做法：同一个文件描述符里先用 dd 恰好读掉头部（到标记行为止的字节数，只读头部几行就能算出），再 cat 剩下的
+    marker_line="$(awk '/^${PAYLOAD_MARKER}$/ { print NR; exit }' "$self")"
+    skip="$(head -n "$marker_line" "$self" | wc -c | tr -d ' ')"
+    ( dd bs="$skip" count=1 of=/dev/null 2>/dev/null; cat ) < "$self"
     if [ "$split_mode" = 1 ]; then
         i=2
         while [ "$i" -le "$vol_count" ]; do
