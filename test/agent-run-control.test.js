@@ -13,7 +13,7 @@ const launch = (command, id, options = {}) => spawn('/bin/bash', ['-lc', wrapAge
 describe('wrapAgentCommand', () => {
     test('writes its pid first and keeps the original command verbatim (still the single bash -lc argument)', () => {
         const id = createRunId();
-        expect(wrapAgentCommand("claude -p 'it''s'", id)).toBe(`echo $$ > ${pidFilePath(id)}; claude -p 'it''s'`);
+        expect(wrapAgentCommand("claude -p 'it''s'", id)).toBe(`echo $$ > ${pidFilePath(id)}; claude -p 'it''s'; exit $?`);
         expect(() => wrapAgentCommand('x', 'bad id; rm -rf /')).toThrow(/runId/);
     });
 
@@ -60,6 +60,19 @@ describe('RUN_KILL_SCRIPT 按不可信输入处理 PID 文件', () => {
         await sleep(400);
         expect(alive(pid)).toBe(false);
         expect(alive(grandchild)).toBe(false);
+        fs.rmSync(pidFilePath(id), { force: true });
+    });
+
+    test('the agent is the last simple command (bash would exec and lose the marker): the process is still recognized and killed', async () => {
+        const id = createRunId();
+        startWrapped(id, 'sleep 63');
+        const pid = await pidOf(id);
+        await sleep(300);
+        expect(alive(pid)).toBe(true);
+        // 没有 exit $? 时 bash 会把自己换成 sleep，命令行里不再有标记，runKill 会因 4 拒绝
+        expect(runKill(id, 'INT').status).toBe(0);
+        await sleep(400);
+        expect(alive(pid)).toBe(false);
         fs.rmSync(pidFilePath(id), { force: true });
     });
 
