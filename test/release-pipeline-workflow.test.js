@@ -94,6 +94,8 @@ describe('release-pipeline workflow', () => {
         expect(condition('finalize')).toContain("needs.test.result == 'success'");
         expect(condition('finalize')).toContain("needs.packages.result == 'success'");
         expect(condition('smoke-macos')).toContain("needs.packages.result == 'success'");
+        // 测试失败时不再白跑十分钟的 macOS 冒烟（试跑 3 里它照跑了）；test 比 packages 早结束，不会拖慢关键路径
+        expect(condition('smoke-macos')).toContain("needs.test.result == 'success'");
         expect(condition('prepublish-verify')).toContain("needs.finalize.result == 'success'");
         for (const upstream of ['prepublish-verify', 'smoke-macos']) expect(condition('publish')).toContain(`needs.${upstream}.result == 'success'`);
         expect(condition('npm')).toContain("needs.publish.result == 'success'");

@@ -273,8 +273,8 @@ jobs:
   # macOS 安装包的冒烟安装（门禁）：Intel 上安装要六七分钟，放在构建 job 里会拖长关键路径；
   # 放在这里与 合并清单 / 公开前验证 并行，只挡住 publish。用临时 HOME 安装刚构建的包（跳过虚拟机），查版本、卸载。
   smoke-macos:
-    needs: [prepare, packages]
-    if: ${{ !cancelled() && needs.packages.result == 'success' }}
+    needs: [prepare, test, packages]
+    if: ${{ !cancelled() && needs.test.result == 'success' && needs.packages.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
