@@ -3310,6 +3310,7 @@ process.exit(0);
             fakeDockerPath,
             `#!/usr/bin/env node
 const args = process.argv.slice(2);
+if (args[0] === 'exec' && args.includes('/bin/sh')) process.exit(0); // 停止时进容器发信号的 exec：假 docker 不处理
 if (args[0] === 'exec') {
   process.stdout.write('{"type":"thread.started"}\\n');
   process.stdout.write('{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc long-task","status":"in_progress"}}\\n');
@@ -3349,7 +3350,8 @@ process.exit(0);
                 dockerCmd: fakeDockerPath,
                 containerExists: () => true,
                 getContainerStatus: () => 'running',
-                webHistoryDir
+                webHistoryDir,
+                agentStopGraceMs: 100
             }));
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
@@ -3604,6 +3606,7 @@ process.exit(0);
             fakeDockerPath,
             `#!/usr/bin/env node
 const args = process.argv.slice(2);
+if (args[0] === 'exec' && args.includes('/bin/sh')) process.exit(0); // 停止时进容器发信号的 exec：假 docker 不处理
 if (args[0] === 'exec') {
   process.stdout.write('{"type":"system","subtype":"init","session_id":"claude-session"}\\n');
   process.stdout.write('{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"sleep 10"}}]}}\\n');
@@ -3644,7 +3647,8 @@ process.exit(0);
                 dockerCmd: fakeDockerPath,
                 containerExists: () => true,
                 getContainerStatus: () => 'running',
-                webHistoryDir
+                webHistoryDir,
+                agentStopGraceMs: 100
             }));
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);

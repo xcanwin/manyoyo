@@ -80,6 +80,11 @@ export type TraceEvent = {
   phase?: string
   status?: string
   detail?: string
+  // 子 Agent 里发生的事件：指向发起它的那次 Agent / Task 工具调用（kind="subagent" 的 toolId）
+  parentToolId?: string
+  subagentType?: string
+  description?: string
+  prompt?: string
 }
 
 export type AppliedConfig = {
@@ -302,7 +307,7 @@ export function buildStreamMetaTraceEvents(meta: {
   return events
 }
 
-const MERGEABLE_TRACE_KINDS = new Set(["tool", "command", "mcp"])
+const MERGEABLE_TRACE_KINDS = new Set(["tool", "command", "mcp", "subagent"])
 
 // 与 mergeToolTraceEvents 对齐：同一个工具调用的 started/completed 事件合并成一行
 // 工具调用的参数展示：不再给“参数摘要”（它只是把同样的内容压成一行，纯属重复）。
@@ -344,7 +349,17 @@ export function compactToolArguments(value: unknown): string {
 // 工具行的标题：一行写清 工具名 + 结果（✅ 成功 / ❎ 失败，执行中不显示）+ 描述。
 // 合并后的事件 text 是服务端的“[工具完成] Bash (success)”，信息量少，这里改由结构化字段拼出；
 // 描述缺省时依次用参数摘要、命令。其他种类的事件照旧用 text
-export function formatTraceRowTitle(event: TraceEvent): string {
+export function formatTraceRowTitle(event: TraceEvent, stepCount = 0): string {
+  if (event.kind === "subagent") {
+    const failed = event.status === "error" || Boolean(event.error)
+    const done = event.phase === "completed" || event.status === "success" || event.status === "completed"
+    const text = (value: unknown) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "")
+    const head = ["[子 Agent]", text(event.subagentType) || event.toolName || "Agent", failed ? "❎" : done ? "✅" : "", text(event.description)]
+      .filter(Boolean)
+      .join(" ")
+    return stepCount > 0 ? `${head} · ${stepCount} 步` : head
+  }
+  if (isTaskListTool(event)) return `[任务清单] 更新 ${taskListUpdateCount(event)} 项`
   if (event.kind !== "tool") return event.text
   const args = event.arguments && typeof event.arguments === "object" && !Array.isArray(event.arguments)
     ? (event.arguments as Record<string, unknown>)
@@ -357,12 +372,120 @@ export function formatTraceRowTitle(event: TraceEvent): string {
   return ["[工具]", event.toolName || "tool", icon, detail].filter(Boolean).join(" ")
 }
 
+const TASK_LIST_TOOLS = new Set(["TodoWrite", "TaskCreate", "TaskUpdate"])
+
+export function isTaskListTool(event: TraceEvent): boolean {
+  return event.kind === "tool" && TASK_LIST_TOOLS.has(event.toolName || "")
+}
+
+function toArgs(event: TraceEvent): Record<string, unknown> {
+  return event.arguments && typeof event.arguments === "object" && !Array.isArray(event.arguments)
+    ? (event.arguments as Record<string, unknown>)
+    : {}
+}
+
+function taskListUpdateCount(event: TraceEvent): number {
+  const todos = toArgs(event).todos
+  return Array.isArray(todos) ? todos.length : 1
+}
+
+export type TaskItem = { id: string; subject: string; status: "pending" | "in_progress" | "completed" }
+
+function normalizeTaskStatus(value: unknown, fallback: TaskItem["status"]): TaskItem["status"] {
+  return value === "completed" || value === "in_progress" || value === "pending" ? value : fallback
+}
+
+// 把 TodoWrite（整份覆盖）/ TaskCreate / TaskUpdate（增量）按顺序折叠成最新的任务清单。
+// TaskCreate 的编号取自结果里的 “#N”，缺省按创建顺序从 1 开始；TaskUpdate 的 status=deleted 表示删掉
+export function buildTaskList(events: TraceEvent[]): TaskItem[] {
+  let items: TaskItem[] = []
+  for (const event of events) {
+    if (!isTaskListTool(event) || event.parentToolId) continue
+    const args = toArgs(event)
+    if (event.toolName === "TodoWrite") {
+      if (!Array.isArray(args.todos)) continue
+      items = args.todos
+        .filter((todo): todo is Record<string, unknown> => Boolean(todo) && typeof todo === "object")
+        .map((todo, index) => ({
+          id: String(index + 1),
+          subject: String(todo.content ?? todo.subject ?? "").trim(),
+          status: normalizeTaskStatus(todo.status, "pending"),
+        }))
+        .filter((item) => item.subject)
+    } else if (event.toolName === "TaskCreate") {
+      const subject = String(args.subject ?? "").trim()
+      if (!subject) continue
+      const numbered = /#(\d+)/.exec(event.result || "")
+      items.push({ id: numbered ? numbered[1] : String(items.length + 1), subject, status: "pending" })
+    } else if (event.toolName === "TaskUpdate") {
+      const id = String(args.taskId ?? "")
+      if (args.status === "deleted") {
+        items = items.filter((item) => item.id !== id)
+        continue
+      }
+      items = items.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              subject: typeof args.subject === "string" && args.subject.trim() ? args.subject.trim() : item.subject,
+              status: normalizeTaskStatus(args.status, item.status),
+            }
+          : item
+      )
+    }
+  }
+  return items
+}
+
+export type TraceNode = {
+  event: TraceEvent
+  key: string
+  // 嵌套深度，缩进最多按第 3 层显示
+  depth: number
+  children: TraceNode[]
+  // 这个子 Agent 里（含更深层）一共有多少步
+  stepCount: number
+}
+
+export const MAX_TRACE_INDENT_DEPTH = 3
+
+export function traceRowKey(event: TraceEvent, index: number): string {
+  return event.toolId ? `${event.kind}:${event.parentToolId || ""}:${event.toolId}` : `${event.kind}-${index}`
+}
+
+// 把合并后的平铺事件按 parentToolId 挂成树：子 Agent 里的事件挂在发起它的那一行下面；
+// 找不到发起者（比如被截断）的事件当作顶层事件，不丢
+export function buildTraceTree(events: TraceEvent[]): TraceNode[] {
+  const roots: TraceNode[] = []
+  const subagents = new Map<string, TraceNode>()
+  events.forEach((event, index) => {
+    const parent = event.parentToolId ? subagents.get(event.parentToolId) : undefined
+    const node: TraceNode = {
+      event,
+      key: traceRowKey(event, index),
+      depth: parent ? parent.depth + 1 : 0,
+      children: [],
+      stepCount: 0,
+    }
+    if (event.kind === "subagent" && event.toolId) subagents.set(event.toolId, node)
+    if (parent) {
+      parent.children.push(node)
+      for (let up: TraceNode | undefined = parent; up; up = up.event.parentToolId ? subagents.get(up.event.parentToolId) : undefined) {
+        up.stepCount += 1
+      }
+    } else {
+      roots.push(node)
+    }
+  })
+  return roots
+}
+
 export function mergeToolTraceEvents(events: TraceEvent[]): TraceEvent[] {
   const result: TraceEvent[] = []
   const indexByKey = new Map<string, number>()
   for (const event of events) {
     if (MERGEABLE_TRACE_KINDS.has(event.kind) && event.toolId) {
-      const key = `${event.kind}:${event.toolId}`
+      const key = `${event.kind}:${event.parentToolId || ""}:${event.toolId}`
       const existingIndex = indexByKey.get(key)
       if (existingIndex !== undefined) {
         result[existingIndex] = { ...result[existingIndex], ...event }
@@ -381,7 +504,8 @@ export function mergeToolTraceEvents(events: TraceEvent[]): TraceEvent[] {
 export function summarizeTraceFlow(events: TraceEvent[], pending: boolean): string {
   const hasError = events.some((event) => event.kind === "error")
   const label = hasError ? "有错误" : pending ? "进行中" : "已完成"
-  return `${events.length} 步 · ${label}`
+  // 只数顶层步数，子 Agent 里的步数写在它自己那一行
+  return `${buildTraceTree(events).length} 步 · ${label}`
 }
 
 export type FsEntry = {
@@ -483,6 +607,8 @@ export type StreamEvent =
   | { type: "content_chunk"; text: string; reset?: boolean }
   // 服务端保活心跳，仅用于喂饱反向代理的空闲读超时，前端忽略即可
   | { type: "ping" }
+  // 这一轮结束后服务端接着发排队的下一条：本条流到此为止，前端改为跟随下一轮
+  | { type: "queue_next" }
   | { type: "result"; exitCode: number; output: string; interrupted?: boolean; replyMessageId?: string }
   | { type: "error"; error: string }
 

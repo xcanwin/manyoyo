@@ -6,7 +6,11 @@ import {
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
+  CircleDotIcon,
+  CircleIcon,
+  CircleCheckIcon,
   CopyIcon,
+  BotIcon,
   MessageSquareIcon,
   OctagonAlertIcon,
   PlugIcon,
@@ -18,7 +22,12 @@ import {
 import { cn } from "@/lib/utils"
 import {
   apiGet,
+  buildTaskList,
   buildToolArgumentParts,
+  buildTraceTree,
+  MAX_TRACE_INDENT_DEPTH,
+  type TaskItem,
+  type TraceNode,
   compactToolArguments,
   formatTraceRowTitle,
   mergeToolTraceEvents,
@@ -37,6 +46,7 @@ const KIND_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   tool: WrenchIcon,
   command: TerminalIcon,
   mcp: PlugIcon,
+  subagent: BotIcon,
   agent_message: MessageSquareIcon,
   error: OctagonAlertIcon,
 }
@@ -91,6 +101,11 @@ function buildBodyParts(event: TraceEvent): BodyPart[] {
       if (text) parts.push({ label: "工具参数", value: text, compact })
     })
     argParts.filter((part) => !["描述", "工具参数"].includes(part.label)).forEach((part) => push(part.label, part.value))
+    push("结果", event.result)
+    push("错误", event.error)
+  }
+  if (event.kind === "subagent") {
+    push("提示词", event.prompt)
     push("结果", event.result)
     push("错误", event.error)
   }
@@ -172,8 +187,13 @@ function TraceBodySection({ part, copyable }: { part: BodyPart; copyable: boolea
 }
 
 // 能展开的行：说明、以及有详情字段的行；原始输出行只有一行文字，不能展开
-function isExpandableEvent(event: TraceEvent): boolean {
-  return event.kind === "agent_message" || (event.kind !== "output" && buildBodyParts(event).length > 0)
+function isExpandableNode(node: TraceNode): boolean {
+  const { event } = node
+  return event.kind === "agent_message" || node.children.length > 0 || (event.kind !== "output" && buildBodyParts(event).length > 0)
+}
+
+function flattenNodes(nodes: TraceNode[]): TraceNode[] {
+  return nodes.flatMap((node) => [node, ...flattenNodes(node.children)])
 }
 
 // 默认状态：说明展开，工具行只露标题和描述；mode=all 全展开，mode=none 全收起
@@ -185,20 +205,23 @@ function defaultRowOpen(event: TraceEvent, mode: ExpandMode): boolean {
 
 type ExpandMode = "default" | "all" | "none"
 
-function traceRowKey(event: TraceEvent, index: number): string {
-  return event.toolId ? `${event.kind}:${event.toolId}` : `${event.kind}-${index}`
-}
-
 function TraceEventRow({
   event,
   complete,
   open,
   onOpenChange,
+  stepCount = 0,
+  nested = null,
+  nestedIndent = true,
 }: {
   event: TraceEvent
   complete: boolean
   open: boolean
   onOpenChange: (next: boolean) => void
+  stepCount?: number
+  // 子 Agent 里的事件行，展开后显示在它自己的详情之前
+  nested?: React.ReactNode
+  nestedIndent?: boolean
 }) {
   const isRawOutput = event.kind === "output"
   const isStderr = isRawOutput && event.stream === "stderr"
@@ -209,7 +232,7 @@ function TraceEventRow({
       : KIND_ICON[event.kind] || MessageSquareIcon
   const isNarration = event.kind === "agent_message"
   const bodyParts = React.useMemo(() => buildBodyParts(event), [event])
-  const expandable = isNarration || bodyParts.length > 0
+  const expandable = isNarration || bodyParts.length > 0 || nested !== null
 
   if (!expandable) {
     return (
@@ -241,7 +264,7 @@ function TraceEventRow({
       <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[13px] hover:bg-muted">
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="flex-1 truncate text-foreground">
-          {isNarration ? "说明" : formatTraceRowTitle(event)}
+          {isNarration ? "说明" : formatTraceRowTitle(event, stepCount)}
         </span>
         <ChevronRightIcon
           className={cn(
@@ -255,10 +278,46 @@ function TraceEventRow({
           // 说明的详情就是正文：不再套一层“详情”小标题
           <p className="text-[13px] leading-[1.75] whitespace-pre-wrap text-foreground">{event.detail || event.text}</p>
         ) : (
-          bodyParts.map((part) => <TraceBodySection key={part.label} part={part} copyable={complete} />)
+          <>
+            {nested !== null ? (
+              <div className={cn("flex flex-col gap-0.5", nestedIndent && "border-l pl-2")}>{nested}</div>
+            ) : null}
+            {bodyParts.map((part) => <TraceBodySection key={part.label} part={part} copyable={complete} />)}
+          </>
         )}
       </CollapsibleContent>
     </Collapsible>
+  )
+}
+
+const TASK_LIST_VISIBLE = 8
+
+function TaskStatusIcon({ status }: { status: TaskItem["status"] }) {
+  if (status === "completed") return <CircleCheckIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+  if (status === "in_progress") return <CircleDotIcon className="mt-0.5 size-3.5 shrink-0 text-foreground" />
+  return <CircleIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+}
+
+// 任务清单只显示一块最新状态（☐ 待办 / ◐ 进行中 / ☑ 完成），不随每次更新刷屏；超过 8 项折叠
+function TaskListBlock({ items }: { items: TaskItem[] }) {
+  const [all, setAll] = React.useState(false)
+  const shown = all ? items : items.slice(0, TASK_LIST_VISIBLE)
+  const done = items.filter((item) => item.status === "completed").length
+  return (
+    <div data-task-list className="flex flex-col gap-0.5 rounded-md border bg-background/60 px-2 py-1.5">
+      <span className="text-xs font-medium text-muted-foreground">任务清单 · {done}/{items.length}</span>
+      {shown.map((item) => (
+        <div key={item.id} className="flex items-start gap-1.5 text-[13px]">
+          <TaskStatusIcon status={item.status} />
+          <span className={cn("flex-1 break-words", item.status === "completed" && "text-muted-foreground line-through")}>{item.subject}</span>
+        </div>
+      ))}
+      {items.length > TASK_LIST_VISIBLE ? (
+        <button type="button" onClick={() => setAll((value) => !value)} className="self-start text-xs text-muted-foreground hover:text-foreground">
+          {all ? "收起" : `还有 ${items.length - TASK_LIST_VISIBLE} 项`}
+        </button>
+      ) : null}
+    </div>
   )
 }
 
@@ -301,14 +360,30 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
   }, [needFetch, cacheKey, sessionName, trace.id])
 
   if (!merged.length) return null
-  const rowKeys = merged.map((event, index) => traceRowKey(event, index))
+  const tree = buildTraceTree(merged)
+  const taskList = buildTaskList(merged)
   const rowOpen = (event: TraceEvent, key: string) => rowOverrides[key] ?? defaultRowOpen(event, mode)
-  const expandableRows = merged.map((event, index) => ({ event, key: rowKeys[index] })).filter((row) => isExpandableEvent(row.event))
-  const allOpen = expandableRows.length > 0 && expandableRows.every((row) => rowOpen(row.event, row.key))
+  // “展开全部 / 收起全部”覆盖嵌套的行
+  const expandableRows = flattenNodes(tree).filter(isExpandableNode)
+  const allOpen = expandableRows.length > 0 && expandableRows.every((node) => rowOpen(node.event, node.key))
   function toggleAll() {
     // 点一下整体切换，并清掉各行手动状态：“全部”就是全部
     setMode(allOpen ? "none" : "all")
     setRowOverrides({})
+  }
+  function renderNode(node: TraceNode): React.ReactNode {
+    return (
+      <TraceEventRow
+        key={node.key}
+        event={node.event}
+        complete={complete}
+        open={rowOpen(node.event, node.key)}
+        onOpenChange={(next) => setRowOverrides((previous) => ({ ...previous, [node.key]: next }))}
+        stepCount={node.stepCount}
+        nested={node.children.length > 0 ? node.children.map(renderNode) : null}
+        nestedIndent={node.depth < MAX_TRACE_INDENT_DEPTH}
+      />
+    )
   }
   const summary = summarizeTraceFlow(merged, trace.pending === true)
   const complete = !truncated || full !== undefined
@@ -361,15 +436,8 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
             {loadFailed ? "完整内容加载失败，收起再展开可重试" : "正在加载完整内容…"}
           </p>
         ) : null}
-        {merged.map((event, index) => (
-          <TraceEventRow
-            key={rowKeys[index]}
-            event={event}
-            complete={complete}
-            open={rowOpen(event, rowKeys[index])}
-            onOpenChange={(next) => setRowOverrides((previous) => ({ ...previous, [rowKeys[index]]: next }))}
-          />
-        ))}
+        {taskList.length > 0 ? <TaskListBlock items={taskList} /> : null}
+        {tree.map(renderNode)}
       </CollapsibleContent>
       </Collapsible>
       {open ? (
