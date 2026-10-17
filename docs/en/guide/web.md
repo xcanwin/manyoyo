@@ -79,7 +79,7 @@ The input box stays enabled while an Agent is working. Use the arrow next to "Se
 
 Queued prompts appear at the bottom of the conversation and can be cancelled or edited. "Stop" only stops the current round: queued prompts are kept, and you can cancel them or click "Continue sending". Command mode does not support this.
 
-Sub-agents and task lists show up in the "execution process": a sub-agent is collapsed into one line by default (click to see what it did), and the task list shows a single block with the latest status.
+Sub-agents and task lists show up in the "execution process": a sub-agent is collapsed into one line by default (click to see what it did), and the task list shows a single block with the latest status. While the agent is still working, what it is saying appears inside the execution process; the reply box shows up only when the turn ends, and it holds the final answer. The "align to bottom" button on the right keeps the bottom of that execution process pinned to the bottom of the window until you scroll yourself.
 
 ## Web Frontend
 

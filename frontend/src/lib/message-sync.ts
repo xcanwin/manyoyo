@@ -101,7 +101,8 @@ function reuseUnchanged(prev: ChatMessage[], next: ChatMessage[]): ChatMessage[]
   let changed = next.length !== prev.length
   const out = next.map((message, index) => {
     const old = byId.get(message.id)
-    const result = old && sameMessage(old, message) ? old : message
+    // 换成服务端版本时带上本地的 renderKey，执行过程的 React key 才不会变
+    const result = old && sameMessage(old, message) ? old : old?.renderKey && !message.renderKey ? { ...message, renderKey: old.renderKey } : message
     if (result !== prev[index]) changed = true
     return result
   })
@@ -141,9 +142,9 @@ export function prependEarlierMessages(
   return { messages: older.length ? older.concat(local) : local, hasMore: res.hasMore }
 }
 
-// 按需加载的完整 trace 缓存键：事件数变了（任务还在跑）就是新的一份
-export function traceCacheKey(sessionName: string, messageId: string | number, eventCount: number): string {
-  return `${sessionName}\u0000${String(messageId)}\u0000${eventCount}`
+// 按需加载的完整 trace 缓存键：按消息（任务还在跑时由调用方把列表里新增的事件接在完整版后面）
+export function traceCacheKey(sessionName: string, messageId: string | number): string {
+  return `${sessionName}\u0000${String(messageId)}`
 }
 
 // 用“最近一页”对账本地列表（流结束、停止、命令执行后）：

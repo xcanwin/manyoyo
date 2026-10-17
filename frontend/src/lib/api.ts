@@ -134,9 +134,14 @@ export type ChatMessage = {
   traceTruncated?: boolean
   // 发送时前端生成的 id，服务端回显，用来确认“这条提示词已经发出去了”
   clientMessageId?: string
+  // 只在前端：本轮执行过程的渲染 key（发送时生成）。占位 id 换成服务端 id、配上回复后都不变，
+  // 执行过程因此不会被 React 重新挂载（重新挂载会丢掉展开状态、整段收起再出现）
+  renderKey?: string
 }
 
-export type DisplayMessage = ChatMessage & { pairedTrace?: ChatMessage }
+// hideBubble：执行中（执行过程与回复都还在进行）回复框不单独显示，正在输出的文字（liveText）交给执行过程——
+// 每条新的 assistant 消息开始时回复框会被清空重来，单独显示会让视野上下抖，也容易被当成最终回复
+export type DisplayMessage = ChatMessage & { pairedTrace?: ChatMessage; hideBubble?: boolean; liveText?: string }
 
 // 消息列表里三类"本地乐观占位"的 id 约定：发送瞬间前端先用这些临时 id 渲染，
 // 服务端 meta/result 事件会带回持久化消息的真实 id，前端收到后原地替换——
@@ -253,7 +258,10 @@ export function mergeTraceIntoReply(messages: ChatMessage[]): DisplayMessage[] {
     if (msg.streamTrace) {
       const next = messages[i + 1]
       if (next && next.role === "assistant" && !next.streamTrace) {
-        result.push({ ...next, timestamp: msg.timestamp, pairedTrace: msg })
+        const live = msg.pending === true && next.pending === true
+        result.push(live
+          ? { ...next, timestamp: msg.timestamp, pairedTrace: msg, hideBubble: true, liveText: next.content }
+          : { ...next, timestamp: msg.timestamp, pairedTrace: msg })
         i++
         continue
       }
@@ -263,6 +271,14 @@ export function mergeTraceIntoReply(messages: ChatMessage[]): DisplayMessage[] {
     result.push(msg)
   }
   return result
+}
+
+// 消息行的 React key：有执行过程的一行用执行过程的 key（renderKey 优先，其次 id），
+// 这样单独的执行过程配上回复、回复换成服务端 id 时，这一行不会被重新挂载
+export function messageRenderKey(message: DisplayMessage): string | number {
+  const owner = message.pairedTrace ?? (message.streamTrace ? message : null)
+  if (owner) return owner.renderKey ?? owner.id
+  return message.renderKey ?? message.id
 }
 
 // 服务端的 trace 事件不保证带结构化 traceEvent：stderr 行（server.js 的
@@ -354,22 +370,26 @@ export function formatTraceRowTitle(event: TraceEvent, stepCount = 0): string {
     const failed = event.status === "error" || Boolean(event.error)
     const done = event.phase === "completed" || event.status === "success" || event.status === "completed"
     const text = (value: unknown) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "")
-    const head = ["[子 Agent]", text(event.subagentType) || event.toolName || "Agent", failed ? "❎" : done ? "✅" : "", text(event.description)]
+    const head = ["[子 Agent]", text(event.subagentType) || event.toolName || "Agent", failed ? "❎" : done ? "✅" : ""]
       .filter(Boolean)
       .join(" ")
     return stepCount > 0 ? `${head} · ${stepCount} 步` : head
   }
   if (isTaskListTool(event)) return `[任务清单] 更新 ${taskListUpdateCount(event)} 项`
   if (event.kind !== "tool") return event.text
-  const args = event.arguments && typeof event.arguments === "object" && !Array.isArray(event.arguments)
-    ? (event.arguments as Record<string, unknown>)
-    : {}
   const failed = event.status === "error" || Boolean(event.error)
   const done = event.phase === "completed" || event.status === "success" || event.status === "completed"
   const icon = failed ? "❎" : done ? "✅" : ""
-  const pick = (value: unknown) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "")
-  const detail = pick(args.description) || pick(event.argumentSummary) || pick(args.command)
-  return ["[工具]", event.toolName || "tool", icon, detail].filter(Boolean).join(" ")
+  return ["[工具]", event.toolName || "tool", icon].filter(Boolean).join(" ")
+}
+
+// 工具 / 子 Agent 行标题下面那一段描述（与 [说明] 正文同样式）：依次用 description、参数摘要、命令，原样保留换行
+export function traceRowDescription(event: TraceEvent): string {
+  const pick = (value: unknown) => (typeof value === "string" ? value.trim() : "")
+  if (event.kind === "subagent") return pick(event.description)
+  if (event.kind !== "tool" || isTaskListTool(event)) return ""
+  const args = toArgs(event)
+  return pick(args.description) || pick(event.argumentSummary) || pick(args.command)
 }
 
 const TASK_LIST_TOOLS = new Set(["TodoWrite", "TaskCreate", "TaskUpdate"])

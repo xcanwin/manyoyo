@@ -92,6 +92,15 @@ describe("applyMessagesResponse", () => {
     expect(out?.hasMore).toBe(true)
   })
 
+  test("服务端版本替换本地消息时保留本地的 renderKey（执行过程的 React key 不变，不会重新挂载）", () => {
+    const local = [msg("a"), msg("t", { pending: true, streamTrace: true, renderKey: "trace-c1", traceEvents: [] })]
+    const out = applyMessagesResponse(local, res([msg("t", { pending: true, streamTrace: true, traceEvents: [{ kind: "output", text: "x" }] })]), "a", false)
+    expect(out?.messages[1].renderKey).toBe("trace-c1")
+    expect(out?.messages[1].traceEvents?.length).toBe(1)
+    const page = reconcileWithPage(local, res([msg("a"), msg("t", { pending: false, streamTrace: true })], { mode: "page" }), false, "e1")
+    expect(page.messages[1].renderKey).toBe("trace-c1")
+  })
+
   test("tail 没有变化：返回原数组引用，避免无谓渲染", () => {
     const local = [msg("a"), msg("b")]
     const out = applyMessagesResponse(local, res([]), "b", false)
@@ -167,10 +176,10 @@ describe("prependEarlierMessages", () => {
 })
 
 describe("traceCacheKey", () => {
-  test("按 会话 + id + 事件数 区分，事件数变了就是新的 key", () => {
-    expect(traceCacheKey("s", "t1", 3)).not.toBe(traceCacheKey("s", "t1", 4))
-    expect(traceCacheKey("s", "t1", 3)).toBe(traceCacheKey("s", "t1", 3))
-    expect(traceCacheKey("s", "t1", 3)).not.toBe(traceCacheKey("s2", "t1", 3))
+  test("按 会话 + id 区分（不含事件数：执行中新增的事件接在完整版后面，不换 key）", () => {
+    expect(traceCacheKey("s", "t1")).toBe(traceCacheKey("s", "t1"))
+    expect(traceCacheKey("s", "t1")).not.toBe(traceCacheKey("s2", "t1"))
+    expect(traceCacheKey("s", "t1")).not.toBe(traceCacheKey("s", "t2"))
   })
 })
 

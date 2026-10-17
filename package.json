@@ -45,6 +45,7 @@
         "test": "jest --coverage && npm run test:web",
         "test:unit": "jest test/ --testPathIgnorePatterns '<rootDir>/temp/' '<rootDir>/.claude/' '<rootDir>/test/integration/' && npm run test:web",
         "test:integration": "jest test/integration/ --runInBand",
+        "test:experience": "jest test/integration/web-chat-experience.test.js --runInBand",
         "test:installer": "jest test/installer.test.js",
         "lint:sh": "command -v shellcheck >/dev/null 2>&1 || { echo '未安装 shellcheck：macOS 用 brew install shellcheck，Debian/Ubuntu 用 sudo apt install shellcheck，或用 docker run --rm -v \"$PWD:/mnt\" -w /mnt koalaman/shellcheck:stable scripts/install.sh scripts/offline/*.sh' >&2; exit 1; } && shellcheck -s sh -x -e SC1091 scripts/install.sh scripts/offline/*.sh",
         "docs:dev": "vitepress dev docs --host 127.0.0.1 --port 5173",

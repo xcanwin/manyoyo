@@ -5,6 +5,9 @@ import {
   buildTraceTree,
   buildTaskList,
   formatTraceRowTitle,
+  traceRowDescription,
+  messageRenderKey,
+  type ChatMessage,
   compactToolArguments,
   type TraceEvent,
   apiStream,
@@ -702,26 +705,55 @@ describe("apiStream 的 HTTP 错误", () => {
   })
 })
 
-describe("formatTraceRowTitle：工具行一行写清 工具名 + 结果 + 描述", () => {
-  test("成功：[工具] Bash ✅ 描述（合并后的 text 是“[工具完成] Bash (success)”也不再显示它）", () => {
+describe("formatTraceRowTitle / traceRowDescription：标题只到 工具名 + 结果，描述单独一段", () => {
+  test("成功 / 失败 / 执行中：[工具] Bash ✅ / ❎ / 无图标，标题里不再带描述", () => {
     expect(
       formatTraceRowTitle({ kind: "tool", toolName: "Bash", text: "[工具完成] Bash (success)", phase: "completed", status: "success", arguments: { command: "ls -la", description: "列出目录" } } as TraceEvent)
-    ).toBe("[工具] Bash ✅ 列出目录")
-  })
-  test("失败：[工具] Bash ❎ 描述", () => {
-    expect(formatTraceRowTitle({ kind: "tool", toolName: "Bash", text: "[工具完成] Bash (error)", phase: "completed", status: "error", arguments: { description: "跑测试" } } as TraceEvent)).toBe("[工具] Bash ❎ 跑测试")
-  })
-  test("还在执行：没有结果图标", () => {
-    expect(formatTraceRowTitle({ kind: "tool", toolName: "Read", text: "[工具开始] Read", phase: "started", status: "in_progress", arguments: { description: "读配置" } } as TraceEvent)).toBe("[工具] Read 读配置")
-  })
-  test("没有描述时用参数摘要，再没有就用命令；都没有只剩工具名和图标", () => {
-    expect(formatTraceRowTitle({ kind: "tool", toolName: "Read", phase: "completed", status: "success", argumentSummary: "file_path=/a.txt" } as TraceEvent)).toBe("[工具] Read ✅ file_path=/a.txt")
-    expect(formatTraceRowTitle({ kind: "tool", toolName: "Bash", phase: "completed", status: "success", arguments: { command: "npm test" } } as TraceEvent)).toBe("[工具] Bash ✅ npm test")
-    expect(formatTraceRowTitle({ kind: "tool", toolName: "Glob", phase: "completed", status: "success" } as TraceEvent)).toBe("[工具] Glob ✅")
-  })
-  test("多行描述折成一行；其他种类的事件照旧用 text", () => {
-    expect(formatTraceRowTitle({ kind: "tool", toolName: "Bash", status: "success", phase: "completed", arguments: { description: "第一行\n第二行" } } as TraceEvent)).toBe("[工具] Bash ✅ 第一行 第二行")
+    ).toBe("[工具] Bash ✅")
+    expect(formatTraceRowTitle({ kind: "tool", toolName: "Bash", text: "[工具完成] Bash (error)", phase: "completed", status: "error", arguments: { description: "跑测试" } } as TraceEvent)).toBe("[工具] Bash ❎")
+    expect(formatTraceRowTitle({ kind: "tool", toolName: "Read", text: "[工具开始] Read", phase: "started", status: "in_progress", arguments: { description: "读配置" } } as TraceEvent)).toBe("[工具] Read")
     expect(formatTraceRowTitle({ kind: "command", text: "[命令完成] ls (0)" } as TraceEvent)).toBe("[命令完成] ls (0)")
+  })
+  test("描述：依次用 description、参数摘要、命令；都没有就是空；多行原样保留", () => {
+    expect(traceRowDescription({ kind: "tool", toolName: "Bash", arguments: { command: "ls", description: "列出目录" } } as TraceEvent)).toBe("列出目录")
+    expect(traceRowDescription({ kind: "tool", toolName: "Read", argumentSummary: "file_path=/a.txt" } as TraceEvent)).toBe("file_path=/a.txt")
+    expect(traceRowDescription({ kind: "tool", toolName: "Bash", arguments: { command: "npm test" } } as TraceEvent)).toBe("npm test")
+    expect(traceRowDescription({ kind: "tool", toolName: "Glob" } as TraceEvent)).toBe("")
+    expect(traceRowDescription({ kind: "tool", toolName: "Bash", arguments: { description: "第一行\n第二行" } } as TraceEvent)).toBe("第一行\n第二行")
+    expect(traceRowDescription({ kind: "subagent", toolName: "Agent", description: "列文件" } as TraceEvent)).toBe("列文件")
+    expect(traceRowDescription({ kind: "agent_message", text: "说明", detail: "x" } as TraceEvent)).toBe("")
+    expect(traceRowDescription({ kind: "tool", toolName: "TodoWrite", arguments: { todos: [] } } as TraceEvent)).toBe("")
+  })
+})
+
+describe("消息行的渲染 key：执行过程在一轮里不重新挂载", () => {
+  const user = { id: "u1", role: "user" as const, content: "hi", timestamp: "" }
+  const trace = (id: string, extra = {}) => ({ id, role: "assistant" as const, content: "", streamTrace: true, pending: true, timestamp: "", renderKey: "trace-c1", ...extra })
+  const reply = (id: string, pending: boolean) => ({ id, role: "assistant" as const, content: "x", pending, timestamp: "", mode: "agent" as const })
+  const keyOf = (messages: ChatMessage[]) => {
+    const shown = mergeTraceIntoReply(messages).find((m) => m.streamTrace || m.pairedTrace)!
+    return messageRenderKey(shown)
+  }
+
+  test("单独的执行过程 → 配上流式回复 → 回复换成服务端 id → trace 换成服务端 id：key 始终相同", () => {
+    const a = keyOf([user, trace(STREAMING_TRACE_ID)])
+    const b = keyOf([user, trace(STREAMING_TRACE_ID), reply(STREAMING_MESSAGE_ID, true)])
+    const c = keyOf([user, trace("t-server"), reply(STREAMING_MESSAGE_ID, true)])
+    const d = keyOf([user, trace("t-server", { pending: false }), reply("r-server", false)])
+    expect(new Set([a, b, c, d]).size).toBe(1)
+  })
+
+  test("没有 renderKey（从服务端加载的历史）：用执行过程的 id，配不配对都一样", () => {
+    const t = { id: "t9", role: "assistant" as const, content: "", streamTrace: true, timestamp: "" }
+    expect(keyOf([user, t])).toBe(keyOf([user, t, reply("r9", false)]))
+  })
+
+  test("执行中（trace 与回复都还在进行）：回复不单独显示，正在输出的文字交给执行过程", () => {
+    const shown = mergeTraceIntoReply([user, trace("t1"), { ...reply("r1", true), content: "正在说的话" }])
+    expect(shown[1].hideBubble).toBe(true)
+    expect(shown[1].liveText).toBe("正在说的话")
+    const done = mergeTraceIntoReply([user, trace("t1", { pending: false }), reply("r1", false)])
+    expect(done[1].hideBubble).toBeFalsy()
   })
 })
 
@@ -774,9 +806,9 @@ describe("子 Agent 事件树", () => {
   })
 
   test("子 Agent 行标题", () => {
-    expect(formatTraceRowTitle(sub(), 3)).toBe("[子 Agent] Explore 列文件 · 3 步")
-    expect(formatTraceRowTitle(sub({ phase: "completed", status: "success" }))).toBe("[子 Agent] Explore ✅ 列文件")
-    expect(formatTraceRowTitle(sub({ phase: "completed", status: "error", error: "x" }))).toBe("[子 Agent] Explore ❎ 列文件")
+    expect(formatTraceRowTitle(sub(), 3)).toBe("[子 Agent] Explore · 3 步")
+    expect(formatTraceRowTitle(sub({ phase: "completed", status: "success" }))).toBe("[子 Agent] Explore ✅")
+    expect(formatTraceRowTitle(sub({ phase: "completed", status: "error", error: "x" }))).toBe("[子 Agent] Explore ❎")
   })
 })
 

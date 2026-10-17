@@ -89,6 +89,62 @@ describe("TraceBlock 按需加载完整内容", () => {
   })
 })
 
+describe("TraceBlock 执行中的截断 trace 不来回切换", () => {
+  test("已经有一份完整版、任务还在跑又来了新事件：直接显示“完整版 + 新事件”，不闪“正在加载完整内容…”，也不重新下载", async () => {
+    const id = "1700000000000-grow01"
+    const grow = (n: number) =>
+      ({
+        ...trace(id, true),
+        pending: true,
+        traceEvents: Array.from({ length: n }, (_, i) => ({ kind: "output", stream: "stdout", text: i === 0 ? SHORT : `第 ${i} 行` })),
+      }) as ChatMessage
+    await mount(grow(1))
+    await expand()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(container.textContent).toContain(LONG)
+    await act(async () => {
+      root.render(<TraceBlock trace={grow(2)} sessionName="c~a" />)
+    })
+    expect(container.textContent).not.toContain("正在加载完整内容")
+    expect(container.textContent).toContain(LONG)
+    expect(container.textContent).toContain("第 1 行")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("TraceBlock 截断 trace 下载（审查补充）", () => {
+  const grow = (n: number, id = "1700000000000-grow02", pending = true) =>
+    ({
+      ...trace(id, true),
+      pending,
+      traceEvents: Array.from({ length: n }, (_, i) => ({ kind: "output", stream: "stdout", text: i === 0 ? SHORT : `第 ${i} 行` })),
+    }) as ChatMessage
+
+  test("下载回来的完整版比请求时多：按返回的条数记，列表追上来后不重复显示", async () => {
+    fetchMock.mockImplementation(async () =>
+      new Response(JSON.stringify({ traceEvents: [{ kind: "output", stream: "stdout", text: LONG }, { kind: "output", stream: "stdout", text: "第 1 行" }, { kind: "output", stream: "stdout", text: "第 2 行" }] }))
+    )
+    await mount(grow(1))
+    await expand()
+    await act(async () => {
+      root.render(<TraceBlock trace={grow(3)} sessionName="c~a" />)
+    })
+    expect((container.textContent!.match(/第 2 行/g) || []).length).toBe(1)
+  })
+
+  test("执行中还没下载完时新事件不触发重复下载", async () => {
+    fetchMock.mockImplementation(() => new Promise<Response>(() => {}))
+    await mount(grow(1, "1700000000000-grow03"))
+    await expand()
+    for (const n of [2, 3, 4]) {
+      await act(async () => {
+        root.render(<TraceBlock trace={grow(n, "1700000000000-grow03")} sessionName="c~a" />)
+      })
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe("TraceBlock 复制只给完整内容", () => {
   const FULL_RESULT = "完整结果-" + "r".repeat(800)
   const toolTrace = (id: string): ChatMessage =>
@@ -183,6 +239,7 @@ describe("TraceBlock 默认展开与全部开合（B2–B4）", () => {
     await expand()
     expect(container.textContent).toContain("先看看目录结构")
     expect(container.textContent).toContain("列出目录")
+    expect(container.textContent).toContain("[说明]")
     expect(container.textContent).not.toContain("total 8")
     expect(container.textContent).not.toContain("ls -la")
     await click(toolRow())
@@ -190,14 +247,54 @@ describe("TraceBlock 默认展开与全部开合（B2–B4）", () => {
     expect(container.textContent).toContain("ls -la")
   })
 
-  test("工具行标题是一行：[工具] Bash ✅ 描述；不再显示“[工具完成] Bash (success)”，超出一行用省略号", async () => {
+  test("工具行标题只到 [工具] Bash ✅；描述在标题下面单独一段，样式与 [说明] 正文相同；点开这一行后描述只出现一次", async () => {
     await mount(mk())
     await expand()
     const row = toolRow()
     const title = row.querySelector("span.truncate") as HTMLElement
-    expect(title.textContent).toBe("[工具] Bash ✅ 列出目录")
+    expect(title.textContent).toBe("[工具] Bash ✅")
     expect(container.textContent).not.toContain("[工具完成]")
-    expect(title.className).toContain("truncate")
+    const narration = container.querySelector("[data-trace-narration]") as HTMLElement
+    const desc = container.querySelector("[data-trace-desc]") as HTMLElement
+    expect(desc.textContent).toBe("列出目录")
+    expect(desc.className).toBe(narration.className)
+    expect(desc.parentElement!.className).toBe(narration.parentElement!.className)
+    await click(toolRow())
+    expect(container.querySelector("[data-trace-desc]")).toBeNull()
+    expect((container.textContent!.match(/列出目录/g) || []).length).toBe(1)
+  })
+
+  test("执行中：正在输出的文字作为最后一行 [说明] 实时显示，标题行带一行预览；正式的说明到了就不再重复", async () => {
+    const live = (_unused: string, events: unknown[] = []) =>
+      ({ ...mk(events), id: "1700000000000-live01", pending: true }) as ChatMessage
+    await act(async () => {
+      root.render(<TraceBlock trace={live("")} sessionName="c~a" liveText="正在说第二段" />)
+    })
+    expect(container.querySelector("[data-trace-block] button")!.textContent).toContain("正在说第二段")
+    await expand()
+    expect(container.querySelector("[data-trace-live]")!.textContent).toContain("正在说第二段")
+    await act(async () => {
+      root.render(<TraceBlock trace={live("", [{ kind: "agent_message", text: "说明", detail: "正在说第二段" }])} sessionName="c~a" liveText="正在说第二段" />)
+    })
+    expect(container.querySelector("[data-trace-live]")).toBeNull()
+    // 列表里只剩正式的那一行（标题行的预览照旧）
+    const list = container.querySelector("[data-trace-block] [data-slot='collapsible-content']")!
+    expect((list.textContent!.match(/正在说第二段/g) || []).length).toBe(1)
+  })
+
+  test("正式的说明只有 text（形如“[说明] …”）没有 detail：也认得出，不重复显示", async () => {
+    await act(async () => {
+      root.render(<TraceBlock trace={{ ...mk([{ kind: "agent_message", text: "[说明] 只有文本" }]), pending: true } as ChatMessage} sessionName="c~a" liveText="只有文本" />)
+    })
+    await expand()
+    expect(container.querySelector("[data-trace-live]")).toBeNull()
+  })
+
+  test("执行中还没有任何事件：也显示执行过程（标题行），不是什么都没有", async () => {
+    await act(async () => {
+      root.render(<TraceBlock trace={{ ...mk(), traceEvents: [], pending: true } as ChatMessage} sessionName="c~a" liveText="" />)
+    })
+    expect(container.textContent).toContain("执行过程")
   })
 
   test("展开全部细节 / 收起全部细节：按钮在两个对齐按钮之间，标题随状态切换", async () => {
@@ -218,7 +315,8 @@ describe("TraceBlock 默认展开与全部开合（B2–B4）", () => {
     await click(button("收起全部细节")!)
     expect(container.textContent).not.toContain("total 8")
     expect(container.textContent).not.toContain("先看看目录结构")
-    // 描述已经写在工具行标题里（一行），收起全部后仍然看得到这一行标题
+    // 收起全部：工具描述与说明正文一样收起，只剩标题
+    expect(container.textContent).not.toContain("列出目录")
     expect(button("展开全部细节")).not.toBeNull()
   })
 
@@ -293,11 +391,15 @@ describe("TraceBlock 子 Agent 与任务清单", () => {
     await mount(msg([sub, inner]))
     expect(container.textContent).toContain("执行过程 · 1 步")
     await expand()
-    expect(rowByText("[子 Agent] Explore ✅ 列文件 · 1 步")).toBeDefined()
+    expect(rowByText("[子 Agent] Explore ✅ · 1 步")).toBeDefined()
+    expect(container.querySelector("[data-trace-desc]")!.textContent).toBe("列文件")
     expect(container.textContent).not.toContain("ls 一下")
     await act(async () => rowByText("[子 Agent]")!.click())
     expect(container.textContent).toContain("ls 一下")
     expect(container.textContent).toContain("共 3 个文件")
+    // 点开后描述在详情里出现一次，标题下面的描述段收起
+    expect(container.querySelector("[data-trace-desc]")?.textContent).not.toBe("列文件")
+    expect((container.textContent!.match(/列文件/g) || []).length).toBe(1)
   })
 
   test("展开全部细节覆盖嵌套的行", async () => {

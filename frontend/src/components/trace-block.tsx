@@ -31,6 +31,7 @@ import {
   compactToolArguments,
   formatTraceRowTitle,
   mergeToolTraceEvents,
+  traceRowDescription,
   summarizeTraceFlow,
   type ChatMessage,
   type TraceEvent,
@@ -41,6 +42,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+
+// 执行过程的对齐按钮发给消息流的事件（detail: { edge: "top" | "bottom", key }），由消息流滚动并设置锚点
+export const TRACE_ALIGN_EVENT = "manyoyo:trace-align"
 
 const KIND_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   tool: WrenchIcon,
@@ -54,10 +58,16 @@ const KIND_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
 // compact：只给“工具参数”用——单行 键=值，点一下展开全文（value 是缩进好的全文）
 type BodyPart = { label: string; value: string; compact?: string }
 
-// 列表里的 trace 长字段被服务端截断过（traceTruncated）：展开时才按需下载完整内容，
-// 同一条消息（id + 事件数相同）只下载一次；任务还在跑、事件数变了就重新拉
+// 列表里的 trace 长字段被服务端截断过（traceTruncated）：展开时才按需下载完整内容，按消息缓存最近一份完整版。
+// 任务还在跑、列表里又多了事件时，显示“完整版 + 列表里新增的事件”，不回退成截断版、不闪“正在加载”
+//（旧做法按事件数做缓存键，每来一个事件就在两种内容之间来回切，视野跟着上下跳）；结束后再补拉一次完整版
 const NO_EVENTS: TraceEvent[] = []
-const fullTraceCache = createLruCache<TraceEvent[]>(40)
+type FullTrace = { count: number; events: TraceEvent[] }
+const fullTraceCache = createLruCache<FullTrace>(40)
+
+// [说明] 正文与工具 / 子 Agent 描述段共用的样式：两者看起来必须一模一样
+const NARRATION_BOX = "px-1.5 pt-1 pb-1.5 pl-6"
+const NARRATION_TEXT = "text-[13px] leading-[1.75] whitespace-pre-wrap text-foreground"
 
 function stringifyPretty(value: unknown): string {
   if (value === undefined || value === null) return ""
@@ -105,6 +115,8 @@ function buildBodyParts(event: TraceEvent): BodyPart[] {
     push("错误", event.error)
   }
   if (event.kind === "subagent") {
+    // 描述已不在标题里：点开后放在详情最前，与工具行一致（只出现一次）
+    push("描述", event.description)
     push("提示词", event.prompt)
     push("结果", event.result)
     push("错误", event.error)
@@ -213,12 +225,15 @@ function TraceEventRow({
   stepCount = 0,
   nested = null,
   nestedIndent = true,
+  showDescription = false,
 }: {
   event: TraceEvent
   complete: boolean
   open: boolean
   onOpenChange: (next: boolean) => void
   stepCount?: number
+  // 收起时在标题下面显示描述段（默认模式；“全部收起”时不显示）
+  showDescription?: boolean
   // 子 Agent 里的事件行，展开后显示在它自己的详情之前
   nested?: React.ReactNode
   nestedIndent?: boolean
@@ -232,6 +247,7 @@ function TraceEventRow({
       : KIND_ICON[event.kind] || MessageSquareIcon
   const isNarration = event.kind === "agent_message"
   const bodyParts = React.useMemo(() => buildBodyParts(event), [event])
+  const description = isNarration ? "" : traceRowDescription(event)
   const expandable = isNarration || bodyParts.length > 0 || nested !== null
 
   if (!expandable) {
@@ -264,7 +280,7 @@ function TraceEventRow({
       <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[13px] hover:bg-muted">
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="flex-1 truncate text-foreground">
-          {isNarration ? "说明" : formatTraceRowTitle(event, stepCount)}
+          {isNarration ? "[说明]" : formatTraceRowTitle(event, stepCount)}
         </span>
         <ChevronRightIcon
           className={cn(
@@ -273,10 +289,15 @@ function TraceEventRow({
           )}
         />
       </CollapsibleTrigger>
-      <CollapsibleContent className="flex flex-col gap-2 px-1.5 pt-1 pb-1.5 pl-6">
+      {!open && showDescription && description ? (
+        <div className={cn("flex flex-col gap-2", NARRATION_BOX)}>
+          <p data-trace-desc className={NARRATION_TEXT}>{description}</p>
+        </div>
+      ) : null}
+      <CollapsibleContent className={cn("flex flex-col gap-2", NARRATION_BOX)}>
         {isNarration ? (
           // 说明的详情就是正文：不再套一层“详情”小标题
-          <p className="text-[13px] leading-[1.75] whitespace-pre-wrap text-foreground">{event.detail || event.text}</p>
+          <p data-trace-narration className={NARRATION_TEXT}>{event.detail || event.text}</p>
         ) : (
           <>
             {nested !== null ? (
@@ -321,7 +342,30 @@ function TaskListBlock({ items }: { items: TaskItem[] }) {
   )
 }
 
-export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; sessionName: string }) {
+// 执行中正在输出的文字：作为最后一行 [说明] 实时显示（与正式的说明行同样式），正式的说明到了就由它接替
+function LiveNarrationRow({ text, open }: { text: string; open: boolean }) {
+  return (
+    <div data-trace-live>
+      <div className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[13px]">
+        <MessageSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="flex-1 truncate text-foreground">[说明]</span>
+        <ChevronRightIcon className={cn("size-3.5 shrink-0 text-muted-foreground", open && "rotate-90")} />
+      </div>
+      {open ? (
+        <div className={cn("flex flex-col gap-2", NARRATION_BOX)}>
+          <p className={NARRATION_TEXT}>{text}</p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function lastLine(text: string): string {
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean)
+  return lines[lines.length - 1] || ""
+}
+
+export function TraceBlock({ trace, sessionName, liveText = "" }: { trace: ChatMessage; sessionName: string; liveText?: string }) {
   // null = 用户还没手动开合过，此时跟随"有错误就自动展开"：出错的那一轮
   // 不该把错误藏在折叠面板里。用户手动点过之后以用户的选择为准，
   // 不会因为后续又来一条 error 事件把面板重新掰开
@@ -333,14 +377,22 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
   const [rowOverrides, setRowOverrides] = React.useState<Record<string, boolean>>({})
   const listEvents = trace.traceEvents || NO_EVENTS
   const truncated = trace.traceTruncated === true
-  const cacheKey = traceCacheKey(sessionName, trace.id, listEvents.length)
-  const full = truncated ? fullTraceCache.get(cacheKey) : undefined
+  const pending = trace.pending === true
+  const cacheKey = traceCacheKey(sessionName, trace.id)
+  const cached = truncated ? fullTraceCache.get(cacheKey) : undefined
   const [loadState, setLoadState] = React.useState<{ key: string; failed: boolean } | null>(null)
-  const events = full ?? listEvents
+  // 有完整版就用它，列表里比它多出来的事件（任务还在跑）接在后面
+  const events = React.useMemo(
+    () => (cached ? (cached.count < listEvents.length ? cached.events.concat(listEvents.slice(cached.count)) : cached.events) : listEvents),
+    [cached, listEvents]
+  )
+  const full = cached && cached.count === listEvents.length ? cached : undefined
   const merged = React.useMemo(() => mergeToolTraceEvents(events), [events])
   const hasError = merged.some((event) => event.kind === "error")
   const open = userOpen ?? hasError
-  const needFetch = open && truncated && !full
+  // 任务进行中已经有一份完整版时不反复下载，结束后再补拉一次
+  const needFetch = open && truncated && (!cached || (!pending && cached.count !== listEvents.length))
+
 
   React.useEffect(() => {
     if (!needFetch) return
@@ -348,7 +400,8 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
     apiGet(buildTraceUrl(sessionName, trace.id))
       .then((data) => {
         if (!Array.isArray(data.traceEvents)) throw new Error("bad trace")
-        fullTraceCache.set(cacheKey, data.traceEvents as TraceEvent[])
+        // 按返回的条数记：任务还在跑时服务端可能已经比请求时多了几条，按请求时的条数记会把它们重复接一遍
+        fullTraceCache.set(cacheKey, { count: data.traceEvents.length, events: data.traceEvents as TraceEvent[] })
         if (!cancelled) setLoadState({ key: cacheKey, failed: false })
       })
       .catch(() => {
@@ -357,9 +410,17 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
     return () => {
       cancelled = true
     }
+    // 不依赖事件条数：执行中每来一个事件都重新发请求会叠出一串重复下载
   }, [needFetch, cacheKey, sessionName, trace.id])
 
-  if (!merged.length) return null
+  // 本地流式拿到的是完整内容：记成这条消息的完整版。流结束对账后换成服务端的截断版时直接用它，
+  // 不闪“正在加载完整内容…”（结束后条数不同再补拉一次）
+  React.useEffect(() => {
+    if (!truncated && listEvents.length) fullTraceCache.set(cacheKey, { count: listEvents.length, events: listEvents })
+  }, [truncated, listEvents, cacheKey])
+
+  // 执行中还没有任何事件时也显示标题行（回复框此时不单独显示，这里是唯一的进度提示）
+  if (!merged.length && !pending) return null
   const tree = buildTraceTree(merged)
   const taskList = buildTaskList(merged)
   const rowOpen = (event: TraceEvent, key: string) => rowOverrides[key] ?? defaultRowOpen(event, mode)
@@ -382,28 +443,32 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
         stepCount={node.stepCount}
         nested={node.children.length > 0 ? node.children.map(renderNode) : null}
         nestedIndent={node.depth < MAX_TRACE_INDENT_DEPTH}
+        showDescription={mode !== "none"}
       />
     )
   }
-  const summary = summarizeTraceFlow(merged, trace.pending === true)
+  const summary = summarizeTraceFlow(merged, pending)
   const complete = !truncated || full !== undefined
-  const loadFailed = !complete && loadState?.key === cacheKey && loadState.failed
+  const loadFailed = !cached && loadState?.key === cacheKey && loadState.failed
+  // 正在输出的文字：最后一条顶层说明已经是它（正式说明到了）就不再单独显示
+  const live = pending ? liveText.trim() : ""
+  const lastNarration = [...tree].reverse().find((node) => node.event.kind === "agent_message")?.event
+  // 与说明行显示的内容一致（detail，没有就用 text，去掉“[说明] ”前缀）
+  const lastNarrationText = String(lastNarration?.detail || lastNarration?.text || "").replace(/^\[说明\]\s*/, "").trim()
+  const showLive = live !== "" && !(lastNarrationText !== "" && lastNarrationText.startsWith(live))
+  const traceKey = String(trace.renderKey ?? trace.id)
 
-  // 过程很长时，滚动条要拖很久才能离开它：展开后右侧给两个按钮，
-  // 把整个过程框直接对齐到聊天区的顶部 / 底部
-  function alignInChat(edge: "top" | "bottom", behavior: ScrollBehavior = "smooth") {
-    const el = wrapperRef.current
-    const box = el?.closest<HTMLElement>("[data-chat-scroll]")
-    if (!el || !box) return
-    const rect = el.getBoundingClientRect()
-    const boxRect = box.getBoundingClientRect()
-    const delta = edge === "top" ? rect.top - boxRect.top : rect.bottom - boxRect.bottom
-    box.scrollTo({ top: box.scrollTop + delta, behavior })
+  // 过程很长时，滚动条要拖很久才能离开它：展开后右侧给两个按钮，把整个过程框直接对齐到聊天区的顶部 / 底部。
+  // 由消息流来滚（TRACE_ALIGN_EVENT）：对齐到底部要把锚点设成“贴着这一段”，之后它怎么长都贴着；
+  // 不用平滑滚动——动画目标在点击时算好，动画期间执行过程继续变长，停下时已经不在底部
+  function alignInChat(edge: "top" | "bottom") {
+    const box = wrapperRef.current?.closest<HTMLElement>("[data-chat-scroll]")
+    box?.dispatchEvent(new CustomEvent(TRACE_ALIGN_EVENT, { detail: { edge, key: traceKey } }))
   }
 
   return (
     // data-trace-block / data-open：消息流据此找到“最新一段已展开的执行过程”，判断视野是否贴着它的底部
-    <div ref={wrapperRef} data-trace-block data-open={open ? "true" : "false"} className="flex w-full max-w-full items-stretch gap-1 @3xl:max-w-[75%]">
+    <div ref={wrapperRef} data-trace-block data-trace-key={traceKey} data-open={open ? "true" : "false"} className="flex w-full max-w-full items-stretch gap-1 @3xl:max-w-[75%]">
       <Collapsible
         open={open}
         onOpenChange={(next) => {
@@ -412,7 +477,7 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
           if (!next) {
             const rect = wrapperRef.current?.getBoundingClientRect()
             const boxTop = wrapperRef.current?.closest<HTMLElement>("[data-chat-scroll]")?.getBoundingClientRect().top
-            if (rect && boxTop !== undefined && rect.top < boxTop) alignInChat("top", "auto")
+            if (rect && boxTop !== undefined && rect.top < boxTop) alignInChat("top")
           }
           setUserOpen(next)
         }}
@@ -428,16 +493,21 @@ export function TraceBlock({ trace, sessionName }: { trace: ChatMessage; session
         <ChevronRightIcon
           className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")}
         />
-        <span className="flex-1">执行过程 · {summary}</span>
+        {/* 一行，超出省略：执行中这里带一行正在输出的文字作为预览，高度不能随它变 */}
+        <span className="min-w-0 flex-1 truncate">
+          执行过程 · {summary}
+          {live ? ` · ${lastLine(live)}` : ""}
+        </span>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-1 flex flex-col gap-0.5 rounded-lg border bg-muted/20 p-1.5">
-        {!complete ? (
+        {!cached && truncated ? (
           <p className="px-1.5 text-xs text-muted-foreground">
             {loadFailed ? "完整内容加载失败，收起再展开可重试" : "正在加载完整内容…"}
           </p>
         ) : null}
         {taskList.length > 0 ? <TaskListBlock items={taskList} /> : null}
         {tree.map(renderNode)}
+        {showLive ? <LiveNarrationRow text={live} open={defaultRowOpen({ kind: "agent_message" } as TraceEvent, mode)} /> : null}
       </CollapsibleContent>
       </Collapsible>
       {open ? (

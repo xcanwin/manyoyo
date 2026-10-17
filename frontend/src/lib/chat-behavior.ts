@@ -48,6 +48,20 @@ export function isOwnScroll(scrollTop: number, lastProgrammaticTop: number | nul
   return lastProgrammaticTop !== null && Math.abs(scrollTop - lastProgrammaticTop) < 1
 }
 
+// 跟随的暂停只给“用户正在滚动”：滚轮、触摸、按键，以及点在滚动条上（目标是滚动容器本身）。
+// 普通点击（展开一行、点按钮、点空白处）不暂停——旧逻辑把点击也算进去，点完 1.5 秒内来的新内容
+// 会让锚点被重新判断成“不贴着”，从此不再跟随（点了“对齐到底部”仍不贴底就是这个原因）
+const FOLLOW_PAUSE_MS = 1500
+
+export function isScrollInput(type: "wheel" | "touch" | "key" | "pointer", onScroller: boolean): boolean {
+  return type !== "pointer" || onScroller
+}
+
+// 暂停期间内容变化既不补滚动、也不重新判断锚点；锚点只在滚动事件里判断
+export function isFollowPaused(params: { now: number; lastScrollInputAt: number; hasSelection: boolean }): boolean {
+  return params.hasSelection || params.now - params.lastScrollInputAt < FOLLOW_PAUSE_MS
+}
+
 // 按当前 AGENT 名拼接页面标题，未传/空白时回退默认标题
 export function buildDocumentTitle(agentName?: string | null): string {
   const trimmed = String(agentName || "").trim()

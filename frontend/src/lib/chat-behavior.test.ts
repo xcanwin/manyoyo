@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { buildDocumentTitle, computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier, computeScrollAnchor, anchoredScrollTop, isOwnScroll } from "./chat-behavior"
+import { buildDocumentTitle, computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier, computeScrollAnchor, anchoredScrollTop, isOwnScroll, isScrollInput, isFollowPaused } from "./chat-behavior"
 
 describe("isNearBottom", () => {
   test("返回 true：滚动条已经在底部（distance = 0）", () => {
@@ -118,5 +118,21 @@ describe("isOwnScroll：自己补滚动引起的滚动事件不重新判断贴�
   test("位置不同或从没自己设置过：是用户滚的", () => {
     expect(isOwnScroll(5300, 5450)).toBe(false)
     expect(isOwnScroll(5450, null)).toBe(false)
+  })
+})
+
+describe("跟随的暂停：只有用户在滚动时才暂停，点击不算", () => {
+  test("滚轮 / 触摸 / 按键是滚动输入；点击只有点在滚动条（滚动容器本身）上才算", () => {
+    expect(isScrollInput("wheel", false)).toBe(true)
+    expect(isScrollInput("touch", false)).toBe(true)
+    expect(isScrollInput("key", false)).toBe(true)
+    expect(isScrollInput("pointer", false)).toBe(false)
+    expect(isScrollInput("pointer", true)).toBe(true)
+  })
+
+  test("最近 1.5 秒内有滚动输入或选中了文字时暂停补滚动；过了就恢复", () => {
+    expect(isFollowPaused({ now: 10_000, lastScrollInputAt: 9_000, hasSelection: false })).toBe(true)
+    expect(isFollowPaused({ now: 10_000, lastScrollInputAt: 8_000, hasSelection: false })).toBe(false)
+    expect(isFollowPaused({ now: 10_000, lastScrollInputAt: 0, hasSelection: true })).toBe(true)
   })
 })

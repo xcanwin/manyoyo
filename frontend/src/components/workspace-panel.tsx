@@ -15,6 +15,7 @@ import {
   isStreamConnectionError,
   LOCAL_USER_MESSAGE_ID_PREFIX,
   mergeTraceIntoReply,
+  messageRenderKey,
   removeLocalPendingPlaceholders,
   resolveComposerBlockReason,
   shouldDismissRecoveryNotice,
@@ -31,7 +32,7 @@ import { useAgentRecoveryPoll } from "@/hooks/use-agent-recovery-poll"
 import { useSessionSync } from "@/hooks/use-session-sync"
 import { useSyncLoop } from "@/hooks/use-sync-loop"
 import { formatDateTime } from "@/lib/format"
-import { anchoredScrollTop, computeScrollAnchor, computeScrollRestore, isOwnScroll, getBubbleState, shouldLoadEarlier, type ScrollAnchor } from "@/lib/chat-behavior"
+import { anchoredScrollTop, computeScrollAnchor, computeScrollRestore, isFollowPaused, isOwnScroll, isScrollInput, getBubbleState, shouldLoadEarlier, type ScrollAnchor } from "@/lib/chat-behavior"
 import {
   clearOutbox,
   createClientMessageId,
@@ -97,7 +98,7 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { TraceBlock } from "@/components/trace-block"
+import { TRACE_ALIGN_EVENT, TraceBlock } from "@/components/trace-block"
 import { ContainerManagePanel } from "@/components/container-manage/container-manage-panel"
 
 type View = "activity" | "files" | "terminal" | "container" | "config" | "detail"
@@ -289,10 +290,13 @@ function ActivityView({
   // 视野贴着内容底部或最新执行过程的底部时才跟随。只在滚动事件里重新判断——内容增长不改 scrollTop，
   // 所以“上一次滚动停下时贴着哪里”就是用户的意图
   const anchorRef = React.useRef<ScrollAnchor>("bottom")
+  // 锚点是 "trace" 时贴的是哪一段执行过程（data-trace-key）：点“对齐到底部”的那一段，
+  // 或滚动停下时视野底部贴着的那一段；找不到时按最新一段已展开的
+  const pinnedTraceRef = React.useRef<string | null>(null)
   // 上次自己补滚动设置的位置：它引起的滚动事件不重新判断贴着哪里（见 isOwnScroll）
   const ownScrollTopRef = React.useRef<number | null>(null)
-  // 用户正在滚轮 / 触摸 / 点击 / 按键时（最近 1.5 秒内），内容变化不能把视野拉走
-  const lastInteractionRef = React.useRef(0)
+  // 用户正在滚动（滚轮 / 触摸 / 按键 / 拖滚动条）时（最近 1.5 秒内），内容变化不能把视野拉走；点击不算（见 isScrollInput）
+  const lastScrollInputRef = React.useRef(0)
 
   // 加载更早的消息会在列表前面插入内容：记下插入前的内容高度，插入后把滚动位置补上
   // 新增的高度，视野停在原来的内容上不跳动。高度由 ResizeObserver 持续记录
@@ -303,42 +307,52 @@ function ActivityView({
   const firstIdRef = React.useRef<string | number | null>(null)
   const earlierRequestedRef = React.useRef(false)
 
-  function markInteraction() {
-    lastInteractionRef.current = Date.now()
+  function markScrollInput(type: "wheel" | "touch" | "key" | "pointer", onScroller = false) {
+    if (isScrollInput(type, onScroller)) lastScrollInputRef.current = Date.now()
   }
 
-  // 最新一段已展开的执行过程的底部（滚动内容坐标系）；没有就是 null
-  function latestTraceBottom(el: HTMLDivElement): number | null {
+  function traceBlockBottom(el: HTMLDivElement, block: HTMLElement): number {
+    return block.getBoundingClientRect().bottom - el.getBoundingClientRect().top + el.scrollTop
+  }
+
+  function latestOpenTrace(el: HTMLDivElement): HTMLElement | null {
     const blocks = el.querySelectorAll<HTMLElement>("[data-trace-block][data-open='true']")
-    const last = blocks[blocks.length - 1]
-    if (!last) return null
-    return last.getBoundingClientRect().bottom - el.getBoundingClientRect().top + el.scrollTop
+    return blocks[blocks.length - 1] ?? null
   }
 
+  // 被贴住的那一段执行过程（已展开）；没有指定就是最新一段已展开的。
+  // 指定的那一段被收起或不在了就不再跟随（返回 null），不改去贴另一段
+  function pinnedTrace(el: HTMLDivElement): HTMLElement | null {
+    const key = pinnedTraceRef.current
+    if (key === null) return latestOpenTrace(el)
+    return Array.from(el.querySelectorAll<HTMLElement>("[data-trace-block][data-open='true']")).find((node) => node.dataset.traceKey === key) ?? null
+  }
+
+  // 只在用户滚动引起的滚动事件里调用：按停下的位置判断贴着哪里
   function measureAnchor(el: HTMLDivElement) {
+    const latest = latestOpenTrace(el)
     anchorRef.current = computeScrollAnchor({
       scrollTop: el.scrollTop,
       scrollHeight: el.scrollHeight,
       clientHeight: el.clientHeight,
-      traceBottom: latestTraceBottom(el),
+      traceBottom: latest ? traceBlockBottom(el, latest) : null,
     })
+    pinnedTraceRef.current = anchorRef.current === "trace" && latest ? latest.dataset.traceKey ?? null : null
   }
 
-  // 内容或视野尺寸变了：按贴着的位置补滚动。用户正在操作（例如点开某一行）或选中了文字时不动，
-  // 并按操作后的位置重新判断贴着哪里
+  // 内容或视野尺寸变了：按贴着的位置补滚动。用户正在滚动或选中了文字时暂停（不补、也不改锚点），
+  // 锚点只在滚动事件里重新判断——内容变化时重新判断会把“贴着”误判成“不贴着”，从此不再跟随
   function applyAnchor(force = false) {
     const el = scrollRef.current
     if (!el) return
     const selection = typeof window !== "undefined" ? window.getSelection() : null
     const hasSelection = Boolean(selection && !selection.isCollapsed && selection.anchorNode && el.contains(selection.anchorNode))
-    if (!force && (hasSelection || Date.now() - lastInteractionRef.current < 1500)) {
-      measureAnchor(el)
-      return
-    }
+    if (!force && isFollowPaused({ now: Date.now(), lastScrollInputAt: lastScrollInputRef.current, hasSelection })) return
+    const pinned = anchorRef.current === "trace" ? pinnedTrace(el) : null
     const target = anchoredScrollTop(anchorRef.current, {
       scrollHeight: el.scrollHeight,
       clientHeight: el.clientHeight,
-      traceBottom: latestTraceBottom(el),
+      traceBottom: pinned ? traceBlockBottom(el, pinned) : null,
     })
     if (target !== null && Math.abs(el.scrollTop - target) >= 1) {
       el.scrollTop = target
@@ -380,10 +394,36 @@ function ActivityView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayMessages])
 
+  // 执行过程的“对齐到顶部 / 底部”按钮（见 trace-block 的 TRACE_ALIGN_EVENT）：
+  // 底部 → 贴住这一段，之后它怎么变长都贴着；顶部 → 不再跟随，这一段的顶部停在窗口顶部
+  React.useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onAlign = (event: Event) => {
+      const { edge, key } = (event as CustomEvent<{ edge: "top" | "bottom"; key: string }>).detail
+      const block = Array.from(el.querySelectorAll<HTMLElement>("[data-trace-block]")).find((node) => node.dataset.traceKey === key)
+      if (!block) return
+      if (edge === "bottom") {
+        anchorRef.current = "trace"
+        pinnedTraceRef.current = key
+        applyAnchor(true)
+        return
+      }
+      anchorRef.current = "none"
+      pinnedTraceRef.current = null
+      el.scrollTop += block.getBoundingClientRect().top - el.getBoundingClientRect().top
+      ownScrollTopRef.current = el.scrollTop
+    }
+    el.addEventListener(TRACE_ALIGN_EVENT, onAlign)
+    return () => el.removeEventListener(TRACE_ALIGN_EVENT, onAlign)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.name, hasContent])
+
   // 用户发送了消息：贴底并滚过去（发出去的消息、随后的执行过程和回复都要看得见）
   React.useLayoutEffect(() => {
     if (!followSignal) return
     anchorRef.current = "bottom"
+    pinnedTraceRef.current = null
     applyAnchor(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [followSignal])
@@ -425,10 +465,11 @@ function ActivityView({
     <div
       ref={scrollRef}
       onScroll={handleScroll}
-      onWheel={markInteraction}
-      onTouchStart={markInteraction}
-      onPointerDown={markInteraction}
-      onKeyDown={markInteraction}
+      onWheel={() => markScrollInput("wheel")}
+      onTouchStart={() => markScrollInput("touch")}
+      onTouchMove={() => markScrollInput("touch")}
+      onPointerDown={(event) => markScrollInput("pointer", event.target === event.currentTarget)}
+      onKeyDown={() => markScrollInput("key")}
       data-chat-scroll
       className="h-full overflow-x-hidden overflow-y-auto overscroll-y-contain"
     >
@@ -458,21 +499,22 @@ function ActivityView({
           // 落单、配对不上下一条回复——这时也要走结构化执行过程展示，不能把
           // 它当成一条普通回复，把裸的多行 content 直接当文本糊出来
           const standaloneTrace = message.streamTrace === true && !message.pairedTrace
+          // 执行过程固定渲染在同一个位置、同一个 key 下（messageRenderKey）：配上回复、换成服务端 id 时不重新挂载
+          const trace = message.pairedTrace ?? (standaloneTrace ? message : null)
           return (
             <div
-              key={message.id}
+              key={messageRenderKey(message)}
               className={cn(
                 "flex flex-col gap-1 transition-opacity",
                 message.role === "user" ? "items-end" : "items-start",
                 dimmed && "opacity-25"
               )}
             >
-              {message.pairedTrace ? <TraceBlock trace={message.pairedTrace} sessionName={session.name} /> : null}
-              {standaloneTrace ? (
-                <TraceBlock trace={message} sessionName={session.name} />
-              ) : (
+              {trace ? <TraceBlock trace={trace} sessionName={session.name} liveText={message.liveText} /> : null}
+              {standaloneTrace || message.hideBubble ? null : (
                 <>
                   <div
+                    data-reply={message.role === "assistant" ? "" : undefined}
                     className={cn(
                       // [overflow-wrap:anywhere]：超长无空格内容（长链接、哈希、一整行 W）在气泡里换行，
                       // 而不是把气泡撑出屏幕；流式输出期间的纯文本同样靠它。
@@ -1426,6 +1468,8 @@ export function WorkspacePanel({
       ...prev,
       {
         id: STREAMING_TRACE_ID,
+        // 本轮执行过程的渲染 key：占位 id 换成服务端 id、配上回复后都不变（见 messageRenderKey）
+        renderKey: `trace-${clientId}`,
         role: "assistant",
         content: "[执行过程]",
         timestamp: new Date().toISOString(),
