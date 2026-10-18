@@ -437,7 +437,7 @@ describe('probe（真实探测当前模式，发布流水线用）', () => {
     test('默认模式（容器内浏览器）：起一次性容器，挂 current 目录，真的打开页面并读回标题；读到才算通过', async () => {
         const { plugin, sink } = newPlugin(home);
         const calls = stubRuntime(plugin, {});
-        expect(await plugin.probe()).toBe(0);
+        expect(await plugin.probeCommand()).toBe(0);
         const run = calls.find(call => call.args[0] === 'run');
         expect(run.args).toEqual(expect.arrayContaining(['--rm', '--volume', `${plugin.currentDir}:/run/manyoyo-playwright:ro`]));
         expect(run.args).toEqual(expect.arrayContaining(['--env', 'PLAYWRIGHT_MCP_CONFIG=/run/manyoyo-playwright/config.json']));
@@ -455,20 +455,29 @@ describe('probe（真实探测当前模式，发布流水线用）', () => {
     test('默认模式：容器里没读到标题 / 镜像不存在 → 退出码 1 并给一句原因；不改任何状态', async () => {
         const { plugin, sink } = newPlugin(home);
         const calls = stubRuntime(plugin, { run: { status: 1, stdout: 'Error: browser launch failed\n', stderr: '' } });
-        expect(await plugin.probe()).toBe(1);
+        expect(await plugin.probeCommand()).toBe(1);
         expect(sink.err).toContain('真实探测: 失败');
         expect(calls.some(call => call.args[0] === 'rm' && call.args.includes('-f'))).toBe(true);
         const missing = newPlugin(home);
         stubRuntime(missing.plugin, { image: { status: 1, stdout: '', stderr: '' } });
-        expect(await missing.plugin.probe()).toBe(1);
+        expect(await missing.plugin.probeCommand()).toBe(1);
         expect(missing.sink.err).toContain('不存在');
         expect(plugin.readState().mode).toBe('default');
     });
 
+    // 回归：命令行的 probe() 曾与底层的 probe(kind, endpoint) 同名，类里后定义的覆盖前者，
+    // up 里的 probeState 于是调回 probe() → modeAlive → probeState……无限异步递归，up headed / vnc 永远不返回
+    test('probeState 走底层探测（返回 { ok, error }），不会调回命令行的 probe()', async () => {
+        const { plugin } = newPlugin(home);
+        const result = await plugin.probeState({ mode: 'headed', port: await freePort(), pid: 2 ** 22 + 9 });
+        expect(typeof result).toBe('object');
+        expect(result.ok).toBe(false);
+    }, 20000);
+
     test('宿主机模式（headed / chrome / vnc）：进程已不在 → 退出码 1，但与 status 不同，不回退默认模式', async () => {
         const { plugin, sink } = newPlugin(home);
         plugin.writeState({ mode: 'headed', port: await freePort(), pid: 2 ** 22 + 9 });
-        expect(await plugin.probe()).toBe(1);
+        expect(await plugin.probeCommand()).toBe(1);
         expect(sink.err).toContain('真实探测: 失败');
         expect(plugin.readState().mode).toBe('headed');
     });
