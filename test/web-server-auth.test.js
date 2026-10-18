@@ -146,6 +146,15 @@ function buildServerOptions(tempHost, port, overrides = {}) {
     };
 }
 
+// Web 端执行命令会追加环境说明（lib/agent-instructions.js，见 test/web-agent-instructions.test.js）；
+// 这里比对的是命令的其余结构，先把注入的那部分去掉
+function stripAgentInstructions(text) {
+    return String(text || '')
+        .replace(/ --append-system-prompt '(?:[^']|'"'"')*'/g, '')
+        .replace(/ -c 'developer_instructions=(?:[^']|'"'"')*'/g, '')
+        .replace(/if \[ -z "\$\{OPENCODE_CONFIG_CONTENT:-\}" \]; then [\s\S]*?; fi; /g, '');
+}
+
 async function loginAndGetCookie(baseUrl) {
     const login = await request(`${baseUrl}/auth/login`, {
         method: 'POST',
@@ -2397,7 +2406,7 @@ process.exit(0);
                 body: JSON.stringify({ prompt: 'hello' })
             });
             expect(claudeRes.response.status).toBe(200);
-            expect(String(claudeRes.json.output || '')).toMatch(
+            expect(stripAgentInstructions(claudeRes.json.output)).toMatch(
                 /claude --verbose --output-format stream-json --include-partial-messages --dangerously-skip-permissions -p/
             );
             expect(String(claudeRes.json.output || '')).not.toContain('--session-id');
@@ -3888,7 +3897,7 @@ process.exit(0);
                 resumeAttempted: true,
                 resumeSucceeded: true
             }));
-            expect(String(turn2.json.output || '')).toContain(
+            expect(stripAgentInstructions(turn2.json.output)).toContain(
                 `claude --verbose --output-format stream-json --include-partial-messages -r ${sessionId} -p 'who am i'`
             );
             expect(String(turn2.json.output || '')).not.toContain('以下是当前会话最近对话历史');
@@ -3975,7 +3984,7 @@ process.exit(0);
                 body: JSON.stringify({ prompt: 'remember me' })
             });
             expect(turn1.response.status).toBe(200);
-            expect(turn1.events).toEqual(expect.arrayContaining([
+            expect(turn1.events.map(event => (event.type === 'result' ? { ...event, output: stripAgentInstructions(event.output) } : event))).toEqual(expect.arrayContaining([
                 expect.objectContaining({ type: 'meta', contextMode: 'first-turn' }),
                 expect.objectContaining({
                     type: 'result',
@@ -3996,7 +4005,7 @@ process.exit(0);
                 resumeAttempted: true,
                 resumeSucceeded: true
             }));
-            expect(turn2.json.output).toContain(
+            expect(stripAgentInstructions(turn2.json.output)).toContain(
                 `codex exec resume --json --skip-git-repo-check '${threadId}' 'what did I say'`
             );
             expect(turn2.json.output).not.toContain('以下是当前会话最近对话历史');
@@ -4325,7 +4334,7 @@ process.exit(0);
                 resumeAttempted: false,
                 resumeSucceeded: false
             }));
-            expect(turn1.json.output).toBe(
+            expect(stripAgentInstructions(turn1.json.output)).toBe(
                 "OPENCODE_PERMISSION='{\"*\":\"allow\"}' opencode --model opencode/big-pickle run --format json 'remember opencode context'"
             );
             let persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
@@ -4342,7 +4351,7 @@ process.exit(0);
                 resumeAttempted: true,
                 resumeSucceeded: true
             }));
-            expect(turn2.json.output).toBe(
+            expect(stripAgentInstructions(turn2.json.output)).toBe(
                 `OPENCODE_PERMISSION='{"*":"allow"}' opencode --model opencode/big-pickle run --format json --session '${sessionId}' 'what did I ask'`
             );
             expect(turn2.json.output).not.toContain('以下是当前会话最近对话历史');

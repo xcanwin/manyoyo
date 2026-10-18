@@ -69,17 +69,36 @@ Current anonymous allowlist:
 
 Unauthenticated requests to any page path redirect to `/auth/login`; API and `/auth/*` requests get a plain `401`.
 
+## Input Box
+
+Mode (💬 Agent chat / system command), model, send and stop are icon buttons inside the input box; hover to see what each does. In Agent chat:
+
+- Type `/` at the start to list the slash commands that work here (Claude Code only, available after the first turn).
+- Type `@` to list files in the working directory; picking one inserts its relative path.
+- Use ↑↓ to choose, Enter or Tab to confirm, Esc to close.
+
 ## Adding Prompts While a Task Runs
 
-The input box stays enabled while an Agent is working. Use the arrow next to "Send" to choose when the new prompt takes effect (your last choice is remembered):
+The input box stays enabled while an Agent is working. Once you type something, a "when to insert" button appears left of the send button; use it to choose when the new prompt takes effect (your last choice is remembered, and the placeholder shows the current choice):
 
 - Insert now: interrupts the current round and continues right away with the new prompt (finished work is kept).
 - Insert after the current step: waits for the current tool call or message to finish, then interrupts; if nothing finishes within 2 minutes it falls back to "insert now".
 - Send after this round: queues the prompt and sends it automatically when the round ends (default).
 
-Queued prompts appear at the bottom of the conversation and can be cancelled or edited. "Stop" only stops the current round: queued prompts are kept, and you can cancel them or click "Continue sending". Command mode does not support this.
+Queued prompts appear at the bottom of the conversation and can be withdrawn (✕) or edited (✎). "Stop" only stops the current round: queued prompts are kept, and you can cancel them or click "Continue sending". Command mode does not support this.
 
 Sub-agents and task lists show up in the "execution process": a sub-agent is collapsed into one line by default (click to see what it did), and the task list shows a single block with the latest status. While the agent is still working, what it is saying appears inside the execution process; the reply box shows up only when the turn ends, and it holds the final answer. The "align to bottom" button on the right keeps the bottom of that execution process pinned to the bottom of the window until you scroll yourself.
+
+## Sessions, Changes and Notifications
+
+- Session names: without a remark, the title the Agent generated (only Claude Code does this today) is used, otherwise the first message. Click the name in the top bar to rename; clear it to go back to the automatic name.
+- Pinning: pin an AGENT from its ⋯ menu; its container moves to the top too.
+- The top-bar ⋯ menu is grouped by owner: chat belongs to the AGENT; files, terminal, changes and container settings belong to the container. "Changes" lists the changes in the git repository of the working directory; click a file to see its diff.
+- Images in replies: when the Agent writes a Markdown image with a path inside the container (e.g. `![screenshot](/root/shot.png)`) it is shown directly. Absolute paths in replies can be clicked to open them in the Files view.
+- Finished-task reminders: if a task ends while the page is in the background, the tab title gets a count such as `(1)`. Browser notifications can be turned on in "Settings → Page" (requires HTTPS or localhost).
+- When you come back after a while, or the network recovers, the top bar shows sync progress and then "Synced".
+
+When the web UI runs an Agent it adds a short note about the environment (replies are shown in a web page, how to write images). You can append your own note in "Settings → Agent → Agent instructions" (config field `agentInstructions`).
 
 ## Web Frontend
 

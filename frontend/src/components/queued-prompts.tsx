@@ -1,3 +1,5 @@
+import { PencilIcon, XIcon } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { QUEUE_WHEN_BADGES, type QueueItem } from "@/lib/queue"
 
@@ -24,14 +26,15 @@ export function QueuedPrompts({
           <div className="max-w-[88%] rounded-xl border border-dashed bg-muted/40 px-3 py-2 text-sm leading-[1.75] whitespace-pre-wrap text-foreground/80 [overflow-wrap:anywhere] @3xl:max-w-[75%]">
             {item.text}
           </div>
-          <span className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-            <span>排队中 · {QUEUE_WHEN_BADGES[item.when]}</span>
-            <button type="button" className="hover:text-foreground" onClick={() => onEdit(item)}>
-              编辑
-            </button>
-            <button type="button" className="hover:text-foreground" onClick={() => onCancel(item)}>
-              取消
-            </button>
+          {/* 编辑 = 撤回后把文字放回输入框；撤回 = 直接取消这一条 */}
+          <span className="flex items-center gap-0.5 px-1 text-xs text-muted-foreground">
+            <span className="mr-1">排队中 · {QUEUE_WHEN_BADGES[item.when]}</span>
+            <Button variant="ghost" size="icon" aria-label="编辑" title="编辑（放回输入框）" onClick={() => onEdit(item)}>
+              <PencilIcon />
+            </Button>
+            <Button variant="ghost" size="icon" aria-label="撤回" title="撤回" onClick={() => onCancel(item)}>
+              <XIcon />
+            </Button>
           </span>
         </div>
       ))}

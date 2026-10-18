@@ -1,8 +1,10 @@
 import * as React from "react"
 import {
   ArrowLeftIcon,
+  LogOutIcon,
   MessageCircleIcon,
   MoreHorizontalIcon,
+  PinIcon,
   PlusIcon,
   ScrollTextIcon,
   SearchIcon,
@@ -16,6 +18,7 @@ import {
   apiPost,
   isSessionOfContainer,
   pickSessionAfterRemoval,
+  sessionDisplayTitle,
   type ContainerGroup,
   type SessionSummary,
 } from "@/lib/api"
@@ -36,6 +39,10 @@ import { PromptDialog } from "@/components/prompt-dialog"
 import { QuickChatSetupDialog } from "@/components/quick-chat-setup-dialog"
 import { SearchDialog } from "@/components/search-dialog"
 import { SystemSettingsDialog } from "@/components/system-settings-dialog"
+import { toast } from "sonner"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
+import { clearAllComposerData, countPendingOutbox } from "@/lib/composer-store"
+import { performLogout } from "@/lib/logout"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -144,6 +151,7 @@ export function AppSidebar({
   onCreatingAgentContainerChange: (containerName: string | null) => void
 }) {
   const { isMobile, setOpenMobile } = useSidebar()
+  const { confirm, dialog: confirmDialog } = useConfirmDialog()
   const [navLevel, setNavLevel] = React.useState<NavLevel>(() => loadPersistedNavState().navLevel)
   const [navContainer, setNavContainer] = React.useState(() => loadPersistedNavState().navContainer)
   const [searchOpen, setSearchOpen] = React.useState(false)
@@ -152,7 +160,6 @@ export function AppSidebar({
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [logsOpen, setLogsOpen] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
-  const [actionError, setActionError] = React.useState("")
   const [remarkDialog, setRemarkDialog] = React.useState<{
     kind: "container" | "agent"
     key: string
@@ -338,7 +345,7 @@ export function AppSidebar({
       applySelectedSession(created)
       return
     }
-    setActionError("已创建成功，但会话列表刷新失败，请稍后重试或刷新页面")
+    toast.error("已创建成功，但会话列表刷新失败，请稍后重试或刷新页面")
   }
 
   React.useEffect(() => {
@@ -353,19 +360,17 @@ export function AppSidebar({
   }, [])
 
   async function handleCreated(name: string) {
-    setActionError("")
     try {
       const freshSessions = await onRefresh()
       goToAgents(name)
       selectCreatedSession(freshSessions, (s) => s.name === name || s.containerName === name)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "刷新会话列表失败")
+      toast.error(err instanceof Error ? err.message : "刷新会话列表失败")
     }
   }
 
   async function runQuickChatWithConfig(quickChatPath: string, quickChatRun: string) {
     setQuickChatBusy(true)
-    setActionError("")
     try {
       const timestamp = formatTimestampCompact(new Date())
       const requestedDir = `${quickChatPath.replace(/\/+$/, "")}/${timestamp}`
@@ -383,7 +388,7 @@ export function AppSidebar({
       })
       await handleCreated(String(data.name))
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "快捷对话创建失败")
+      toast.error(err instanceof Error ? err.message : "快捷对话创建失败")
     } finally {
       setQuickChatBusy(false)
     }
@@ -392,7 +397,6 @@ export function AppSidebar({
   async function startQuickChat() {
     if (quickChatBusy) return
     if (!(await confirmLeaveIfDirty())) return
-    setActionError("")
     try {
       const data = await apiGet("/api/system/quick-chat-config")
       const quickChatPath = typeof data.path === "string" ? data.path : ""
@@ -403,14 +407,13 @@ export function AppSidebar({
         setQuickChatSetupOpen(true)
       }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "读取快捷对话配置失败")
+      toast.error(err instanceof Error ? err.message : "读取快捷对话配置失败")
     }
   }
 
   async function createAgent(containerName: string) {
     if (creatingAgentContainer) return
     if (!(await confirmLeaveIfDirty())) return
-    setActionError("")
     onCreatingAgentContainerChange(containerName)
     try {
       // 接口直接返回新建 AGENT 的 name，比"倒序猜最后一个"更可靠——
@@ -421,7 +424,7 @@ export function AppSidebar({
       goToAgents(containerName)
       selectCreatedSession(freshSessions, (s) => s.name === newName)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "新建 AGENT 失败")
+      toast.error(err instanceof Error ? err.message : "新建 AGENT 失败")
     } finally {
       onCreatingAgentContainerChange(null)
     }
@@ -458,7 +461,6 @@ export function AppSidebar({
     )
     if (!choice) return
     const removeHistory = choice === "with-history"
-    setActionError("")
     try {
       await apiPost(`/api/sessions/${encodeURIComponent(containerName)}/remove`, {
         removeHistory,
@@ -473,8 +475,30 @@ export function AppSidebar({
         )
       }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "删除容器失败")
+      toast.error(err instanceof Error ? err.message : "删除容器失败")
     }
+  }
+
+  async function togglePin(session: SessionSummary) {
+    const pinned = session.pinned !== true
+    try {
+      await apiPost(`/api/sessions/${encodeURIComponent(session.name)}/agent-pin`, { pinned })
+      toast.success(pinned ? "已置顶" : "已取消置顶")
+      await onRefresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "置顶失败")
+    }
+  }
+
+  // 退出登录：清掉这台设备上的草稿与待发箱（共用设备时不留内容），流程见 lib/logout.ts
+  function logout() {
+    return performLogout({
+      pendingCount: countPendingOutbox(),
+      confirm,
+      post: (url) => apiPost(url, {}),
+      clear: () => clearAllComposerData(),
+      navigate: (url) => window.location.assign(url),
+    })
   }
 
   function editAgentRemark(session: SessionSummary) {
@@ -492,14 +516,13 @@ export function AppSidebar({
   }
 
   async function removeAgent(session: SessionSummary) {
-    const agentLabel = session.agentRemark || session.agentName
+    const agentLabel = sessionDisplayTitle(session)
     const choice = await confirmRemoveChoice(
       "删除 AGENT",
       `确认删除 ${agentLabel}？可以选择是否同时删除它的历史记录（消息与事件日志）。`
     )
     if (!choice) return
     const removeHistory = choice === "with-history"
-    setActionError("")
     try {
       await apiPost(`/api/sessions/${encodeURIComponent(session.name)}/remove-with-history`, {
         removeHistory,
@@ -510,7 +533,7 @@ export function AppSidebar({
         onSelectSession(pickSessionAfterRemoval(freshSessions, session))
       }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "删除 AGENT 失败")
+      toast.error(err instanceof Error ? err.message : "删除 AGENT 失败")
     }
   }
 
@@ -623,8 +646,8 @@ export function AppSidebar({
             ) : null}
           </BreadcrumbList>
         </Breadcrumb>
-        {error || actionError ? (
-          <p className="text-xs text-destructive">{error || actionError}</p>
+        {error ? (
+          <p className="text-xs text-destructive">{error}</p>
         ) : null}
       </SidebarHeader>
 
@@ -650,6 +673,9 @@ export function AppSidebar({
                           <span className="truncate font-medium">
                             {group.containerRemark || group.containerName}
                           </span>
+                          {group.pinned ? (
+                            <PinIcon aria-label="有置顶的 AGENT" className="size-3.5 shrink-0 text-muted-foreground" />
+                          ) : null}
                           <Badge
                             variant={
                               group.status.toLowerCase().includes("up")
@@ -696,8 +722,20 @@ export function AppSidebar({
                       >
                         <span className="flex w-full items-center gap-1.5">
                           <span className="truncate font-medium">
-                            {session.agentRemark || session.agentName}
+                            {sessionDisplayTitle(session)}
                           </span>
+                          {session.pinned ? (
+                            <PinIcon aria-label="已置顶" className="size-3.5 shrink-0 text-muted-foreground" />
+                          ) : null}
+                          {/* 执行中：静态绿点（常驻元素不用无限动画） */}
+                          {session.agentRunning ? (
+                            <span
+                              role="status"
+                              aria-label="执行中"
+                              title="执行中"
+                              className="ml-auto size-2 shrink-0 rounded-full bg-emerald-500"
+                            />
+                          ) : null}
                           {session.archived ? (
                             <Badge variant="outline" className="ml-auto shrink-0">
                               已停止
@@ -720,7 +758,10 @@ export function AppSidebar({
                           <DropdownMenuGroup>
                             <DropdownMenuLabel>AGENT</DropdownMenuLabel>
                             <DropdownMenuItem onClick={() => editAgentRemark(session)}>
-                              编辑备注
+                              重命名
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => void togglePin(session)}>
+                              {session.pinned ? "取消置顶" : "置顶"}
                             </DropdownMenuItem>
                           </DropdownMenuGroup>
                           <DropdownMenuSeparator className="mx-1 bg-border/50" />
@@ -765,7 +806,11 @@ export function AppSidebar({
           <ScrollTextIcon data-icon="inline-start" />
           运行日志
         </Button>
+        <Button variant="outline" size="icon-lg" aria-label="退出登录" title="退出登录" onClick={() => void logout()}>
+          <LogOutIcon />
+        </Button>
       </SidebarFooter>
+      {confirmDialog}
 
       <SystemSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <LogsDialog open={logsOpen} onOpenChange={setLogsOpen} />
@@ -804,9 +849,9 @@ export function AppSidebar({
         onOpenChange={(next) => {
           if (!next) setRemarkDialog(null)
         }}
-        title={remarkDialog?.kind === "container" ? "设置容器备注" : "设置 AGENT 备注"}
-        description="留空可清除备注。"
-        label="备注"
+        title={remarkDialog?.kind === "container" ? "设置容器备注" : "会话名称"}
+        description={remarkDialog?.kind === "container" ? "留空可清除备注。" : "留空就用自动生成的名字"}
+        label={remarkDialog?.kind === "container" ? "备注" : "名称"}
         initialValue={remarkDialog?.initial ?? ""}
         onSubmit={submitRemark}
       />

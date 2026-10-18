@@ -4,6 +4,10 @@ export type SessionSummary = {
   agentId: string
   agentName: string
   agentRemark: string
+  // Agent 自己生成的标题（目前只有 claude）与首条 Agent 消息，都是来自容器的不可信文本，只按纯文本显示
+  agentTitle?: string
+  firstPrompt?: string
+  pinned?: boolean
   containerRemark: string
   status: string
   image: string
@@ -22,6 +26,18 @@ export type SessionSummary = {
   // agentRunning 表示跑的就是这个 AGENT 自己
   containerBusy?: boolean
   agentRunning?: boolean
+}
+
+// 会话显示名的唯一规则：用户备注 > Agent 生成的标题 > 首条消息 > “AGENT N”
+export function sessionDisplayTitle(
+  session: Pick<SessionSummary, "agentName" | "agentRemark" | "agentTitle" | "firstPrompt"> | null | undefined
+): string {
+  if (!session) return ""
+  for (const candidate of [session.agentRemark, session.agentTitle, session.firstPrompt]) {
+    const text = String(candidate || "").trim()
+    if (text) return text
+  }
+  return session.agentName || ""
 }
 
 export type ServeLogEntry = {
@@ -563,6 +579,8 @@ export type ContainerGroup = {
   hostPath: string
   updatedAt: string
   sessions: SessionSummary[]
+  // 容器里有置顶的 AGENT（排序与图标用）
+  pinned?: boolean
 }
 
 async function request(url: string, options: RequestInit = {}) {
@@ -864,7 +882,17 @@ export function groupSessionsByContainer(sessions: SessionSummary[]): ContainerG
       group.updatedAt = session.updatedAt
     }
   }
+  // 置顶：容器内置顶的 AGENT 排最前（其余保持原顺序）；含置顶 AGENT 的容器排在容器列表最前
+  for (const group of groups.values()) {
+    group.pinned = group.sessions.some((session) => session.pinned === true)
+    group.sessions = [
+      ...group.sessions.filter((session) => session.pinned === true),
+      ...group.sessions.filter((session) => session.pinned !== true),
+    ]
+  }
   return Array.from(groups.values()).sort(
-    (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+    (a, b) =>
+      Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+      new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
   )
 }

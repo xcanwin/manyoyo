@@ -122,7 +122,7 @@ async function skipWizard(page) {
 }
 
 async function isRunning(page) {
-    return (await page.locator('button:has-text("停止")').count()) > 0;
+    return (await page.locator('button[aria-label="停止"]').count()) > 0;
 }
 
 async function waitIdle(page, timeoutMs = 180000) {
@@ -137,7 +137,7 @@ async function waitIdle(page, timeoutMs = 180000) {
 async function send(page, text) {
     await page.locator('textarea').first().fill(text);
     await page.getByRole('button', { name: '发送', exact: true }).click();
-    await page.waitForSelector('button:has-text("停止")', { timeout: 20000 });
+    await page.waitForSelector('button[aria-label="停止"]', { timeout: 20000 });
 }
 
 // 在消息流里滚动：桌面用滚轮，手机用真实的触摸拖动（CDP dispatchTouchEvent；headless 下
@@ -192,7 +192,7 @@ async function runCase(page, { prompt, action, mobile = false, warmMs = 1500 }) 
         // 运行中刷新页面：走恢复轮询（列表里的 trace 是截断版、回复由服务端的 streamingReply 顶替）
         await page.reload();
         await skipWizard(page);
-        await page.waitForSelector('button:has-text("停止")', { timeout: 20000 });
+        await page.waitForSelector('button[aria-label="停止"]', { timeout: 20000 });
         await page.waitForTimeout(800);
         await ev(page, () => window.__ux.start());
         fromT = await probeNow(page);

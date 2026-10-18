@@ -11,7 +11,10 @@ import { useSessions } from "@/hooks/use-sessions"
 import { useUnsavedChangesDialog } from "@/hooks/use-unsaved-changes-dialog"
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import type { FilesEditorState } from "@/components/files-panel"
-import type { SessionSummary } from "@/lib/api"
+import { sessionDisplayTitle, type SessionSummary } from "@/lib/api"
+import { Toaster } from "@/components/ui/sonner"
+import { useAttention } from "@/hooks/use-attention"
+import { withAttentionBadge } from "@/lib/attention"
 import { fetchSetupStatus } from "@/lib/setup"
 import { buildSessionHash, parseSessionHash, pickMostRecentSession } from "@/lib/session-url"
 
@@ -125,10 +128,12 @@ export function App() {
   // 按当前 AGENT 动态改写页面标题，方便
   // 并行打开多个会话时在浏览器标签/任务切换器里辨认。--title 传了自定义静态
   // 标题时，服务端会在 <head> 里插一个 meta 标记，这里跳过动态改写不覆盖它
+  // 任务结束但还没看到的会话数显示在标题前面，例如 “(1) 修复登录页 · MANYOYO Web”
+  const { unseenCount, markFinished } = useAttention({ sessions, activeSessionName })
   React.useEffect(() => {
     if (document.querySelector('meta[name="manyoyo-serve-title"]')) return
-    document.title = buildDocumentTitle(activeSession?.agentRemark || activeSession?.agentName)
-  }, [activeSession])
+    document.title = withAttentionBadge(buildDocumentTitle(sessionDisplayTitle(activeSession)), unseenCount)
+  }, [activeSession, unseenCount])
 
   async function handleSetupFinished(containerName: string) {
     const latest = await refresh()
@@ -166,12 +171,15 @@ export function App() {
         <WorkspacePanel
           activeSession={activeSession}
           onAfterSend={refresh}
+          onRunFinished={markFinished}
           filesEditorRef={filesEditorRef}
           confirmLeaveIfDirty={confirmLeaveIfDirty}
           creatingAgent={creatingAgentContainer !== null}
         />
       </SidebarInset>
       {unsavedChangesDialog}
+      {/* 一次性的操作结果（成功 / 失败）统一用 toast；表单校验、断线这类持续状态仍然就地显示 */}
+      <Toaster position="top-center" />
       <UpdateBanner />
     </SidebarProvider>
   )

@@ -85,11 +85,12 @@ describe("Composer 任务进行中", () => {
       root.render(<Composer {...p} />)
     })
     expect((container.querySelector("textarea") as HTMLTextAreaElement).disabled).toBe(false)
-    expect(byText("发送").hasAttribute("disabled")).toBe(false)
-    expect(byText("停止")).toBeDefined()
-    await act(async () => byText("发送").click())
+    const labeled = (label: string) => container.querySelector(`[aria-label="${label}"]`) as HTMLElement
+    expect(labeled("发送").hasAttribute("disabled")).toBe(false)
+    expect(labeled("停止")).not.toBeNull()
+    await act(async () => labeled("发送").click())
     expect(p.onSend).toHaveBeenCalled()
-    expect(container.querySelector('[aria-label="选择插入时机"]')).not.toBeNull()
+    expect(container.querySelector('[aria-label="插入时机"]')).not.toBeNull()
   })
 
   test("下拉框三个选项，选中后回调", async () => {
@@ -97,7 +98,7 @@ describe("Composer 任务进行中", () => {
     await act(async () => {
       root.render(<Composer {...p} />)
     })
-    await act(async () => (container.querySelector('[aria-label="选择插入时机"]') as HTMLElement).click())
+    await act(async () => (container.querySelector('[aria-label="插入时机"]') as HTMLElement).click())
     const options = Array.from(document.querySelectorAll("[role='menuitem']")).map((el) => el.textContent)
     expect(options).toEqual(["立即插入", "当前这一步结束后插入", "这一轮结束后发送"])
     await act(async () => (document.querySelectorAll("[role='menuitem']")[0] as HTMLElement).click())
@@ -108,6 +109,19 @@ describe("Composer 任务进行中", () => {
     await act(async () => {
       root.render(<Composer {...props({ mode: "command" })} />)
     })
-    expect(container.querySelector('[aria-label="选择插入时机"]')).toBeNull()
+    expect(container.querySelector('[aria-label="插入时机"]')).toBeNull()
+  })
+})
+
+describe("排队气泡的操作按钮", () => {
+  test("编辑 / 撤回是带名称的图标按钮，点击区域不小于 32px", async () => {
+    await act(async () => {
+      root.render(<QueuedPrompts items={[item("1", "turn")]} idle={false} onCancel={() => {}} onEdit={() => {}} onContinue={() => {}} />)
+    })
+    for (const label of ["编辑", "撤回"]) {
+      const el = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+      expect([label, Boolean(el)]).toEqual([label, true])
+      expect(el!.className).toMatch(/size-8|size-9|size-10/)
+    }
   })
 })

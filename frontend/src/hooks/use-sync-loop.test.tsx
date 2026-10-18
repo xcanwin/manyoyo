@@ -131,3 +131,79 @@ describe("useSyncLoop", () => {
     expect(reconcile.mock.calls.length).toBe(calls + 1)
   })
 })
+
+describe("回到页面 / 恢复联网后的同步提示", () => {
+  function ResumeHarness({ reconcile, onResumeSync }: { reconcile: (manual: boolean) => Promise<void>; onResumeSync: (p: Promise<void>) => void }) {
+    useSyncLoop(reconcile, { onResumeSync })
+    return null
+  }
+  async function mountResume(reconcile: (manual: boolean) => Promise<void>, onResumeSync: (p: Promise<void>) => void) {
+    await act(async () => {
+      root.render(<ResumeHarness reconcile={reconcile} onResumeSync={onResumeSync} />)
+    })
+  }
+  async function hideFor(ms: number) {
+    visibility = "hidden"
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")))
+    await advance(ms)
+    visibility = "visible"
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")))
+    await advance(400)
+  }
+
+  test("离开超过 5 秒再回来：立刻同步，并把这次同步交给提示", async () => {
+    const reconcile = vi.fn(async () => {})
+    const onResumeSync = vi.fn()
+    await mountResume(reconcile, onResumeSync)
+    await hideFor(60_000)
+    expect(reconcile).toHaveBeenLastCalledWith(true)
+    expect(onResumeSync).toHaveBeenCalledTimes(1)
+  })
+
+  test("只离开一下、定时同步、窗口重新聚焦：不提示", async () => {
+    const reconcile = vi.fn(async () => {})
+    const onResumeSync = vi.fn()
+    await mountResume(reconcile, onResumeSync)
+    await hideFor(1000)
+    await advance(6100)
+    await act(async () => window.dispatchEvent(new Event("focus")))
+    await advance(400)
+    expect(reconcile).toHaveBeenCalled()
+    expect(onResumeSync).not.toHaveBeenCalled()
+  })
+
+  test("网络恢复（online）：立刻同步并提示", async () => {
+    const reconcile = vi.fn(async () => {})
+    const onResumeSync = vi.fn()
+    await mountResume(reconcile, onResumeSync)
+    await act(async () => window.dispatchEvent(new Event("online")))
+    await advance(400)
+    expect(reconcile).toHaveBeenLastCalledWith(true)
+    expect(onResumeSync).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("审查回归：回来时的提示不能挂到之后的某次聚焦上", () => {
+  test("聚焦先触发了同步，300ms 内才变成可见：这次同步算回来；之后的普通聚焦不提示", async () => {
+    function H({ reconcile, onResumeSync }: { reconcile: (m: boolean) => Promise<void>; onResumeSync: (p: Promise<void>) => void }) {
+      useSyncLoop(reconcile, { onResumeSync })
+      return null
+    }
+    const reconcile = vi.fn(async () => {})
+    const onResumeSync = vi.fn()
+    await act(async () => root.render(<H reconcile={reconcile} onResumeSync={onResumeSync} />))
+    visibility = "hidden"
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")))
+    await advance(60_000)
+    await act(async () => window.dispatchEvent(new Event("focus")))
+    visibility = "visible"
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")))
+    await advance(400)
+    const afterResume = onResumeSync.mock.calls.length
+    await advance(10_000)
+    await act(async () => window.dispatchEvent(new Event("focus")))
+    await advance(400)
+    expect(afterResume).toBe(1)
+    expect(onResumeSync).toHaveBeenCalledTimes(1)
+  })
+})

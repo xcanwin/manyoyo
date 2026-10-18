@@ -106,6 +106,22 @@ export function clearAllComposerData(storage: StorageLike | null = defaultStorag
   }
 }
 
+// 还没确认送达的内容条数（每个会话最多一条待发箱）：退出登录前提醒用户
+export function countPendingOutbox(storage: StorageLike | null = defaultStorage()): number {
+  try {
+    if (!storage) return 0
+    let count = 0
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i)
+      if (!key || !key.startsWith(KEY_PREFIX)) continue
+      if (isOutbox(readStored(key.slice(KEY_PREFIX.length), storage).outbox)) count++
+    }
+    return count
+  } catch {
+    return 0
+  }
+}
+
 export function purgeExpiredComposerData(now: number = Date.now(), storage: StorageLike | null = defaultStorage()) {
   try {
     if (!storage) return

@@ -9,7 +9,7 @@ import {
   CommandInput,
   CommandList,
 } from "@/components/ui/command"
-import { scoreSearchCandidate, type ContainerGroup, type SessionSummary } from "@/lib/api"
+import { scoreSearchCandidate, sessionDisplayTitle, type ContainerGroup, type SessionSummary } from "@/lib/api"
 
 export function SearchDialog({
   open,
@@ -59,7 +59,7 @@ export function SearchDialog({
                   .map((session) => (
                     <CommandItem
                       key={session.name}
-                      value={`agent:${session.agentName} ${session.agentRemark} ${group.containerName} ${group.containerRemark}`}
+                      value={`agent:${session.agentName} ${sessionDisplayTitle(session)} ${group.containerName} ${group.containerRemark}`}
                       onSelect={() => {
                         onSelectAgent(group.containerName, session)
                         onOpenChange(false)
@@ -67,7 +67,7 @@ export function SearchDialog({
                     >
                       <BotIcon />
                       <div className="flex min-w-0 flex-col">
-                        <span className="truncate">{session.agentRemark || session.agentName}</span>
+                        <span className="truncate">{sessionDisplayTitle(session)}</span>
                         <span className="truncate text-xs text-muted-foreground">
                           {group.containerRemark || group.containerName}
                         </span>

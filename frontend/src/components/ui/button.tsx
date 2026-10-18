@@ -32,6 +32,8 @@ const buttonVariants = cva(
         "icon-sm":
           "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",
+        // 手机上的主要操作按钮（输入区的发送 / 停止等）：点击区域不小于 40px
+        "icon-xl": "size-10",
       },
     },
     defaultVariants: {

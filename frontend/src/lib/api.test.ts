@@ -838,3 +838,32 @@ describe("任务清单", () => {
     expect(buildTaskList([tool("TodoWrite", { todos: [{ content: "a" }] }, { parentToolId: "toolu_A" })])).toEqual([])
   })
 })
+
+describe("sessionDisplayTitle", () => {
+  const base = { agentName: "AGENT 1", agentRemark: "", agentTitle: "", firstPrompt: "" }
+  test("备注 > Agent 标题 > 首条消息 > AGENT N", async () => {
+    const { sessionDisplayTitle } = await import("./api")
+    expect(sessionDisplayTitle({ ...base, agentRemark: "我的备注", agentTitle: "标题", firstPrompt: "首条" })).toBe("我的备注")
+    expect(sessionDisplayTitle({ ...base, agentTitle: "标题", firstPrompt: "首条" })).toBe("标题")
+    expect(sessionDisplayTitle({ ...base, firstPrompt: "首条" })).toBe("首条")
+    expect(sessionDisplayTitle(base)).toBe("AGENT 1")
+    expect(sessionDisplayTitle({ ...base, agentRemark: "   ", agentTitle: "  " })).toBe("AGENT 1")
+    expect(sessionDisplayTitle(null)).toBe("")
+  })
+})
+
+describe("groupSessionsByContainer 置顶", () => {
+  const s = (containerName: string, agentId: string, updatedAt: string, pinned = false) =>
+    ({ name: `${containerName}~${agentId}`, containerName, agentId, updatedAt, pinned, status: "Up" }) as never
+  test("含置顶 AGENT 的容器排最前（标记 pinned），容器内置顶的 AGENT 排最前，其余保持原顺序", async () => {
+    const { groupSessionsByContainer } = await import("./api")
+    const groups = groupSessionsByContainer([
+      s("new", "a", "2026-10-03T00:00:00Z"),
+      s("old", "a", "2026-10-01T00:00:00Z"),
+      s("old", "b", "2026-10-01T00:00:00Z", true),
+      s("mid", "a", "2026-10-02T00:00:00Z"),
+    ])
+    expect(groups.map((g) => [g.containerName, g.pinned])).toEqual([["old", true], ["new", false], ["mid", false]])
+    expect(groups[0].sessions.map((x) => x.agentId)).toEqual(["b", "a"])
+  })
+})

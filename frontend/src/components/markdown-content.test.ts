@@ -33,3 +33,15 @@ describe("markdownContentPropsEqual", () => {
     expect(markdownContentPropsEqual(a, b)).toBe(false)
   })
 })
+
+describe("markdownContentPropsEqual 容器上下文", () => {
+  test("sessionName / baseDir 变化应视为 props 变化（图片地址要重新解析）", () => {
+    expect(markdownContentPropsEqual({ content: "x", sessionName: "a", baseDir: "/w" }, { content: "x", sessionName: "b", baseDir: "/w" })).toBe(false)
+    expect(markdownContentPropsEqual({ content: "x", sessionName: "a", baseDir: "/w" }, { content: "x", sessionName: "a", baseDir: "/v" })).toBe(false)
+  })
+
+  test("onOpenPath 只看有无，引用变化不算", () => {
+    expect(markdownContentPropsEqual({ content: "x", onOpenPath: () => {} }, { content: "x", onOpenPath: () => {} })).toBe(true)
+    expect(markdownContentPropsEqual({ content: "x", onOpenPath: () => {} }, { content: "x" })).toBe(false)
+  })
+})

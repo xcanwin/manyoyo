@@ -409,3 +409,24 @@ describe("系统设置：保存不覆盖别人的修改", () => {
     expect((q("#settings-mirror-npm") as HTMLSelectElement).value).toBe("https://registry.npmmirror.com/")
   })
 })
+
+describe("系统设置左侧按作用范围分组", () => {
+  test("组标题按顺序出现，每组下面是对应的分类，新增“Agent 环境说明”", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ raw: "{}", etag: "v1", path: "/x/manyoyo.json" }))))
+    await openDialog()
+    const list = document.body.querySelector('[role="tablist"]') as HTMLElement
+    const items = Array.from(list.children).map((el) =>
+      el.getAttribute("role") === "tab"
+        ? (el.querySelector(".sm\\:inline")?.textContent ?? el.textContent)?.trim()
+        : `#${el.getAttribute("data-group")}`
+    )
+    expect(items).toEqual([
+      "#界面", "页面",
+      "#Agent", "快捷对话", "Agent 环境说明",
+      "#新容器默认值", "基础", "启动环境", "运行命令", "运行配置", "软件源",
+      "#镜像", "构建参数",
+      "#MANYOYO 服务", "Web 服务", "插件",
+      "#宿主机与维护", "环境检查", "容量预估", "容器状态",
+    ])
+  })
+})

@@ -65,6 +65,8 @@
     "shell": "",
     "shellSuffix": "",
     "agentPromptCommand": "",
+    // 网页里执行 Agent 时追加的说明（接在内置环境说明后面），例如 "回答用中文"
+    "agentInstructions": "",
     "yolo": "",
     "quiet": ["tip", "cmd"],
 

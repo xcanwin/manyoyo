@@ -98,3 +98,14 @@ export function computeScrollRestore(params: {
 }): number {
   return params.scrollTop + Math.max(0, params.nextScrollHeight - params.prevScrollHeight)
 }
+
+// “↓ 有新输出”浮钮是否显示：视野离底部超过一屏的 48px 阈值、而且内容变高了才出现；
+// 回到底部附近就消失；内容没变化时保持原状（ResizeObserver 也会因为视野尺寸变化回调）
+export function nextHasNewBelow(
+  prev: boolean,
+  m: { prevHeight: number; scrollHeight: number; scrollTop: number; clientHeight: number }
+): boolean {
+  if (isNearBottom(m.scrollTop, m.scrollHeight, m.clientHeight)) return false
+  if (m.scrollHeight > m.prevHeight + 1) return true
+  return prev
+}

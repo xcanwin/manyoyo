@@ -318,6 +318,25 @@
   font-size: 13px;
   line-height: 1.6;
 }
+/* 代码块高亮（lib/code-highlight.ts 用 @lezer/highlight 的 classHighlighter 输出 tok-* 类名）。
+   颜色取 GitHub 亮色 / 暗色主题的常用色，与正文前景色有足够对比 */
+.chat-markdown pre .tok-keyword { color: #cf222e; }
+.chat-markdown pre :is(.tok-string, .tok-string2, .tok-url) { color: #0a3069; }
+.chat-markdown pre :is(.tok-comment, .tok-meta) { color: #6e7781; font-style: italic; }
+.chat-markdown pre :is(.tok-number, .tok-bool, .tok-atom, .tok-literal, .tok-propertyName) { color: #0550ae; }
+.chat-markdown pre :is(.tok-typeName, .tok-className, .tok-namespace) { color: #953800; }
+.chat-markdown pre .tok-definition { color: #8250df; }
+.chat-markdown pre :is(.tok-heading, .tok-strong) { font-weight: 600; }
+.chat-markdown pre .tok-inserted { color: #116329; }
+.chat-markdown pre :is(.tok-deleted, .tok-invalid) { color: #82071e; }
+.dark .chat-markdown pre .tok-keyword { color: #ff7b72; }
+.dark .chat-markdown pre :is(.tok-string, .tok-string2, .tok-url) { color: #a5d6ff; }
+.dark .chat-markdown pre :is(.tok-comment, .tok-meta) { color: #8b949e; }
+.dark .chat-markdown pre :is(.tok-number, .tok-bool, .tok-atom, .tok-literal, .tok-propertyName) { color: #79c0ff; }
+.dark .chat-markdown pre :is(.tok-typeName, .tok-className, .tok-namespace) { color: #ffa657; }
+.dark .chat-markdown pre .tok-definition { color: #d2a8ff; }
+.dark .chat-markdown pre .tok-inserted { color: #7ee787; }
+.dark .chat-markdown pre :is(.tok-deleted, .tok-invalid) { color: #ffa198; }
 /* 横向滚动条两端各让出圆角的宽度：贴满整条底边时，滚动条会把圆角代码块的下方两个角盖成直角。
    track 的 margin 只有 ::-webkit-scrollbar 能做，而 Chrome 一旦看到标准的 scrollbar-width
    就会忽略这些伪元素，所以 thin 只留给不支持它们的浏览器（Firefox） */
@@ -410,4 +429,19 @@
 }
 .chat-markdown summary {
   cursor: pointer;
+}
+
+/* 回到页面后的同步进度线（use-resume-indicator）：只在同步期间短暂存在，减少动效时改成静止的整条 */
+@keyframes manyoyo-sync-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+.sync-progress-bar {
+  animation: manyoyo-sync-progress 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sync-progress-bar {
+    width: 100%;
+    animation: none;
+  }
 }

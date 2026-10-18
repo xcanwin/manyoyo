@@ -9,6 +9,8 @@ import { CodeMirrorEditor } from "@/components/code-mirror-editor"
 import { DoctorPanel } from "@/components/doctor-panel"
 import { MirrorPanel } from "@/components/mirror-panel"
 import { QuickChatSettingsView } from "@/components/quick-chat-settings-view"
+import { AgentInstructionsPanel } from "@/components/agent-instructions-panel"
+import { isNotifyEnabled, notificationSupported, setNotifyEnabled } from "@/lib/attention"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useTheme } from "@/components/theme-provider"
 import {
@@ -47,29 +49,80 @@ type ConfigCategory = {
   id: string
   label: string
   keys: string[]
+  // 左侧导航里按作用范围分组：界面只影响当前浏览器；新容器默认值只对之后创建的容器生效
+  group: string
+  // 窄屏左栏（w-20）放不下时用的短名
+  shortLabel?: string
+}
+
+// 窄屏左栏只有 w-20，组标题用短名
+const GROUP_SHORT_LABELS: Record<string, string> = {
+  界面: "界面",
+  Agent: "Agent",
+  新容器默认值: "新容器",
+  镜像: "镜像",
+  "MANYOYO 服务": "服务",
+  宿主机与维护: "维护",
 }
 
 const CATEGORIES: ConfigCategory[] = [
   // 主题是前端本地记忆（theme-provider 存 localStorage），不落进 manyoyo.json，
   // keys 留空即可，跟 quick-chat/capacity 一样走自定义渲染分支
-  { id: "page", label: "页面", keys: [] },
+  { id: "page", label: "页面", keys: [], group: "界面" },
+  { id: "quick-chat", label: "快捷对话", keys: [], group: "Agent" },
+  { id: "agent-instructions", label: "Agent 环境说明", shortLabel: "环境说明", keys: [], group: "Agent" },
   {
     id: "basic",
     label: "基础",
     keys: ["containerName", "hostPath", "containerPath", "imageName", "imageVersion", "containerMode"],
+    group: "新容器默认值",
   },
-  { id: "runtime", label: "启动环境", keys: ["envFile", "env", "volumes", "ports", "first"] },
-  { id: "command", label: "运行命令", keys: ["shellPrefix", "shell", "shellSuffix", "agentPromptCommand", "yolo", "quiet"] },
-  { id: "build", label: "构建参数", keys: ["imageBuildArgs"] },
-  { id: "web", label: "Web 服务", keys: ["serverUser", "serverPass", "serve"] },
-  { id: "plugins", label: "插件", keys: ["plugins"] },
-  { id: "runs", label: "运行配置", keys: ["runs"] },
-  { id: "quick-chat", label: "快捷对话", keys: [] },
-  { id: "capacity", label: "容量预估", keys: [] },
-  { id: "mirrors", label: "软件源", keys: [] },
-  { id: "doctor", label: "环境检查", keys: [] },
-  { id: "orphans", label: "容器状态", keys: [] },
+  { id: "runtime", label: "启动环境", keys: ["envFile", "env", "volumes", "ports", "first"], group: "新容器默认值" },
+  { id: "command", label: "运行命令", keys: ["shellPrefix", "shell", "shellSuffix", "agentPromptCommand", "yolo", "quiet"], group: "新容器默认值" },
+  { id: "runs", label: "运行配置", keys: ["runs"], group: "新容器默认值" },
+  { id: "mirrors", label: "软件源", keys: [], group: "新容器默认值" },
+  { id: "build", label: "构建参数", keys: ["imageBuildArgs"], group: "镜像" },
+  { id: "web", label: "Web 服务", keys: ["serverUser", "serverPass", "serve"], group: "MANYOYO 服务" },
+  { id: "plugins", label: "插件", keys: ["plugins"], group: "MANYOYO 服务" },
+  { id: "doctor", label: "环境检查", keys: [], group: "宿主机与维护" },
+  { id: "capacity", label: "容量预估", keys: [], group: "宿主机与维护" },
+  { id: "orphans", label: "容器状态", keys: [], group: "宿主机与维护" },
 ]
+
+// 任务结束时的浏览器通知：开关只存在这台设备上；浏览器只在 HTTPS 或 localhost 下允许通知
+function NotifySetting() {
+  const supported = notificationSupported()
+  const [enabled, setEnabled] = React.useState(() => supported && isNotifyEnabled() && Notification.permission === "granted")
+  const [hint, setHint] = React.useState("")
+
+  async function handleChange(next: boolean) {
+    setHint("")
+    if (!next) {
+      setNotifyEnabled(false)
+      setEnabled(false)
+      return
+    }
+    const permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission
+    if (permission !== "granted") {
+      setHint("浏览器没有允许通知，请在网站设置里打开")
+      return
+    }
+    setNotifyEnabled(true)
+    setEnabled(true)
+  }
+
+  return (
+    <Field orientation="horizontal" className="justify-between">
+      <div className="flex flex-col gap-1">
+        <FieldLabel htmlFor="notify-finished">任务结束时通知</FieldLabel>
+        <FieldDescription>
+          {supported ? hint || "页面在后台时，任务结束弹出系统通知（只写会话名）" : "需要用 HTTPS 或 localhost 打开才能使用"}
+        </FieldDescription>
+      </div>
+      <Switch id="notify-finished" checked={enabled} disabled={!supported} onCheckedChange={(value) => void handleChange(Boolean(value))} />
+    </Field>
+  )
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -599,10 +652,29 @@ export function SystemSettingsDialog({
             >
               {/* 移动端屏宽有限，分类栏收窄把空间让给右侧表单 */}
               <TabsList variant="line" className="w-20 shrink-0 sm:w-36">
-                {CATEGORIES.map((category) => (
-                  <TabsTrigger key={category.id} value={category.id}>
-                    {category.label}
-                  </TabsTrigger>
+                {CATEGORIES.map((category, index) => (
+                  <React.Fragment key={category.id}>
+                    {index === 0 || CATEGORIES[index - 1].group !== category.group ? (
+                      <div
+                        aria-hidden="true"
+                        data-group={category.group}
+                        className={cn("w-full self-stretch px-2 pb-1 text-left text-xs text-muted-foreground", index > 0 && "pt-3")}
+                      >
+                        <span className="sm:hidden">{GROUP_SHORT_LABELS[category.group] || category.group}</span>
+                        <span className="hidden sm:inline">{category.group}</span>
+                      </div>
+                    ) : null}
+                    <TabsTrigger value={category.id}>
+                      {category.shortLabel ? (
+                        <>
+                          <span className="sm:hidden">{category.shortLabel}</span>
+                          <span className="hidden sm:inline">{category.label}</span>
+                        </>
+                      ) : (
+                        category.label
+                      )}
+                    </TabsTrigger>
+                  </React.Fragment>
                 ))}
               </TabsList>
               <div className="min-h-0 flex-1 overflow-y-auto py-1 pr-1 pl-4">
@@ -626,6 +698,7 @@ export function SystemSettingsDialog({
                             <ToggleGroupItem value="system">跟随系统</ToggleGroupItem>
                           </ToggleGroup>
                         </Field>
+                        <NotifySetting />
                       </FieldGroup>
                     ) : category.id === "runs" ? (
                       <RunsCategoryFields key={formVersion} liveParsed={liveParsed} onCommit={handleLeafCommit} />
@@ -639,6 +712,8 @@ export function SystemSettingsDialog({
                       <OrphanStatesPanel />
                     ) : category.id === "quick-chat" ? (
                       <QuickChatSettingsView onSaved={handleSubPanelSaved} />
+                    ) : category.id === "agent-instructions" ? (
+                      <AgentInstructionsPanel onSaved={handleSubPanelSaved} />
                     ) : (
                       <CategoryFields key={formVersion} category={category} liveParsed={liveParsed} onCommit={handleLeafCommit} />
                     )}

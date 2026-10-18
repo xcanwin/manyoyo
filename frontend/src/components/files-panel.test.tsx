@@ -192,3 +192,35 @@ describe("文件面板：保存不覆盖容器里刚改过的文件", () => {
     expect(byText("仍然保存")).toBeUndefined()
   })
 })
+
+describe("文件面板：外部要求打开路径", () => {
+  test("路径是文件：列出上级目录并打开该文件；是目录：直接列出该目录", async () => {
+    const calls: string[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const u = decodeURIComponent(String(url))
+        calls.push(u)
+        if (u.includes("/fs/list") && u.includes("path=/b.txt")) {
+          return new Response(JSON.stringify({ error: "目标不是目录" }), { status: 400 })
+        }
+        const { status, body } = file.handle(String(url), init)
+        return new Response(JSON.stringify(body), { status })
+      })
+    )
+    await act(async () => {
+      root.render(<FilesPanel activeSession={session} confirmLeaveIfDirty={async () => true} openRequest={{ path: "/b.txt", nonce: 1 }} />)
+    })
+    await tick()
+    expect(calls.some((u) => u.includes("/fs/read") && u.includes("path=/b.txt"))).toBe(true)
+    expect(editor().value).toBe("另一个文件\n")
+
+    calls.length = 0
+    await act(async () => {
+      root.render(<FilesPanel activeSession={session} confirmLeaveIfDirty={async () => true} openRequest={{ path: "/sub", nonce: 2 }} />)
+    })
+    await tick()
+    expect(calls.filter((u) => u.includes("/fs/list") && u.includes("path=/sub")).length).toBeGreaterThan(0)
+    expect(calls.some((u) => u.includes("/fs/read"))).toBe(false)
+  })
+})

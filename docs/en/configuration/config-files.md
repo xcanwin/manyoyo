@@ -75,6 +75,7 @@ For mount and `sock` mode risks, see [Security](../guide/security.md).
 | `autostart` | string | bash script run by the in-container init on every container start; written when a container is created, then edited on the web "Set container" tab, see [Manage containers](../guide/container-manage.md) |
 | `autostartOnServe` | boolean | Start this container when `serve` starts |
 | `agentPromptCommand` | string | Prompt command template for web AGENT mode, must contain `{prompt}`; inferred from `shell` / `yolo` when empty |
+| `agentInstructions` | string | Extra instructions appended after the built-in environment note when the web UI runs an Agent (Claude Code, Codex, OpenCode) |
 | `quiet` | string array | Suppress output: `tip` / `cmd` / `full` |
 
 ```json5

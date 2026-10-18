@@ -31,31 +31,6 @@ function joinPath(base: string, name: string): string {
   return `${base.replace(/\/$/, "")}/${name}`
 }
 
-// 借一个假的 internal origin 把相对路径解析成
-// 规范化的绝对路径，再拼到容器文件读取接口 fs/raw
-function resolveMarkdownImageUrl(sessionName: string, basePath: string, relativeHref: string): string {
-  try {
-    const lastSlash = basePath.lastIndexOf("/")
-    const baseDir = lastSlash >= 0 ? basePath.slice(0, lastSlash + 1) : "/"
-    const resolvedPath = new URL(relativeHref, "http://manyoyo-internal" + baseDir).pathname
-    return `/api/sessions/${encodeURIComponent(sessionName)}/fs/raw?path=${encodeURIComponent(resolvedPath)}`
-  } catch {
-    return ""
-  }
-}
-
-// 只处理最常见的行内图片写法 ![alt](href "title")，引用式图片不在预览场景考虑范围内
-function rewriteRelativeImageLinks(markdownText: string, resolver: (href: string) => string): string {
-  return markdownText.replace(
-    /!\[([^\]]*)\]\(([^)\s]+)(\s+"[^"]*")?\)/g,
-    (match, alt: string, href: string, titlePart = "") => {
-      if (/^(?:https?:|data:|#)/i.test(href)) return match
-      const resolved = resolver(href)
-      return resolved ? `![${alt}](${resolved}${titlePart})` : match
-    }
-  )
-}
-
 // 单行只读路径展示：外观和 Input 一致（边框/圆角/背景），但用可滚动的 div 实现——
 // 原生 input 在移动端对 readOnly 内容的横向触摸滑动支持并不可靠，div + overflow-x-auto
 // 是标准的内容滚动，各平台表现一致；no-scrollbar 只是不露出滚动条，不影响滑动能力
@@ -116,11 +91,14 @@ export function FilesPanel({
   editorStateRef,
   confirmLeaveIfDirty,
   onPreviewHtml,
+  openRequest,
 }: {
   activeSession: SessionSummary | null
   editorStateRef?: React.RefObject<FilesEditorState | null>
   confirmLeaveIfDirty: () => Promise<boolean>
   onPreviewHtml?: (title: string, code: string) => void
+  // 外部要求打开某个路径（聊天里点了路径）；nonce 变化才触发，同一路径可以重复打开
+  openRequest?: { path: string; nonce: number } | null
 }) {
   const historyOnly = activeSession?.status === "history"
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
@@ -200,10 +178,13 @@ export function FilesPanel({
     if (item) box.scrollTop += item.getBoundingClientRect().top - box.getBoundingClientRect().top - 8
   }, [loading, entries])
 
+  const listSeqRef = React.useRef(0)
   const loadList = React.useCallback(
     (path: string, manual = false, revealPath = "") => {
       if (!activeSession || historyOnly) return
       revealPathRef.current = revealPath
+      // 只采用最后一次请求的结果：首次挂载的默认目录和外部打开的目录可能同时在路上
+      const seq = ++listSeqRef.current
       setLoading(true)
       // 手动刷新时让转圈至少显示一会儿，请求太快会让人以为按钮没反应
       const minSpin = manual ? new Promise((resolve) => setTimeout(resolve, 600)) : null
@@ -212,14 +193,16 @@ export function FilesPanel({
         `/api/sessions/${encodeURIComponent(activeSession.name)}/fs/list?path=${encodeURIComponent(path)}`
       )
         .then((data) => {
+          if (seq !== listSeqRef.current) return
           setCurrentPath(String(data.path || path))
           setParentPath(typeof data.parentPath === "string" ? data.parentPath : "")
           setEntries(Array.isArray(data.entries) ? (data.entries as FsEntry[]) : [])
         })
         .catch((err) => {
+          if (seq !== listSeqRef.current) return
           setListError(err instanceof Error ? err.message : "加载目录失败")
         })
-        .finally(() => (minSpin ?? Promise.resolve()).then(() => setLoading(false)))
+        .finally(() => (minSpin ?? Promise.resolve()).then(() => seq === listSeqRef.current && setLoading(false)))
     },
     [activeSession, historyOnly]
   )
@@ -290,6 +273,33 @@ export function FilesPanel({
       setFileLoading(false)
     }
   }
+
+  // 路径可能是目录也可能是文件：先按目录列，列不出来再按文件打开（并在列表里定位到它）
+  async function openPath(path: string) {
+    if (!activeSession || historyOnly) return
+    try {
+      await apiGet(`/api/sessions/${encodeURIComponent(activeSession.name)}/fs/list?path=${encodeURIComponent(path)}`)
+      setMobilePane("list")
+      loadList(path)
+      return
+    } catch {
+      // 不是目录，按文件处理
+    }
+    // 先打开文件（里面会先确认未保存的修改，用户取消就什么都不变），打开了再把列表切到它所在目录
+    await fetchFile(path, false)
+    if (selectedPathRef.current !== path) return
+    const slash = path.lastIndexOf("/")
+    loadList(slash > 0 ? path.slice(0, slash) : "/", false, path)
+  }
+
+  const handledOpenNonceRef = React.useRef(0)
+  React.useEffect(() => {
+    if (!openRequest || openRequest.nonce === handledOpenNonceRef.current) return
+    handledOpenNonceRef.current = openRequest.nonce
+    const target = openRequest.path
+    queueMicrotask(() => void openPath(target))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest?.nonce, activeSession?.name])
 
   async function openRegularFile(entry: FsEntry) {
     const size = Number(entry.size)
@@ -672,9 +682,10 @@ export function FilesPanel({
                   />
                 ) : isMarkdown ? (
                   <MarkdownContent
-                    content={rewriteRelativeImageLinks(editContent ?? fileData.content ?? "", (href) =>
-                      resolveMarkdownImageUrl(activeSession.name, selectedPath, href)
-                    )}
+                    content={editContent ?? fileData.content ?? ""}
+                    sessionName={activeSession.name}
+                    baseDir={selectedPath.slice(0, selectedPath.lastIndexOf("/") + 1) || "/"}
+                    onOpenPath={(path) => void openPath(path)}
                   />
                 ) : (
                   <CodeMirrorEditor

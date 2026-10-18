@@ -15,6 +15,10 @@ type MarkdownContentProps = {
   content: string
   className?: string
   onPreviewHtml?: (code: string) => void
+  // 有会话上下文时，容器内路径的图片会改写成 fs/raw，路径可以点开（交给 onOpenPath）
+  sessionName?: string
+  baseDir?: string
+  onOpenPath?: (path: string) => void
 }
 
 // 只比较 content/className/是否传了 onPreviewHtml，忽略 onPreviewHtml 的函数
@@ -24,7 +28,10 @@ export function markdownContentPropsEqual(prev: MarkdownContentProps, next: Mark
   return (
     prev.content === next.content &&
     prev.className === next.className &&
-    Boolean(prev.onPreviewHtml) === Boolean(next.onPreviewHtml)
+    prev.sessionName === next.sessionName &&
+    prev.baseDir === next.baseDir &&
+    Boolean(prev.onPreviewHtml) === Boolean(next.onPreviewHtml) &&
+    Boolean(prev.onOpenPath) === Boolean(next.onOpenPath)
   )
 }
 
@@ -41,14 +48,24 @@ export const MarkdownContent = React.memo(
     content,
     className,
     onPreviewHtml,
+    sessionName,
+    baseDir,
+    onOpenPath,
   }: MarkdownContentProps) {
     const [pendingUrl, setPendingUrl] = React.useState<string | null>(null)
 
     // 代码块原文存进这份和 html 一起算出来的数组，而不是编码进 DOM 属性——
     // 避免大段 html 反复转义/截断，handleClick 委托点击时按下标查表即可
+    const enablePreview = Boolean(onPreviewHtml)
+    const pathLinks = Boolean(onOpenPath)
     const { html, htmlBlocks, codeBlocks } = React.useMemo(
-      () => renderMarkdownToHtml(content, Boolean(onPreviewHtml)),
-      [content, Boolean(onPreviewHtml)]
+      () =>
+        renderMarkdownToHtml(
+          content,
+          enablePreview,
+          sessionName ? { sessionName, baseDir: baseDir || "/", pathLinks } : undefined
+        ),
+      [content, enablePreview, sessionName, baseDir, pathLinks]
     )
 
     function handleClick(event: React.MouseEvent<HTMLDivElement>) {
@@ -77,6 +94,13 @@ export const MarkdownContent = React.memo(
         const index = Number(previewTrigger.getAttribute("data-preview-html-index"))
         const code = htmlBlocks[index]
         if (code !== undefined) onPreviewHtml?.(code)
+        return
+      }
+      const pathTrigger = (event.target as HTMLElement).closest<HTMLElement>("[data-open-path]")
+      if (pathTrigger) {
+        event.preventDefault()
+        const path = pathTrigger.getAttribute("data-open-path") || ""
+        if (path) onOpenPath?.(path)
         return
       }
       const link = (event.target as HTMLElement).closest("a")

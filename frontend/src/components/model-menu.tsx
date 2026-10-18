@@ -1,4 +1,5 @@
 import * as React from "react"
+import { SparklesIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -32,10 +33,16 @@ export function ModelMenu({
   session,
   disabled,
   onChanged,
+  compact = false,
+  size,
 }: {
   session: SessionSummary | null
   disabled: boolean
   onChanged: () => void
+  // 窄屏只显示图标（模型名放进 title / aria-label），宽屏显示图标 + 名字
+  compact?: boolean
+  // 只显示图标时的按钮尺寸，与输入区其他图标按钮一致
+  size?: "icon-lg" | "icon-xl"
 }) {
   const [env, setEnv] = React.useState<EnvOptions>({ defaultModel: "", options: [] })
   const [catalog, setCatalog] = React.useState<ModelOption[]>([])
@@ -109,15 +116,29 @@ export function ModelMenu({
       <DropdownMenu onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger
           render={
-            <Button
-              variant="outline"
-              className="w-28 shrink-0 justify-between sm:w-44"
-              disabled={disabled}
-              title={`模型：${shown}`}
-            />
+            compact ? (
+              <Button
+                variant="ghost"
+                size={size || "icon-lg"}
+                className="shrink-0"
+                disabled={disabled}
+                title={`模型：${shown}`}
+                aria-label={`选择模型（当前：${shown}）`}
+              />
+            ) : (
+              <Button
+                variant="ghost"
+                size="lg"
+                className="max-w-56 min-w-0 shrink justify-start text-muted-foreground"
+                disabled={disabled}
+                title={`模型：${shown}`}
+                aria-label={`选择模型（当前：${shown}）`}
+              />
+            )
           }
         >
-          <ModelName value={shown} />
+          <SparklesIcon />
+          {compact ? null : <ModelName value={shown} />}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="w-96 max-w-[calc(100vw-2rem)] overflow-y-hidden">
           {/* 滚动放在内层：菜单外壳是圆角，滚动条直接贴在外壳边缘会露出直角 */}

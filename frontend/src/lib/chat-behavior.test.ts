@@ -136,3 +136,15 @@ describe("跟随的暂停：只有用户在滚动时才暂停，点击不算", (
     expect(isFollowPaused({ now: 10_000, lastScrollInputAt: 0, hasSelection: true })).toBe(true)
   })
 })
+
+describe("新输出浮钮", () => {
+  test("不在底部且内容变高时出现；回到底部附近就消失；内容没变保持原状", async () => {
+    const { nextHasNewBelow } = await import("./chat-behavior")
+    const far = { scrollTop: 0, clientHeight: 500 }
+    expect(nextHasNewBelow(false, { ...far, prevHeight: 2000, scrollHeight: 2100 })).toBe(true)
+    expect(nextHasNewBelow(true, { ...far, prevHeight: 2100, scrollHeight: 2100 })).toBe(true)
+    expect(nextHasNewBelow(false, { ...far, prevHeight: 2100, scrollHeight: 2100 })).toBe(false)
+    expect(nextHasNewBelow(true, { scrollTop: 1580, clientHeight: 500, prevHeight: 2100, scrollHeight: 2100 })).toBe(false)
+    expect(nextHasNewBelow(false, { scrollTop: 1600, clientHeight: 500, prevHeight: 2000, scrollHeight: 2100 })).toBe(false)
+  })
+})

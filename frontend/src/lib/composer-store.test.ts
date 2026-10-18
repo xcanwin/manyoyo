@@ -167,3 +167,14 @@ describe("清理与降级", () => {
     expect(loadComposer("s", bad)).toEqual({ draft: "" })
   })
 })
+
+describe("登出前统计未确认送达的内容", () => {
+  test("只数带待发箱的会话", async () => {
+    const { countPendingOutbox } = await import("./composer-store")
+    const s = memoryStorage()
+    saveDraft("a", "只是草稿", s)
+    setOutbox("b", outbox(), s)
+    setOutbox("c", outbox(), s)
+    expect(countPendingOutbox(s)).toBe(2)
+  })
+})

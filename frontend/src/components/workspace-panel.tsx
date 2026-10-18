@@ -1,5 +1,18 @@
 import * as React from "react"
-import { CheckIcon, ChevronDownIcon, CopyIcon, EllipsisIcon, SendIcon } from "lucide-react"
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  CheckIcon,
+  CopyIcon,
+  CornerDownRightIcon,
+  EllipsisIcon,
+  ListEndIcon,
+  MessageSquareIcon,
+  SquareIcon,
+  SquareTerminalIcon,
+  XIcon,
+  ZapIcon,
+} from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
@@ -18,6 +31,7 @@ import {
   messageRenderKey,
   removeLocalPendingPlaceholders,
   resolveComposerBlockReason,
+  sessionDisplayTitle,
   shouldDismissRecoveryNotice,
   shouldDiscardMessagesResponse,
   STREAMING_MESSAGE_ID,
@@ -31,8 +45,9 @@ import {
 import { useAgentRecoveryPoll } from "@/hooks/use-agent-recovery-poll"
 import { useSessionSync } from "@/hooks/use-session-sync"
 import { useSyncLoop } from "@/hooks/use-sync-loop"
+import { useResumeIndicator } from "@/hooks/use-resume-indicator"
 import { formatDateTime } from "@/lib/format"
-import { anchoredScrollTop, computeScrollAnchor, computeScrollRestore, isFollowPaused, isOwnScroll, isScrollInput, getBubbleState, shouldLoadEarlier, type ScrollAnchor } from "@/lib/chat-behavior"
+import { anchoredScrollTop, computeScrollAnchor, computeScrollRestore, isFollowPaused, isOwnScroll, isScrollInput, getBubbleState, nextHasNewBelow, shouldLoadEarlier, type ScrollAnchor } from "@/lib/chat-behavior"
 import {
   clearOutbox,
   createClientMessageId,
@@ -81,6 +96,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FilesPanel, type FilesEditorState } from "@/components/files-panel"
+import { ChangesPanel } from "@/components/changes-panel"
+import { useComposerSuggestions } from "@/components/composer-suggestions"
+import { toast } from "sonner"
+import { PromptDialog } from "@/components/prompt-dialog"
 import { HtmlPreviewPanel, type HtmlPreviewState } from "@/components/html-preview-panel"
 import { MarkdownContent } from "@/components/markdown-content"
 import { ModelMenu } from "@/components/model-menu"
@@ -101,22 +120,21 @@ import { Textarea } from "@/components/ui/textarea"
 import { TRACE_ALIGN_EVENT, TraceBlock } from "@/components/trace-block"
 import { ContainerManagePanel } from "@/components/container-manage/container-manage-panel"
 
-type View = "activity" | "files" | "terminal" | "container" | "config" | "detail"
+type View = "activity" | "files" | "terminal" | "changes" | "container" | "config" | "detail"
 
 const VIEW_LABELS: Record<View, string> = {
   activity: "聊天",
   files: "文件",
   terminal: "终端",
+  changes: "改动",
   container: "设置容器",
   config: "容器详情",
   detail: "Agent详情",
 }
 
-// ⋯ 面板里按作用对象分两组：所属容器的 / AGENT 自己的
-const OTHER_VIEW_GROUPS: { title: string; views: View[] }[] = [
-  { title: "容器", views: ["terminal", "container", "config"] },
-  { title: "AGENT", views: ["detail"] },
-]
+// ⋯ 里按归属分两组：聊天属于 AGENT，文件、终端等属于它所在的容器
+const AGENT_VIEWS: View[] = ["activity", "detail"]
+const CONTAINER_VIEWS: View[] = ["files", "terminal", "changes", "container", "config"]
 
 // visibilitychange 与 focus 几乎同时触发，窗口内只同步一次
 const RESTORE_NOTICE_TEXT = "上次没发出去的内容已放回输入框"
@@ -271,11 +289,14 @@ function ActivityView({
   onLoadEarlier,
   followSignal,
   tail,
+  onOpenPath,
 }: {
   session: SessionSummary | null
   messages: ChatMessage[]
   mode: "agent" | "command"
   onPreviewHtml: (title: string, code: string) => void
+  // 回复里的容器内路径被点击：交给文件面板打开
+  onOpenPath: (path: string) => void
   hasMore: boolean
   loadingEarlier: boolean
   onLoadEarlier: () => void
@@ -306,6 +327,15 @@ function ActivityView({
   const lastHeightRef = React.useRef(0)
   const firstIdRef = React.useRef<string | number | null>(null)
   const earlierRequestedRef = React.useRef(false)
+  // 视野不在底部时内容又变长了：显示“↓ 有新输出”，点一下贴底（见 nextHasNewBelow）
+  const [hasNewBelow, setHasNewBelow] = React.useState(false)
+
+  function jumpToBottom() {
+    anchorRef.current = "bottom"
+    pinnedTraceRef.current = null
+    applyAnchor(true)
+    setHasNewBelow(false)
+  }
 
   function markScrollInput(type: "wheel" | "touch" | "key" | "pointer", onScroller = false) {
     if (isScrollInput(type, onScroller)) lastScrollInputRef.current = Date.now()
@@ -367,6 +397,9 @@ function ActivityView({
       ownScrollTopRef.current = null
       measureAnchor(el)
     }
+    setHasNewBelow((prev) =>
+      nextHasNewBelow(prev, { prevHeight: el.scrollHeight, scrollHeight: el.scrollHeight, scrollTop: el.scrollTop, clientHeight: el.clientHeight })
+    )
     if (shouldLoadEarlier({ scrollTop: el.scrollTop, hasMore, loading: loadingEarlier })) {
       earlierRequestedRef.current = true
       onLoadEarlier()
@@ -435,9 +468,22 @@ function ActivityView({
     lastHeightRef.current = el.scrollHeight
     // 内容变高（执行过程补全、点开某一行、流式增长）和视野变矮（输入框变高、软键盘弹出）都要按贴着的位置补滚动，
     // 否则贴底时底部内容会被输入框挡住
+    let lastWidth = el.clientWidth
     const observer = new ResizeObserver(() => {
+      const prevHeight = lastHeightRef.current
       applyAnchor()
       lastHeightRef.current = el.scrollHeight
+      // 宽度变了（转屏、拖侧栏）是重新排版变高，不是新输出：只按新位置判断要不要收起浮钮
+      const widthChanged = el.clientWidth !== lastWidth
+      lastWidth = el.clientWidth
+      setHasNewBelow((prev) =>
+        nextHasNewBelow(prev, {
+          prevHeight: widthChanged ? el.scrollHeight : prevHeight,
+          scrollHeight: el.scrollHeight,
+          scrollTop: el.scrollTop,
+          clientHeight: el.clientHeight,
+        })
+      )
     })
     observer.observe(content)
     observer.observe(el)
@@ -462,119 +508,135 @@ function ActivityView({
   }
 
   return (
-    <div
-      ref={scrollRef}
-      onScroll={handleScroll}
-      onWheel={() => markScrollInput("wheel")}
-      onTouchStart={() => markScrollInput("touch")}
-      onTouchMove={() => markScrollInput("touch")}
-      onPointerDown={(event) => markScrollInput("pointer", event.target === event.currentTarget)}
-      onKeyDown={() => markScrollInput("key")}
-      data-chat-scroll
-      className="h-full overflow-x-hidden overflow-y-auto overscroll-y-contain"
-    >
-      {/* 按聊天区自身宽度（而不是屏幕宽度）切档：侧栏占掉一部分宽度后，稍窄时气泡应接近铺满，只有宽屏才收成 75% */}
-      <div ref={contentRef} className="@container flex flex-col gap-3 p-4">
-        {hasMore ? (
-          <div className="flex justify-center">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={loadingEarlier}
-              onClick={() => {
-                earlierRequestedRef.current = true
-                onLoadEarlier()
-              }}
-            >
-              {loadingEarlier ? "加载中…" : "加载更早的消息"}
-            </Button>
-          </div>
-        ) : null}
-        {displayMessages.map((message) => {
-          const bubble = getBubbleState(message)
-          // 切换发送模式时，历史里"另一种模式"产生的消息整体变淡，突出当前模式的上下文
-          const origin = message.mode === "agent" || message.mode === "command" ? message.mode : ""
-          const dimmed = origin !== "" && origin !== mode
-          // 正式回复还没抵达（比如切回一个仍在跑的会话）时，trace 消息会暂时
-          // 落单、配对不上下一条回复——这时也要走结构化执行过程展示，不能把
-          // 它当成一条普通回复，把裸的多行 content 直接当文本糊出来
-          const standaloneTrace = message.streamTrace === true && !message.pairedTrace
-          // 执行过程固定渲染在同一个位置、同一个 key 下（messageRenderKey）：配上回复、换成服务端 id 时不重新挂载
-          const trace = message.pairedTrace ?? (standaloneTrace ? message : null)
-          return (
-            <div
-              key={messageRenderKey(message)}
-              className={cn(
-                "flex flex-col gap-1 transition-opacity",
-                message.role === "user" ? "items-end" : "items-start",
-                dimmed && "opacity-25"
-              )}
-            >
-              {trace ? <TraceBlock trace={trace} sessionName={session.name} liveText={message.liveText} /> : null}
-              {standaloneTrace || message.hideBubble ? null : (
-                <>
-                  <div
-                    data-reply={message.role === "assistant" ? "" : undefined}
-                    className={cn(
-                      // [overflow-wrap:anywhere]：超长无空格内容（长链接、哈希、一整行 W）在气泡里换行，
-                      // 而不是把气泡撑出屏幕；流式输出期间的纯文本同样靠它。
-                      // 行高 1.75 与 markdown 正文（.chat-markdown）一致：用户气泡、流式纯文本、
-                      // 渲染后的回复同一种行距，流结束切到 markdown 时不跳动
-                      "max-w-full rounded-xl px-3 py-2 text-sm leading-[1.75] [overflow-wrap:anywhere] @3xl:max-w-[75%]",
-                      message.role === "user"
-                        ? "max-w-[88%] bg-muted/80 text-foreground whitespace-pre-wrap @3xl:max-w-[75%]"
-                        : message.mode === "command"
-                          // 命令模式的回复是原始命令输出，不是被动的系统提示——
-                          // 走跟 assistant 一样的正常气泡，只是下面不做 markdown 渲染；
-                          // 等宽字体保证 ls -al 这类按列对齐的输出不错位
-                          ? "bg-muted/40 font-mono text-[13px] leading-[1.6] whitespace-pre-wrap text-foreground"
-                          : message.role === "system"
-                            ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
-                            // AGENT 回复不加底色，只用浅色圆角边框圈出范围；用户气泡保留底色作区分
-                            : "border bg-transparent px-4 py-3 text-foreground",
-                      // AGENT 回复固定占满可用宽度（与上面的执行过程框等宽），
-                      // 不随内容长短忽宽忽窄
-                      message.role === "assistant" && "w-full",
-                      bubble.faded && "opacity-70"
-                    )}
-                  >
-                    {message.role === "assistant" ? (
-                      // 流式期间只展示纯文本，避免每个 token 到达都触发一次全量
-                      // marked.parse + DOMPurify.sanitize（性能开销 + 未闭合代码块/
-                      // 标签导致的渲染抖动）；流结束后再一次性走 markdown 渲染，
-                      message.pending ? (
-                        <div className="whitespace-pre-wrap">{message.content || "…"}</div>
-                      ) : (
-                        <MarkdownContent
-                          content={message.content || ""}
-                          onPreviewHtml={(code) => onPreviewHtml("聊天中的 HTML 代码块", code)}
-                        />
-                      )
-                    ) : (
-                      message.content || (message.pending ? "…" : "")
-                    )}
-                  </div>
-                  <span className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
-                    {formatTime(message.timestamp)}
-                    {message.interrupted ? " · 已停止" : ""}
-                    {bubble.copyable ? (
-                      message.role === "assistant" ? (
-                        <CopyMessageButton
-                          text={markdownToPlainText(message.content)}
-                          markdown={message.content}
-                        />
-                      ) : (
-                        <CopyMessageButton text={message.content} />
-                      )
-                    ) : null}
-                  </span>
-                </>
-              )}
+    <div className="relative h-full">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        onWheel={() => markScrollInput("wheel")}
+        onTouchStart={() => markScrollInput("touch")}
+        onTouchMove={() => markScrollInput("touch")}
+        onPointerDown={(event) => markScrollInput("pointer", event.target === event.currentTarget)}
+        onKeyDown={() => markScrollInput("key")}
+        data-chat-scroll
+        className="h-full overflow-x-hidden overflow-y-auto overscroll-y-contain"
+      >
+        {/* 按聊天区自身宽度（而不是屏幕宽度）切档：侧栏占掉一部分宽度后，稍窄时气泡应接近铺满，只有宽屏才收成 75% */}
+        <div ref={contentRef} className="@container flex flex-col gap-3 p-4">
+          {hasMore ? (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={loadingEarlier}
+                onClick={() => {
+                  earlierRequestedRef.current = true
+                  onLoadEarlier()
+                }}
+              >
+                {loadingEarlier ? "加载中…" : "加载更早的消息"}
+              </Button>
             </div>
-          )
-        })}
-        {tail}
+          ) : null}
+          {displayMessages.map((message) => {
+            const bubble = getBubbleState(message)
+            // 切换发送模式时，历史里"另一种模式"产生的消息整体变淡，突出当前模式的上下文
+            const origin = message.mode === "agent" || message.mode === "command" ? message.mode : ""
+            const dimmed = origin !== "" && origin !== mode
+            // 正式回复还没抵达（比如切回一个仍在跑的会话）时，trace 消息会暂时
+            // 落单、配对不上下一条回复——这时也要走结构化执行过程展示，不能把
+            // 它当成一条普通回复，把裸的多行 content 直接当文本糊出来
+            const standaloneTrace = message.streamTrace === true && !message.pairedTrace
+            // 执行过程固定渲染在同一个位置、同一个 key 下（messageRenderKey）：配上回复、换成服务端 id 时不重新挂载
+            const trace = message.pairedTrace ?? (standaloneTrace ? message : null)
+            return (
+              <div
+                key={messageRenderKey(message)}
+                className={cn(
+                  "flex flex-col gap-1 transition-opacity",
+                  message.role === "user" ? "items-end" : "items-start",
+                  dimmed && "opacity-25"
+                )}
+              >
+                {trace ? <TraceBlock trace={trace} sessionName={session.name} liveText={message.liveText} /> : null}
+                {standaloneTrace || message.hideBubble ? null : (
+                  <>
+                    <div
+                      data-reply={message.role === "assistant" ? "" : undefined}
+                      className={cn(
+                        // [overflow-wrap:anywhere]：超长无空格内容（长链接、哈希、一整行 W）在气泡里换行，
+                        // 而不是把气泡撑出屏幕；流式输出期间的纯文本同样靠它。
+                        // 行高 1.75 与 markdown 正文（.chat-markdown）一致：用户气泡、流式纯文本、
+                        // 渲染后的回复同一种行距，流结束切到 markdown 时不跳动
+                        "max-w-full rounded-xl px-3 py-2 text-sm leading-[1.75] [overflow-wrap:anywhere] @3xl:max-w-[75%]",
+                        message.role === "user"
+                          ? "max-w-[88%] bg-muted/80 text-foreground whitespace-pre-wrap @3xl:max-w-[75%]"
+                          : message.mode === "command"
+                            // 命令模式的回复是原始命令输出，不是被动的系统提示——
+                            // 走跟 assistant 一样的正常气泡，只是下面不做 markdown 渲染；
+                            // 等宽字体保证 ls -al 这类按列对齐的输出不错位
+                            ? "bg-muted/40 font-mono text-[13px] leading-[1.6] whitespace-pre-wrap text-foreground"
+                            : message.role === "system"
+                              ? "bg-transparent whitespace-pre-wrap text-muted-foreground italic"
+                              // AGENT 回复不加底色，只用浅色圆角边框圈出范围；用户气泡保留底色作区分
+                              : "border bg-transparent px-4 py-3 text-foreground",
+                        // AGENT 回复固定占满可用宽度（与上面的执行过程框等宽），
+                        // 不随内容长短忽宽忽窄
+                        message.role === "assistant" && "w-full",
+                        bubble.faded && "opacity-70"
+                      )}
+                    >
+                      {message.role === "assistant" ? (
+                        // 流式期间只展示纯文本，避免每个 token 到达都触发一次全量
+                        // marked.parse + DOMPurify.sanitize（性能开销 + 未闭合代码块/
+                        // 标签导致的渲染抖动）；流结束后再一次性走 markdown 渲染，
+                        message.pending ? (
+                          <div className="whitespace-pre-wrap">{message.content || "…"}</div>
+                        ) : (
+                          <MarkdownContent
+                            content={message.content || ""}
+                            onPreviewHtml={(code) => onPreviewHtml("聊天中的 HTML 代码块", code)}
+                            sessionName={session?.name}
+                            baseDir={session?.containerPath || "/"}
+                            onOpenPath={onOpenPath}
+                          />
+                        )
+                      ) : (
+                        message.content || (message.pending ? "…" : "")
+                      )}
+                    </div>
+                    <span className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
+                      {formatTime(message.timestamp)}
+                      {message.interrupted ? " · 已停止" : ""}
+                      {bubble.copyable ? (
+                        message.role === "assistant" ? (
+                          <CopyMessageButton
+                            text={markdownToPlainText(message.content)}
+                            markdown={message.content}
+                          />
+                        ) : (
+                          <CopyMessageButton text={message.content} />
+                        )
+                      ) : null}
+                    </span>
+                  </>
+                )}
+              </div>
+            )
+          })}
+          {tail}
+        </div>
       </div>
+      {hasNewBelow ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-background shadow-md"
+          onClick={jumpToBottom}
+        >
+          <ArrowDownIcon data-icon="inline-start" />
+          有新输出
+        </Button>
+      ) : null}
     </div>
   )
 }
@@ -733,6 +795,16 @@ function DetailView({ detail }: { detail: SessionDetail | null }) {
   )
 }
 
+// 空会话里的常用任务：点一下填进输入框，用户可以改完再发
+const STARTER_PROMPTS = ["介绍一下这个项目", "运行测试并修复失败的用例", "检查最近的改动有没有问题"]
+
+// 插入时机按钮的图标随当前选择变化：不点开也能看出追加的内容会怎么发
+const QUEUE_WHEN_ICONS: Record<QueueWhen, typeof ZapIcon> = {
+  now: ZapIcon,
+  step: CornerDownRightIcon,
+  turn: ListEndIcon,
+}
+
 export function Composer({
   draft,
   onDraftChange,
@@ -747,7 +819,10 @@ export function Composer({
   onModelChanged,
   queueWhen,
   onQueueWhenChange,
+  centered = false,
 }: {
+  // 空会话时输入区放在页面中间：不要顶部分割线，也不用避让底部安全区
+  centered?: boolean
   draft: string
   onDraftChange: (value: string) => void
   onSend: () => void
@@ -772,141 +847,190 @@ export function Composer({
   // 任务进行中输入框仍可用：agent 对话可以追加提示词（选插入时机）；系统命令不支持追加
   const sendDisabled = inputDisabled || draft.trim() === "" || (sending && mode === "command")
 
+  // 执行中有内容时才显示“插入时机”（只对 Agent 对话有意义）；执行中没内容时只留“停止”
+  const hasDraft = draft.trim() !== ""
+  const showQueueWhen = sending && mode === "agent" && hasDraft
+  const showSend = !sending || hasDraft || mode === "command"
+  // 手机上按钮点击区域不小于 40px，桌面 36px
+  const iconSize = isMobile ? "icon-xl" : "icon-lg"
+  const QueueWhenIcon = QUEUE_WHEN_ICONS[queueWhen]
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  // 开头打 / 列斜杠命令、打 @ 列工作目录里的文件（只在 Agent 对话模式下）
+  const suggestions = useComposerSuggestions({
+    session,
+    enabled: mode === "agent" && !inputDisabled,
+    draft,
+    onDraftChange,
+    textareaRef,
+  })
+
   // 底部内边距按安全区取大值：加到主屏幕全屏运行时，iOS 的 home 指示条会压在
   // 输入框上；桌面端 env() 取值为 0，等价于原来的 p-3
   return (
-    <div className="border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-      <Textarea
-        placeholder={
-          disabled
-            ? "请先在左侧选择一个容器 / AGENT"
-            : blockReason === "archived"
-              ? "该 AGENT 已被删除，仅可查看历史消息"
-              : blockReason === "container-busy"
-                ? "同容器的另一个 AGENT 正在执行任务，请等它结束或先停止"
-                : blockReason === "agent-unavailable"
-                  ? "当前会话未配置 CLI，点「选项 → CLI」设置后即可对话"
-                  : mode === "command"
-                    ? "输入容器命令，例如: ls -la"
-                    : "输入要发给 AGENT 的内容"
-        }
-        // Textarea 自带 field-sizing-content（跟着内容自动长高）但没有上限，
-        // 粘进几十行就会把聊天内容整个顶出屏幕。加一个高度上限，超出后内部滚动。
-        // 系统命令模式下换等宽字体：敲的是 shell 命令，路径/引号/空格数量要对得齐
+    <div className={centered ? "px-3" : "border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"}>
+      {/* 输入框和按钮放在同一个圆角框里：按钮只显示图标，悬停看 title，读屏读 aria-label */}
+      <div
         className={cn(
-          "max-h-[40vh] min-h-16 resize-none overflow-y-auto",
-          mode === "command" && "font-mono"
+          "relative rounded-xl border bg-background transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
+          inputDisabled && "opacity-70"
         )}
-        value={draft}
-        disabled={inputDisabled}
-        onChange={(event) => onDraftChange(event.target.value)}
-        onKeyDown={(event) => {
-          // 输入法组词期间的 Enter（选字确认）不应触发发送
-          if (event.key !== "Enter" || event.nativeEvent.isComposing) return
-          // 窄屏：Enter 始终换行，发送需点击发送按钮
-          if (isMobile) return
-          // Shift+Enter / Alt+Enter 换行，其余 Enter 发送
-          if (event.shiftKey || event.altKey) return
-          event.preventDefault()
-          if (!sendDisabled) onSend()
-        }}
-      />
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {/* 模型按钮在模式按钮左边：切模型不用再开弹窗；系统命令模式不涉及模型，置灰 */}
-          <ModelMenu
-            session={session}
-            disabled={disabled || archived || !session || mode === "command"}
-            onChanged={onModelChanged}
-          />
-          <DropdownMenu>
-            {/* 模式必须常驻可见：只靠输入框 placeholder 提示的话，一打字就看不见了，
-                很容易在"系统命令"模式下把整段话当 shell 命令发出去 */}
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant={mode === "command" ? "secondary" : "outline"}
-                  className="px-4"
-                  disabled={disabled}
-                />
-              }
-            >
-              {formatComposerModeLabel(mode)}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-44">
-              <DropdownMenuGroup>
-                <DropdownMenuItem
-                  className={mode === "agent" ? "bg-accent" : undefined}
-                  onClick={() => onModeChange("agent")}
-                >
-                  Agent对话
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={mode === "command" ? "bg-accent" : undefined}
-                  onClick={() => onModeChange("command")}
-                >
-                  系统命令
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator className="mx-1 bg-border/50" />
-              <DropdownMenuGroup>
-                <DropdownMenuItem disabled={!session || archived} onClick={() => onOpenCliTemplate()}>
-                  CLI · {session?.agentProgram || "未设置"}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        {sending ? (
-          <div className="flex shrink-0 items-center gap-2">
-            <Button variant="destructive" className="px-4" onClick={onStop}>
-              停止
-            </Button>
-            {mode === "agent" ? (
-              <div className="flex items-center">
-                <Button
-                  className="rounded-r-none px-3"
-                  onClick={onSend}
-                  disabled={sendDisabled}
-                  title={QUEUE_WHEN_LABELS[queueWhen]}
-                >
-                  发送
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        className="rounded-l-none border-l border-primary-foreground/30 px-2"
-                        aria-label="选择插入时机"
-                        disabled={inputDisabled}
-                      />
-                    }
+      >
+        {suggestions.popup}
+        <Textarea
+          ref={textareaRef}
+          {...suggestions.textareaProps}
+          placeholder={
+            disabled
+              ? "请先在左侧选择一个容器 / AGENT"
+              : blockReason === "archived"
+                ? "该 AGENT 已被删除，仅可查看历史消息"
+                : blockReason === "container-busy"
+                  ? "同容器的另一个 AGENT 正在执行任务，请等它结束或先停止"
+                  : blockReason === "agent-unavailable"
+                    ? "当前会话未配置 CLI，点「模式 → CLI」设置后即可对话"
+                    : mode === "command"
+                      ? sending
+                        ? "任务执行中，系统命令要等它结束"
+                        : "输入容器命令，例如: ls -la"
+                      : sending
+                        ? `追加要求（${QUEUE_WHEN_LABELS[queueWhen]}）`
+                        : "输入要发给 AGENT 的内容"
+          }
+          // Textarea 自带 field-sizing-content（跟着内容自动长高）但没有上限，
+          // 粘进几十行就会把聊天内容整个顶出屏幕。加一个高度上限，超出后内部滚动。
+          // 系统命令模式下换等宽字体：敲的是 shell 命令，路径/引号/空格数量要对得齐。
+          // 边框和聚焦描边交给外面的圆角框
+          className={cn(
+            "max-h-[40vh] min-h-10 resize-none overflow-y-auto border-0 bg-transparent shadow-none focus-visible:ring-0 sm:min-h-16 dark:bg-transparent",
+            mode === "command" && "font-mono"
+          )}
+          value={draft}
+          disabled={inputDisabled}
+          onChange={(event) => {
+            onDraftChange(event.target.value)
+            suggestions.handleInput(event.target.selectionStart ?? event.target.value.length)
+          }}
+          onKeyDown={(event) => {
+            // 补全弹层打开时，↑↓ / Enter / Tab / Esc 交给它
+            if (suggestions.handleKeyDown(event)) return
+            // 输入法组词期间的 Enter（选字确认）不应触发发送
+            if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+            // 窄屏：Enter 始终换行，发送需点击发送按钮
+            if (isMobile) return
+            // Shift+Enter / Alt+Enter 换行，其余 Enter 发送
+            if (event.shiftKey || event.altKey) return
+            event.preventDefault()
+            if (!sendDisabled) onSend()
+          }}
+        />
+        <div className="flex items-center justify-between gap-1 px-1.5 pb-1.5">
+          <div className="flex min-w-0 items-center gap-1">
+            <DropdownMenu>
+              {/* 模式必须常驻可见：只靠输入框 placeholder 提示的话，一打字就看不见了，
+                  很容易在"系统命令"模式下把整段话当 shell 命令发出去。所以图标随模式变，
+                  系统命令模式下按钮带底色，输入框也换成等宽字体 */}
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant={mode === "command" ? "secondary" : "ghost"}
+                    size={iconSize}
+                    disabled={disabled}
+                    aria-label="切换模式"
+                    title={`模式：${formatComposerModeLabel(mode)}`}
+                  />
+                }
+              >
+                {mode === "command" ? <SquareTerminalIcon /> : <MessageSquareIcon />}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="top" className="w-44">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    className={mode === "agent" ? "bg-accent" : undefined}
+                    onClick={() => onModeChange("agent")}
                   >
-                    <ChevronDownIcon />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuGroup>
-                      {QUEUE_WHEN_ORDER.map((when) => (
-                        <DropdownMenuItem
-                          key={when}
-                          className={when === queueWhen ? "bg-accent" : undefined}
-                          onClick={() => onQueueWhenChange(when)}
-                        >
-                          {QUEUE_WHEN_LABELS[when]}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+                    <MessageSquareIcon />
+                    Agent对话
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={mode === "command" ? "bg-accent" : undefined}
+                    onClick={() => onModeChange("command")}
+                  >
+                    <SquareTerminalIcon />
+                    系统命令
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator className="mx-1 bg-border/50" />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem disabled={!session || archived} onClick={() => onOpenCliTemplate()}>
+                    CLI · {session?.agentProgram || "未设置"}
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* 系统命令模式不涉及模型，直接隐藏 */}
+            {mode === "agent" ? (
+              <ModelMenu
+                session={session}
+                disabled={disabled || archived || !session}
+                onChanged={onModelChanged}
+                compact={isMobile}
+                size={iconSize}
+              />
             ) : null}
           </div>
-        ) : (
-          <Button className="px-4" onClick={onSend} disabled={sendDisabled}>
-            <SendIcon data-icon="inline-start" />
-            发送
-          </Button>
-        )}
+          <div className="flex shrink-0 items-center gap-1">
+            {showQueueWhen ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size={iconSize}
+                      className="rounded-full"
+                      aria-label="插入时机"
+                      title={`插入时机：${QUEUE_WHEN_LABELS[queueWhen]}`}
+                      disabled={inputDisabled}
+                    />
+                  }
+                >
+                  <QueueWhenIcon />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" side="top" className="w-60">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>追加的内容什么时候交给 AGENT</DropdownMenuLabel>
+                    {QUEUE_WHEN_ORDER.map((when) => {
+                      const Icon = QUEUE_WHEN_ICONS[when]
+                      return (
+                        <DropdownMenuItem key={when} onClick={() => onQueueWhenChange(when)}>
+                          <Icon />
+                          {QUEUE_WHEN_LABELS[when]}
+                          {when === queueWhen ? <CheckIcon className="ml-auto" /> : null}
+                        </DropdownMenuItem>
+                      )
+                    })}
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+            {sending ? (
+              <Button variant="destructive" size={iconSize} className="rounded-full" onClick={onStop} aria-label="停止" title="停止">
+                <SquareIcon className="fill-current" />
+              </Button>
+            ) : null}
+            {showSend ? (
+              <Button
+                size={iconSize}
+                className="rounded-full"
+                onClick={onSend}
+                disabled={sendDisabled}
+                aria-label="发送"
+                title={sending && mode === "agent" ? `追加（${QUEUE_WHEN_LABELS[queueWhen]}）` : "发送"}
+              >
+                <ArrowUpIcon />
+              </Button>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -918,14 +1042,18 @@ export function WorkspacePanel({
   filesEditorRef,
   confirmLeaveIfDirty,
   creatingAgent,
+  onRunFinished,
 }: {
   activeSession: SessionSummary | null
   onAfterSend: () => void | Promise<unknown>
+  // 当前会话的任务从“执行中”变成结束：用于标签页角标与通知
+  onRunFinished?: (sessionName: string) => void
   filesEditorRef: React.RefObject<FilesEditorState | null>
   confirmLeaveIfDirty: () => Promise<boolean>
   creatingAgent: boolean
 }) {
   const [view, setView] = React.useState<View>("activity")
+  const isMobile = useIsMobile()
   const activeSessionName = activeSession?.name ?? null
   // 终端一旦打开就常驻：切到聊天/文件等标签只是隐藏，不卸载——卸载会关掉
   // WebSocket，容器里那个 shell 随之被回收，切回来只能是个全新的 shell，
@@ -1082,12 +1210,41 @@ export function WorkspacePanel({
   const activeAgentRunning =
     sending || messages.some((message) => message.mode === "agent" && message.pending === true)
 
+  // 同一个会话里 activeAgentRunning 从 true 变成 false 才算“结束”；切换会话不算
+  const runWatchRef = React.useRef<{ name: string | null; running: boolean }>({ name: null, running: false })
+  React.useEffect(() => {
+    const prev = runWatchRef.current
+    if (prev.name === activeSessionName && prev.running && !activeAgentRunning && activeSessionName) {
+      onRunFinished?.(activeSessionName)
+    }
+    runWatchRef.current = { name: activeSessionName, running: activeAgentRunning }
+  }, [activeAgentRunning, activeSessionName, onRunFinished])
+
   // 文件编辑器有未保存修改时，切走顶部标签会直接丢弃 FilesPanel 的编辑状态
   // （非 files 视图不渲染 FilesPanel），所以要在真正 setView 之前先拦一次
   async function changeView(next: View) {
     if (view === next) return
     if (view === "files" && !(await confirmLeaveIfDirty())) return
     setView(next)
+  }
+
+  // 点顶栏标题改名：改的就是 AGENT 备注；提交空字符串表示清掉备注，回到自动生成的名字
+  const [renameOpen, setRenameOpen] = React.useState(false)
+  async function handleRename(value: string) {
+    if (!activeSession) return
+    const trimmed = value.trim()
+    // 没改动（仍是当前显示名）时不把自动标题固化成备注
+    if (trimmed === sessionDisplayTitle(activeSession) && trimmed !== activeSession.agentRemark) return
+    await apiPost(`/api/sessions/${encodeURIComponent(activeSession.name)}/agent-remark`, { remark: trimmed })
+    toast.success(trimmed ? "已改名" : "已恢复自动名称")
+    await onAfterSend()
+  }
+
+  // 聊天里点了路径：切到文件页并让 FilesPanel 打开它（nonce 让同一路径可以重复打开）
+  const [filesOpenRequest, setFilesOpenRequest] = React.useState<{ path: string; nonce: number } | null>(null)
+  function openPathInFiles(path: string) {
+    setFilesOpenRequest((prev) => ({ path, nonce: (prev?.nonce ?? 0) + 1 }))
+    void changeView("files")
   }
 
   function setSendingFor(name: string, value: boolean) {
@@ -1304,6 +1461,9 @@ export function WorkspacePanel({
 
   // 本标签页正在为当前会话跑 stream 时跳过 /messages 与 /detail，避免用半途的服务端快照覆盖实时状态；
   // 侧栏（onAfterSend）不受此限制。定时与事件调度见 useSyncLoop
+  // 离开一阵子再回来 / 网络恢复时，顶栏下方显示同步进度，成功后标题旁闪一下“已同步”
+  const resumeIndicator = useResumeIndicator()
+  const trackResume = resumeIndicator.track
   useSyncLoop(
     React.useCallback(
       async (manual: boolean) => {
@@ -1316,7 +1476,13 @@ export function WorkspacePanel({
         await sidebar
       },
       [requestSync, onAfterSend]
-    )
+    ),
+    {
+      onResumeSync: (sync) => {
+        const tickBefore = messagesSyncTickRef.current
+        trackResume(sync, () => messagesSyncTickRef.current > tickBefore)
+      },
+    }
   )
 
   async function handleSend() {
@@ -1653,71 +1819,132 @@ export function WorkspacePanel({
     }
   }
 
+  // 空会话（Agent 对话模式、没有消息也没有排队）时输入区放在中间
+  const emptyConversation =
+    view === "activity" &&
+    Boolean(activeSession) &&
+    !creatingAgent &&
+    !(messagesLoading && !hasCachedMessages) &&
+    messages.length === 0 &&
+    (activeSession ? (queueBySession[activeSession.name] ?? []).length === 0 : true) &&
+    mode === "agent" &&
+    !activeAgentRunning &&
+    !activeSession?.archived
+  const composerNode = (
+    <Composer
+      centered={emptyConversation}
+      draft={draft}
+      onDraftChange={updateDraft}
+      onSend={handleSend}
+      onStop={handleStop}
+      mode={mode}
+      onModeChange={setMode}
+      disabled={!activeSession || (messagesLoading && !hasCachedMessages)}
+      sending={activeAgentRunning}
+      session={activeSession}
+      onOpenCliTemplate={() => setCliDialogOpen(true)}
+      queueWhen={queueWhen}
+      onQueueWhenChange={(value) => {
+        setQueueWhen(value)
+        saveQueueWhen(value)
+      }}
+      onModelChanged={() => {
+        onAfterSend()
+        loadDetail()
+      }}
+    />
+  )
+
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
+      {/* 顶栏从左到右：侧栏按钮、会话标题（点击改名）、⋯（按 AGENT / 容器分组的各个视图） */}
+      <header className="relative flex h-12 shrink-0 items-center gap-2 border-b px-3">
         <SidebarTrigger />
-        <Separator orientation="vertical" className="h-4!" />
-        <div className="flex shrink-0 items-center gap-1">
-          <Button
-            variant={view === "activity" ? "secondary" : "ghost"}
-            size="sm"
-            aria-current={view === "activity"}
-            onClick={() => changeView("activity")}
-          >
-            聊天
-          </Button>
-          <Button
-            variant={view === "files" ? "secondary" : "ghost"}
-            size="sm"
-            aria-current={view === "files"}
-            onClick={() => changeView("files")}
-          >
-            文件
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon-sm" title="更多标签页" aria-label="更多标签页" />}
+        <Separator orientation="vertical" className="h-4! self-center" />
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium">
+          {activeSession ? (
+            <button
+              type="button"
+              className="min-w-0 truncate rounded-md px-1 py-0.5 text-left hover:bg-muted"
+              title="点击改名"
+              onClick={() => setRenameOpen(true)}
             >
-              <EllipsisIcon />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-36">
-              {OTHER_VIEW_GROUPS.map((group, index) => (
-                <React.Fragment key={group.title}>
-                  {/* 这里分隔的是“作用对象”（AGENT / 容器），比侧栏菜单里按功能分类的分割线颜色更深 */}
-                  {index > 0 ? <DropdownMenuSeparator className="mx-1" /> : null}
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>{group.title}</DropdownMenuLabel>
-                    {group.views.map((key) => (
-                      <DropdownMenuItem
-                        key={key}
-                        aria-current={view === key}
-                        className={view === key ? "bg-accent" : undefined}
-                        onClick={() => changeView(key)}
-                      >
-                        {VIEW_LABELS[key]}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuGroup>
-                </React.Fragment>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <Separator orientation="vertical" className="h-4! shrink-0" />
-        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm font-medium">
-          <span className="truncate">
-            {activeSession
-              ? `${activeSession.containerRemark || activeSession.containerName} · ${activeSession.agentRemark || activeSession.agentName}`
-              : "选择左侧的容器 / AGENT 开始"}
-          </span>
+              {sessionDisplayTitle(activeSession)}
+            </button>
+          ) : (
+            <span className="truncate">选择左侧的容器 / AGENT 开始</span>
+          )}
+          {activeSession && view !== "activity" ? (
+            // 不在聊天时显示当前视图名，点它回到聊天（顶栏没有常驻的“聊天”按钮）
+            <button
+              type="button"
+              className="flex shrink-0 items-center gap-0.5 rounded-md px-1 py-0.5 font-normal text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="回到聊天"
+              aria-label={`${VIEW_LABELS[view]}，回到聊天`}
+              onClick={() => changeView("activity")}
+            >
+              · {VIEW_LABELS[view]}
+              <XIcon className="size-3.5" />
+            </button>
+          ) : null}
           {activeSession?.archived ? (
             <Badge variant="outline" className="shrink-0">
               已停止
             </Badge>
           ) : null}
-        </span>
+          {resumeIndicator.phase === "synced" ? (
+            <span role="status" className="shrink-0 text-xs font-normal text-muted-foreground">
+              已同步
+            </span>
+          ) : null}
+        </div>
+        {resumeIndicator.phase === "syncing" ? (
+          <div role="status" aria-label="正在同步" className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden">
+            <div className="sync-progress-bar h-full w-1/3 bg-primary/70" />
+          </div>
+        ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="icon-sm" title="更多" aria-label="更多" className="shrink-0" />}
+          >
+            <EllipsisIcon />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            {[
+              { title: "AGENT", views: AGENT_VIEWS },
+              {
+                title: activeSession
+                  ? `容器 · ${activeSession.containerRemark || activeSession.containerName}`
+                  : "容器",
+                views: CONTAINER_VIEWS,
+              },
+            ].map((group, index) => (
+              <React.Fragment key={group.views[0]}>
+                {/* 这里分隔的是“作用对象”（AGENT / 容器），比侧栏菜单里按功能分类的分割线颜色更深 */}
+                {index > 0 ? <DropdownMenuSeparator className="mx-1" /> : null}
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="truncate">{group.title}</DropdownMenuLabel>
+                  {group.views.map((key) => (
+                    <DropdownMenuItem key={key} aria-current={view === key} onClick={() => changeView(key)}>
+                      {VIEW_LABELS[key]}
+                      {view === key ? <CheckIcon className="ml-auto" /> : null}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+              </React.Fragment>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </header>
+      <PromptDialog
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+        title="会话名称"
+        description="留空就用自动生成的名字"
+        label="名称"
+        initialValue={activeSession ? sessionDisplayTitle(activeSession) : ""}
+        onSubmit={handleRename}
+      />
 
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
         {creatingAgent ? (
@@ -1732,6 +1959,20 @@ export function WorkspacePanel({
             <div className="flex h-full items-center justify-center">
               <Spinner className="size-6" />
             </div>
+          ) : emptyConversation ? (
+            // 空会话：输入区放在中间，下面给几个常用任务（点一下只是填进输入框，不直接发送）；
+            // 发出第一条后回到正常布局，输入区在底部
+            <div className="flex h-full flex-col items-center justify-center gap-3 overflow-y-auto px-1 py-6">
+              <p className="text-base font-medium">想让 AGENT 做什么？</p>
+              <div className="w-full max-w-2xl">{composerNode}</div>
+              <div className="flex max-w-2xl flex-wrap justify-center gap-2 px-3">
+                {STARTER_PROMPTS.map((text) => (
+                  <Button key={text} variant="outline" size={isMobile ? "lg" : "sm"} onClick={() => updateDraft(text)}>
+                    {text}
+                  </Button>
+                ))}
+              </div>
+            </div>
           ) : (
             <ActivityView
               key={activeSession?.name ?? "none"}
@@ -1743,6 +1984,7 @@ export function WorkspacePanel({
               loadingEarlier={loadingEarlier}
               onLoadEarlier={() => void loadEarlier()}
               followSignal={sendTick}
+              onOpenPath={openPathInFiles}
               tail={
                 <QueuedPrompts
                   items={activeSession ? queueBySession[activeSession.name] ?? [] : []}
@@ -1767,6 +2009,7 @@ export function WorkspacePanel({
               editorStateRef={filesEditorRef}
               confirmLeaveIfDirty={confirmLeaveIfDirty}
               onPreviewHtml={(title, code) => setHtmlPreview({ title, code })}
+              openRequest={filesOpenRequest}
             />
           </div>
         ) : null}
@@ -1778,6 +2021,13 @@ export function WorkspacePanel({
               <EmptyPane text="请先选择左侧的容器 / AGENT" />
             )}
           </div>
+        ) : null}
+        {view === "changes" ? (
+          activeSession ? (
+            <ChangesPanel key={activeSession.name} session={activeSession} onOpenFile={openPathInFiles} />
+          ) : (
+            <EmptyPane text="请先选择左侧的容器 / AGENT" />
+          )
         ) : null}
         {view === "detail" ? <DetailView detail={sessionDetail} /> : null}
         {view === "config" ? <ConfigView detail={sessionDetail} /> : null}
@@ -1828,29 +2078,7 @@ export function WorkspacePanel({
         </Alert>
       ) : null}
 
-      {view === "activity" ? (
-        <Composer
-          draft={draft}
-          onDraftChange={updateDraft}
-          onSend={handleSend}
-          onStop={handleStop}
-          mode={mode}
-          onModeChange={setMode}
-          disabled={!activeSession || (messagesLoading && !hasCachedMessages)}
-          sending={activeAgentRunning}
-          session={activeSession}
-          onOpenCliTemplate={() => setCliDialogOpen(true)}
-          queueWhen={queueWhen}
-          onQueueWhenChange={(value) => {
-            setQueueWhen(value)
-            saveQueueWhen(value)
-          }}
-          onModelChanged={() => {
-            onAfterSend()
-            loadDetail()
-          }}
-        />
-      ) : null}
+      {view === "activity" && !emptyConversation ? composerNode : null}
 
       <AgentTemplateDialog
         open={cliDialogOpen}
