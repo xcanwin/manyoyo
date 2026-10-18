@@ -651,7 +651,8 @@ export function SystemSettingsDialog({
               className="h-full min-h-72"
             >
               {/* 移动端屏宽有限，分类栏收窄把空间让给右侧表单 */}
-              <TabsList variant="line" className="w-20 shrink-0 sm:w-36">
+              {/* 分类多，窄屏或矮窗口放不下：限制在弹窗高度内、从顶部排起，超出可以上下滚动 */}
+              <TabsList variant="line" className="max-h-full w-20 shrink-0 justify-start overflow-y-auto sm:w-36">
                 {CATEGORIES.map((category, index) => (
                   <React.Fragment key={category.id}>
                     {index === 0 || CATEGORIES[index - 1].group !== category.group ? (

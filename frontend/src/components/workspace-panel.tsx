@@ -871,7 +871,7 @@ export function Composer({
       {/* 输入框和按钮放在同一个圆角框里：按钮只显示图标，悬停看 title，读屏读 aria-label */}
       <div
         className={cn(
-          "relative rounded-xl border bg-background transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
+          "relative rounded-xl border bg-background pt-1 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
           inputDisabled && "opacity-70"
         )}
       >

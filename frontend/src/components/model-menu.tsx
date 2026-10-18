@@ -129,7 +129,7 @@ export function ModelMenu({
               <Button
                 variant="ghost"
                 size="lg"
-                className="max-w-56 min-w-0 shrink justify-start text-muted-foreground"
+                className="max-w-56 min-w-0 shrink justify-start"
                 disabled={disabled}
                 title={`模型：${shown}`}
                 aria-label={`选择模型（当前：${shown}）`}
