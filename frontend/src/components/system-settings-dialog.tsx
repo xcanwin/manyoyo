@@ -667,7 +667,7 @@ export function SystemSettingsDialog({
                     ) : null}
                     <TabsTrigger
                       value={category.id}
-                      className="text-foreground after:hidden group-data-[variant=line]/tabs-list:data-active:bg-muted dark:group-data-[variant=line]/tabs-list:data-active:bg-muted dark:text-foreground"
+                      className="text-foreground after:hidden hover:bg-muted/60 group-data-[variant=line]/tabs-list:hover:bg-muted/60 group-data-[variant=line]/tabs-list:data-active:bg-muted dark:group-data-[variant=line]/tabs-list:data-active:bg-muted dark:text-foreground"
                     >
                       {category.shortLabel ? (
                         <>

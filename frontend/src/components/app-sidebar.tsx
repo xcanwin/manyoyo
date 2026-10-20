@@ -601,7 +601,7 @@ export function AppSidebar({
         >
           <SearchIcon data-icon="inline-start" />
           搜索容器 / AGENT
-          <kbd className="ml-auto font-mono text-xs text-muted-foreground">⌘K</kbd>
+          <kbd className="ml-auto font-sans text-xs leading-none text-muted-foreground">⌘K</kbd>
         </Button>
         <Breadcrumb>
           <BreadcrumbList className="flex-nowrap gap-1 text-sm">

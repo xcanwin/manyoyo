@@ -55,8 +55,8 @@ function LockedRow({ rule, containers, tip, mobile, ports = "全部", proto = "a
   const action = <div className={cn(fixed, "font-semibold", actionTone(rule.action))}>{rule.action === "allow" ? "允许" : "拒绝"}</div>
   const target = (
     <div className={cn(fixed, "min-w-0")}>
-      <span className="font-mono text-xs text-foreground">{rule.target}</span>
-      <span className="truncate">{describeTarget(rule.target, containers)}</span>
+      <span className="font-mono text-xs leading-none text-foreground">{rule.target}</span>
+      <span className="truncate leading-none">{describeTarget(rule.target, containers)}</span>
     </div>
   )
   if (mobile) {

@@ -144,8 +144,8 @@ function KeyLabel({ htmlFor, k, hint }: { htmlFor: string; k: string; hint?: str
 // 与字段标签同级的折叠标题：加粗文字 + 右侧箭头，默认收起
 function SectionToggle({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Collapsible>
-      <CollapsibleTrigger className="group/section flex w-full items-center justify-between gap-2 rounded-md py-0.5 text-left text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+    <Collapsible className="border-t pt-2">
+      <CollapsibleTrigger className="group/section -mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-sm font-semibold outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50">
         {title}
         <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]/section:rotate-180" />
       </CollapsibleTrigger>
