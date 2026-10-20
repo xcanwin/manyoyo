@@ -96,6 +96,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FilesPanel, type FilesEditorState } from "@/components/files-panel"
+import { configLabel } from "@/lib/config-labels"
 import { ChangesPanel } from "@/components/changes-panel"
 import { useComposerSuggestions } from "@/components/composer-suggestions"
 import { HtmlPreviewPanel, type HtmlPreviewState } from "@/components/html-preview-panel"
@@ -198,13 +199,16 @@ function InfoCard({ title, rows }: { title: string; rows: InfoRow[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">{title}</CardTitle>
+        <CardTitle className="text-sm font-semibold">{title}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col divide-y">
         {rows.map((row) => (
           <div key={row.label} className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-muted-foreground">{row.label}</span>
+              <span className="text-sm text-muted-foreground">
+                {configLabel([row.label]).mono ? row.label : configLabel([row.label]).title}
+                {configLabel([row.label]).mono ? null : <span className="ml-1.5 font-mono text-xs">{row.label}</span>}
+              </span>
               {row.tone ? (
                 <Badge variant={TONE_BADGE_VARIANT[row.tone]}>{row.value}</Badge>
               ) : (

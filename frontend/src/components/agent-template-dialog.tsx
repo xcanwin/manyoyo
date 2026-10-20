@@ -171,7 +171,7 @@ export function AgentTemplateDialog({
               </FieldLabel>
               <Textarea
                 id="agent-template-command"
-                className="min-h-20 font-mono text-xs"
+                className="min-h-20 font-mono"
                 placeholder={
                   isDefaultAgent
                     ? "例如 codex exec --skip-git-repo-check {prompt}"

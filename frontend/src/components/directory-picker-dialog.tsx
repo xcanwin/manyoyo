@@ -92,7 +92,7 @@ export function DirectoryPickerDialog({
           >
             <ArrowUpIcon />
           </Button>
-          <Input value={currentPath} readOnly className="h-8 font-mono text-xs" />
+          <Input value={currentPath} readOnly className="h-8 font-mono" />
         </div>
 
         {error ? (
