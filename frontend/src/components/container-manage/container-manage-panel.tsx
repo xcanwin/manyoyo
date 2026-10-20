@@ -306,7 +306,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-5xl flex-col gap-4 p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground">管理容器 {containerName} 的环境变量、网络与自启动，改动不需要重建容器。</p>
+          <p className="text-xs text-muted-foreground">管理容器 {containerName} 的环境变量、网络与自启动，改动不需要重建容器。</p>
           <Button variant="ghost" size="icon-sm" aria-label="重新加载" disabled={loading} onClick={() => void load(true)}>
             <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
           </Button>
@@ -314,7 +314,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base font-semibold">环境变量</CardTitle>
+            <CardTitle className="text-sm font-semibold">环境变量</CardTitle>
             <CardDescription>
               保存后下一条命令起生效，已在运行的进程不受影响。容器里也可以直接编辑 /run/manyoyo/env。
             </CardDescription>
@@ -362,7 +362,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
         {net && policy ? (
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base font-semibold">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
                 网络
                 {status ? (
                   <Badge variant={status.tone === "ok" ? "secondary" : status.tone === "danger" ? "destructive" : "outline"}>
@@ -406,7 +406,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
         {net && (net.policy.preset === "allowlist" || (net.denied ?? []).length > 0) ? (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-semibold">最近被拦截</CardTitle>
+              <CardTitle className="text-sm font-semibold">最近被拦截</CardTitle>
               <CardDescription>容器想访问但被拦下的网站。网页打不开、点了没反应时先看这里，点「允许」马上生效。</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
@@ -430,7 +430,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base font-semibold">自启动</CardTitle>
+            <CardTitle className="text-sm font-semibold">自启动</CardTitle>
             <CardDescription>容器新建、重启后都会执行（网络规则下发完成之后才运行）；也可以立即运行一次。</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">

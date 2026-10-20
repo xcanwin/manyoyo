@@ -75,7 +75,7 @@ export function TargetInput({
       <Input
         aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
-        className={cn("font-mono text-xs", chip && !open ? "pr-24" : "")}
+        className={cn("font-mono", chip && !open ? "pr-24" : "")}
         placeholder={placeholder}
         value={shown}
         autoComplete="off"

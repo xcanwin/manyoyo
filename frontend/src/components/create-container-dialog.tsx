@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { configLabel } from "@/lib/config-labels"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
@@ -129,7 +130,18 @@ function buildCreateOptions(form: CreateContainerForm) {
   return options
 }
 
-// 与上面的字段标签（run、containerName…）同样式的折叠标题：加粗文字 + 右侧箭头，默认收起
+// 字段标签：中文名 + 灰色小字配置键（与系统设置同写法）
+function KeyLabel({ htmlFor, k, hint }: { htmlFor: string; k: string; hint?: string }) {
+  return (
+    <FieldLabel htmlFor={htmlFor}>
+      {configLabel([k]).title}
+      <span className="font-mono text-xs font-normal text-muted-foreground">{k}</span>
+      {hint ? <span className="text-xs font-normal text-muted-foreground">{hint}</span> : null}
+    </FieldLabel>
+  )
+}
+
+// 与字段标签同级的折叠标题：加粗文字 + 右侧箭头，默认收起
 function SectionToggle({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <Collapsible>
@@ -292,7 +304,7 @@ export function CreateContainerDialog({
             <FieldGroup className="gap-4">
               <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-run">run</FieldLabel>
+                  <KeyLabel htmlFor="create-run" k="run" />
                   <Select value={form.run} onValueChange={handleRunChange}>
                     <SelectTrigger id="create-run" className="w-full">
                       <SelectValue placeholder="(不使用 run)" />
@@ -309,9 +321,7 @@ export function CreateContainerDialog({
                   </Select>
                 </Field>
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-container-name">
-                    containerName
-                  </FieldLabel>
+                  <KeyLabel htmlFor="create-container-name" k="containerName" />
                   <Input
                     id="create-container-name"
                     placeholder="例如 my-dev 或 my-{now}"
@@ -323,7 +333,7 @@ export function CreateContainerDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-host-path">hostPath</FieldLabel>
+                  <KeyLabel htmlFor="create-host-path" k="hostPath" />
                   <div className="flex gap-2">
                     <Input
                       id="create-host-path"
@@ -343,9 +353,7 @@ export function CreateContainerDialog({
                   </div>
                 </Field>
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-container-path">
-                    containerPath
-                  </FieldLabel>
+                  <KeyLabel htmlFor="create-container-path" k="containerPath" />
                   <Input
                     id="create-container-path"
                     placeholder="例如 /workspace"
@@ -357,7 +365,7 @@ export function CreateContainerDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-image-name">imageName</FieldLabel>
+                  <KeyLabel htmlFor="create-image-name" k="imageName" />
                   <Input
                     id="create-image-name"
                     placeholder="例如 ghcr.io/xcanwin/manyoyo"
@@ -368,9 +376,7 @@ export function CreateContainerDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-image-version">
-                    imageVersion
-                  </FieldLabel>
+                  <KeyLabel htmlFor="create-image-version" k="imageVersion" />
                   <Input
                     id="create-image-version"
                     placeholder="例如 2.2.0-common"
@@ -382,9 +388,7 @@ export function CreateContainerDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-container-mode">
-                    containerMode
-                  </FieldLabel>
+                  <KeyLabel htmlFor="create-container-mode" k="containerMode" />
                   <Select
                     value={form.containerMode}
                     onValueChange={(value: string | null) =>
@@ -404,9 +408,7 @@ export function CreateContainerDialog({
                   </Select>
                 </Field>
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-shell-prefix">
-                    shellPrefix
-                  </FieldLabel>
+                  <KeyLabel htmlFor="create-shell-prefix" k="shellPrefix" />
                   <Input
                     id="create-shell-prefix"
                     placeholder="例如 IS_SANDBOX=1"
@@ -418,7 +420,7 @@ export function CreateContainerDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-shell">shell</FieldLabel>
+                  <KeyLabel htmlFor="create-shell" k="shell" />
                   <Input
                     id="create-shell"
                     placeholder="例如 claude / codex"
@@ -427,9 +429,7 @@ export function CreateContainerDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-shell-suffix">
-                    shellSuffix
-                  </FieldLabel>
+                  <KeyLabel htmlFor="create-shell-suffix" k="shellSuffix" />
                   <Input
                     id="create-shell-suffix"
                     placeholder="例如 --dangerously-skip-permissions"
@@ -441,7 +441,7 @@ export function CreateContainerDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-yolo">CLI</FieldLabel>
+                  <KeyLabel htmlFor="create-yolo" k="yolo" />
                   <Select value={form.yolo} onValueChange={handleCliChange}>
                     <SelectTrigger id="create-yolo" className="w-full">
                       <SelectValue placeholder="(不使用)" />
@@ -457,9 +457,7 @@ export function CreateContainerDialog({
                   </Select>
                 </Field>
                 <Field>
-                  <FieldLabel className="font-semibold" htmlFor="create-agent-prompt-command">
-                    agentPromptCommand
-                  </FieldLabel>
+                  <KeyLabel htmlFor="create-agent-prompt-command" k="agentPromptCommand" />
                   <Input
                     id="create-agent-prompt-command"
                     placeholder="例如 codex exec --plain-text {prompt}"
@@ -472,9 +470,7 @@ export function CreateContainerDialog({
               </div>
 
               <Field>
-                <FieldLabel className="font-semibold" htmlFor="create-volumes">
-                  volumes (每行一项)
-                </FieldLabel>
+                <KeyLabel htmlFor="create-volumes" k="volumes" hint="每行一项" />
                 <Textarea
                   id="create-volumes"
                   placeholder="例如 /path/to/data:/data"

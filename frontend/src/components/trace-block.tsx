@@ -68,7 +68,7 @@ const fullTraceCache = createLruCache<FullTrace>(40)
 
 // [说明] 正文与工具 / 子 Agent 描述段共用的样式：两者看起来必须一模一样
 const NARRATION_BOX = "px-1.5 pt-1 pb-1.5 pl-6"
-const NARRATION_TEXT = "text-[13px] leading-[1.75] whitespace-pre-wrap text-foreground"
+const NARRATION_TEXT = "text-[13px] leading-[1.75] break-words whitespace-pre-wrap text-foreground"
 
 function stringifyPretty(value: unknown): string {
   if (value === undefined || value === null) return ""
@@ -164,7 +164,7 @@ function CompactParams({ part }: { part: BodyPart }) {
         <pre
           onClick={() => setFull(false)}
           title="点一下收成一行"
-          className="cursor-pointer overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs leading-[1.6] whitespace-pre-wrap text-foreground"
+          className="cursor-pointer overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs leading-[1.6] break-words whitespace-pre-wrap text-foreground"
         >
           {part.value}
         </pre>
@@ -192,7 +192,7 @@ function TraceBodySection({ part, copyable }: { part: BodyPart; copyable: boolea
         <span className="text-xs font-medium text-muted-foreground">{part.label}</span>
         {isResult ? <CopyBodyButton text={part.value} /> : null}
       </div>
-      <pre className="overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs leading-[1.6] whitespace-pre-wrap text-foreground">
+      <pre className="overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs leading-[1.6] break-words whitespace-pre-wrap text-foreground">
         {part.value}
       </pre>
     </div>
@@ -418,7 +418,9 @@ export function TraceBlock({ trace, sessionName, liveText = "" }: { trace: ChatM
   // 三态循环：默认（展开描述）→ 展开全部细节 → 隐藏所有细节 → 展开描述；按钮显示的是点一下会变成什么
   const nextMode: ExpandMode = mode === "default" ? "all" : mode === "all" ? "none" : "default"
   const nextLabel = mode === "default" ? "展开全部细节" : mode === "all" ? "隐藏所有细节" : "展开描述"
-  const NextIcon = mode === "default" ? ChevronsUpDownIcon : mode === "all" ? ChevronsDownUpIcon : AlignLeftIcon
+  // 图标表示当前状态，标题 / aria-label 表示点一下会变成什么
+  const NextIcon = mode === "default" ? AlignLeftIcon : mode === "all" ? ChevronsUpDownIcon : ChevronsDownUpIcon
+  const modeLabel = mode === "default" ? "展开描述" : mode === "all" ? "展开全部细节" : "隐藏所有细节"
   function toggleAll() {
     // 点一下整体切换，并清掉各行手动状态：“全部”就是全部
     setMode(nextMode)
@@ -517,7 +519,7 @@ export function TraceBlock({ trace, sessionName, liveText = "" }: { trace: ChatM
           <button
             type="button"
             onClick={toggleAll}
-            title={nextLabel}
+            title={`当前：${modeLabel}，点击切换为${nextLabel}`}
             aria-label={nextLabel}
             className="rounded-md border bg-muted/40 p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           >

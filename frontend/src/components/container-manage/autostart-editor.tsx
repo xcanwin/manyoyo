@@ -23,7 +23,7 @@ export function AutostartEditor({
         <FieldLabel htmlFor={`${idPrefix}-autostart`}>自启动脚本（bash）</FieldLabel>
         <Textarea
           id={`${idPrefix}-autostart`}
-          className="min-h-28 font-mono text-xs"
+          className="min-h-28 font-mono"
           placeholder={"例如：\nnohup python3 -m http.server 8080 &"}
           value={script}
           onChange={(event) => onScriptChange(event.target.value)}

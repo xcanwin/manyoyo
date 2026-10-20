@@ -607,8 +607,13 @@ export function AppSidebar({
           <BreadcrumbList className="flex-nowrap gap-1 text-sm">
             <BreadcrumbItem className="shrink-0">
               {navLevel === "containers" ? (
-                // 容器列表已在最顶层，不显示“全部容器”，只留空位避免高度跳动
-                <div aria-hidden="true" className="h-8" />
+                // 容器列表已在最顶层：灰色不可点的“容器列表”，圆点占位避免宽度跳动
+                <Button variant="outline" disabled>
+                  <span data-icon="inline-start" className="flex size-4 items-center justify-center">
+                    <span className="size-1.5 rounded-full bg-current" />
+                  </span>
+                  容器列表
+                </Button>
               ) : (
                 <Button
                   variant="outline"
@@ -626,7 +631,7 @@ export function AppSidebar({
               <>
                 <BreadcrumbSeparator className="shrink-0" />
                 <BreadcrumbItem className="min-w-0 flex-1">
-                  <BreadcrumbPage className="block truncate">
+                  <BreadcrumbPage className="block truncate" title={activeGroup.containerRemark ? `${activeGroup.containerRemark}（${activeGroup.containerName}）` : activeGroup.containerName}>
                     {activeGroup.containerRemark || activeGroup.containerName}
                   </BreadcrumbPage>
                 </BreadcrumbItem>

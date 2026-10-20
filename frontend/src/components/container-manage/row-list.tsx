@@ -79,7 +79,7 @@ export function RowList<T extends Record<string, string>>({
               <Input
                 key={column.key}
                 aria-label={`${ariaPrefix}第 ${index + 1} 行${column.label}`}
-                className={cn("min-w-0 font-mono text-xs", column.className ?? "flex-1")}
+                className={cn("min-w-0 font-mono", column.className ?? "flex-1")}
                 placeholder={column.placeholder}
                 inputMode={column.inputMode}
                 value={row[column.key]}

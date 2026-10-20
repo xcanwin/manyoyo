@@ -150,7 +150,7 @@ function UserRow({
       data-field="ports"
       aria-label={`${label}第 ${n} 行${direction === "outbound" ? "目标端口" : "容器端口"}`}
       aria-invalid={!!portsError || undefined}
-      className={cn("min-w-0 font-mono text-xs", off && "opacity-45")}
+      className={cn("min-w-0 font-mono", off && "opacity-45")}
       placeholder="留空即全部"
       value={rule.ports}
       onChange={(event) => onChange({ ...rule, ports: event.target.value })}
@@ -159,7 +159,7 @@ function UserRow({
   )
   const proto = (
     <Select value={rule.proto} onValueChange={(next) => next && onChange({ ...rule, proto: next as Proto })}>
-      <SelectTrigger aria-label={`${label}第 ${n} 行协议`} className={cn("w-full min-w-0 text-xs", off && "opacity-45")}>
+      <SelectTrigger aria-label={`${label}第 ${n} 行协议`} className={cn("w-full min-w-0", off && "opacity-45")}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

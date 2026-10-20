@@ -39,11 +39,11 @@ export function DeniedList({
       {normal.length ? (
         normal.map((record) => <Row key={`${record.host}:${record.port}`} record={record} disabled={disabled} onAllow={onAllow} />)
       ) : (
-        <p className="text-sm text-muted-foreground">暂无</p>
+        <p className="text-xs text-muted-foreground">暂无</p>
       )}
       {background.length ? (
         <Collapsible>
-          <CollapsibleTrigger className="group/section flex w-full items-center justify-between gap-2 rounded-md py-0.5 text-left text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+          <CollapsibleTrigger className="group/section flex w-full items-center justify-between gap-2 rounded-md py-0.5 text-left text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
             浏览器后台请求（{background.length}）
             <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]/section:rotate-180" />
           </CollapsibleTrigger>

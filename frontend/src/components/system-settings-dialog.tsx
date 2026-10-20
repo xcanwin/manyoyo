@@ -193,7 +193,7 @@ function ConfigFieldLabel({ path, htmlFor }: { path: string[]; htmlFor?: string 
   return (
     <FieldLabel htmlFor={htmlFor} className="items-baseline gap-2">
       <span className={cn("font-medium", label.mono && "font-mono")}>{label.title}</span>
-      {!label.mono ? <span className="font-mono font-normal text-muted-foreground">{label.key}</span> : null}
+      {!label.mono ? <span className="font-mono text-xs font-normal text-muted-foreground">{label.key}</span> : null}
     </FieldLabel>
   )
 }
@@ -330,7 +330,7 @@ function ConfigValueGroup({
           <CardHeader>
             <CardTitle className="flex items-baseline gap-2 text-sm font-semibold">
               <span className={cn(label.mono && "font-mono")}>{label.title}</span>
-              {!label.mono ? <span className="font-mono font-normal text-muted-foreground">{label.key}</span> : null}
+              {!label.mono ? <span className="font-mono text-xs font-normal text-muted-foreground">{label.key}</span> : null}
             </CardTitle>
             {label.desc ? <CardDescription>{label.desc}</CardDescription> : null}
           </CardHeader>
@@ -345,9 +345,9 @@ function ConfigValueGroup({
         <div className="flex flex-col gap-0.5">
           <div className="flex items-baseline gap-2">
             <h4 className={cn("text-sm font-semibold", label.mono && "font-mono")}>{label.title}</h4>
-            {!label.mono ? <span className="font-mono text-sm text-muted-foreground">{label.key}</span> : null}
+            {!label.mono ? <span className="font-mono text-xs text-muted-foreground">{label.key}</span> : null}
           </div>
-          {label.desc ? <p className="text-sm text-muted-foreground">{label.desc}</p> : null}
+          {label.desc ? <p className="text-xs text-muted-foreground">{label.desc}</p> : null}
         </div>
         <div className="flex flex-col gap-4 border-l-2 pl-3">{children}</div>
       </section>

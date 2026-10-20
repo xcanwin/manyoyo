@@ -129,7 +129,7 @@ export function EnvEditor({
         <Textarea
           id={`${idPrefix}-env-text`}
           aria-label="环境变量文本"
-          className="min-h-32 font-mono text-xs"
+          className="min-h-32 font-mono"
           placeholder="例如 KEY=value，每行一项"
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -150,13 +150,13 @@ export function EnvEditor({
               <div key={index} className="flex items-center gap-2">
                 <Input
                   aria-label={`第 ${index + 1} 项名称`}
-                  className="w-2/5 font-mono text-xs"
+                  className="w-2/5 font-mono"
                   value={entry.key}
                   onChange={(event) => updateEntry(index, { key: event.target.value })}
                 />
                 <Input
                   aria-label={`第 ${index + 1} 项的值`}
-                  className={cn("flex-1 font-mono text-xs", hidden && "[-webkit-text-security:disc]")}
+                  className={cn("flex-1 font-mono", hidden && "[-webkit-text-security:disc]")}
                   // 不用 type=password：浏览器会把它当登录表单，回车后弹“要保存密码吗”
                   type="text"
                   autoComplete="off"
