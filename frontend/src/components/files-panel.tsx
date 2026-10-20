@@ -35,8 +35,15 @@ function joinPath(base: string, name: string): string {
 // 原生 input 在移动端对 readOnly 内容的横向触摸滑动支持并不可靠，div + overflow-x-auto
 // 是标准的内容滚动，各平台表现一致；no-scrollbar 只是不露出滚动条，不影响滑动能力
 function PathBar({ value, className }: { value: string; className?: string }) {
+  // 路径过长时优先显示最右边：当前所在位置和文件名比前面的目录更重要
+  const boxRef = React.useRef<HTMLDivElement>(null)
+  React.useLayoutEffect(() => {
+    const box = boxRef.current
+    if (box) box.scrollLeft = box.scrollWidth
+  }, [value])
   return (
     <div
+      ref={boxRef}
       className={cn(
         "no-scrollbar flex h-8 w-full min-w-0 items-center overflow-x-auto rounded-lg border border-input bg-transparent px-2.5 dark:bg-input/30",
         className
@@ -51,8 +58,18 @@ function PathBar({ value, className }: { value: string; className?: string }) {
 
 function EditablePathBar({ value, onSubmit, className }: { value: string; onSubmit: (path: string) => void; className?: string }) {
   const [draft, setDraft] = React.useState(value)
+  // 路径过长时优先显示最右边（失焦、重置后同样）
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const scrollToEnd = React.useCallback(() => {
+    const input = inputRef.current
+    if (input) input.scrollLeft = input.scrollWidth
+  }, [])
+  React.useLayoutEffect(() => {
+    scrollToEnd()
+  }, [value, scrollToEnd])
   return (
     <input
+      ref={inputRef}
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
       onKeyDown={(event) => {
@@ -63,7 +80,10 @@ function EditablePathBar({ value, onSubmit, className }: { value: string; onSubm
           setDraft(value)
         }
       }}
-      onBlur={() => setDraft(value)}
+      onBlur={() => {
+        setDraft(value)
+        requestAnimationFrame(scrollToEnd)
+      }}
       spellCheck={false}
       autoComplete="off"
       data-1p-ignore
@@ -72,7 +92,7 @@ function EditablePathBar({ value, onSubmit, className }: { value: string; onSubm
       autoCorrect="off"
       aria-label="当前路径，回车跳转"
       className={cn(
-        "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 font-mono text-xs text-muted-foreground outline-none focus:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30",
+        "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 font-mono text-base text-muted-foreground outline-none md:text-sm focus:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30",
         className
       )}
     />
@@ -573,7 +593,7 @@ export function FilesPanel({
 
         <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", !showDetailPane && "hidden")}>
           {selectedPath ? (
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b p-2">
+            <div className={cn("flex shrink-0 gap-2 border-b p-2", isMobile ? "flex-col items-stretch" : "items-center justify-between")}>
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 {isMobile ? (
                   <Button variant="outline" size="sm" onClick={handleMobileBackToList} title="返回目录列表">
@@ -596,7 +616,7 @@ export function FilesPanel({
                 ) : null}
               </div>
               {fileData?.kind === "text" ? (
-                <div className="flex shrink-0 items-center gap-2">
+                <div className={cn("flex shrink-0 items-center gap-2", isMobile && "justify-end")}>
                   <Button
                     variant={mode === "edit" ? "secondary" : "outline"}
                     size="sm"

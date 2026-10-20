@@ -48,6 +48,7 @@ const KEYBAR_KEYS: Array<{ label: string; data: string }> = [
   { label: "▲", data: "\x1b[A" },
   { label: "▼", data: "\x1b[B" },
   { label: "▶", data: "\x1b[C" },
+  { label: "^C", data: "\x03" },
 ]
 
 // 单字符输入按当前修饰键状态转换：ctrl 走控制字符，alt 走 ESC 前缀。
@@ -106,10 +107,16 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
     else termRef.current?.focus()
   }
 
+  // 移动端点按键条不改变焦点（输入条已聚焦就保持，没聚焦也不去聚焦）
+  function keepFocus(event: React.MouseEvent) {
+    if (isMobile) event.preventDefault()
+  }
+
   function sendKey(data: string) {
     sendInput(data)
-    // 点击按钮会把浏览器焦点带到按钮本身，这里点完再抢回来
-    restoreFocus()
+    // 桌面端：点击按钮会把浏览器焦点带到按钮本身，点完抢回给 xterm。
+    // 移动端不抢：抢回输入条会弹出软键盘，挡住终端，也没法连续点方向键 / ctrl+c
+    if (!isMobile) restoreFocus()
   }
 
   function submitMobileInput() {
@@ -291,6 +298,7 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
             <button
               key={key.label}
               type="button"
+              onMouseDown={keepFocus}
               onClick={() => sendKey(key.data)}
               className="shrink-0 rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800"
             >
@@ -299,9 +307,10 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
           ))}
           <button
             type="button"
+            onMouseDown={keepFocus}
             onClick={() => {
               setCtrlMode((value) => !value)
-              termRef.current?.focus()
+              if (!isMobile) termRef.current?.focus()
             }}
             className={cn(
               "shrink-0 rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
@@ -312,9 +321,10 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
           </button>
           <button
             type="button"
+            onMouseDown={keepFocus}
             onClick={() => {
               setAltMode((value) => !value)
-              termRef.current?.focus()
+              if (!isMobile) termRef.current?.focus()
             }}
             className={cn(
               "shrink-0 rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
@@ -341,7 +351,6 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
         <div
           ref={containerRef}
           className="h-full w-full overflow-hidden"
-          onClick={isMobile ? () => mobileInputRef.current?.focus() : undefined}
         />
       </div>
       {isMobile ? (
