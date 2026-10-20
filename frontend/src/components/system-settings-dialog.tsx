@@ -665,7 +665,10 @@ export function SystemSettingsDialog({
                         <span className="hidden sm:inline">{category.group}</span>
                       </div>
                     ) : null}
-                    <TabsTrigger value={category.id}>
+                    <TabsTrigger
+                      value={category.id}
+                      className="text-foreground after:hidden group-data-[variant=line]/tabs-list:data-active:bg-muted dark:group-data-[variant=line]/tabs-list:data-active:bg-muted dark:text-foreground"
+                    >
                       {category.shortLabel ? (
                         <>
                           <span className="sm:hidden">{category.shortLabel}</span>

@@ -164,6 +164,8 @@ export function AppSidebar({
     kind: "container" | "agent"
     key: string
     initial: string
+    // 改名前已有的备注；没改动时不把自动标题固化成备注
+    remark?: string
   } | null>(null)
   const [cloneDialog, setCloneDialog] = React.useState<{
     mode: CloneMode
@@ -502,11 +504,12 @@ export function AppSidebar({
   }
 
   function editAgentRemark(session: SessionSummary) {
-    setRemarkDialog({ kind: "agent", key: session.name, initial: session.agentRemark })
+    setRemarkDialog({ kind: "agent", key: session.name, initial: sessionDisplayTitle(session), remark: session.agentRemark })
   }
 
   async function submitRemark(value: string) {
     if (!remarkDialog) return
+    if (remarkDialog.kind === "agent" && value === remarkDialog.initial && value !== remarkDialog.remark) return
     const endpoint =
       remarkDialog.kind === "container" ? "container-remark" : "agent-remark"
     await apiPost(`/api/sessions/${encodeURIComponent(remarkDialog.key)}/${endpoint}`, {
@@ -601,28 +604,23 @@ export function AppSidebar({
           <kbd className="ml-auto font-mono text-xs text-muted-foreground">⌘K</kbd>
         </Button>
         <Breadcrumb>
-          <BreadcrumbList className="flex-nowrap gap-1 text-xs">
+          <BreadcrumbList className="flex-nowrap gap-1 text-sm">
             <BreadcrumbItem className="shrink-0">
-              <Button
-                variant="outline"
-                size="xs"
-                disabled={navLevel === "containers"}
-                onClick={navLevel === "containers" ? undefined : goToContainers}
-                // Breadcrumb 自己套了一层 text-muted-foreground，Button 默认不强制文字颜色，
-                // 会被继承成灰色——这里显式改回前景色，不然容器名旁边这颗按钮看着像不能点
-                className="text-foreground"
-              >
-                {navLevel === "containers" ? (
-                  // 容器列表层级已经在最顶层，没有"返回"语义了，箭头图标换成一个等宽的圆点占位，
-                  // 既不会因为图标消失导致按钮宽度跳动，也不会让人误以为还能往回点
-                  <span data-icon="inline-start" className="flex size-4 items-center justify-center">
-                    <span className="size-1.5 rounded-full bg-current" />
-                  </span>
-                ) : (
+              {navLevel === "containers" ? (
+                // 容器列表已在最顶层，不显示“全部容器”，只留空位避免高度跳动
+                <div aria-hidden="true" className="h-8" />
+              ) : (
+                <Button
+                  variant="outline"
+                  // Breadcrumb 自己套了一层 text-muted-foreground，Button 默认不强制文字颜色，
+                  // 会被继承成灰色——这里显式改回前景色
+                  className="font-medium text-foreground"
+                  onClick={goToContainers}
+                >
                   <ArrowLeftIcon data-icon="inline-start" />
-                )}
-                全部容器
-              </Button>
+                  全部容器
+                </Button>
+              )}
             </BreadcrumbItem>
             {navLevel === "agents" && activeGroup ? (
               <>
@@ -635,7 +633,7 @@ export function AppSidebar({
                 <BreadcrumbItem className="shrink-0">
                   <DropdownMenu>
                     <DropdownMenuTrigger
-                      render={<Button variant="ghost" size="icon-xs" title="容器操作" aria-label="容器操作" />}
+                      render={<Button variant="outline" size="icon" title="容器操作" aria-label="容器操作" />}
                     >
                       <MoreHorizontalIcon />
                     </DropdownMenuTrigger>

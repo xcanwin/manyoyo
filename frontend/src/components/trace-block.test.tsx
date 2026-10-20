@@ -297,7 +297,7 @@ describe("TraceBlock 默认展开与全部开合（B2–B4）", () => {
     expect(container.textContent).toContain("执行过程")
   })
 
-  test("展开全部细节 / 收起全部细节：按钮在两个对齐按钮之间，标题随状态切换", async () => {
+  test("展开全部细节 → 隐藏所有细节 → 展开描述：按钮在两个对齐按钮之间，三态循环", async () => {
     await mount(mk())
     await expand()
     const labels = Array.from(container.querySelectorAll("button[aria-label]")).map((el) => el.getAttribute("aria-label"))
@@ -309,14 +309,19 @@ describe("TraceBlock 默认展开与全部开合（B2–B4）", () => {
 
     await click(button("展开全部细节")!)
     expect(container.textContent).toContain("total 8")
-    expect(button("收起全部细节")).not.toBeNull()
+    expect(button("隐藏所有细节")).not.toBeNull()
     expect(button("展开全部细节")).toBeNull()
 
-    await click(button("收起全部细节")!)
+    await click(button("隐藏所有细节")!)
     expect(container.textContent).not.toContain("total 8")
     expect(container.textContent).not.toContain("先看看目录结构")
     // 收起全部：工具描述与说明正文一样收起，只剩标题
     expect(container.textContent).not.toContain("列出目录")
+    expect(button("展开描述")).not.toBeNull()
+
+    await click(button("展开描述")!)
+    expect(container.textContent).toContain("列出目录")
+    expect(container.textContent).not.toContain("total 8")
     expect(button("展开全部细节")).not.toBeNull()
   })
 

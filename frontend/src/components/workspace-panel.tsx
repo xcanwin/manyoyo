@@ -98,8 +98,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FilesPanel, type FilesEditorState } from "@/components/files-panel"
 import { ChangesPanel } from "@/components/changes-panel"
 import { useComposerSuggestions } from "@/components/composer-suggestions"
-import { toast } from "sonner"
-import { PromptDialog } from "@/components/prompt-dialog"
 import { HtmlPreviewPanel, type HtmlPreviewState } from "@/components/html-preview-panel"
 import { MarkdownContent } from "@/components/markdown-content"
 import { ModelMenu } from "@/components/model-menu"
@@ -329,6 +327,12 @@ function ActivityView({
   const earlierRequestedRef = React.useRef(false)
   // 视野不在底部时内容又变长了：显示“↓ 有新输出”，点一下贴底（见 nextHasNewBelow）
   const [hasNewBelow, setHasNewBelow] = React.useState(false)
+  // 只有任务在跑时内容变长才算“新输出”；用户点开执行过程等操作引起的变长不提示
+  const runningRef = React.useRef(false)
+  const running = displayMessages.some((message) => message.pending)
+  React.useEffect(() => {
+    runningRef.current = running
+  }, [running])
 
   function jumpToBottom() {
     anchorRef.current = "bottom"
@@ -478,7 +482,7 @@ function ActivityView({
       lastWidth = el.clientWidth
       setHasNewBelow((prev) =>
         nextHasNewBelow(prev, {
-          prevHeight: widthChanged ? el.scrollHeight : prevHeight,
+          prevHeight: widthChanged || !runningRef.current ? el.scrollHeight : prevHeight,
           scrollHeight: el.scrollHeight,
           scrollTop: el.scrollTop,
           clientHeight: el.clientHeight,
@@ -630,7 +634,7 @@ function ActivityView({
         <Button
           variant="outline"
           size="sm"
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-background shadow-md"
+          className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-background shadow-md"
           onClick={jumpToBottom}
         >
           <ArrowDownIcon data-icon="inline-start" />
@@ -1226,18 +1230,6 @@ export function WorkspacePanel({
     if (view === next) return
     if (view === "files" && !(await confirmLeaveIfDirty())) return
     setView(next)
-  }
-
-  // 点顶栏标题改名：改的就是 AGENT 备注；提交空字符串表示清掉备注，回到自动生成的名字
-  const [renameOpen, setRenameOpen] = React.useState(false)
-  async function handleRename(value: string) {
-    if (!activeSession) return
-    const trimmed = value.trim()
-    // 没改动（仍是当前显示名）时不把自动标题固化成备注
-    if (trimmed === sessionDisplayTitle(activeSession) && trimmed !== activeSession.agentRemark) return
-    await apiPost(`/api/sessions/${encodeURIComponent(activeSession.name)}/agent-remark`, { remark: trimmed })
-    toast.success(trimmed ? "已改名" : "已恢复自动名称")
-    await onAfterSend()
   }
 
   // 聊天里点了路径：切到文件页并让 FilesPanel 打开它（nonce 让同一路径可以重复打开）
@@ -1857,20 +1849,13 @@ export function WorkspacePanel({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
-      {/* 顶栏从左到右：侧栏按钮、会话标题（点击改名）、⋯（按 AGENT / 容器分组的各个视图） */}
+      {/* 顶栏从左到右：侧栏按钮、会话标题、⋯（按 AGENT / 容器分组的各个视图） */}
       <header className="relative flex h-12 shrink-0 items-center gap-2 border-b px-3">
         <SidebarTrigger />
         <Separator orientation="vertical" className="h-4! self-center" />
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium">
           {activeSession ? (
-            <button
-              type="button"
-              className="min-w-0 truncate rounded-md px-1 py-0.5 text-left hover:bg-muted"
-              title="点击改名"
-              onClick={() => setRenameOpen(true)}
-            >
-              {sessionDisplayTitle(activeSession)}
-            </button>
+            <span className="min-w-0 truncate px-1 py-0.5">{sessionDisplayTitle(activeSession)}</span>
           ) : (
             <span className="truncate">选择左侧的容器 / AGENT 开始</span>
           )}
@@ -1936,16 +1921,6 @@ export function WorkspacePanel({
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
-      <PromptDialog
-        open={renameOpen}
-        onOpenChange={setRenameOpen}
-        title="会话名称"
-        description="留空就用自动生成的名字"
-        label="名称"
-        initialValue={activeSession ? sessionDisplayTitle(activeSession) : ""}
-        onSubmit={handleRename}
-      />
-
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
         {creatingAgent ? (
           <div className="flex h-full flex-col items-center justify-center gap-2">

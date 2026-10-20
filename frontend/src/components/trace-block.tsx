@@ -6,6 +6,7 @@ import {
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
+  AlignLeftIcon,
   CircleDotIcon,
   CircleIcon,
   CircleCheckIcon,
@@ -196,16 +197,6 @@ function TraceBodySection({ part, copyable }: { part: BodyPart; copyable: boolea
       </pre>
     </div>
   )
-}
-
-// 能展开的行：说明、以及有详情字段的行；原始输出行只有一行文字，不能展开
-function isExpandableNode(node: TraceNode): boolean {
-  const { event } = node
-  return event.kind === "agent_message" || node.children.length > 0 || (event.kind !== "output" && buildBodyParts(event).length > 0)
-}
-
-function flattenNodes(nodes: TraceNode[]): TraceNode[] {
-  return nodes.flatMap((node) => [node, ...flattenNodes(node.children)])
 }
 
 // 默认状态：说明展开，工具行只露标题和描述；mode=all 全展开，mode=none 全收起
@@ -424,12 +415,13 @@ export function TraceBlock({ trace, sessionName, liveText = "" }: { trace: ChatM
   const tree = buildTraceTree(merged)
   const taskList = buildTaskList(merged)
   const rowOpen = (event: TraceEvent, key: string) => rowOverrides[key] ?? defaultRowOpen(event, mode)
-  // “展开全部 / 收起全部”覆盖嵌套的行
-  const expandableRows = flattenNodes(tree).filter(isExpandableNode)
-  const allOpen = expandableRows.length > 0 && expandableRows.every((node) => rowOpen(node.event, node.key))
+  // 三态循环：默认（展开描述）→ 展开全部细节 → 隐藏所有细节 → 展开描述；按钮显示的是点一下会变成什么
+  const nextMode: ExpandMode = mode === "default" ? "all" : mode === "all" ? "none" : "default"
+  const nextLabel = mode === "default" ? "展开全部细节" : mode === "all" ? "隐藏所有细节" : "展开描述"
+  const NextIcon = mode === "default" ? ChevronsUpDownIcon : mode === "all" ? ChevronsDownUpIcon : AlignLeftIcon
   function toggleAll() {
     // 点一下整体切换，并清掉各行手动状态：“全部”就是全部
-    setMode(allOpen ? "none" : "all")
+    setMode(nextMode)
     setRowOverrides({})
   }
   function renderNode(node: TraceNode): React.ReactNode {
@@ -525,11 +517,11 @@ export function TraceBlock({ trace, sessionName, liveText = "" }: { trace: ChatM
           <button
             type="button"
             onClick={toggleAll}
-            title={allOpen ? "收起全部细节" : "展开全部细节"}
-            aria-label={allOpen ? "收起全部细节" : "展开全部细节"}
+            title={nextLabel}
+            aria-label={nextLabel}
             className="rounded-md border bg-muted/40 p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
-            {allOpen ? <ChevronsDownUpIcon className="size-3.5" /> : <ChevronsUpDownIcon className="size-3.5" />}
+            <NextIcon className="size-3.5" />
           </button>
           <button
             type="button"
