@@ -65,8 +65,11 @@
     "shell": "",
     "shellSuffix": "",
     "agentPromptCommand": "",
-    // 网页里执行 Agent 时追加的说明（接在内置环境说明后面），例如 "回答用中文"
+    // 网页里新建容器时的补充系统提示词（接在默认系统提示词后面），例如 "回答用中文"
     "agentInstructions": "",
+    // 默认 / 补充系统提示词的开关，默认都开
+    "agentInstructionsBuiltinEnabled": true,
+    "agentInstructionsCustomEnabled": true,
     "yolo": "",
     "quiet": ["tip", "cmd"],
 

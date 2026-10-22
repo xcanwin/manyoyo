@@ -348,7 +348,7 @@ function installServeProcessDiagnostics(logger) {
  * @property {string[]} [volumes] - 挂载卷数组
  * @property {Object.<string, Object>} [plugins] - 可选插件配置映射（如 plugins.playwright）
  * @property {{title?:string}} [serve] - serve 命令专属配置（如自定义网页标题，留空字符串则显示为空）
- * @property {string} [agentInstructions] - 网页里执行 Agent 时追加给它的说明（接在内置环境说明后面；runs.<name> 可覆盖）
+ * @property {string} [agentInstructions] - 补充系统提示词（接在默认系统提示词后面，作为网页新建容器的初始内容；runs.<name> 可覆盖）
  * @property {Object.<string, Object>} [runs] - 运行配置映射（-r <name>）
  * @property {string} [yolo] - YOLO 模式
  * @property {string} [containerMode] - 容器模式

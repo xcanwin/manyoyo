@@ -117,6 +117,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             ['GET', '/api/containers/boxa/env'], ['PUT', '/api/containers/boxa/env'],
             ['GET', '/api/containers/boxa/autostart'], ['PUT', '/api/containers/boxa/autostart'],
             ['POST', '/api/containers/boxa/autostart/run'], ['GET', '/api/containers/boxa/autostart/log'],
+            ['GET', '/api/containers/boxa/system-prompt'], ['PUT', '/api/containers/boxa/system-prompt'],
             ['GET', '/api/containers/boxa/network'], ['PUT', '/api/containers/boxa/network'],
             ['POST', '/api/containers/boxa/network/allow'], ['DELETE', '/api/containers/boxa/network/denied'],
             ['POST', '/api/containers/boxa/expose'], ['DELETE', '/api/containers/boxa/expose'],
@@ -177,6 +178,62 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(put.json.legacy).toBe(true);
             expect((await request(`${baseUrl}/api/containers/nothere/env`, { headers: { Cookie: cookie } })).response.status).toBe(404);
             expect((await request(`${baseUrl}/api/containers/${encodeURIComponent('a b;c')}/env`, { headers: { Cookie: cookie } })).response.status).toBe(400);
+        });
+    });
+
+    describe('启动 / 停止容器', () => {
+        test('未登录 401；停止走 docker stop，启动走统一的拉起路径；容器不存在 404', async () => {
+            const calls = [];
+            await handle.close();
+            await start({
+                dockerExecAsync: async args => { calls.push(args); return ''; },
+                getContainerStatus: () => 'exited',
+                dockerExecArgs: args => { calls.push(args); return args[0] === 'inspect' ? '' : ''; }
+            });
+            const anon = await request(`${baseUrl}/api/sessions/boxa/container/stop`, { method: 'POST' });
+            expect(anon.response.status).toBe(401);
+            const stop = await request(`${baseUrl}/api/sessions/boxa/container/stop`, json(cookie, 'POST', {}));
+            expect(stop.response.status).toBe(200);
+            expect(calls).toContainEqual(['stop', '-t', '10', 'boxa']);
+            const startRes = await request(`${baseUrl}/api/sessions/boxa/container/start`, json(cookie, 'POST', {}));
+            expect(startRes.response.status).toBe(200);
+            expect(calls).toContainEqual(['start', 'boxa']);
+            const missing = await request(`${baseUrl}/api/sessions/nobody/container/stop`, json(cookie, 'POST', {}));
+            expect(missing.response.status).toBe(404);
+        });
+    });
+
+    describe('系统提示词', () => {
+        test('没存过时显示按系统设置现算的内容；保存后以容器自己的为准，格式不对 400', async () => {
+            const first = await request(`${baseUrl}/api/containers/boxa/system-prompt`, { headers: { Cookie: cookie } });
+            expect(first.json).toEqual(expect.objectContaining({ legacy: false, enabled: true }));
+            expect(first.json.text).toContain('网页');
+
+            const bad = await request(`${baseUrl}/api/containers/boxa/system-prompt`, json(cookie, 'PUT', { text: 1, enabled: true }));
+            expect(bad.response.status).toBe(400);
+
+            const put = await request(`${baseUrl}/api/containers/boxa/system-prompt`, json(cookie, 'PUT', { text: '只给这个容器', enabled: false }));
+            expect(put.json).toEqual(expect.objectContaining({ text: '只给这个容器', enabled: false }));
+            expect(state.readSystemPrompt(tempHost, boxA.id)).toEqual({ enabled: false, text: '只给这个容器' });
+        });
+
+        test('新建时填的提示词写进状态目录；没填就按系统设置现算', async () => {
+            const create = body => request(`${baseUrl}/api/sessions`, json(cookie, 'POST', { createOptions: { hostPath: tempHost, imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.0.0-common', ...body } }));
+            const before = new Set(state.listStateIds(tempHost));
+            const withPrompt = await create({ containerName: 'promptbox1', systemPrompt: { enabled: false, text: '创建时写的' } });
+            expect(withPrompt.response.status).toBe(200);
+            const first = state.listStateIds(tempHost).find(id => !before.has(id));
+            expect(state.readSystemPrompt(tempHost, first)).toEqual({ enabled: false, text: '创建时写的' });
+
+            const bad = await create({ containerName: 'promptbox2', systemPrompt: { text: 1 } });
+            expect(bad.response.status).toBe(400);
+
+            const seen = new Set(state.listStateIds(tempHost));
+            const plain = await create({ containerName: 'promptbox3' });
+            expect(plain.response.status).toBe(200);
+            const second = state.listStateIds(tempHost).find(id => !seen.has(id));
+            expect(state.readSystemPrompt(tempHost, second)).toEqual(expect.objectContaining({ enabled: true }));
+            expect(state.readSystemPrompt(tempHost, second).text).toContain('网页');
         });
     });
 

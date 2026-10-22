@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { AutostartEditor } from "@/components/container-manage/autostart-editor"
+import { SystemPromptEditor } from "@/components/container-manage/system-prompt-editor"
 import { EnvEditor } from "@/components/container-manage/env-editor"
 import { DeniedList } from "@/components/container-manage/denied-list"
 import { NetworkEditor } from "@/components/container-manage/network-editor"
@@ -26,6 +27,7 @@ import {
 import { formatDateTime } from "@/lib/format"
 
 type AutostartState = { script: string; autostartOnServe: boolean }
+type SystemPromptState = { enabled: boolean; text: string }
 
 const enc = (name: string) => encodeURIComponent(name)
 
@@ -56,6 +58,11 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
   const [autostartBusy, setAutostartBusy] = React.useState(false)
   const [log, setLog] = React.useState<string | null>(null)
 
+  const [prompt, setPrompt] = React.useState<SystemPromptState>({ enabled: true, text: "" })
+  const [promptSaved, setPromptSaved] = React.useState<SystemPromptState>({ enabled: true, text: "" })
+  const [promptMessage, setPromptMessage] = React.useState<{ tone: "ok" | "error"; text: string } | null>(null)
+  const [promptBusy, setPromptBusy] = React.useState(false)
+
   const [net, setNet] = React.useState<NetworkState | null>(null)
   const [policy, setPolicy] = React.useState<NetworkPolicy | null>(null)
   const [netMessage, setNetMessage] = React.useState<{ tone: "ok" | "error"; text: string } | null>(null)
@@ -71,10 +78,11 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
     const minSpin = manual ? new Promise((resolve) => setTimeout(resolve, 600)) : null
     setLoadError("")
     try {
-      const [env, auto, network] = await Promise.all([
+      const [env, auto, network, systemPrompt] = await Promise.all([
         apiGet(`${base}/env`),
         apiGet(`${base}/autostart`),
         apiGet(`${base}/network`),
+        apiGet(`${base}/system-prompt`),
       ])
       if (env.legacy === true) {
         setLegacy(String(env.message || ""))
@@ -94,6 +102,10 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
       setAutostart(loadedAuto)
       setAutostartSaved(loadedAuto)
       setAutostartMessage(null)
+      const loadedPrompt = { enabled: systemPrompt.enabled !== false, text: String(systemPrompt.text || "") }
+      setPrompt(loadedPrompt)
+      setPromptSaved(loadedPrompt)
+      setPromptMessage(null)
       const loadedNet = network as unknown as NetworkState
       setNet(loadedNet)
       setPolicy(loadedNet.policy)
@@ -141,6 +153,25 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
       }
     } finally {
       setEnvSaving(false)
+    }
+  }
+
+  const promptDirty = prompt.enabled !== promptSaved.enabled || prompt.text !== promptSaved.text
+
+  async function savePrompt() {
+    if (promptBusy) return
+    setPromptBusy(true)
+    setPromptMessage(null)
+    try {
+      const data = await apiPut(`${base}/system-prompt`, prompt)
+      const saved = { enabled: data.enabled !== false, text: String(data.text || "") }
+      setPrompt(saved)
+      setPromptSaved(saved)
+      setPromptMessage({ tone: "ok", text: "已保存，下一轮对话开始生效。" })
+    } catch (error) {
+      setPromptMessage({ tone: "error", text: error instanceof Error ? error.message : "保存失败" })
+    } finally {
+      setPromptBusy(false)
     }
   }
 
@@ -462,6 +493,32 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
             </Button>
             <Button size="sm" variant="outline" onClick={() => void refreshLog()}>
               {log === null ? "查看日志" : "刷新日志"}
+            </Button>
+          </CardFooter>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">系统提示词</CardTitle>
+            <CardDescription>告诉这个容器里的 Agent 它的使用环境。系统设置里的修改不会影响已有容器。</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <SystemPromptEditor
+              idPrefix="manage"
+              text={prompt.text}
+              onTextChange={(text) => setPrompt((prev) => ({ ...prev, text }))}
+              enabled={prompt.enabled}
+              onEnabledChange={(enabled) => setPrompt((prev) => ({ ...prev, enabled }))}
+            />
+            {promptMessage && !(promptMessage.tone === "ok" && promptDirty) ? (
+              <Alert variant={promptMessage.tone === "ok" ? "default" : "destructive"}>
+                <AlertDescription>{promptMessage.text}</AlertDescription>
+              </Alert>
+            ) : null}
+          </CardContent>
+          <CardFooter>
+            <Button size="sm" disabled={!promptDirty || promptBusy} onClick={() => void savePrompt()}>
+              保存系统提示词
             </Button>
           </CardFooter>
         </Card>

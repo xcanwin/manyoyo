@@ -27,6 +27,7 @@ import { CLI_PROMPT_TEMPLATES, normalizeYolo } from "@/lib/agent-templates"
 import { DirectoryPickerDialog } from "@/components/directory-picker-dialog"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { AutostartEditor } from "@/components/container-manage/autostart-editor"
+import { SystemPromptEditor } from "@/components/container-manage/system-prompt-editor"
 import { EnvEditor } from "@/components/container-manage/env-editor"
 import { NetworkEditor } from "@/components/container-manage/network-editor"
 import { cleanPolicy, defaultPolicy, networkForCreate, parseEnvText, policyProblems, policyRisks, type NetworkPolicy } from "@/lib/container-manage"
@@ -51,6 +52,9 @@ type CreateContainerForm = {
   volumes: string
   autostart: string
   autostartOnServe: boolean
+  systemPrompt: string
+  systemPromptDefault: string
+  systemPromptEnabled: boolean
   network: NetworkPolicy
 }
 
@@ -72,6 +76,9 @@ const DEFAULT_FORM: CreateContainerForm = {
   volumes: "",
   autostart: "",
   autostartOnServe: false,
+  systemPrompt: "",
+  systemPromptDefault: "",
+  systemPromptEnabled: true,
   network: defaultPolicy(),
 }
 
@@ -121,6 +128,10 @@ function buildCreateOptions(form: CreateContainerForm) {
   if (volumes.length) options.volumes = volumes
   if (form.autostart.trim()) options.autostart = form.autostart
   if (form.autostartOnServe) options.autostartOnServe = true
+  // 没改过内容就不带，由服务端按所选运行配置算默认值
+  if (!form.systemPromptEnabled || form.systemPrompt !== form.systemPromptDefault) {
+    options.systemPrompt = { enabled: form.systemPromptEnabled, text: form.systemPrompt }
+  }
   // 放开类的改动（自定义）已在编辑器里确认过，这里带上 confirmRisk
   const network = networkForCreate(form.network)
   if (network) {
@@ -181,6 +192,10 @@ export function CreateContainerDialog({
       setRuns(runsMap)
 
       const defaults = (data.defaults || {}) as Record<string, unknown>
+      // 系统提示词的初始内容 = 系统设置里的默认 + 补充（各自开关生效）
+      const composed = await apiGet("/api/agent-instructions")
+        .then((info) => String(info.composed || ""))
+        .catch(() => "")
       setForm({
         ...DEFAULT_FORM,
         hostPath: String(defaults.hostPath || ""),
@@ -193,6 +208,8 @@ export function CreateContainerDialog({
         shellSuffix: String(defaults.shellSuffix || ""),
         yolo: normalizeYolo(String(defaults.yolo || "")),
         agentPromptCommand: String(defaults.agentPromptCommand || ""),
+        systemPrompt: composed,
+        systemPromptDefault: composed,
       })
     } catch {
       setRuns({})
@@ -505,6 +522,16 @@ export function CreateContainerDialog({
                   onScriptChange={(value) => setField("autostart", value)}
                   onServe={form.autostartOnServe}
                   onServeChange={(value) => setField("autostartOnServe", value)}
+                />
+              </SectionToggle>
+
+              <SectionToggle title="系统提示词">
+                <SystemPromptEditor
+                  idPrefix="create"
+                  text={form.systemPrompt}
+                  onTextChange={(value) => setField("systemPrompt", value)}
+                  enabled={form.systemPromptEnabled}
+                  onEnabledChange={(value) => setField("systemPromptEnabled", value)}
                 />
               </SectionToggle>
 

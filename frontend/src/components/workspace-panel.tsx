@@ -1989,6 +1989,7 @@ export function WorkspacePanel({
               confirmLeaveIfDirty={confirmLeaveIfDirty}
               onPreviewHtml={(title, code) => setHtmlPreview({ title, code })}
               openRequest={filesOpenRequest}
+              visible={view === "files"}
             />
           </div>
         ) : null}

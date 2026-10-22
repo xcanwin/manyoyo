@@ -411,7 +411,7 @@ describe("系统设置：保存不覆盖别人的修改", () => {
 })
 
 describe("系统设置左侧按作用范围分组", () => {
-  test("组标题按顺序出现，每组下面是对应的分类，新增“Agent 环境说明”", async () => {
+  test("组标题按顺序出现，每组下面是对应的分类，新增“系统提示词”", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ raw: "{}", etag: "v1", path: "/x/manyoyo.json" }))))
     await openDialog()
     const list = document.body.querySelector('[role="tablist"]') as HTMLElement
@@ -422,7 +422,7 @@ describe("系统设置左侧按作用范围分组", () => {
     )
     expect(items).toEqual([
       "#界面", "页面",
-      "#Agent", "快捷对话", "Agent 环境说明",
+      "#Agent", "快捷对话", "系统提示词",
       "#新容器默认值", "基础", "启动环境", "运行命令", "运行配置", "软件源",
       "#镜像", "构建参数",
       "#MANYOYO 服务", "Web 服务", "插件",

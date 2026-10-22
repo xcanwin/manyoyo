@@ -70,7 +70,7 @@ const CATEGORIES: ConfigCategory[] = [
   // keys 留空即可，跟 quick-chat/capacity 一样走自定义渲染分支
   { id: "page", label: "页面", keys: [], group: "界面" },
   { id: "quick-chat", label: "快捷对话", keys: [], group: "Agent" },
-  { id: "agent-instructions", label: "Agent 环境说明", shortLabel: "环境说明", keys: [], group: "Agent" },
+  { id: "agent-instructions", label: "系统提示词", keys: [], group: "Agent" },
   {
     id: "basic",
     label: "基础",
@@ -681,7 +681,7 @@ export function SystemSettingsDialog({
                   </React.Fragment>
                 ))}
               </TabsList>
-              <div className="min-h-0 flex-1 overflow-y-auto py-1 pr-1 pl-4">
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-1 pr-1 pl-4">
                 {CATEGORIES.map((category) => (
                   <TabsContent key={category.id} value={category.id} className="mt-0">
                     {category.id === "page" ? (

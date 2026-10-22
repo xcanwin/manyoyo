@@ -75,7 +75,8 @@ description: "~/.manyoyo/manyoyo.json 的全部字段、合并规则与最小示
 | `autostart` | 字符串 | 容器每次启动都由容器内 init 执行的 bash 脚本，新建容器时写入，之后在网页「设置容器」页修改，见[管理容器](../guide/container-manage.md) |
 | `autostartOnServe` | 布尔 | `serve` 启动时自动拉起此容器 |
 | `agentPromptCommand` | 字符串 | 网页 AGENT 模式的提示词命令模板，须含 `{prompt}`；为空时按 `shell` / `yolo` 自动推断 |
-| `agentInstructions` | 字符串 | 网页里执行 Agent 时追加的说明，接在内置的环境说明后面（Claude Code、Codex、OpenCode 生效） |
+| `agentInstructions` | 字符串 | 补充系统提示词，接在默认系统提示词后面，作为网页新建容器时系统提示词的初始内容（Claude Code、Codex、OpenCode 生效） |
+| `agentInstructionsBuiltinEnabled` / `agentInstructionsCustomEnabled` | 布尔 | 默认 / 补充系统提示词的开关，默认 `true` |
 | `quiet` | 字符串数组 | 静默显示，可选 `tip` / `cmd` / `full` |
 
 ```json5

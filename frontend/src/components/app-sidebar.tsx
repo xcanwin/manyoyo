@@ -47,8 +47,6 @@ import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import {
   DropdownMenu,
@@ -279,7 +277,9 @@ export function AppSidebar({
   }
 
   // 容器行的 ⋯ 与面包屑上的 ⋯ 共用同一份菜单，按作用对象分组：备注 / 子 AGENT / 容器复制 / 删除
-  function renderContainerMenuContent(containerName: string, remark: string, side: "right" | "bottom") {
+  function renderContainerMenuContent(containerName: string, remark: string, status: string, side: "right" | "bottom") {
+    // history = 容器已不存在，没有可启停的对象
+    const running = /^Up\b/.test(status)
     return (
       <DropdownMenuContent side={side} align="start" className="w-56">
         <DropdownMenuGroup>
@@ -287,6 +287,11 @@ export function AppSidebar({
           <DropdownMenuItem onClick={() => editContainerRemark(containerName, remark)}>
             编辑备注
           </DropdownMenuItem>
+          {status !== "history" ? (
+            <DropdownMenuItem onClick={() => void toggleContainerRunning(containerName, running)}>
+              {running ? "停止容器" : "启动容器"}
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuGroup>
         <DropdownMenuSeparator className="mx-1 bg-border/50" />
         <DropdownMenuGroup>
@@ -456,6 +461,17 @@ export function AppSidebar({
     )
   }
 
+  async function toggleContainerRunning(containerName: string, running: boolean) {
+    const loadingId = toast.loading(running ? "正在停止容器..." : "正在启动容器...")
+    try {
+      await apiPost(`/api/sessions/${encodeURIComponent(containerName)}/container/${running ? "stop" : "start"}`, {})
+      toast.success(running ? "容器已停止" : "容器已启动", { id: loadingId })
+      await onRefresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : running ? "停止容器失败" : "启动容器失败", { id: loadingId })
+    }
+  }
+
   async function removeContainer(containerName: string) {
     const choice = await confirmRemoveChoice(
       "删除容器",
@@ -584,16 +600,30 @@ export function AppSidebar({
             </Button>
           ) : null}
         </div>
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>工作台</span>
-          <span>
-            {loading
-              ? "加载中..."
-              : navLevel === "agents"
-                ? `${visibleAgentSessions.length} 个 AGENT`
-                : `${containers.length} 个容器 / ${agentCount} 个 AGENT`}
-          </span>
-        </div>
+        {navLevel === "agents" && activeGroup ? (
+          // 容器名一行：高度与下面“全部容器”按钮一致
+          <div className="flex h-8 items-center justify-between gap-2">
+            <span
+              className="min-w-0 flex-1 truncate text-sm font-medium"
+              title={activeGroup.containerRemark ? `${activeGroup.containerRemark}（${activeGroup.containerName}）` : activeGroup.containerName}
+            >
+              {activeGroup.containerRemark || activeGroup.containerName}
+            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button variant="outline" size="icon" title="容器操作" aria-label="容器操作" />}
+              >
+                <MoreHorizontalIcon />
+              </DropdownMenuTrigger>
+              {renderContainerMenuContent(activeGroup.containerName, activeGroup.containerRemark, activeGroup.status, "bottom")}
+            </DropdownMenu>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>工作台</span>
+            <span>{loading ? "加载中..." : `${containers.length} 个容器 / ${agentCount} 个 AGENT`}</span>
+          </div>
+        )}
         <Button
           variant="outline"
           className="w-full justify-start bg-background text-muted-foreground shadow-none"
@@ -627,26 +657,6 @@ export function AppSidebar({
                 </Button>
               )}
             </BreadcrumbItem>
-            {navLevel === "agents" && activeGroup ? (
-              <>
-                <BreadcrumbSeparator className="shrink-0" />
-                <BreadcrumbItem className="min-w-0 flex-1">
-                  <BreadcrumbPage className="block truncate" title={activeGroup.containerRemark ? `${activeGroup.containerRemark}（${activeGroup.containerName}）` : activeGroup.containerName}>
-                    {activeGroup.containerRemark || activeGroup.containerName}
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
-                <BreadcrumbItem className="shrink-0">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={<Button variant="outline" size="icon" title="容器操作" aria-label="容器操作" />}
-                    >
-                      <MoreHorizontalIcon />
-                    </DropdownMenuTrigger>
-                    {renderContainerMenuContent(activeGroup.containerName, activeGroup.containerRemark, "bottom")}
-                  </DropdownMenu>
-                </BreadcrumbItem>
-              </>
-            ) : null}
           </BreadcrumbList>
         </Breadcrumb>
         {error ? (
@@ -710,7 +720,7 @@ export function AppSidebar({
                             </SidebarMenuAction>
                           }
                         />
-                        {renderContainerMenuContent(group.containerName, group.containerRemark, "right")}
+                        {renderContainerMenuContent(group.containerName, group.containerRemark, group.status, "right")}
                       </DropdownMenu>
                     </SidebarMenuItem>
                   ))

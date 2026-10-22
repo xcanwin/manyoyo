@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { __testing } = require('../lib/web/server');
-const { BUILTIN_AGENT_INSTRUCTIONS, buildAgentInstructions } = require('../lib/agent-instructions');
+const { BUILTIN_AGENT_INSTRUCTIONS, buildAgentInstructions, composeSystemPrompt } = require('../lib/agent-instructions');
 
 const { buildWebAgentExecCommand } = __testing;
 
@@ -39,6 +39,21 @@ describe('环境说明的内容', () => {
         const config = { agentInstructions: '全局', runs: { dev: { agentInstructions: '运行配置' } } };
         expect(buildAgentInstructions(config, 'dev')).toBe(`${BUILTIN_AGENT_INSTRUCTIONS}\n\n运行配置`);
         expect(buildAgentInstructions(config, 'other')).toBe(`${BUILTIN_AGENT_INSTRUCTIONS}\n\n全局`);
+    });
+
+    test('默认不提 MANYOYO；两段各有开关，初始内容 = 默认 + 补充 + 换行', () => {
+        expect(BUILTIN_AGENT_INSTRUCTIONS).not.toMatch(/manyoyo/i);
+        expect(BUILTIN_AGENT_INSTRUCTIONS).toContain('网页');
+        expect(composeSystemPrompt({ agentInstructions: '补充' }, '')).toBe(`${BUILTIN_AGENT_INSTRUCTIONS}\n\n补充\n`);
+        expect(composeSystemPrompt({ agentInstructions: '补充', agentInstructionsBuiltinEnabled: false }, '')).toBe('补充\n');
+        expect(composeSystemPrompt({ agentInstructions: '补充', agentInstructionsCustomEnabled: false }, '')).toBe(`${BUILTIN_AGENT_INSTRUCTIONS}\n`);
+        expect(composeSystemPrompt({ agentInstructionsBuiltinEnabled: false, agentInstructionsCustomEnabled: false }, '')).toBe('');
+    });
+
+    test('容器自己存过的提示词优先于系统设置；关掉就不注入', () => {
+        const config = { agentInstructions: '全局' };
+        expect(buildAgentInstructions(config, '', { enabled: true, text: '容器专属\n' })).toBe('容器专属');
+        expect(buildAgentInstructions(config, '', { enabled: false, text: '容器专属' })).toBe('');
     });
 
     test('去掉控制字符（保留换行和制表符），{prompt} 不会被当成占位符', () => {

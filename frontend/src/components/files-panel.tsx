@@ -112,8 +112,11 @@ export function FilesPanel({
   confirmLeaveIfDirty,
   onPreviewHtml,
   openRequest,
+  visible = true,
 }: {
   activeSession: SessionSummary | null
+  // 面板藏在后台时不请求：fs/list 会把已关闭的容器启动起来
+  visible?: boolean
   editorStateRef?: React.RefObject<FilesEditorState | null>
   confirmLeaveIfDirty: () => Promise<boolean>
   onPreviewHtml?: (title: string, code: string) => void
@@ -248,11 +251,14 @@ export function FilesPanel({
     selectedPathRef.current = selectedPath
   }, [selectedPath])
 
+  const listedForRef = React.useRef("")
   React.useEffect(() => {
-    if (!activeSession || historyOnly) return
+    if (!activeSession || historyOnly || !visible) return
+    if (listedForRef.current === activeSession.name) return
+    listedForRef.current = activeSession.name
     queueMicrotask(() => loadList(activeSession.containerPath || "/"))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSession?.name, historyOnly])
+  }, [activeSession?.name, historyOnly, visible])
 
   // forceEdit：新建出来的文件即使是 md/html 也直接进编辑态——刚建的是空文件，
   // 预览一个空白页没有意义，用户的意图就是要写内容

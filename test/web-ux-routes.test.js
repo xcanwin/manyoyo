@@ -206,7 +206,13 @@ describe('环境说明、标题、首条消息、斜杠命令', () => {
     test('一轮对话后：命令带环境说明，标题来自 ai-title（最后一条、按纯文本清洗），首条消息被记下，斜杠命令按规则过滤', async () => {
         await withServer(async ({ baseUrl, cookie, argvLog }) => {
             const builtin = await request(`${baseUrl}/api/agent-instructions`, { headers: { Cookie: cookie } });
-            expect(builtin.json).toEqual({ builtin: BUILTIN_AGENT_INSTRUCTIONS, custom: '全局说明' });
+            expect(builtin.json).toEqual({
+                builtin: BUILTIN_AGENT_INSTRUCTIONS,
+                custom: '全局说明',
+                builtinEnabled: true,
+                customEnabled: true,
+                composed: `${BUILTIN_AGENT_INSTRUCTIONS}\n\n全局说明\n`
+            });
 
             const stream = await request(`${baseUrl}/api/sessions/demo/agent/stream`, {
                 method: 'POST',

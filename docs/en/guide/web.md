@@ -98,7 +98,7 @@ Sub-agents and task lists show up in the "execution process": a sub-agent is col
 - Finished-task reminders: if a task ends while the page is in the background, the tab title gets a count such as `(1)`. Browser notifications can be turned on in "Settings → Page" (requires HTTPS or localhost).
 - When you come back after a while, or the network recovers, the top bar shows sync progress and then "Synced".
 
-When the web UI runs an Agent it adds a short note about the environment (replies are shown in a web page, how to write images). You can append your own note in "Settings → Agent → Agent instructions" (config field `agentInstructions`).
+When the web UI runs an Agent it adds a system prompt (replies are shown in a web page, how to write images). In "Settings → Agent → System prompt" you can turn off the default system prompt or add your own supplementary one (config field `agentInstructions`); they only set the initial content for containers created afterwards. You can edit it when creating a container, and later in the container's settings; existing containers are not affected by system settings.
 
 ## Web Frontend
 
