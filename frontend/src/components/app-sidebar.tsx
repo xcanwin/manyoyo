@@ -600,6 +600,15 @@ export function AppSidebar({
             </Button>
           ) : null}
         </div>
+        <Button
+          variant="outline"
+          className="w-full justify-start bg-background text-muted-foreground shadow-none"
+          onClick={() => setSearchOpen(true)}
+        >
+          <SearchIcon data-icon="inline-start" />
+          搜索容器 / AGENT
+          <kbd className="ml-auto font-sans text-xs leading-none text-muted-foreground">⌘K</kbd>
+        </Button>
         {navLevel === "agents" && activeGroup ? (
           // 容器名一行：高度与下面“全部容器”按钮一致
           <div className="flex h-8 items-center justify-between gap-2">
@@ -619,20 +628,11 @@ export function AppSidebar({
             </DropdownMenu>
           </div>
         ) : (
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex h-8 items-center justify-between text-xs text-muted-foreground">
             <span>工作台</span>
             <span>{loading ? "加载中..." : `${containers.length} 个容器 / ${agentCount} 个 AGENT`}</span>
           </div>
         )}
-        <Button
-          variant="outline"
-          className="w-full justify-start bg-background text-muted-foreground shadow-none"
-          onClick={() => setSearchOpen(true)}
-        >
-          <SearchIcon data-icon="inline-start" />
-          搜索容器 / AGENT
-          <kbd className="ml-auto font-sans text-xs leading-none text-muted-foreground">⌘K</kbd>
-        </Button>
         <Breadcrumb>
           <BreadcrumbList className="flex-nowrap gap-1 text-sm">
             <BreadcrumbItem className="shrink-0">
