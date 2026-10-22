@@ -9,7 +9,7 @@ const { spawnSync } = require('child_process');
 const appUpdate = require('../lib/app-update');
 const { createUpdateChecker } = require('../lib/update-check');
 
-const { detectInstallMode, fetchLatestRelease, installAppUpdate, rollbackApp, compareVersions, describeRuntimeChange, findOutdatedContainers, UpdateError } = appUpdate;
+const { detectInstallMode, fetchLatestRelease, installAppUpdate, rollbackApp, compareVersions, describeRuntimeChange, findOutdatedContainers, isAppVersion, installFromArchive, UpdateError } = appUpdate;
 const sha = buf => crypto.createHash('sha256').update(buf).digest('hex');
 const ARCH = appUpdate.arch();
 
@@ -117,6 +117,74 @@ describe('install mode detection', () => {
         fs.mkdirSync(path.dirname(decoy), { recursive: true });
         fs.writeFileSync(decoy, '');
         expect(detectInstallMode({ scriptPath: decoy, homeDir: home }).mode).toBe('npm');
+    });
+});
+
+describe('代码版版本号（x.y.z+sha7）', () => {
+    const CODE_A = '8.6.9+aaaaaaa';
+    const CODE_B = '8.6.9+bbbbbbb';
+
+    function writeArchive(version) {
+        const file = path.join(root, `code-${version}.tar.gz`);
+        fs.writeFileSync(file, buildAppTarball(version));
+        return file;
+    }
+
+    test('isAppVersion 只认 x.y.z 与 x.y.z+<7 位小写 hex>，目录名里的其它写法一律不是版本', () => {
+        ['1.2.3', '8.6.9+abc1234', '10.0.12+0123456'].forEach(v => expect(isAppVersion(v)).toBe(true));
+        ['1.2', '1.2.3+abc', '1.2.3+ABC1234', '1.2.3+abc12345', '1.2.3-x', '../1.2.3', '1.2.3+abc1234/..', '', undefined].forEach(v => expect(isAppVersion(v)).toBe(false));
+    });
+
+    test('比较：同一 x.y.z 的代码版与正式版相等，更新的正式版更大', () => {
+        expect(compareVersions(CODE_A, '8.6.9')).toBe(0);
+        expect(compareVersions('8.6.9', CODE_A)).toBe(0);
+        expect(compareVersions(CODE_A, CODE_B)).toBe(0);
+        expect(compareVersions('8.6.10', CODE_A)).toBe(1);
+        expect(compareVersions(CODE_A, '8.6.10')).toBe(-1);
+    });
+
+    test('detectInstallMode 认得 app/<x.y.z+sha7>/ 下的程序', () => {
+        seedInstalled(CODE_A);
+        const script = path.join(appRoot, CODE_A, 'manyoyo/bin/manyoyo.js');
+        expect(detectInstallMode({ scriptPath: script, homeDir: home })).toEqual({ mode: 'offline', appRoot, version: CODE_A });
+    });
+
+    test('连装两次代码版后，最新的正式版目录仍保留（可回滚、可重装）', async () => {
+        seedInstalled('8.6.9');
+        await installFromArchive({ appRoot, archive: writeArchive(CODE_A), version: CODE_A, targetArch: ARCH, targetOs: 'macos' });
+        await installFromArchive({ appRoot, archive: writeArchive(CODE_B), version: CODE_B, targetArch: ARCH, targetOs: 'macos' });
+        expect(fs.readdirSync(appRoot).filter(n => !n.startsWith('.')).sort()).toEqual(['8.6.9', CODE_A, CODE_B, 'current'].sort());
+        expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe(CODE_B);
+    });
+
+    test('清理不留旧代码版：第三次安装后只剩当前、上一个与最新正式版', async () => {
+        seedInstalled('8.6.9');
+        for (const v of [CODE_A, CODE_B, '8.6.9+ccccccc']) {
+            await installFromArchive({ appRoot, archive: writeArchive(v), version: v, targetArch: ARCH, targetOs: 'macos' });
+        }
+        expect(fs.readdirSync(appRoot).filter(n => !n.startsWith('.')).sort()).toEqual(['8.6.9', CODE_B, '8.6.9+ccccccc', 'current'].sort());
+    });
+
+    test('回滚能回到上一个代码版；记录里的上一版本是代码版也认', async () => {
+        seedInstalled('8.6.9');
+        await installFromArchive({ appRoot, archive: writeArchive(CODE_A), version: CODE_A, targetArch: ARCH, targetOs: 'macos' });
+        await installFromArchive({ appRoot, archive: writeArchive(CODE_B), version: CODE_B, targetArch: ARCH, targetOs: 'macos' });
+        expect(rollbackApp({ appRoot })).toEqual({ from: CODE_B, to: CODE_A });
+    });
+
+    test('没有记录时回退候选：同一 x.y.z 下正式版排在代码版前面', () => {
+        seedInstalled(CODE_A);
+        seedInstalled('8.6.9');
+        seedInstalled(CODE_B);
+        fs.rmSync(path.join(appRoot, '.update.json'), { force: true });
+        expect(rollbackApp({ appRoot })).toEqual({ from: CODE_B, to: '8.6.9' });
+    });
+
+    test('旧客户端写的 .update.json（只有 x.y.z）照常可读', () => {
+        seedInstalled('8.6.8');
+        seedInstalled(CODE_A);
+        fs.writeFileSync(path.join(appRoot, '.update.json'), JSON.stringify({ previous: '8.6.8', current: '8.6.9' }));
+        expect(rollbackApp({ appRoot })).toEqual({ from: CODE_A, to: '8.6.8' });
     });
 });
 

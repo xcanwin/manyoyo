@@ -21,6 +21,9 @@ Running `manyoyo` on the machine signs you in automatically, no password needed.
 **I want to go back to the previous version after upgrading**
 `manyoyo update --rollback`, see [Daily Use](../guide/daily.md).
 
+**The `manyoyo` command will not start (after an upgrade)**
+Run the install command again, or run `ln -sfn <a version that worked> ~/.manyoyo/app/current` (see `ls ~/.manyoyo/app` for the versions).
+
 **`manyoyo update` or the installer times out**
 Set a proxy in the terminal first, `export https_proxy=http://127.0.0.1:7890`, then retry (the macOS system proxy is detected automatically). If that still fails, download the files listed on screen by hand, see [Install](../guide/quick-start.md).
 

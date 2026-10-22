@@ -93,4 +93,17 @@ describe('collectFacts', () => {
     expect(seen).toEqual(expect.arrayContaining(['gh', 'npm']));
     expect(facts.npm.version).toBe('8.1.0');
   });
+
+  // 代码版预发布的 code-* tag 固定指向根提交；发布控制台算“最近一次正式版”时不能把它们算进去
+  test('code-* tags (rolling code builds) are ignored when working out the latest release tag', async () => {
+    const { spawnSync } = require('child_process');
+    const git = (...args) => spawnSync('git', ['-C', root, '-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { encoding: 'utf-8' });
+    git('init', '-q');
+    git('add', '.');
+    git('commit', '-q', '-m', 'init');
+    for (const tag of ['v8.1.0', 'v8.2.0', 'code-main', 'code-feat--x']) git('tag', tag);
+    const read = (cmd, args) => (cmd === 'git' ? git(...args) : { status: 0, stdout: '', stderr: '' });
+    const facts = await collectFacts({ repoRoot: root, read, fetchJson: async () => ({}), fetchStatus: async () => 401 });
+    expect(facts.git.latestTag).toBe('v8.2.0');
+  });
 });

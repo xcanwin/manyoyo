@@ -26,6 +26,7 @@ const { listServeInstances, formatServeTable } = require('../lib/serve-instances
 const { pruneDanglingImages: pruneDanglingImagesSafely } = require('../lib/image-prune');
 const { runUninstall, readPid, defaultIsManyoyoServe, defaultKill } = require('../lib/uninstall');
 const appUpdate = require('../lib/app-update');
+const codeUpdate = require('../lib/code-update');
 const { getGithubFetch } = require('../lib/net-proxy');
 const { createUpdateChecker } = require('../lib/update-check');
 const { getLoginTokenDir, issueLoginToken } = require('../lib/login-token');
@@ -862,7 +863,30 @@ async function updateOfflineInstall(mode, options, globalConfig) {
     const installed = appUpdate.currentVersion(appRoot) || mode.version;
     console.log(`${CYAN}🔄 当前版本: ${installed}${NC}`);
     let result;
-    if (options.file) {
+    if (options.code) {
+        const github = getGithubFetch();
+        if (github.notice) console.log(`${CYAN}🌐 ${github.notice}${NC}`);
+        console.log(`${CYAN}🔄 正在查询分支 ${options.code} 的代码版...${NC}`);
+        try {
+            // MANYOYO_TEST_CODE_BASE 只给测试用（指向本地下载站替身）
+            const outcome = await codeUpdate.installCodeUpdate({
+                appRoot, branch: options.code, installed, fetchImpl: github.fetch, targetOs: appUpdate.platformOs(),
+                downloadBase: process.env.MANYOYO_TEST_CODE_BASE || undefined, log: line => console.log(`   ${line}`)
+            });
+            const label = `${options.code}@${outcome.info.commit.slice(0, 7)}`;
+            if (outcome.status === 'same') {
+                console.log(`${GREEN}✅ 已是 ${label}，无需更新${NC}`);
+                return;
+            }
+            console.log(`${CYAN}   ${label} ${outcome.info.subject}（构建于 ${outcome.info.builtAt || '未知时间'}）${NC}`);
+            result = outcome;
+        } catch (error) {
+            if (error instanceof appUpdate.UpdateError && error.code === 'NETWORK') {
+                error.message += `\n   ${github.proxy && github.proxy.proxyEnv ? `当前代理: ${github.proxy.display}，请确认代理可用` : '有代理的话先在终端设置: export https_proxy=http://127.0.0.1:7890'}`;
+            }
+            throw error;
+        }
+    } else if (options.file) {
         const info = appUpdate.parseAppFileName(options.file);
         if (info && appUpdate.compareVersions(info.version, installed) <= 0) {
             console.log(`${GREEN}✅ 已是最新版本 ${installed}${NC}`);
@@ -878,7 +902,7 @@ async function updateOfflineInstall(mode, options, globalConfig) {
             console.log(`${CYAN}🔄 正在查询最新版本...${NC}`);
             release = await appUpdate.fetchLatestRelease({ fetchImpl: github.fetch });
             if (appUpdate.compareVersions(release.version, installed) <= 0) {
-                console.log(`${GREEN}✅ 已是最新版本 ${installed}${NC}`);
+                console.log(`${GREEN}✅ ${codeUpdate.latestReleaseNotice(installed, release.version)}${NC}`);
                 return;
             }
             console.log(`${CYAN}⬇️  发现新版本 ${release.version}，只下载 manyoyo 本体（数十 MB）${NC}`);
@@ -938,6 +962,14 @@ async function updateOfflineInstall(mode, options, globalConfig) {
 }
 
 async function updateManyoyo(options = {}, globalConfig = {}) {
+    if (options.code && (options.file || options.rollback)) {
+        console.error(`${RED}❌ --code 不能同时使用 --file 或 --rollback。${NC}`);
+        process.exit(1);
+    }
+    if (options.code && !codeUpdate.isValidBranch(options.code)) {
+        console.error(`${RED}❌ 分支名不合法: ${String(options.code).slice(0, 60)}（只能用字母、数字、. _ - /，不能以符号开头，不能含 -- / .. / //）${NC}`);
+        process.exit(1);
+    }
     const mode = appUpdate.detectInstallMode({ scriptPath: __filename });
     if (mode.mode === 'offline') {
         try {
@@ -953,6 +985,10 @@ async function updateManyoyo(options = {}, globalConfig = {}) {
     }
     if (options.rollback) {
         console.error(`${RED}❌ --rollback 只适用于离线包安装；npm 安装的版本请用 npm install -g @xcanwin/manyoyo@<版本> 回退。${NC}`);
+        process.exit(1);
+    }
+    if (options.code) {
+        console.error(`${RED}❌ --code 只适用于离线包安装；npm 安装请用 npm install -g @xcanwin/manyoyo 升级。${NC}`);
         process.exit(1);
     }
     if (options.file) {
@@ -1225,7 +1261,8 @@ https://github.com/xcanwin/manyoyo
         .description('升级到最新版本')
         .option('--rollback', '回到上一版本')
         .option('--file <path>', '安装手动下载的升级包（manyoyo-<版本>-<系统>-<架构>-app.tar.gz，同目录需有 SHA256SUMS）')
-        .action(options => selectAction('update', { update: true, rollback: Boolean(options.rollback), file: options.file || '' }));
+        .option('--code [branch]', '安装某个分支的最新代码版（未发布，默认 main）')
+        .action(options => selectAction('update', { update: true, rollback: Boolean(options.rollback), file: options.file || '', code: options.code === undefined ? '' : (options.code === true ? 'main' : options.code) }));
 
     program.command('uninstall')
         .helpGroup('日常:')

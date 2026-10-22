@@ -207,6 +207,22 @@ rm -rf ~/.manyoyo/                # 删除配置、历史与日志（可选，�
 
 离线包安装的升级与卸载用 `manyoyo update` 与 `manyoyo uninstall`，见[安装](../guide/quick-start.md)。
 
+## 代码版（未发布）
+
+不等发版，让已安装的 manyoyo 直接更新到某个分支的最新代码（仅离线包安装；npm 安装请继续用 npm）。
+
+```bash
+manyoyo update --code          # main 分支
+manyoyo update --code dev      # 其他分支
+```
+
+- main 推送后会自动构建，几分钟后可用；其他分支要维护者在 GitHub Actions 里手动运行 “Code Packages”。
+- 装好后 `my` 本身就是新代码，版本号形如 `8.6.9+abc1234`，不会多出第二份 manyoyo。
+- 出问题：`manyoyo update --rollback` 回到上一个版本；`my` 起不来时重新运行安装命令，或执行 `ln -sfn <正式版本号> ~/.manyoyo/app/current`。
+- 换回正式版：新的正式版发布后 `manyoyo update` 会自动升级；否则重新运行安装命令。
+- 前提：这台机器上的 manyoyo 要已经带有 `--code`（先升级到发布过该功能的正式版一次）；代码版需要的镜像还没发布时会拒绝升级，镜像发布后重新运行一次 “Code Packages” 才会解除。
+- 旧版本（8.6.9 及以前）不认识带 `+` 的目录，只会多留几个目录，不影响使用；卸载时整个 `~/.manyoyo/app/` 一并删除。
+
 ## 离线包结构
 
 给维护者和想了解安装包内部的用户。一键安装脚本 `scripts/install.sh` 只负责下载、校验并启动 `.run`；真正的安装逻辑在 `.run` 解开后的 `install/install.sh`。

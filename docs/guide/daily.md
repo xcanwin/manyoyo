@@ -26,9 +26,10 @@ manyoyo serve 127.0.0.1:<端口> --stop     # 端口见启动时打印的地址
 ```bash
 manyoyo update              # 升级到最新版本
 manyoyo update --rollback   # 回到上一版本
+manyoyo update --code       # 安装 main 分支最新代码（未发布）
 ```
 
-升级只下载变化的部分，几十 MB。
+升级只下载变化的部分，几十 MB。不等发版想用最新代码，见[安装详解](../advanced/installation.md)的“代码版”。
 
 ## 卸载
 

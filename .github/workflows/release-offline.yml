@@ -17,20 +17,6 @@ on:
       runId:
         description: 'Build Packages 那次成功运行的 ID'
         required: true
-  # 发布流水线复用：安装包 artifact 就在调用方的这次运行里，runId 留空即可；dryRun 的草稿 tag 带 -dryrun-<id> 后缀，版本号单独用 version 给
-  workflow_call:
-    inputs:
-      tag:
-        type: string
-        required: true
-      version:
-        type: string
-        required: false
-        default: ''
-      runId:
-        type: string
-        required: false
-        default: ''
 
 jobs:
   attach:

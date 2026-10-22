@@ -9,7 +9,7 @@ describe('release-offline workflow', () => {
     test('is manual only and can neither build, publish to npm nor create/publish a Release or tag', () => {
         const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\njobs:'));
         expect(onBlock).toContain('workflow_dispatch:');
-        expect(onBlock).toContain('workflow_call:'); // 发布流水线复用
+        expect(onBlock).not.toContain('workflow_call:'); // 流水线已不再调用，不留没有调用方的入口
         expect(onBlock).not.toMatch(/^\s*(push|pull_request|schedule|release):/m);
         expect(text).not.toMatch(/gh release create|gh release edit|--draft=false|npm publish|git push|git tag|docker push|docker build/);
         expect(text).toContain('gh release upload');

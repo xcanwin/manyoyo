@@ -32,6 +32,18 @@ describe('assertReleaseAssets (the gate in front of publish)', () => {
         expect(bad(fakeGh({ assets: list, sums: sumsText(list.slice(0, -1)) })).ok).toBe(false);
     });
 
+    test('滚动的代码版预发布（code-*）出现在 Release 列表里时，只认这个草稿自己的摘要', () => {
+        const list = names('8.7.0');
+        const base = fakeGh({ assets: list, sums: sumsText(list) });
+        const gh = args => (args[0] === 'api'
+            ? { status: 0, stdout: JSON.stringify([
+                { tag_name: 'code-main', draft: false, prerelease: true, assets: [{ name: 'manyoyo-8.7.0-macos-x64.run', digest: `sha256:${'b'.repeat(64)}` }] },
+                { tag_name: 'v8.7.0', draft: true, assets: list.map(name => ({ name, digest: `sha256:${'a'.repeat(64)}` })) }
+            ]) }
+            : base(args));
+        expect(assertReleaseAssets({ tag: 'v8.7.0', version: '8.7.0', repo: 'x/y', gh })).toMatchObject({ ok: true });
+    });
+
     test('an asset whose upload did not finish (state is not "uploaded") or is empty blocks publishing', () => {
         const list = names('8.7.0');
         const result = assertReleaseAssets({ tag: 'v8.7.0', version: '8.7.0', gh: fakeGh({ assets: list, sums: sumsText(list), states: { 'manyoyo-8.7.0-macos-x64.run': 'open' } }) });

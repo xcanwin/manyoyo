@@ -1,0 +1,148 @@
+# 代码版升级包：不发版，让已安装的 manyoyo 也能更新到某个分支的最新代码（客户端 `manyoyo update --code [分支]`）。
+# main 推送后（测试通过）自动构建；其他分支在 Actions 页面手动触发，构建的就是触发时选的那个分支。
+# 产物是该分支的滚动预发布 `code-<分支>`（/ 换成 --）：4 个平台的 manyoyo-code-<sha7>-<系统>-<架构>-app.tar.gz + 最后上传的 CODE.json（客户端以它为准）。
+# 预发布不会成为 releases/latest，也不会触发 npm 发布（npm-publish.yml 跳过预发布）。
+# tag 固定指向仓库的根提交、永不移动：移动已有 tag 会让维护者本机的 `git fetch --tags` 以退出码 1 失败（发布控制台多处依赖它）。真实提交只记在 CODE.json 里。
+# 注意：不要在仓库设置里开启“不可变发布（immutable releases）”，否则这里无法替换资产，构建会失败。
+
+name: Code Packages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: code-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  build:
+    needs: test
+    if: needs.test.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      BRANCH: ${{ github.ref_name }}
+      COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Check the ref is a branch with a valid name
+        run: |
+          if [ "${GITHUB_REF_TYPE}" != "branch" ]; then echo "只能构建分支（当前是 ${GITHUB_REF_TYPE}）"; exit 1; fi
+          node -e "const { isValidBranch } = require('./lib/code-update'); process.exit(isValidBranch(process.env.BRANCH) ? 0 : 1)" \
+            || { echo "分支名不合法，无法构建代码版: ${BRANCH}"; exit 1; }
+      - run: npm ci --include=optional
+      - run: npm run build:web
+      # 目标机器上没有这个镜像时升级会让容器拉不到镜像：记下 ghcr 里有没有当前 imageVersion，客户端据此拒绝安装
+      - name: Check the image is published
+        id: image
+        run: |
+          IMAGE_VERSION="$(node -p "require('./package.json').imageVersion")"
+          if docker manifest inspect "ghcr.io/xcanwin/manyoyo:${IMAGE_VERSION}" > /dev/null 2>&1; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "镜像 ghcr.io/xcanwin/manyoyo:${IMAGE_VERSION} 还没有发布，CODE.json 将标记 imageReady=false"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build the four platform packages and CODE.json
+        env:
+          MANYOYO_SKIP_WEB_BUILD: '1'
+          IMAGE_READY: ${{ steps.image.outputs.ready }}
+        run: |
+          SUBJECT="$(git log -1 --format=%s "${COMMIT}")"
+          node scripts/offline/build-code.js --branch "${BRANCH}" --commit "${COMMIT}" --subject "${SUBJECT}" \
+            --image-ready "${IMAGE_READY}" --out dist-code --work code-work
+      # 发布前扫描：扫描失败即整个 job 失败，产物不会上传
+      - name: Scan packaged trees
+        run: |
+          node scripts/scan-release-artifacts.js --auto-identity --no-inventory \
+            --allowlist scripts/offline/scan-allowlist-code.json \
+            code-work/staging
+      # 冒烟：本机（linux-x64）能直接运行的那个包，用包内自带的 node 跑，输出的版本必须等于 CODE.json
+      - name: Smoke the linux-x64 package
+        run: |
+          SMOKE="$(mktemp -d)"
+          tar -xzf dist-code/manyoyo-code-*-linux-x64-app.tar.gz -C "${SMOKE}"
+          GOT="$("${SMOKE}/node/bin/node" "${SMOKE}/manyoyo/bin/manyoyo.js" --version)"
+          WANT="$(node -p "require('./dist-code/CODE.json').version")"
+          echo "got=${GOT} want=${WANT}"
+          [ "${GOT}" = "${WANT}" ]
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-code
+          path: dist-code
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [test, build]
+    if: needs.test.result == 'success' && needs.build.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: ${{ github.ref_name }}
+      COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-code
+          path: dist-code
+      # 推送连发时，只有该分支最新的提交才发布；落后的这次什么都不做（不算失败）
+      - name: Is this still the latest commit of the branch?
+        id: latest
+        run: |
+          HEAD_SHA="$(git ls-remote origin "refs/heads/${BRANCH}" | cut -f1)"
+          if [ "${HEAD_SHA}" = "${COMMIT}" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "分支 ${BRANCH} 已经前进到 ${HEAD_SHA}，跳过这次发布"
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Publish to the rolling pre-release
+        if: steps.latest.outputs.current == 'true'
+        run: |
+          set -eu
+          TAG="$(node -e "console.log(require('./lib/code-update').codeTagForBranch(process.env.BRANCH))")"
+          # tag 固定指向仓库的根提交，永不移动（见文件头注释）
+          ROOT="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+          if ! gh release view "${TAG}" > /dev/null 2>&1; then
+            gh release create "${TAG}" --target "${ROOT}" --prerelease --latest=false \
+              --title "代码版 ${BRANCH}（未发布）" \
+              --notes "分支 ${BRANCH} 的最新代码构建，未发布。安装方式：manyoyo update --code ${BRANCH}。内容以 CODE.json 为准，页面上的 Source code 压缩包没有意义。"
+          fi
+          NEW7="$(node -p "require('./dist-code/CODE.json').commit.slice(0, 7)")"
+          # 上一次的 CODE.json 指向的那一套包还有客户端在用，先记下来，最后只删更旧的
+          PREV7=""
+          if gh release download "${TAG}" --pattern CODE.json --output prev-CODE.json > /dev/null 2>&1; then
+            PREV7="$(node -p "require('./prev-CODE.json').commit.slice(0, 7)" 2>/dev/null || true)"
+          fi
+          # 先传包，最后才传 CODE.json：客户端读到 CODE.json 时它指向的包一定已经就位
+          gh release upload "${TAG}" dist-code/manyoyo-code-*.tar.gz --clobber
+          gh release upload "${TAG}" dist-code/CODE.json --clobber
+          gh release view "${TAG}" --json assets --jq '.assets[].name' | while read -r NAME; do
+            case "${NAME}" in
+              manyoyo-code-"${NEW7}"-*|manyoyo-code-"${PREV7:-none}"-*|CODE.json) ;;
+              manyoyo-code-*) gh release delete-asset "${TAG}" "${NAME}" --yes ;;
+            esac
+          done

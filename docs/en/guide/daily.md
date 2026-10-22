@@ -26,9 +26,10 @@ manyoyo serve 127.0.0.1:<port> --stop     # the port is in the address printed a
 ```bash
 manyoyo update              # upgrade to the latest version
 manyoyo update --rollback   # return to the previous version
+manyoyo update --code       # install the latest main branch code (unreleased)
 ```
 
-An upgrade downloads only what changed, tens of MB.
+An upgrade downloads only what changed, tens of MB. To run the latest code without waiting for a release, see the "Code Builds" section of [Advanced Install](../advanced/installation.md).
 
 ## Uninstall
 

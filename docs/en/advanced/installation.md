@@ -207,6 +207,22 @@ rm -rf ~/.manyoyo/                # delete config, history and logs (optional, i
 
 For offline-package installs, use `manyoyo update` and `manyoyo uninstall`, see [Install](../guide/quick-start.md).
 
+## Code Builds (Unreleased)
+
+Update an installed manyoyo straight to the latest code of a branch without waiting for a release (offline-package installs only; npm installs keep using npm).
+
+```bash
+manyoyo update --code          # the main branch
+manyoyo update --code dev      # another branch
+```
+
+- Pushes to main are built automatically and ready after a few minutes; for other branches a maintainer runs "Code Packages" in GitHub Actions by hand.
+- After installing, `my` itself is the new code with a version like `8.6.9+abc1234`; there is no second copy of manyoyo.
+- If something goes wrong: `manyoyo update --rollback` returns to the previous version; if `my` cannot start, run the install command again, or run `ln -sfn <release version> ~/.manyoyo/app/current`.
+- Back to a release: `manyoyo update` upgrades automatically once a newer release is published; otherwise run the install command again.
+- Prerequisite: the manyoyo on this machine must already include `--code` (upgrade to a release that has it once); the upgrade is refused while the image the code build needs is not published yet, and stays refused until "Code Packages" is run again after the image is published.
+- Older versions (8.6.9 and earlier) do not recognise directories containing `+`; they only leave a few extra directories behind, which is harmless; uninstalling removes the whole `~/.manyoyo/app/`.
+
 ## Offline Package Layout
 
 For maintainers and anyone curious about what is inside. The one-line installer `scripts/install.sh` only downloads, verifies and starts the `.run`; the real installation logic is `install/install.sh` inside the unpacked `.run`.
