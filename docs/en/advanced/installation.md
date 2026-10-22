@@ -217,7 +217,7 @@ manyoyo update --code dev      # another branch
 ```
 
 - Pushes to main are built automatically and ready after a few minutes; for other branches a maintainer runs "Code Packages" in GitHub Actions by hand.
-- After installing, `my` itself is the new code with a version like `8.6.9+abc1234`; there is no second copy of manyoyo.
+- After installing, `my` itself is the new code with a version like `8.6.9+abc1234`; there is no second copy of manyoyo. Nothing is downloaded again when that code build is already on disk, or when it is the code of the current release.
 - If something goes wrong: `manyoyo update --rollback` returns to the previous version; if `my` cannot start, run the install command again, or run `ln -sfn <release version> ~/.manyoyo/app/current`.
 - Back to a release: `manyoyo update` upgrades automatically once a newer release is published; otherwise run the install command again.
 - Prerequisite: the manyoyo on this machine must already include `--code` (upgrade to a release that has it once); the upgrade is refused while the image the code build needs is not published yet, and stays refused until "Code Packages" is run again after the image is published.

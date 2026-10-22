@@ -69,6 +69,7 @@ async function buildCodePackages(options, injected = {}) {
     const sharedPkgPath = path.join(shared, 'package.json');
     const sharedPkg = JSON.parse(fs.readFileSync(sharedPkgPath, 'utf-8'));
     sharedPkg.version = version;
+    sharedPkg.gitHead = commit;
     fs.writeFileSync(sharedPkgPath, `${JSON.stringify(sharedPkg, null, 2)}\n`);
 
     // 2. 四个平台：各自的 Node + 共享的 manyoyo → manifest.json → 规范化打包

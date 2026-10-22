@@ -108,6 +108,16 @@ describe('build-code：构建四个平台的代码版升级包', () => {
         expect(JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf-8')).version).toBe(BASE_VERSION);
     });
 
+    test('包里 manyoyo/package.json 的 gitHead 等于提交（与 version 一起改写）', async () => {
+        await build();
+        for (const [platform, arch] of PLATFORMS) {
+            const dir = extract(path.join(root, 'out', codeAssetName(COMMIT, platform, arch)));
+            const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'manyoyo', 'package.json'), 'utf-8'));
+            expect(pkg.gitHead).toBe(COMMIT);
+            expect(pkg.version).toBe(`${BASE_VERSION}+${SHA7}`);
+        }
+    });
+
     test('包内容：node、manyoyo、manifest.json；manifest 与安装逻辑要求的字段一致', async () => {
         await build();
         for (const [platform, arch] of PLATFORMS) {

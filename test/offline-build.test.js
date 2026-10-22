@@ -383,6 +383,7 @@ describe('stage helpers', () => {
 });
 
 describe('full assembly with stand-in components', () => {
+    const GIT_HEAD = 'c0ffee1234567890c0ffee1234567890c0ffee12';
     const IMAGE_BYTES = Buffer.from('fake image archive');
 
     function makeRepo() {
@@ -422,7 +423,7 @@ describe('full assembly with stand-in components', () => {
         return { nodeTgz, pkg, image };
     }
 
-    function makeRun(repo) {
+    function makeRun(repo, { gitHeadOut = GIT_HEAD } = {}) {
         return (cmd, args, opts = {}) => {
             if (cmd === 'tar') {
                 const r = spawnSync('tar', args, { encoding: 'utf-8' });
@@ -441,19 +442,22 @@ describe('full assembly with stand-in components', () => {
             if (cmd === 'npm' && args[0] === 'ci') {
                 fs.mkdirSync(path.join(opts.cwd, 'node_modules/dep'), { recursive: true });
                 fs.writeFileSync(path.join(opts.cwd, 'node_modules/dep/index.js'), 'dep');
+                // 模拟 npm ci 动过 package.json：gitHead 必须在它之后写，否则会被覆盖
+                fs.writeFileSync(path.join(opts.cwd, 'package.json'), '{"name":"@x/manyoyo","touchedByCi":true}');
                 return '';
             }
+            if (cmd === 'git' && args[0] === 'rev-parse') return `${gitHeadOut}\n`;
             if (cmd === 'codesign' && args[0] === '-d') return '<plist><key>com.apple.security.hypervisor</key><true/></plist>';
             if (cmd === 'otool') return 'path @executable_path/../lib (offset 12)';
             return '';
         };
     }
 
-    async function build(arch, out, extra = {}) {
+    async function build(arch, out, extra = {}, runOptions = {}) {
         const repo = makeRepo();
         const fixtures = makeFixtures();
         const deps = {
-            run: makeRun(repo),
+            run: makeRun(repo, runOptions),
             log: () => {},
             download: async ({ url }) => (url.includes('nodejs.org') ? fixtures.nodeTgz : fixtures.pkg),
             fetchVmDisk: async ({ tmpRoot }) => {
@@ -565,6 +569,22 @@ describe('full assembly with stand-in components', () => {
         const app = fs.readFileSync(path.join(out, 'manyoyo-9.9.9-macos-arm64-app.tar.gz'));
         expect(app[8]).not.toBe(4);
         extract(runFile, path.join(root, 'fast-full'));
+    });
+
+    test('暂存的 manyoyo/package.json 带 gitHead（取自当前提交、在 npm ci 之后写），安装包与升级包里都有', async () => {
+        const out = path.join(root, 'out');
+        await build('arm64', out);
+        const appDir = path.join(root, 'x-app');
+        fs.mkdirSync(appDir);
+        tar('-xzf', path.join(out, 'manyoyo-9.9.9-macos-arm64-app.tar.gz'), '-C', appDir);
+        const fromApp = JSON.parse(fs.readFileSync(path.join(appDir, 'manyoyo/package.json'), 'utf8'));
+        expect(fromApp).toEqual({ name: '@x/manyoyo', touchedByCi: true, gitHead: GIT_HEAD });
+        const runDir = extract(path.join(out, 'manyoyo-9.9.9-macos-arm64.run'), path.join(root, 'x-run'));
+        expect(JSON.parse(fs.readFileSync(path.join(runDir, 'app/manyoyo/package.json'), 'utf8')).gitHead).toBe(GIT_HEAD);
+    });
+
+    test.each([['空', ''], ['太短', 'abc1234'], ['大写', GIT_HEAD.toUpperCase()], ['带空白', `${GIT_HEAD} x`]])('取不到合法的提交号（%s）时构建失败，不写进空字段或错误的值', async (_, value) => {
+        await expect(build('arm64', path.join(root, 'out'), {}, { gitHeadOut: value })).rejects.toThrow(/gitHead|提交/);
     });
 
     test('x64: no krunkit stack, no patch, applehv stays usable', async () => {

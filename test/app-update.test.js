@@ -9,7 +9,7 @@ const { spawnSync } = require('child_process');
 const appUpdate = require('../lib/app-update');
 const { createUpdateChecker } = require('../lib/update-check');
 
-const { detectInstallMode, fetchLatestRelease, installAppUpdate, rollbackApp, compareVersions, describeRuntimeChange, findOutdatedContainers, isAppVersion, installFromArchive, UpdateError } = appUpdate;
+const { detectInstallMode, fetchLatestRelease, installAppUpdate, rollbackApp, compareVersions, describeRuntimeChange, findOutdatedContainers, isAppVersion, installFromArchive, switchInstalled, UpdateError } = appUpdate;
 const sha = buf => crypto.createHash('sha256').update(buf).digest('hex');
 const ARCH = appUpdate.arch();
 
@@ -185,6 +185,37 @@ describe('代码版版本号（x.y.z+sha7）', () => {
         seedInstalled(CODE_A);
         fs.writeFileSync(path.join(appRoot, '.update.json'), JSON.stringify({ previous: '8.6.8', current: '8.6.9' }));
         expect(rollbackApp({ appRoot })).toEqual({ from: CODE_A, to: '8.6.8' });
+    });
+});
+
+describe('switchInstalled（切换 current、写记录、清理旧版本；installFromArchive 与本地复用共用）', () => {
+    test('切换到已存在的目录，记下上一版本，返回值带 manifest', () => {
+        seedInstalled('8.6.8');
+        seedInstalled('8.6.9');
+        fs.rmSync(path.join(appRoot, 'current'), { force: true });
+        fs.symlinkSync('8.6.8', path.join(appRoot, 'current'));
+        const manifest = { version: '8.6.9', kind: 'app' };
+        expect(switchInstalled({ appRoot, version: '8.6.9', manifest })).toEqual({ version: '8.6.9', previous: '8.6.8', manifest });
+        expect(fs.readlinkSync(path.join(appRoot, 'current'))).toBe('8.6.9');
+        expect(JSON.parse(fs.readFileSync(path.join(appRoot, '.update.json'), 'utf-8'))).toMatchObject({ previous: '8.6.8', current: '8.6.9' });
+    });
+
+    test('清理：只留当前、上一版本和最新的正式版，残留的临时目录一起清掉', () => {
+        ['8.6.5', '8.6.6', '8.6.7', '8.6.8'].forEach(v => seedInstalled(v));
+        fs.mkdirSync(path.join(appRoot, '.tmp-8.6.7-1'));
+        fs.rmSync(path.join(appRoot, 'current'), { force: true });
+        fs.symlinkSync('8.6.7', path.join(appRoot, 'current'));
+        switchInstalled({ appRoot, version: '8.6.6' });
+        expect(fs.readdirSync(appRoot).filter(n => n !== '.update.json').sort()).toEqual(['8.6.6', '8.6.7', '8.6.8', 'current']);
+    });
+
+    test('切到当前已经是的版本：上一版本记录不被冲掉', () => {
+        seedInstalled('8.6.8');
+        seedInstalled('8.6.9');
+        switchInstalled({ appRoot, version: '8.6.8' });
+        switchInstalled({ appRoot, version: '8.6.9' });
+        switchInstalled({ appRoot, version: '8.6.9' });
+        expect(JSON.parse(fs.readFileSync(path.join(appRoot, '.update.json'), 'utf-8')).previous).toBe('8.6.8');
     });
 });
 

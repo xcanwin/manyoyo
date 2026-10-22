@@ -217,7 +217,7 @@ manyoyo update --code dev      # 其他分支
 ```
 
 - main 推送后会自动构建，几分钟后可用；其他分支要维护者在 GitHub Actions 里手动运行 “Code Packages”。
-- 装好后 `my` 本身就是新代码，版本号形如 `8.6.9+abc1234`，不会多出第二份 manyoyo。
+- 装好后 `my` 本身就是新代码，版本号形如 `8.6.9+abc1234`，不会多出第二份 manyoyo。本地已有这个代码版，或它就是当前正式版的代码时，不会重复下载。
 - 出问题：`manyoyo update --rollback` 回到上一个版本；`my` 起不来时重新运行安装命令，或执行 `ln -sfn <正式版本号> ~/.manyoyo/app/current`。
 - 换回正式版：新的正式版发布后 `manyoyo update` 会自动升级；否则重新运行安装命令。
 - 前提：这台机器上的 manyoyo 要已经带有 `--code`（先升级到发布过该功能的正式版一次）；代码版需要的镜像还没发布时会拒绝升级，镜像发布后重新运行一次 “Code Packages” 才会解除。

@@ -84,6 +84,12 @@ async function buildOfflinePackages(options, injected = {}) {
     const nodeArchive = await deps.download({ url: lock.node.url, sha256: lock.node.sha256, dest: path.join(cacheDir, lock.node.file), log: deps.log });
     deps.stageNode({ archivePath: nodeArchive, destDir: path.join(components, 'app', 'node'), run: deps.run, tmpRoot });
     const manyoyoStage = deps.stageManyoyo({ repoRoot, destDir: path.join(components, 'app', 'manyoyo'), run: deps.run, tmpRoot });
+    // 在暂存的 package.json 里记下构建所用的提交（npm 的惯用字段 gitHead）：这个目录同时进 .run 和 -app.tar.gz，
+    // 客户端据此判断“代码版就是当前正式版”。写在 npm ci 之后；提交号不合法就让构建失败，不写进空字段或错误的值
+    const gitHead = String(deps.run('git', ['rev-parse', 'HEAD'], { cwd: repoRoot })).trim();
+    if (!/^[0-9a-f]{40}$/.test(gitHead)) throw new Error(`取不到合法的构建提交（git rev-parse HEAD 得到 "${gitHead.slice(0, 60)}"），无法写入 gitHead`);
+    const stagedPkgPath = path.join(components, 'app', 'manyoyo', 'package.json');
+    fs.writeFileSync(stagedPkgPath, `${JSON.stringify({ ...JSON.parse(fs.readFileSync(stagedPkgPath, 'utf-8')), gitHead }, null, 2)}\n`);
 
     let podmanResult = null;
     let vm = null;

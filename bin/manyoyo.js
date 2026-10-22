@@ -871,14 +871,20 @@ async function updateOfflineInstall(mode, options, globalConfig) {
             // MANYOYO_TEST_CODE_BASE 只给测试用（指向本地下载站替身）
             const outcome = await codeUpdate.installCodeUpdate({
                 appRoot, branch: options.code, installed, fetchImpl: github.fetch, targetOs: appUpdate.platformOs(),
-                downloadBase: process.env.MANYOYO_TEST_CODE_BASE || undefined, log: line => console.log(`   ${line}`)
+                downloadBase: process.env.MANYOYO_TEST_CODE_BASE || undefined, log: line => console.log(`   ${line}`),
+                // 校验通过后、下载或切换之前先说清楚装的是哪个提交
+                onInfo: info => console.log(`${CYAN}   ${options.code}@${info.commit.slice(0, 7)} ${info.subject}（构建于 ${codeUpdate.formatBuiltAt(info.builtAt)}）${NC}`)
             });
             const label = `${options.code}@${outcome.info.commit.slice(0, 7)}`;
             if (outcome.status === 'same') {
                 console.log(`${GREEN}✅ 已是 ${label}，无需更新${NC}`);
                 return;
             }
-            console.log(`${CYAN}   ${label} ${outcome.info.subject}（构建于 ${outcome.info.builtAt || '未知时间'}）${NC}`);
+            if (outcome.status === 'same-release') {
+                console.log(`${GREEN}✅ ${label} 就是当前正式版 ${installed} 的代码，无需更新${NC}`);
+                return;
+            }
+            if (outcome.status === 'reused') console.log(`${CYAN}   使用本地已有的 ${outcome.version}，无需下载${NC}`);
             result = outcome;
         } catch (error) {
             if (error instanceof appUpdate.UpdateError && error.code === 'NETWORK') {
