@@ -70,7 +70,7 @@ For mount and `sock` mode risks, see [Security](../guide/security.md).
 | `shellPrefix` | string | Command prefix, often temporary env vars |
 | `shell` | string | Main command, e.g. `claude` |
 | `shellSuffix` | string | Appended after `shell`, e.g. `resume --last`; overridable by `--ss` or `-- ...` (the latter wins) |
-| `first` | object | Runs once **after a new container is created**, not when reusing one; has `shellPrefix` / `shell` / `shellSuffix` (override), `env` (merge by key), `envFile` (append) |
+| `first` | object | Runs once **after a new container is created**, not when reusing one (containers created in the web UI, including quick chat, run it too; a failure is only reported in the session and the container is kept); has `shellPrefix` / `shell` / `shellSuffix` (override), `env` (merge by key), `envFile` (append) |
 | `network` | object | Network policy written at creation: `preset` (`restricted` default / `allowlist` / `custom`), `outbound` / `inbound` (rule arrays, each `{ "action": "allow", "target": "@host", "ports": "11434", "proto": "tcp" }`, inbound uses `source`; variables and rules in [Manage a container](../guide/container-manage.md#network)), `expose`; omitted = restricted by default |
 | `autostart` | string | bash script run by the in-container init on every container start; written when a container is created, then edited on the web "Set container" tab, see [Manage containers](../guide/container-manage.md) |
 | `autostartOnServe` | boolean | Start this container when `serve` starts |
