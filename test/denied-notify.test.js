@@ -43,6 +43,40 @@ describe('对话里的拦截提示', () => {
     });
 });
 
+describe('模型域名被拦', () => {
+    test('只对模型域名回调一次，其余域名只提示', () => {
+        let records = [];
+        const out = [];
+        const denied = [];
+        const notifier = createDeniedNotifier({
+            read: () => records,
+            isIgnored: () => false,
+            isModelHost: host => host === 'api.model.example',
+            onModelDenied: host => denied.push(host),
+            emit: text => out.push(text)
+        });
+        notifier.start();
+        records = [{ host: 'other.example', port: 443, count: 1 }, { host: 'api.model.example', port: 443, count: 2 }];
+        notifier.tick();
+        notifier.tick();
+        records = [{ host: 'api.model.example', port: 443, count: 9 }];
+        notifier.tick();
+        expect(denied).toEqual(['api.model.example']);
+        expect(out).toHaveLength(2);
+    });
+
+    test('onModelDenied 抛异常不冒泡', () => {
+        const notifier = createDeniedNotifier({
+            read: () => [{ host: 'api.model.example', port: 443, count: 1 }],
+            isIgnored: () => false,
+            isModelHost: () => true,
+            onModelDenied: () => { throw new Error('x'); },
+            emit: () => {}
+        });
+        expect(() => notifier.tick()).not.toThrow();
+    });
+});
+
 describe('浏览器后台请求列表', () => {
     test('精确匹配列表里的域名，不误伤其他谷歌域名与子域', () => {
         BROWSER_BACKGROUND_DOMAINS.forEach(host => expect(isBrowserBackground(host)).toBe(true));

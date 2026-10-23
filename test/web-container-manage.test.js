@@ -316,6 +316,12 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(after.json.suggestedDomains).toEqual([]);
         });
 
+        test('配了官方 Key 但没配 BASE_URL：建议放行该 Agent 的官方域名', async () => {
+            fs.appendFileSync(boxA.env, 'ANTHROPIC_AUTH_TOKEN=sk-x\n');
+            const r = await request(`${baseUrl}/api/containers/boxa/network`, { headers: { Cookie: cookie } });
+            expect(r.json.suggestedDomains).toEqual(['api.anthropic.com']);
+        });
+
         test('保存即下发；切到自定义需要二次确认（服务端也校验）；只有“允许 @any”时不再要求网络规则', async () => {
             const hostRule = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { outbound: [allowRow('@host', { ports: '18601', proto: 'tcp' })] } }));
             expect(hostRule.response.status).toBe(200);

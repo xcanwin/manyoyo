@@ -89,6 +89,8 @@ import {
   type QueueWhen,
 } from "@/lib/queue"
 import { QueuedPrompts } from "@/components/queued-prompts"
+import { ModelDeniedNotice } from "@/components/model-denied-notice"
+import { findModelDenied } from "@/lib/model-denied"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AgentTemplateDialog } from "@/components/agent-template-dialog"
@@ -1197,6 +1199,7 @@ export function WorkspacePanel({
   // 后台刷新到位后无感更新——而不是先转一圈加载 Spinner 把界面闪空白
   const hasCachedMessages = activeSessionMessages !== undefined
   const messages = activeSessionMessages ?? []
+  const modelDenied = React.useMemo(() => findModelDenied(activeSessionMessages ?? []), [activeSessionMessages])
   // 更新某个会话的消息：流式回调在会话切换后仍持续维护自己会话的状态，
   // 所以这里按 name 定位，而不是操作"当前活动会话"
   const setSessionMessages = React.useCallback(
@@ -1481,8 +1484,10 @@ export function WorkspacePanel({
     }
   )
 
-  async function handleSend() {
-    const text = draft.trim()
+  // overrideText：不经输入框直接发送一条（“允许并重试”重发被中止的提示词），输入框里正在写的内容不动
+  async function handleSend(overrideText?: string) {
+    const fromDraft = overrideText === undefined
+    const text = (fromDraft ? draft : overrideText).trim()
     if (!text || !activeSession) return
     const name = activeSession.name
     // 任务进行中只有 agent 对话能追加提示词；系统命令仍要等上一条跑完
@@ -1509,7 +1514,7 @@ export function WorkspacePanel({
     })
     restoredRef.current = null
     // 输入框上方还挂着上一次没发出去的内容：待发箱被新的覆盖前，先把它放回现在已清空的输入框
-    updateDraft(bannerOutbox ? bannerOutbox.text : "")
+    if (fromDraft) updateDraft(bannerOutbox ? bannerOutbox.text : "")
     setRestoreNotice(bannerOutbox ? { kind: "info" } : null)
     showLoadError("")
     // 没发出去：输入框为空就直接放回，不为空不覆盖，保留待发箱并给出“恢复”入口
@@ -1716,6 +1721,7 @@ export function WorkspacePanel({
                         pending: false,
                         interrupted: event.interrupted,
                         exitCode: event.exitCode,
+                        networkDenied: event.networkDenied,
                       }
                     : message
                 ),
@@ -1831,7 +1837,7 @@ export function WorkspacePanel({
       centered={emptyConversation}
       draft={draft}
       onDraftChange={updateDraft}
-      onSend={handleSend}
+      onSend={() => void handleSend()}
       onStop={handleStop}
       mode={mode}
       onModeChange={setMode}
@@ -2056,6 +2062,14 @@ export function WorkspacePanel({
             ) : null}
           </AlertDescription>
         </Alert>
+      ) : null}
+
+      {view === "activity" && modelDenied && activeSession && !activeAgentRunning && !sendingNames.has(activeSession.name) ? (
+        <ModelDeniedNotice
+          containerName={activeSession.containerName}
+          denied={modelDenied}
+          onRetry={(prompt) => void handleSend(prompt)}
+        />
       ) : null}
 
       {view === "activity" && !emptyConversation ? composerNode : null}

@@ -54,3 +54,25 @@ describe('withEnvEndpoints', () => {
     expect(await withEnvEndpoints(open, ['B=http://192.168.1.50:8000'], lookup)).toBe(open);
   });
 });
+
+describe('modelDomains（Agent 自己的模型域名）', () => {
+    const { modelDomains } = require('../lib/network-endpoints');
+
+    test('配了 BASE_URL：只认 env 里的域名，不再加官方域名', () => {
+        expect(modelDomains(['ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic'], 'claude')).toEqual(['api.deepseek.com']);
+    });
+
+    test('没配 BASE_URL：加上该 Agent 的官方默认域名', () => {
+        expect(modelDomains([], 'claude')).toEqual(['api.anthropic.com']);
+        expect(modelDomains(['OPENAI_API_KEY=x'], 'codex')).toEqual(['api.openai.com']);
+    });
+
+    test('不指定 Agent：只算配了 Key 的 Agent 的官方域名', () => {
+        expect(modelDomains(['ANTHROPIC_AUTH_TOKEN=x'])).toEqual(['api.anthropic.com']);
+        expect(modelDomains([])).toEqual([]);
+    });
+
+    test('未知 Agent 不报错', () => {
+        expect(modelDomains([], 'nope')).toEqual([]);
+    });
+});

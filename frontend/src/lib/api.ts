@@ -144,6 +144,8 @@ export type ChatMessage = {
   pending?: boolean
   interrupted?: boolean
   exitCode?: number
+  // 这一轮因为 Agent 自己的模型地址被网络策略拦下而中止
+  networkDenied?: { host: string; model?: boolean }
   streamTrace?: boolean
   traceEvents?: TraceEvent[]
   // 列表里 trace 的长字段被服务端截断过；展开时按需请求 /messages/<id>/trace 取完整内容
@@ -647,7 +649,16 @@ export type StreamEvent =
   | { type: "ping" }
   // 这一轮结束后服务端接着发排队的下一条：本条流到此为止，前端改为跟随下一轮
   | { type: "queue_next" }
-  | { type: "result"; exitCode: number; output: string; interrupted?: boolean; replyMessageId?: string }
+  // 被网络策略拦下的域名；model=true 表示是 Agent 自己的模型地址，服务端随后会中止本轮
+  | { type: "network_denied"; host: string; model?: boolean }
+  | {
+      type: "result"
+      exitCode: number
+      output: string
+      interrupted?: boolean
+      replyMessageId?: string
+      networkDenied?: { host: string; model?: boolean }
+    }
   | { type: "error"; error: string }
 
 // 流被"连接层"打断（而不是服务端明确报错）的判定。典型触发：agent 静默时间超过
