@@ -31,6 +31,7 @@ if (args[0] !== 'exec') process.exit(0);
 const bashIdx = args.indexOf('bash');
 if (bashIdx >= 0 && args[bashIdx + 1] === '-c') {
   const script = args[bashIdx + 2].split('/run/manyoyo/snap.git').join(${JSON.stringify(snapDir)});
+  if (script.includes('git checkout') && fs.existsSync(${JSON.stringify(path.join(tempHost, 'slow'))})) spawnSync('sleep', ['1.5']);
   const r = spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { ...process.env, HOME: ${JSON.stringify(tempHost)}, CLAUDE_CONFIG_DIR: '' } });
   process.stdout.write(r.stdout);
   process.exit(0);
@@ -222,6 +223,22 @@ describe('按轮快照、按轮改动、回退、隐藏', () => {
             expect((await ctx.call('POST', '/api/sessions/demo/rewind', { messageId: first.id, scope: 'conversation' })).status).toBe(200);
         });
     }, 30000);
+
+    test('回退进行中占住运行锁：这时发新的一轮得到 409，回退结束后又可以发', async () => {
+        await withServer(async ctx => {
+            await threeRounds(ctx);
+            const [, second] = await ctx.users();
+            fs.writeFileSync(path.join(ctx.tempHost, 'slow'), '1');
+            const rewinding = ctx.call('POST', '/api/sessions/demo/rewind', { messageId: second.id, scope: 'both' });
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const blocked = await ctx.call('POST', '/api/sessions/demo/agent/stream', { prompt: 'sneak in', clientMessageId: 'cm-sneak-0001' });
+            expect(blocked.status).toBe(409);
+            expect((await rewinding).status).toBe(200);
+            fs.rmSync(path.join(ctx.tempHost, 'slow'));
+            await ctx.turn('after rewind WRITE d.txt=dd');
+            expect(ctx.read('d.txt')).toBe('dd');
+        });
+    }, 60000);
 
     test('隐藏这一组：用户消息、执行过程、回复都带 hidden，可取消；换新 epoch', async () => {
         await withServer(async ctx => {

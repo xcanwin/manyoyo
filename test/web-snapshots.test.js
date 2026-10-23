@@ -62,6 +62,29 @@ describe('快照', () => {
         expect(fs.existsSync(path.join(gitDir, 'index.lock'))).toBe(false);
     }, 20000);
 
+    test('git add 失败（有读不了的文件）：不能把上一张快照当成“现在”的快照', () => {
+        write('a.txt', '1');
+        const first = take('first');
+        expect(first.sha).toMatch(/^[0-9a-f]{40}$/);
+        write('secret.txt', 'x');
+        fs.chmodSync(path.join(work, 'secret.txt'), 0o000);
+        try {
+            if (process.getuid && process.getuid() === 0) return; // root 读得了，这个场景测不出来
+            expect(take('second')).toEqual({ skipped: 'unavailable' });
+        } finally {
+            fs.chmodSync(path.join(work, 'secret.txt'), 0o644);
+        }
+    });
+
+    test('不读用户的全局 git 配置（比如要求签名提交）', () => {
+        const home = path.join(root, 'home');
+        fs.mkdirSync(home);
+        fs.writeFileSync(path.join(home, '.gitconfig'), '[commit]\n\tgpgsign = true\n[gpg]\n\tprogram = /nonexistent/gpg\n');
+        write('a.txt', '1');
+        const out = sh(snap.buildSnapshotCommand(work, 'x', gitDir), { HOME: home, XDG_CONFIG_HOME: home });
+        expect(snap.parseSnapshotOutput(out).sha).toMatch(/^[0-9a-f]{40}$/);
+    });
+
     test('路径、提交说明里的引号 / 空格 / 命令替换不会被执行', () => {
         const odd = path.join(root, `we ird'dir "x" $(touch pwned) \`touch pwned\``);
         fs.mkdirSync(odd);

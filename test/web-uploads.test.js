@@ -192,6 +192,32 @@ describe('POST /api/sessions/:name/uploads', () => {
     });
 });
 
+describe('排队项里的图片', () => {
+    test('落盘后读回仍带图片；不合法的路径被丢掉', () => {
+        const { normalizeStoredQueue } = require('../lib/web/agent-queue');
+        const queue = normalizeStoredQueue([
+            { id: 'q-1', text: 'a', when: 'turn', clientMessageId: 'x', images: [OK_PATH, '/etc/passwd', 5] },
+            { id: 'q-2', text: 'b', when: 'turn' }
+        ]);
+        expect(queue[0].images).toEqual([OK_PATH]);
+        expect(queue[1].images).toBeUndefined();
+    });
+});
+
+describe('上传目录被换成符号链接', () => {
+    test('拒绝写入，不跟着写到宿主机别的目录', async () => {
+        await withServer({}, async ({ upload, uploadsDir, tempHost }) => {
+            const outside = path.join(tempHost, 'outside');
+            fs.mkdirSync(outside);
+            fs.mkdirSync(path.dirname(uploadsDir), { recursive: true });
+            fs.symlinkSync(outside, uploadsDir);
+            const res = await upload(PNG);
+            expect(res.status).toBe(500);
+            expect(fs.readdirSync(outside)).toEqual([]);
+        });
+    });
+});
+
 describe('images 随提示词发送', () => {
     test('非法 images 返回 400，不执行', async () => {
         await withServer({}, async ({ send, tempHost }) => {

@@ -674,7 +674,7 @@ function ActivityView({
                         </>
                       )}
                     </div>
-                    <span className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
+                    <span className={cn("flex items-center gap-1 px-1 text-xs text-muted-foreground", message.role === "user" && message.mode === "agent" && "min-h-6")}>
                       {formatTime(message.timestamp)}
                       {message.interrupted ? " · 已停止" : ""}
                       {bubble.copyable ? (
@@ -1646,9 +1646,12 @@ export function WorkspacePanel({
     const name = activeSession.name
     if (result.scope !== "files") cutMessagesFrom(name, target.id)
     // 提示词和图片放回输入框，用户改完可以直接再发
-    const current = draftRef.current
-    updateDraft(current.trim() ? `${result.prompt}\n\n${current}` : result.prompt)
-    if (result.images.length) composerImages.restore(result.images)
+    // 只恢复文件时对话没变，提示词还在聊天里，不放回输入框（否则再发一次就重复了）
+    if (result.scope !== "files") {
+      const current = draftRef.current
+      updateDraft(current.trim() ? `${result.prompt}\n\n${current}` : result.prompt)
+      if (result.images.length) composerImages.restore(result.images)
+    }
     if (result.scope === "files") void requestSync(true, true)
   }
 

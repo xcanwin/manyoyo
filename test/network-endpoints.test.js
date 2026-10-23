@@ -76,3 +76,14 @@ describe('modelDomains（Agent 自己的模型域名）', () => {
         expect(modelDomains([], 'nope')).toEqual([]);
     });
 });
+
+describe('agentModelDomains（判断被拦的是不是 Agent 自己的模型地址）', () => {
+    const { agentModelDomains } = require('../lib/network-endpoints');
+
+    test('配了 BASE_URL 只认它；没配认官方域名；env 里别的 URL（npm 源等）不算', () => {
+        expect(agentModelDomains(['ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic', 'NPM_CONFIG_REGISTRY=https://registry.npmmirror.com'], 'claude')).toEqual(['api.deepseek.com']);
+        expect(agentModelDomains(['NPM_CONFIG_REGISTRY=https://registry.npmmirror.com'], 'claude')).toEqual(['api.anthropic.com']);
+        expect(agentModelDomains([], 'nope')).toEqual([]);
+        expect(agentModelDomains(['OPENAI_BASE_URL=http://host.containers.internal:11434/v1'], 'codex')).toEqual([]);
+    });
+});

@@ -175,4 +175,15 @@ describe('模型域名被网络策略拦截', () => {
             expect(reply.networkDenied).toBeUndefined();
         });
     }, 20000);
+
+    test('env 里别的 URL（npm 源）被拦：不是模型地址，本轮不中止', async () => {
+        await withServer({ envLines: ['OPENAI_BASE_URL=https://blocked-model.example.com/v1', 'NPM_CONFIG_REGISTRY=https://registry.npmmirror.com'] }, async ({ stream, writeDenied }) => {
+            let written = false;
+            const { events } = await stream(async event => {
+                if (event.type === 'meta' && !written) { written = true; writeDenied('registry.npmmirror.com'); }
+            });
+            expect(events.find(e => e.type === 'network_denied')).toBeUndefined();
+            expect(events.find(e => e.type === 'result').interrupted).toBe(false);
+        });
+    }, 20000);
 });

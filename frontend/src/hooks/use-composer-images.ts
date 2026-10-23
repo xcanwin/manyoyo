@@ -86,7 +86,10 @@ export function useComposerImages(sessionName: string | null) {
     (paths: string[]) => {
       const name = sessionRef.current
       if (!name) return
-      apply(name, paths.map((path) => ({ id: `img-${nextId++}`, src: chatImageUrl(name, path), status: "done" as const, path })))
+      // 追加到已有的图片后面（输入框里的文字也是合并的），已经有的路径不重复加
+      const have = new Set(imagesRef.current.map((item) => item.path))
+      const added = paths.filter((path) => !have.has(path)).map((path) => ({ id: `img-${nextId++}`, src: chatImageUrl(name, path), status: "done" as const, path }))
+      apply(name, [...imagesRef.current, ...added].slice(0, MAX_CHAT_IMAGES))
     },
     [apply]
   )

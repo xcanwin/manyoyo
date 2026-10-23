@@ -79,5 +79,8 @@ describe("useComposerImages", () => {
     expect(api.images).toEqual([])
     await act(async () => api.restore(["/run/manyoyo/uploads/b2.png"]))
     expect(api.paths).toEqual(["/run/manyoyo/uploads/b2.png"])
+    // 再 restore：追加，不覆盖已有的，也不重复
+    await act(async () => api.restore(["/run/manyoyo/uploads/b2.png", "/run/manyoyo/uploads/c3.png"]))
+    expect(api.paths).toEqual(["/run/manyoyo/uploads/b2.png", "/run/manyoyo/uploads/c3.png"])
   })
 })
