@@ -15,7 +15,7 @@ export function ModelDeniedNotice({
 }: {
   containerName: string
   denied: ModelDenied
-  onRetry: (prompt: string) => void
+  onRetry: (prompt: string, images: string[]) => void
 }) {
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
@@ -38,7 +38,7 @@ export function ModelDeniedNotice({
         if (!ok) return
         await apiPost(allowUrl, { domain: denied.host, confirmRisk: true })
       }
-      onRetry(denied.prompt)
+      onRetry(denied.prompt, denied.images)
     } catch (err) {
       setError(err instanceof Error ? err.message : "允许失败")
     } finally {

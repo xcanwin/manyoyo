@@ -11,6 +11,11 @@ Once a container is running, change its environment variables, network rules and
 
 The web UI provides three interaction modes: `Command`, `AGENT`, and `Interactive Terminal`. `AGENT` mode requires `agentPromptCommand` to be configured on the session (template must include `{prompt}`).
 
+## Small chat features
+
+- **Images**: paste or drag a screenshot into the input box in AGENT mode; on a phone tap "Add image" at the bottom left to pick from the photo library. Up to 5 images per message, 10MB each; png, jpeg, gif and webp. Images live in the container's state directory and are deleted with the container. Containers created before 2.3.0 have no such directory; recreate them to send images. Whether the model can read images depends on the model you use.
+- **Model address blocked**: when the container uses a network policy such as "allowlist only" and the AGENT's own model address is not allowed, the chat immediately shows "Model address xxx is blocked by the network policy"; click "Allow and retry" to allow it and resend the last message.
+
 ## Listen Address and Startup
 
 `serve` only supports `<ip:port>`, e.g. `127.0.0.1:3000`, `0.0.0.0:3000`.

@@ -20,7 +20,7 @@ describe("findModelDenied", () => {
       msg("assistant", "[执行过程]", { streamTrace: true }),
       msg("assistant", "已中止", { networkDenied: { host: "api.x.com", model: true } }),
     ]
-    expect(findModelDenied(list)).toEqual({ host: "api.x.com", prompt: "写个网页" })
+    expect(findModelDenied(list)).toEqual({ host: "api.x.com", prompt: "写个网页", images: [] })
   })
 
   test("之后又有新的用户消息：不再提示", () => {

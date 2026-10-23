@@ -144,6 +144,8 @@ export type ChatMessage = {
   pending?: boolean
   interrupted?: boolean
   exitCode?: number
+  // 用户消息附带的图片（容器内路径）
+  images?: string[]
   // 这一轮因为 Agent 自己的模型地址被网络策略拦下而中止
   networkDenied?: { host: string; model?: boolean }
   streamTrace?: boolean
@@ -619,6 +621,9 @@ export function apiErrorData(error: unknown): { status: number; data: Record<str
 }
 
 export const apiGet = (url: string, signal?: AbortSignal) => request(url, signal ? { signal } : {})
+// 上传图片：原始请求体（不是 JSON），Content-Type 用图片自己的类型
+export const apiUploadImage = (url: string, file: File) =>
+  request(url, { method: "POST", body: file, headers: { "Content-Type": file.type } })
 export const apiPost = (url: string, body?: unknown) =>
   request(url, { method: "POST", body: body === undefined ? "{}" : JSON.stringify(body) })
 export const apiPut = (url: string, body?: unknown, headers?: Record<string, string>) =>

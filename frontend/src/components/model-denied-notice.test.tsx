@@ -27,7 +27,7 @@ const button = (label: string) =>
 
 async function mount(onRetry = vi.fn()) {
   await act(async () => {
-    root.render(<ModelDeniedNotice containerName="box-1" denied={{ host: "api.x.com", prompt: "写个网页" }} onRetry={onRetry} />)
+    root.render(<ModelDeniedNotice containerName="box-1" denied={{ host: "api.x.com", prompt: "写个网页", images: [] }} onRetry={onRetry} />)
   })
   return onRetry
 }
@@ -46,7 +46,7 @@ describe("ModelDeniedNotice", () => {
     expect(container.textContent).toContain("模型地址 api.x.com 被网络策略拦截")
     await click(button("允许并重试"))
     expect(apiPost).toHaveBeenCalledWith("/api/containers/box-1/network/allow", { domain: "api.x.com" })
-    expect(onRetry).toHaveBeenCalledWith("写个网页")
+    expect(onRetry).toHaveBeenCalledWith("写个网页", [])
   })
 
   test("服务端要求确认：确认后带 confirmRisk 再试一次，才重发", async () => {
@@ -56,7 +56,7 @@ describe("ModelDeniedNotice", () => {
     expect(onRetry).not.toHaveBeenCalled()
     await click(button("确认放开"))
     expect(apiPost).toHaveBeenLastCalledWith("/api/containers/box-1/network/allow", { domain: "api.x.com", confirmRisk: true })
-    expect(onRetry).toHaveBeenCalledWith("写个网页")
+    expect(onRetry).toHaveBeenCalledWith("写个网页", [])
   })
 
   test("允许失败：显示错误，不重发", async () => {

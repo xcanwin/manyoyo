@@ -6,6 +6,7 @@ import {
   CopyIcon,
   CornerDownRightIcon,
   EllipsisIcon,
+  ImagePlusIcon,
   ListEndIcon,
   MessageSquareIcon,
   SquareIcon,
@@ -90,6 +91,9 @@ import {
 } from "@/lib/queue"
 import { QueuedPrompts } from "@/components/queued-prompts"
 import { ModelDeniedNotice } from "@/components/model-denied-notice"
+import { ComposerImages } from "@/components/composer-images"
+import { useComposerImages, type ComposerImage } from "@/hooks/use-composer-images"
+import { chatImageUrl, pickImageFiles } from "@/lib/chat-images"
 import { findModelDenied } from "@/lib/model-denied"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -611,7 +615,18 @@ function ActivityView({
                           />
                         )
                       ) : (
-                        message.content || (message.pending ? "…" : "")
+                        <>
+                          {message.images?.length ? (
+                            <div className="mb-1 flex flex-wrap justify-end gap-1.5">
+                              {message.images.map((path) => (
+                                <a key={path} href={chatImageUrl(session.name, path)} target="_blank" rel="noopener noreferrer">
+                                  <img src={chatImageUrl(session.name, path)} alt="附图" className="max-h-40 max-w-full rounded-lg border object-cover" loading="lazy" />
+                                </a>
+                              ))}
+                            </div>
+                          ) : null}
+                          {message.content || (message.pending ? "…" : "")}
+                        </>
                       )}
                     </div>
                     <span className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
@@ -830,7 +845,14 @@ export function Composer({
   queueWhen,
   onQueueWhenChange,
   centered = false,
+  images = [],
+  onAddImages,
+  onRemoveImage,
 }: {
+  // 待发送的图片（选中 / 粘贴 / 拖进来就上传）；不传就没有图片功能
+  images?: ComposerImage[]
+  onAddImages?: (files: File[]) => void
+  onRemoveImage?: (id: string) => void
   // 空会话时输入区放在页面中间：不要顶部分割线，也不用避让底部安全区
   centered?: boolean
   draft: string
@@ -855,16 +877,20 @@ export function Composer({
   const inputDisabled = disabled || blockReason !== ""
   // 空输入/纯空白时发送按钮直接置灰，而不是点了没反应
   // 任务进行中输入框仍可用：agent 对话可以追加提示词（选插入时机）；系统命令不支持追加
-  const sendDisabled = inputDisabled || draft.trim() === "" || (sending && mode === "command")
+  const hasImages = images.some((item) => item.status === "done")
+  const uploadingImages = images.some((item) => item.status === "uploading")
+  const sendDisabled = inputDisabled || (draft.trim() === "" && !hasImages) || uploadingImages || (sending && mode === "command")
 
   // 执行中有内容时才显示“插入时机”（只对 Agent 对话有意义）；执行中没内容时只留“停止”
-  const hasDraft = draft.trim() !== ""
+  const hasDraft = draft.trim() !== "" || hasImages
   const showQueueWhen = sending && mode === "agent" && hasDraft
   const showSend = !sending || hasDraft || mode === "command"
   // 手机上按钮点击区域不小于 40px，桌面 36px
   const iconSize = isMobile ? "icon-xl" : "icon-lg"
   const QueueWhenIcon = QUEUE_WHEN_ICONS[queueWhen]
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const imagesEnabled = Boolean(onAddImages) && mode === "agent" && !inputDisabled
   // 开头打 / 列斜杠命令、打 @ 列工作目录里的文件（只在 Agent 对话模式下）
   const suggestions = useComposerSuggestions({
     session,
@@ -886,6 +912,7 @@ export function Composer({
         )}
       >
         {suggestions.popup}
+        <ComposerImages images={images} onRemove={(id) => onRemoveImage?.(id)} />
         <Textarea
           ref={textareaRef}
           {...suggestions.textareaProps}
@@ -919,6 +946,21 @@ export function Composer({
           onChange={(event) => {
             onDraftChange(event.target.value)
             suggestions.handleInput(event.target.selectionStart ?? event.target.value.length)
+          }}
+          onPaste={(event) => {
+            const files = imagesEnabled ? pickImageFiles(event.clipboardData) : []
+            if (files.length === 0) return
+            event.preventDefault()
+            onAddImages?.(files)
+          }}
+          onDragOver={(event) => {
+            if (imagesEnabled && Array.from(event.dataTransfer.types).includes("Files")) event.preventDefault()
+          }}
+          onDrop={(event) => {
+            const files = imagesEnabled ? pickImageFiles(event.dataTransfer) : []
+            if (files.length === 0) return
+            event.preventDefault()
+            onAddImages?.(files)
           }}
           onKeyDown={(event) => {
             // 补全弹层打开时，↑↓ / Enter / Tab / Esc 交给它
@@ -977,6 +1019,32 @@ export function Composer({
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
+            {onAddImages && mode === "agent" ? (
+              <>
+                {/* 手机上会调起系统相册 / 相机，是手机端发图的主入口 */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  onChange={(event) => {
+                    onAddImages(Array.from(event.target.files ?? []))
+                    event.target.value = ""
+                  }}
+                />
+                <Button
+                  variant="ghost"
+                  size={iconSize}
+                  disabled={!imagesEnabled}
+                  aria-label="添加图片"
+                  title="添加图片"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <ImagePlusIcon />
+                </Button>
+              </>
+            ) : null}
             {/* 系统命令模式不涉及模型，直接隐藏 */}
             {mode === "agent" ? (
               <ModelMenu
@@ -1099,6 +1167,7 @@ export function WorkspacePanel({
   const loadingEarlierRef = React.useRef(false)
   const [messagesLoading, setMessagesLoading] = React.useState(false)
   const [draft, setDraft] = React.useState("")
+  const composerImages = useComposerImages(activeSession?.name ?? null)
   // 每发送一次加 1，通知消息流贴底（见 ActivityView 的 followSignal）
   const [sendTick, setSendTick] = React.useState(0)
   const draftRef = React.useRef("")
@@ -1484,11 +1553,14 @@ export function WorkspacePanel({
     }
   )
 
-  // overrideText：不经输入框直接发送一条（“允许并重试”重发被中止的提示词），输入框里正在写的内容不动
-  async function handleSend(overrideText?: string) {
+  // overrideText：不经输入框直接发送一条（“允许并重试”重发被中止的提示词，连图片一起），输入框里正在写的内容不动
+  async function handleSend(overrideText?: string, overrideImages?: string[]) {
     const fromDraft = overrideText === undefined
-    const text = (fromDraft ? draft : overrideText).trim()
+    const sendImages = fromDraft ? composerImages.paths : (overrideImages ?? [])
+    // 只发图片没写字：给一句默认的话（服务端要求提示词非空）
+    const text = (fromDraft ? draft : overrideText).trim() || (sendImages.length ? "请看附图。" : "")
     if (!text || !activeSession) return
+    if (fromDraft && composerImages.uploading) return
     const name = activeSession.name
     // 任务进行中只有 agent 对话能追加提示词；系统命令仍要等上一条跑完
     if ((sendingNames.has(name) || activeAgentRunning) && mode === "command") return
@@ -1514,7 +1586,10 @@ export function WorkspacePanel({
     })
     restoredRef.current = null
     // 输入框上方还挂着上一次没发出去的内容：待发箱被新的覆盖前，先把它放回现在已清空的输入框
-    if (fromDraft) updateDraft(bannerOutbox ? bannerOutbox.text : "")
+    if (fromDraft) {
+      updateDraft(bannerOutbox ? bannerOutbox.text : "")
+      composerImages.clear()
+    }
     setRestoreNotice(bannerOutbox ? { kind: "info" } : null)
     showLoadError("")
     // 没发出去：输入框为空就直接放回，不为空不覆盖，保留待发箱并给出“恢复”入口
@@ -1524,6 +1599,7 @@ export function WorkspacePanel({
         clearOutbox(name, clientId)
         restoredRef.current = { sessionName: name, clientId, text: plan.text }
         updateDraft(plan.text)
+        if (sendImages.length && isStillActive()) composerImages.restore(sendImages)
         setMode(outbox.mode)
         setRestoreNotice({ kind: "info" })
       } else {
@@ -1563,6 +1639,7 @@ export function WorkspacePanel({
       try {
         const data = await apiPost(`/api/sessions/${encodeURIComponent(name)}/agent/queue`, {
           prompt: text,
+          ...(sendImages.length ? { images: sendImages } : {}),
           when: queueWhen,
           clientMessageId: clientId,
         })
@@ -1585,6 +1662,7 @@ export function WorkspacePanel({
         timestamp: new Date().toISOString(),
         mode,
         clientMessageId: clientId,
+        ...(sendImages.length ? { images: sendImages } : {}),
       },
     ])
     setSendTick((value) => value + 1)
@@ -1655,7 +1733,7 @@ export function WorkspacePanel({
       },
     ])
     try {
-      await apiStream(`/api/sessions/${encodeURIComponent(name)}/agent/stream`, { prompt: text, clientMessageId: clientId }, (event) => {
+      await apiStream(`/api/sessions/${encodeURIComponent(name)}/agent/stream`, { prompt: text, ...(sendImages.length ? { images: sendImages } : {}), clientMessageId: clientId }, (event) => {
         if (event.type === "meta") {
           metaReceived = true
           clearOutbox(name, clientId)
@@ -1854,6 +1932,9 @@ export function WorkspacePanel({
         onAfterSend()
         loadDetail()
       }}
+      images={composerImages.images}
+      onAddImages={composerImages.addFiles}
+      onRemoveImage={composerImages.remove}
     />
   )
 
@@ -2068,7 +2149,7 @@ export function WorkspacePanel({
         <ModelDeniedNotice
           containerName={activeSession.containerName}
           denied={modelDenied}
-          onRetry={(prompt) => void handleSend(prompt)}
+          onRetry={(prompt, images) => void handleSend(prompt, images)}
         />
       ) : null}
 
