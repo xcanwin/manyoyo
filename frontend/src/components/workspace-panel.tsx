@@ -6,6 +6,9 @@ import {
   CopyIcon,
   CornerDownRightIcon,
   EllipsisIcon,
+  EyeOffIcon,
+  Undo2Icon,
+  Trash2Icon,
   ImagePlusIcon,
   ListEndIcon,
   MessageSquareIcon,
@@ -92,10 +95,14 @@ import {
 import { QueuedPrompts } from "@/components/queued-prompts"
 import { ModelDeniedNotice } from "@/components/model-denied-notice"
 import { ComposerImages } from "@/components/composer-images"
+import { RewindDialog, type RewindResult } from "@/components/rewind-dialog"
 import { useComposerImages, type ComposerImage } from "@/hooks/use-composer-images"
 import { chatImageUrl, pickImageFiles } from "@/lib/chat-images"
 import { findModelDenied } from "@/lib/model-denied"
+import { buildRoundOptions } from "@/lib/rounds"
+import { groupHiddenMessages } from "@/lib/hidden-groups"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AgentTemplateDialog } from "@/components/agent-template-dialog"
 import { Badge } from "@/components/ui/badge"
@@ -298,7 +305,14 @@ function ActivityView({
   followSignal,
   tail,
   onOpenPath,
+  onRewind,
+  onDeleteFrom,
+  onSetHidden,
 }: {
+  // 用户消息的操作：回退到这里 / 删除这一组及之后 / 隐藏或取消隐藏这一组；不传就没有操作菜单
+  onRewind?: (message: ChatMessage) => void
+  onDeleteFrom?: (message: ChatMessage) => void
+  onSetHidden?: (message: ChatMessage, hidden: boolean) => void
   session: SessionSummary | null
   messages: ChatMessage[]
   mode: "agent" | "command"
@@ -314,6 +328,9 @@ function ActivityView({
   tail?: React.ReactNode
 }) {
   const displayMessages = React.useMemo(() => mergeTraceIntoReply(messages), [messages])
+  // 被隐藏的一组（连续的 hidden 消息，从用户消息开始）：默认折叠成一行，可以展开看
+  const hiddenGroups = React.useMemo(() => groupHiddenMessages(displayMessages), [displayMessages])
+  const [expandedHidden, setExpandedHidden] = React.useState<Set<string>>(() => new Set())
   const scrollRef = React.useRef<HTMLDivElement>(null)
   // 内容变化时贴着哪里（规则见 computeScrollAnchor）：默认固定不动，只往下追加；
   // 视野贴着内容底部或最新执行过程的底部时才跟随。只在滚动事件里重新判断——内容增长不改 scrollTop，
@@ -552,6 +569,33 @@ function ActivityView({
             </div>
           ) : null}
           {displayMessages.map((message) => {
+            const hiddenGroup = message.hidden ? hiddenGroups.get(String(message.id)) : undefined
+            if (hiddenGroup && !hiddenGroup.first && !expandedHidden.has(hiddenGroup.key)) return null
+            const hiddenRow =
+              hiddenGroup && hiddenGroup.first ? (
+                <div key={`hidden-${hiddenGroup.key}`} className="flex items-center justify-center gap-2 text-xs text-muted-foreground" data-hidden-group>
+                  <span>已隐藏 1 组（agent 仍记得）</span>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() =>
+                      setExpandedHidden((prev) => {
+                        const next = new Set(prev)
+                        if (!next.delete(hiddenGroup.key)) next.add(hiddenGroup.key)
+                        return next
+                      })
+                    }
+                  >
+                    {expandedHidden.has(hiddenGroup.key) ? "收起" : "展开"}
+                  </Button>
+                  {onSetHidden && hiddenGroup.userMessage ? (
+                    <Button variant="ghost" size="xs" onClick={() => onSetHidden(hiddenGroup.userMessage as ChatMessage, false)}>
+                      取消隐藏
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null
+            if (hiddenRow && !expandedHidden.has(hiddenGroup!.key)) return hiddenRow
             const bubble = getBubbleState(message)
             // 切换发送模式时，历史里"另一种模式"产生的消息整体变淡，突出当前模式的上下文
             const origin = message.mode === "agent" || message.mode === "command" ? message.mode : ""
@@ -563,8 +607,9 @@ function ActivityView({
             // 执行过程固定渲染在同一个位置、同一个 key 下（messageRenderKey）：配上回复、换成服务端 id 时不重新挂载
             const trace = message.pairedTrace ?? (standaloneTrace ? message : null)
             return (
+              <React.Fragment key={messageRenderKey(message)}>
+              {hiddenRow}
               <div
-                key={messageRenderKey(message)}
                 className={cn(
                   "flex flex-col gap-1 transition-opacity",
                   message.role === "user" ? "items-end" : "items-start",
@@ -642,10 +687,36 @@ function ActivityView({
                           <CopyMessageButton text={message.content} />
                         )
                       ) : null}
+                      {message.role === "user" && message.mode === "agent" && !message.pending && !running && onRewind && onDeleteFrom && onSetHidden && typeof message.id === "string" && !message.id.startsWith(LOCAL_USER_MESSAGE_ID_PREFIX) ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={<Button variant="ghost" size="icon-xs" aria-label="更多操作" title="更多操作" />}
+                          >
+                            <EllipsisIcon />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuGroup>
+                              <DropdownMenuItem onClick={() => onRewind(message)}>
+                                <Undo2Icon />
+                                回退到这里
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onDeleteFrom(message)}>
+                                <Trash2Icon />
+                                删除这一组及之后
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onSetHidden(message, true)}>
+                                <EyeOffIcon />
+                                从页面隐藏这一组
+                              </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : null}
                     </span>
                   </>
                 )}
               </div>
+              </React.Fragment>
             )
           })}
           {tail}
@@ -1268,6 +1339,7 @@ export function WorkspacePanel({
   // 后台刷新到位后无感更新——而不是先转一圈加载 Spinner 把界面闪空白
   const hasCachedMessages = activeSessionMessages !== undefined
   const messages = activeSessionMessages ?? []
+  const rounds = React.useMemo(() => buildRoundOptions(activeSessionMessages ?? []), [activeSessionMessages])
   const modelDenied = React.useMemo(() => findModelDenied(activeSessionMessages ?? []), [activeSessionMessages])
   // 更新某个会话的消息：流式回调在会话切换后仍持续维护自己会话的状态，
   // 所以这里按 name 定位，而不是操作"当前活动会话"
@@ -1552,6 +1624,62 @@ export function WorkspacePanel({
       },
     }
   )
+
+  // ---- 回退 / 删除 / 隐藏（用户消息上的菜单）----
+  const [rewindTarget, setRewindTarget] = React.useState<ChatMessage | null>(null)
+  const { confirm: confirmDeleteFrom, dialog: deleteFromDialog } = useConfirmDialog()
+
+  // 回退 / 删除后：本地先砍掉那条及之后的消息（服务端换了 epoch，随后对账会整页重置）
+  function cutMessagesFrom(name: string, messageId: string | number) {
+    setSessionMessages(name, (prev) => {
+      const index = prev.findIndex((item) => item.id === messageId)
+      return index === -1 ? prev : prev.slice(0, index)
+    })
+    syncMetaRef.current[name] = { epoch: null, hasMore: syncMetaRef.current[name]?.hasMore ?? false }
+    void requestSync(true, true)
+  }
+
+  function handleRewindDone(result: RewindResult) {
+    const target = rewindTarget
+    setRewindTarget(null)
+    if (!target || !activeSession) return
+    const name = activeSession.name
+    if (result.scope !== "files") cutMessagesFrom(name, target.id)
+    // 提示词和图片放回输入框，用户改完可以直接再发
+    const current = draftRef.current
+    updateDraft(current.trim() ? `${result.prompt}\n\n${current}` : result.prompt)
+    if (result.images.length) composerImages.restore(result.images)
+    if (result.scope === "files") void requestSync(true, true)
+  }
+
+  async function handleDeleteFrom(message: ChatMessage) {
+    if (!activeSession) return
+    const name = activeSession.name
+    const ok = await confirmDeleteFrom({
+      title: "删除这一组及之后？",
+      message: "这条提示词和它之后的对话会被删除，agent 也会忘掉它们；文件不动。",
+      confirmLabel: "删除",
+    })
+    if (!ok) return
+    try {
+      await apiPost(`/api/sessions/${encodeURIComponent(name)}/rewind`, { messageId: String(message.id), scope: "conversation" })
+      cutMessagesFrom(name, message.id)
+    } catch (err) {
+      showLoadError(err instanceof Error ? err.message : "删除失败")
+    }
+  }
+
+  async function handleSetHidden(message: ChatMessage, hidden: boolean) {
+    if (!activeSession) return
+    const name = activeSession.name
+    try {
+      await apiPost(`/api/sessions/${encodeURIComponent(name)}/messages/hide`, { messageId: String(message.id), hidden })
+      syncMetaRef.current[name] = { epoch: null, hasMore: syncMetaRef.current[name]?.hasMore ?? false }
+      void requestSync(true, true)
+    } catch (err) {
+      showLoadError(err instanceof Error ? err.message : "操作失败")
+    }
+  }
 
   // overrideText：不经输入框直接发送一条（“允许并重试”重发被中止的提示词，连图片一起），输入框里正在写的内容不动
   async function handleSend(overrideText?: string, overrideImages?: string[]) {
@@ -2051,6 +2179,9 @@ export function WorkspacePanel({
               onLoadEarlier={() => void loadEarlier()}
               followSignal={sendTick}
               onOpenPath={openPathInFiles}
+              onRewind={(message) => setRewindTarget(message)}
+              onDeleteFrom={(message) => void handleDeleteFrom(message)}
+              onSetHidden={(message, hidden) => void handleSetHidden(message, hidden)}
               tail={
                 <QueuedPrompts
                   items={activeSession ? queueBySession[activeSession.name] ?? [] : []}
@@ -2091,7 +2222,7 @@ export function WorkspacePanel({
         ) : null}
         {view === "changes" ? (
           activeSession ? (
-            <ChangesPanel key={activeSession.name} session={activeSession} onOpenFile={openPathInFiles} />
+            <ChangesPanel key={activeSession.name} session={activeSession} onOpenFile={openPathInFiles} rounds={rounds} />
           ) : (
             <EmptyPane text="请先选择左侧的容器 / AGENT" />
           )
@@ -2155,6 +2286,14 @@ export function WorkspacePanel({
 
       {view === "activity" && !emptyConversation ? composerNode : null}
 
+      <RewindDialog
+        open={rewindTarget !== null}
+        sessionName={activeSession?.name ?? ""}
+        message={rewindTarget}
+        onClose={() => setRewindTarget(null)}
+        onDone={handleRewindDone}
+      />
+      {deleteFromDialog}
       <AgentTemplateDialog
         open={cliDialogOpen}
         onOpenChange={setCliDialogOpen}

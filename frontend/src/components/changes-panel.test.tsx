@@ -26,6 +26,8 @@ beforeEach(() => {
           { path: "new.txt", status: "untracked", added: null, deleted: null },
         ] }))
       }
+      if (u.includes("/git/rounds/changes")) return new Response(JSON.stringify({ ok: true, truncated: false, files: [{ path: "round.txt", status: "added", added: 3, deleted: 0 }] }))
+      if (u.includes("/git/rounds/diff")) return new Response(JSON.stringify({ ok: true, diff: "+from round", truncated: false }))
       if (u.includes("/git/diff")) return new Response(JSON.stringify({ repo: true, diff: "-old\n+<b>new</b>", truncated: false }))
       return new Response("{}")
     })
@@ -64,5 +66,44 @@ describe("改动视图", () => {
     expect(diffLineClass("-a")).toContain("red")
     expect(diffLineClass("+++ b/a")).toBe("text-muted-foreground")
     expect(diffLineClass(" a")).toBe("")
+  })
+
+  test("按轮看改动：有轮次时可切换，默认最新一轮，diff 走按轮接口", async () => {
+    const rounds = [
+      { id: "u1", before: "a".repeat(40), after: "b".repeat(40), label: "第 1 轮 · 建文件" },
+      { id: "u2", before: "c".repeat(40), after: "d".repeat(40), label: "第 2 轮 · 改文件" },
+    ]
+    await act(async () => root.render(<ChangesPanel session={session} onOpenFile={vi.fn()} rounds={rounds} />))
+    await tick()
+    await act(async () => rowButton("按轮").click())
+    await tick()
+    expect(calls.some((u) => u.includes(`/git/rounds/changes?from=${"c".repeat(40)}&to=${"d".repeat(40)}`))).toBe(true)
+    expect(container.textContent).toContain("round.txt")
+    expect(container.textContent).toContain("第 2 轮 · 改文件")
+    await act(async () => rowButton("round.txt").click())
+    await tick()
+    expect(calls.some((u) => u.includes("/git/rounds/diff?") && u.includes("path=round.txt"))).toBe(true)
+    expect(container.textContent).toContain("+from round")
+  })
+
+  test("工作目录不是 git 仓库且有轮次：自动改成按轮看", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const u = String(url)
+      calls.push(u)
+      if (u.includes("/git/rounds/changes")) return new Response(JSON.stringify({ ok: true, truncated: false, files: [{ path: "x.txt", status: "added", added: 1, deleted: 0 }] }))
+      return new Response(JSON.stringify({ repo: false, root: "", files: [], truncated: false }))
+    }))
+    const rounds = [{ id: "u1", before: "a".repeat(40), after: "b".repeat(40), label: "第 1 轮 · 建文件" }]
+    await act(async () => root.render(<ChangesPanel session={session} onOpenFile={vi.fn()} rounds={rounds} />))
+    await tick()
+    await tick()
+    expect(container.textContent).toContain("x.txt")
+    expect(container.textContent).not.toContain("工作目录不是 git 仓库")
+  })
+
+  test("没有轮次：不显示切换按钮（和以前一样）", async () => {
+    await act(async () => root.render(<ChangesPanel session={session} onOpenFile={vi.fn()} />))
+    await tick()
+    expect(container.textContent).not.toContain("按轮")
   })
 })
