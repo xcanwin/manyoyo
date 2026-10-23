@@ -39,7 +39,7 @@ Add one entry per agent under `runs.<name>` in `~/.manyoyo/manyoyo.json`, then j
 }
 ```
 
-`manyoyo init all` generates these entries in one go. The official common image includes Claude Code and Codex; Gemini and OpenCode need a full image you build yourself: `manyoyo build --iv 2.2.0-full --iba TOOL=full`.
+`manyoyo init all` generates these entries in one go. The official common image includes Claude Code and Codex; Gemini and OpenCode need a full image you build yourself: `manyoyo build --iv 2.3.0-full --iba TOOL=full`.
 
 ## Claude Code
 
@@ -47,6 +47,8 @@ Add one entry per agent under `runs.<name>` in `~/.manyoyo/manyoyo.json`, then j
 manyoyo run -r claude
 manyoyo run -n <container> -- -c      # Continue the most recent session
 ```
+
+When you use Claude Code in a terminal, it rings the bell when a task finishes (not in the web UI). Only images from 2.3.0 on include this; recreate old containers.
 
 Environment variables (`anthropic_claudecode.env`):
 

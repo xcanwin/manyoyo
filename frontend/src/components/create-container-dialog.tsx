@@ -399,7 +399,7 @@ export function CreateContainerDialog({
                   <KeyLabel htmlFor="create-image-version" k="imageVersion" />
                   <Input
                     id="create-image-version"
-                    placeholder="例如 2.2.0-common"
+                    placeholder="例如 2.3.0-common"
                     value={form.imageVersion}
                     onChange={(event) =>
                       setField("imageVersion", event.target.value)

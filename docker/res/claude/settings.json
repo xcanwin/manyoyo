@@ -7,5 +7,25 @@
     "statusLine": {
         "type": "command",
         "command": "bash /root/.claude/statusline.sh"
+    },
+    "hooks": {
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "[ \"$CLAUDE_CODE_ENTRYPOINT\" = cli ] || exit 0; sleep 0; printf '%s' '{\"terminalSequence\":\"\\u0007\"}'"
+                    },
+                    {
+                        "type": "command",
+                        "command": "[ \"$CLAUDE_CODE_ENTRYPOINT\" = cli ] || exit 0; sleep 0.3; printf '%s' '{\"terminalSequence\":\"\\u0007\"}'"
+                    },
+                    {
+                        "type": "command",
+                        "command": "[ \"$CLAUDE_CODE_ENTRYPOINT\" = cli ] || exit 0; sleep 0.6; printf '%s' '{\"terminalSequence\":\"\\u0007\"}'"
+                    }
+                ]
+            }
+        ]
     }
 }

@@ -39,7 +39,7 @@ manyoyo run -n my-session -- -c     # 回到已有容器，并给智能体传恢
 }
 ```
 
-`manyoyo init all` 可一次生成这些条目。官方 common 镜像带 Claude Code 和 Codex；Gemini 和 OpenCode 需要自己构建 full 镜像：`manyoyo build --iv 2.2.0-full --iba TOOL=full`。
+`manyoyo init all` 可一次生成这些条目。官方 common 镜像带 Claude Code 和 Codex；Gemini 和 OpenCode 需要自己构建 full 镜像：`manyoyo build --iv 2.3.0-full --iba TOOL=full`。
 
 ## Claude Code
 
@@ -47,6 +47,8 @@ manyoyo run -n my-session -- -c     # 回到已有容器，并给智能体传恢
 manyoyo run -r claude
 manyoyo run -n <容器名> -- -c      # 继续最近一次会话
 ```
+
+在终端里用 Claude Code，任务完成时会响铃提醒（网页里不响）。新镜像（2.3.0 起）才带这个设置，旧容器需要重建。
 
 环境变量（`anthropic_claudecode.env`）：
 
