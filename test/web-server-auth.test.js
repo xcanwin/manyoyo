@@ -5606,7 +5606,8 @@ describe('Web Server Session List Performance', () => {
 
             const historyReads = readSpy.mock.calls
                 .filter(call => String(call[0] || '') === historyPath);
-            expect(historyReads).toHaveLength(1);
+            // 启动对账已把历史读进缓存，请求时 0 次；关键是不能随 agent 数量重复读
+            expect(historyReads.length).toBeLessThanOrEqual(1);
         } finally {
             readSpy.mockRestore();
             if (handle && typeof handle.close === 'function') {

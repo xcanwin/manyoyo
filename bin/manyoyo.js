@@ -9,6 +9,7 @@ const net = require('net');
 const readline = require('readline');
 const { Command, Help } = require('commander');
 const { startWebServer } = require('../lib/web/server');
+const { authSessionsFilePath } = require('../lib/web/auth-store');
 const { isSidecarName } = require('../lib/egress-sidecar');
 const { buildContainerRunArgs, buildContainerRunCommand, runWithEnvFile, hasNetworkArg } = require('../lib/container-run');
 const { getManyoyoConfigPath, readManyoyoConfig, syncGlobalImageVersion } = require('../lib/global-config');
@@ -2574,6 +2575,7 @@ async function runWebServerMode(runtime) {
         importState: () => readImportState(),
         updateInfo: () => updateChecker.getInfo(),
         loginTokenDir: getLoginTokenDir(),
+        authSessionsFile: authSessionsFilePath(os.homedir(), runtime.serverHost, runtime.serverPort),
         doctorCheck: async () => runDoctorChecks({
             selectRuntime: () => CONTAINER_RUNTIME,
             runCommand: runRuntimeCommandAsync,
