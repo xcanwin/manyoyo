@@ -1,5 +1,8 @@
 import * as React from "react"
 
+import { useAgentAvailability } from "@/hooks/use-agent-availability"
+import { AGENT_UNAVAILABLE_HINT } from "@/lib/setup"
+
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -46,6 +49,7 @@ export function AgentTemplateDialog({
   onSaved: () => void
 }) {
   const isDefaultAgent = session?.agentId === "default"
+  const isAgentAvailable = useAgentAvailability(open)
   const [cli, setCli] = React.useState(CUSTOM_CLI)
   const [template, setTemplate] = React.useState("")
   const [loading, setLoading] = React.useState(false)
@@ -157,10 +161,11 @@ export function AgentTemplateDialog({
                       <SelectItem value={INHERIT_CLI}>继承容器默认</SelectItem>
                     ) : null}
                     <SelectItem value={CUSTOM_CLI}>自定义</SelectItem>
-                    <SelectItem value="claude">claude</SelectItem>
-                    <SelectItem value="codex">codex</SelectItem>
-                    <SelectItem value="gemini">gemini</SelectItem>
-                    <SelectItem value="opencode">opencode</SelectItem>
+                    {["claude", "codex", "gemini", "opencode"].map((id) => (
+                      <SelectItem key={id} value={id} disabled={!isAgentAvailable(id)}>
+                        {isAgentAvailable(id) ? id : `${id}（${AGENT_UNAVAILABLE_HINT}）`}
+                      </SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>

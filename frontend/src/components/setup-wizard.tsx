@@ -18,6 +18,8 @@ import {
   connectionNotice,
   createAgentSession,
   fetchSetupAgents,
+  AGENT_UNAVAILABLE_HINT,
+  isAgentUnavailable,
   fetchSetupStatus,
   getDirectoryHint,
   getReadiness,
@@ -95,11 +97,16 @@ export function SetupWizard({
   // 后台启动的服务密码是自动生成、用户看不到的；没设置过就在保存前要求设置一个
   const needsPassword = status?.passwordSet === false
 
+  // 镜像就绪后要再取一次：就绪前 available 是未知（null），就绪后才知道哪些 CLI 没装
+  const imageReady = status?.image.status === "ready"
   React.useEffect(() => {
     let cancelled = false
     fetchSetupAgents()
       .then((list) => {
-        if (!cancelled) setAgents(list)
+        if (cancelled) return
+        setAgents(list)
+        // 已选中的 Agent 变成不可用时清空选择
+        setForm((prev) => (list.some((item) => item.id === prev.agentId && isAgentUnavailable(item)) ? { ...prev, agentId: "" } : prev))
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "加载 Agent 列表失败")
@@ -107,7 +114,7 @@ export function SetupWizard({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [imageReady])
 
   React.useEffect(() => {
     let cancelled = false
@@ -299,14 +306,18 @@ export function SetupWizard({
                     type="button"
                     role="radio"
                     aria-checked={form.agentId === item.id}
+                    disabled={isAgentUnavailable(item)}
                     onClick={() => setField("agentId", item.id)}
                     className={cn(
                       "flex flex-col gap-0.5 rounded-lg border p-3 text-left transition-colors hover:bg-muted",
-                      form.agentId === item.id && "border-primary bg-muted"
+                      form.agentId === item.id && "border-primary bg-muted",
+                      isAgentUnavailable(item) && "cursor-not-allowed opacity-50 hover:bg-transparent"
                     )}
                   >
                     <span className="text-sm font-medium">{item.label}</span>
-                    <span className="text-xs text-muted-foreground">{AGENT_BLURBS[item.id] ?? ""}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {isAgentUnavailable(item) ? AGENT_UNAVAILABLE_HINT : (AGENT_BLURBS[item.id] ?? "")}
+                    </span>
                   </button>
                 ))}
                 {agents.length === 0 && !error ? <Spinner className="mx-auto my-4" /> : null}
@@ -407,7 +418,17 @@ export function SetupWizard({
                               "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 *:data-[slot=alert-description]:text-emerald-700 dark:text-emerald-400 dark:*:data-[slot=alert-description]:text-emerald-400"
                           )}
                         >
-                          <AlertDescription>{connectionNotice(testResult).text}</AlertDescription>
+                          <AlertDescription>
+                            {connectionNotice(testResult).text}
+                            {testResult.category !== "success" && testResult.detail ? (
+                              <details className="mt-1">
+                                <summary className="cursor-pointer text-xs">详情</summary>
+                                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">
+                                  {testResult.detail}
+                                </pre>
+                              </details>
+                            ) : null}
+                          </AlertDescription>
                         </Alert>
                       ) : null}
                     </div>

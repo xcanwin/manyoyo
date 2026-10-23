@@ -11,6 +11,8 @@ export type SetupAgent = {
   baseUrlKey: string
   baseUrlPresets: { label: string; value: string }[]
   env: SetupEnvEntry[]
+  // 镜像里有没有这个 CLI：null = 还不知道（镜像没就绪），照常可选
+  available?: boolean | null
 }
 export type SetupStatus = {
   needsSetup: boolean
@@ -25,7 +27,7 @@ export type SetupStatus = {
   passwordSet: boolean
   mirrors?: { apt: string; npm: string; pip: string }
 }
-export type ConnectionCategory = "success" | "network" | "auth" | "other"
+export type ConnectionCategory = "success" | "network" | "auth" | "missing_cli" | "other"
 export type ConnectionResult = { category: ConnectionCategory; message: string; detail: string }
 
 export type AccessMode = "official" | "compatible" | "subscription"
@@ -137,7 +139,7 @@ export function connectionNotice(result: ConnectionResult): { tone: "success" | 
     case "auth":
       return { tone: "error", text: "认证失败：Key 无效或没有权限，请检查后重新填写。" }
     default:
-      return { tone: "error", text: result.message ? `测试失败：${result.message}` : "测试失败，请稍后重试。" }
+      return { tone: "error", text: result.message || "测试失败，请稍后重试。" }
   }
 }
 
@@ -149,6 +151,9 @@ export function getDirectoryHint(path: string, status: SetupStatus | null): stri
   }
   return ""
 }
+
+export const AGENT_UNAVAILABLE_HINT = "当前镜像未安装，需要 full 镜像"
+export const isAgentUnavailable = (agent: { available?: boolean | null }) => agent.available === false
 
 export const fetchSetupStatus = async () => (await apiGet("/api/setup/status")) as unknown as SetupStatus
 export const fetchSetupAgents = async () =>

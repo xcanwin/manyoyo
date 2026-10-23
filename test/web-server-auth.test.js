@@ -5911,6 +5911,43 @@ describe('Web Server Setup API', () => {
         });
     });
 
+    describe('agents available (image probe)', () => {
+        function probeExec(calls, agents = 'claude\ncodex\n') {
+            return async args => {
+                calls.push(args);
+                if (args[0] === 'image') return 'sha256:abc\n';
+                if (args[0] === 'run') return agents;
+                return '';
+            };
+        }
+
+        test('镜像就绪：装了的为 true，没装的为 false，探测只做一次', async () => {
+            const calls = [];
+            await withSetupServer(() => ({ dockerExecAsync: probeExec(calls) }), async ({ call }) => {
+                const first = (await call('GET', '/api/setup/agents')).json.agents;
+                expect(Object.fromEntries(first.map(a => [a.id, a.available]))).toEqual({ claude: true, codex: true, gemini: false, opencode: false });
+                await call('GET', '/api/setup/agents');
+                expect(calls.filter(a => a[0] === 'run')).toHaveLength(1);
+            });
+        });
+
+        test('镜像没就绪：available 为 null（未知）', async () => {
+            const calls = [];
+            await withSetupServer(() => ({ runtimeState: { status: 'starting', message: '' }, dockerExecAsync: probeExec(calls) }), async ({ call }) => {
+                const agents = (await call('GET', '/api/setup/agents')).json.agents;
+                expect(agents.every(a => a.available === null)).toBe(true);
+                expect(calls.filter(a => a[0] === 'run')).toHaveLength(0);
+            });
+        });
+
+        test('探测失败：available 为 null', async () => {
+            await withSetupServer(() => ({ dockerExecAsync: async args => { if (args[0] === 'run') throw new Error('x'); return 'sha256:abc'; } }), async ({ call }) => {
+                const agents = (await call('GET', '/api/setup/agents')).json.agents;
+                expect(agents.every(a => a.available === null)).toBe(true);
+            });
+        });
+    });
+
     test('saving an agent keeps comments and other settings, and masks the response', async () => {
         await withSetupServer(() => ({}), async ({ tempHost, call, configPath }) => {
             fs.writeFileSync(configPath, `{

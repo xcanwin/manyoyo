@@ -1,5 +1,7 @@
 import * as React from "react"
 
+import { useAgentAvailability } from "@/hooks/use-agent-availability"
+import { AGENT_UNAVAILABLE_HINT } from "@/lib/setup"
 import { cn } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -180,6 +182,7 @@ export function CreateContainerDialog({
   const [runs, setRuns] = React.useState<Record<string, RunPreset>>({})
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
+  const isAgentAvailable = useAgentAvailability(open)
 
   const loadDefaults = React.useCallback(async () => {
     try {
@@ -465,10 +468,11 @@ export function CreateContainerDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="claude">claude</SelectItem>
-                        <SelectItem value="codex">codex</SelectItem>
-                        <SelectItem value="gemini">gemini</SelectItem>
-                        <SelectItem value="opencode">opencode</SelectItem>
+                        {["claude", "codex", "gemini", "opencode"].map((id) => (
+                          <SelectItem key={id} value={id} disabled={!isAgentAvailable(id)}>
+                            {isAgentAvailable(id) ? id : `${id}（${AGENT_UNAVAILABLE_HINT}）`}
+                          </SelectItem>
+                        ))}
                       </SelectGroup>
                     </SelectContent>
                   </Select>

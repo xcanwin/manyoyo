@@ -203,7 +203,7 @@ describe("SetupWizard", () => {
     ["success", "连接成功"],
     ["network", "国内"],
     ["auth", "认证失败"],
-    ["other", "测试失败：镜像尚未就绪"],
+    ["other", "镜像尚未就绪"],
   ] as const)("test connection result %s shows the matching hint", async (category, expected) => {
     api.testConnection.mockResolvedValue({ category, message: "镜像尚未就绪", detail: "" })
     await mount(readyStatus)
@@ -219,6 +219,53 @@ describe("SetupWizard", () => {
     expect(alert.dataset.tone).toBe(category === "success" ? "success" : "error")
     expect(alert.className.includes("emerald")).toBe(category === "success")
     expect(text()).not.toContain("sk-secret")
+  })
+
+  test("失败时消息不重复前缀，详情可展开", async () => {
+    api.testConnection.mockResolvedValue({ category: "other", message: "测试失败，请查看详情", detail: "boom: something broke" })
+    await mount(readyStatus)
+    await click(radio("Claude Code"))
+    await click(button("下一步"))
+    await type("setup-api-key", "sk-secret")
+    await click(button("测试连接"))
+    expect(text()).not.toContain("测试失败：测试失败")
+    const details = container.querySelector("details") as HTMLElement
+    expect(details.textContent).toContain("详情")
+    expect(details.textContent).toContain("boom: something broke")
+  })
+
+  test("镜像里没装的 Agent 置灰且不能选", async () => {
+    api.fetchSetupStatus.mockResolvedValue(readyStatus)
+    api.fetchSetupAgents.mockResolvedValue([agents[0], { ...agents[1], available: false }])
+    await act(async () => {
+      root.render(<SetupWizard onFinished={vi.fn()} onSkip={vi.fn()} />)
+    })
+    await flush()
+    const codex = radio("Codex") as HTMLButtonElement
+    expect(codex.disabled).toBe(true)
+    expect(codex.textContent).toContain("当前镜像未安装，需要 full 镜像")
+    await click(codex)
+    await click(button("下一步"))
+    expect(text()).toContain("请选择一个 Agent")
+  })
+
+  test("镜像就绪后重新取一次列表，已选中的 Agent 变成不可用时清空选择", async () => {
+    api.fetchSetupAgents.mockResolvedValue(agents)
+    api.fetchSetupStatus.mockResolvedValue(startingStatus)
+    await act(async () => {
+      root.render(<SetupWizard onFinished={vi.fn()} onSkip={vi.fn()} />)
+    })
+    await flush()
+    await click(radio("Codex"))
+    expect(radio("Codex").getAttribute("aria-checked")).toBe("true")
+    api.fetchSetupAgents.mockResolvedValue([agents[0], { ...agents[1], available: false }])
+    api.fetchSetupStatus.mockResolvedValue(readyStatus)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2300))
+    })
+    await flush()
+    expect(api.fetchSetupAgents.mock.calls.length).toBeGreaterThanOrEqual(2)
+    expect(radio("Codex").getAttribute("aria-checked")).toBe("false")
   })
 
   test("the key input is a password field", async () => {
