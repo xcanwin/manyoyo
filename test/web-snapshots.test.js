@@ -159,6 +159,20 @@ describe('回退文件', () => {
         expect(read('sub/c.txt')).toBe('c-from-bash');
     });
 
+    test('回退到“什么文件都没有”的快照（第一轮开始前的空目录）：新建的文件全部删掉', () => {
+        const empty = take('round 1 before');
+        write('index.html', '<h1>hi</h1>');
+        write('assets/a.css', 'x');
+        take('round 1 after');
+        const restored = snap.parseRestoreOutput(sh(snap.buildRestoreCommand(work, empty.sha, gitDir)));
+        expect(restored.ok).toBe(true);
+        expect(exists('index.html')).toBe(false);
+        expect(exists('assets/a.css')).toBe(false);
+        // 预览同样可用
+        write('again.txt', '1');
+        expect(snap.parseRestorePreviewOutput(sh(snap.buildRestorePreviewCommand(work, empty.sha, gitDir)))).toMatchObject({ ok: true, delete: 1 });
+    });
+
     test('目标快照不存在：失败，不动文件', () => {
         write('a.txt', 'a1');
         take();
