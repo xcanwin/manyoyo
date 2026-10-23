@@ -2,6 +2,7 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 import { CHECK_ICON, renderMarkdownToHtml } from "@/lib/markdown-render"
+import { sessionPathExists } from "@/lib/path-exists"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -100,7 +101,15 @@ export const MarkdownContent = React.memo(
       if (pathTrigger) {
         event.preventDefault()
         const path = pathTrigger.getAttribute("data-open-path") || ""
-        if (path) onOpenPath?.(path)
+        if (!path || !onOpenPath) return
+        // 先确认路径存在才打开；不存在就什么都不做
+        if (!sessionName) {
+          onOpenPath(path)
+          return
+        }
+        void sessionPathExists(sessionName, path).then((exists) => {
+          if (exists) onOpenPath(path)
+        })
         return
       }
       const link = (event.target as HTMLElement).closest("a")
