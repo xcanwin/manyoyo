@@ -51,6 +51,10 @@ const agents: SetupAgent[] = [
     requiredAnyOf: ["ANTHROPIC_AUTH_TOKEN"],
     baseUrlKey: "ANTHROPIC_BASE_URL",
     baseUrlPresets: [{ label: "Anthropic 官方", value: "https://api.anthropic.com" }],
+    providers: [
+      { id: "deepseek", label: "DeepSeek", docUrl: "https://docs.example/ds", baseUrl: "https://api.deepseek.com/anthropic", keyEnv: "ANTHROPIC_AUTH_TOKEN", models: ["deepseek-flash[1m]"], defaultModel: "deepseek-flash[1m]" },
+      { id: "kimicode", label: "Kimi Code", docUrl: "https://docs.example/kc", baseUrl: "https://api.kimi.ai/coding/", keyEnv: "ANTHROPIC_API_KEY", models: [], defaultModel: "" },
+    ],
     env: [],
   },
   {
@@ -266,6 +270,41 @@ describe("SetupWizard", () => {
     await flush()
     expect(api.fetchSetupAgents.mock.calls.length).toBeGreaterThanOrEqual(2)
     expect(radio("Codex").getAttribute("aria-checked")).toBe("false")
+  })
+
+  test("兼容服务：点服务商预设填好 Base URL、Key 变量和必填模型，并给出官方说明；Claude 的占位不是 /v1", async () => {
+    await mount(readyStatus)
+    await click(radio("Claude Code"))
+    await click(button("下一步"))
+    await click(radio("兼容服务"))
+    expect((container.querySelector("#setup-base-url") as HTMLInputElement).placeholder).toContain("/anthropic")
+    await click(button("DeepSeek"))
+    expect((container.querySelector("#setup-base-url") as HTMLInputElement).value).toBe("https://api.deepseek.com/anthropic")
+    expect((container.querySelector("#setup-model") as HTMLInputElement).value).toBe("deepseek-flash[1m]")
+    expect(container.querySelector('a[href="https://docs.example/ds"]')?.textContent).toBe("官方说明")
+    await type("setup-api-key", "sk-secret")
+    api.testConnection.mockResolvedValue({ category: "success", message: "", detail: "" })
+    await click(button("测试连接"))
+    expect(api.testConnection).toHaveBeenCalledWith("claude", {
+      ANTHROPIC_AUTH_TOKEN: "sk-secret",
+      ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
+      ANTHROPIC_MODEL: "deepseek-flash[1m]",
+    })
+  })
+
+  test("兼容服务：服务商要求 ANTHROPIC_API_KEY 时 Key 写进该变量；手改地址后恢复默认变量", async () => {
+    await mount(readyStatus)
+    await click(radio("Claude Code"))
+    await click(button("下一步"))
+    await click(radio("兼容服务"))
+    await click(button("Kimi Code"))
+    await type("setup-api-key", "k-1")
+    api.testConnection.mockResolvedValue({ category: "success", message: "", detail: "" })
+    await click(button("测试连接"))
+    expect(api.testConnection).toHaveBeenLastCalledWith("claude", { ANTHROPIC_API_KEY: "k-1", ANTHROPIC_BASE_URL: "https://api.kimi.ai/coding/" })
+    await type("setup-base-url", "https://my.example.com/anthropic")
+    await click(button("测试连接"))
+    expect(api.testConnection).toHaveBeenLastCalledWith("claude", { ANTHROPIC_AUTH_TOKEN: "k-1", ANTHROPIC_BASE_URL: "https://my.example.com/anthropic" })
   })
 
   test("the key input is a password field", async () => {

@@ -2,6 +2,15 @@ import { apiGet, apiPost } from "@/lib/api"
 import { formatTimestampCompact } from "@/lib/format"
 
 export type SetupEnvEntry = { name: string; description: string; secret: boolean }
+export type SetupProvider = {
+  id: string
+  label: string
+  docUrl: string
+  baseUrl: string
+  keyEnv: string
+  models: string[]
+  defaultModel: string
+}
 export type SetupAgent = {
   id: string
   label: string
@@ -10,6 +19,8 @@ export type SetupAgent = {
   requiredAnyOf: string[]
   baseUrlKey: string
   baseUrlPresets: { label: string; value: string }[]
+  // 兼容服务的服务商预设（网页向导和命令行向导共用服务端的同一份数据）
+  providers?: SetupProvider[]
   env: SetupEnvEntry[]
   // 镜像里有没有这个 CLI：null = 还不知道（镜像没就绪），照常可选
   available?: boolean | null
@@ -38,6 +49,10 @@ export type SetupForm = {
   baseUrl: string
   model: string
   hostPath: string
+  // 选了服务商预设后，Key 要写进哪个变量（空 = 该 Agent 的默认变量）
+  keyEnv?: string
+  // 选中的服务商预设 id，用来显示“官方说明”和模型占位
+  providerId?: string
 }
 
 export const AGENT_BLURBS: Record<string, string> = {
@@ -93,6 +108,11 @@ export function getModeKeyEnvName(agent: SetupAgent): string {
   return agent.requiredAnyOf[0]
 }
 
+// Base URL 输入框的占位：Claude 的兼容地址以 /anthropic 结尾，不是 /v1
+export function baseUrlPlaceholder(agent: SetupAgent): string {
+  return agent.id === "claude" ? "例如 https://…/anthropic" : "例如 https://your-service.example.com/v1"
+}
+
 export function isValidBaseUrl(value: string): boolean {
   try {
     const url = new URL(value.trim())
@@ -121,7 +141,7 @@ export function validateStep(step: 1 | 2 | 3, form: SetupForm, agent: SetupAgent
 export function buildEnvBody(agent: SetupAgent, form: SetupForm): Record<string, string> {
   const env: Record<string, string> = {}
   const key = form.apiKey.trim()
-  if (key) env[getModeKeyEnvName(agent)] = key
+  if (key) env[form.mode === "compatible" && form.keyEnv ? form.keyEnv : getModeKeyEnvName(agent)] = key
   if (form.mode === "compatible" && form.baseUrl.trim()) env[agent.baseUrlKey] = form.baseUrl.trim()
   if (form.model.trim()) env[agent.modelKey] = form.model.trim()
   return env

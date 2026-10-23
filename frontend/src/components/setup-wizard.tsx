@@ -18,6 +18,7 @@ import {
   connectionNotice,
   createAgentSession,
   fetchSetupAgents,
+  baseUrlPlaceholder,
   AGENT_UNAVAILABLE_HINT,
   isAgentUnavailable,
   fetchSetupStatus,
@@ -92,6 +93,7 @@ export function SetupWizard({
 
   const readiness = getReadiness(status)
   const agent = agents.find((item) => item.id === form.agentId) ?? null
+  const selectedProvider = agent?.providers?.find((item) => item.id === form.providerId) ?? null
   const hostPath = form.hostPath || status?.defaultHostPath || ""
   const effectiveForm: SetupForm = { ...form, hostPath }
   // 后台启动的服务密码是自动生成、用户看不到的；没设置过就在保存前要求设置一个
@@ -156,7 +158,7 @@ export function SetupWizard({
   }, [ready])
 
   function setField<K extends keyof SetupForm>(key: K, value: SetupForm[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }))
+    setForm((prev) => ({ ...prev, [key]: value, ...(key === "agentId" ? { keyEnv: "", providerId: "" } : {}) }))
     if (key !== "hostPath") setTestResult(null)
   }
 
@@ -349,10 +351,41 @@ export function SetupWizard({
                     <Input
                       id="setup-base-url"
                       inputMode="url"
-                      placeholder="例如 https://your-service.example.com/v1"
+                      placeholder={baseUrlPlaceholder(agent)}
                       value={form.baseUrl}
-                      onChange={(event) => setField("baseUrl", event.target.value)}
+                      onChange={(event) => setForm((prev) => ({ ...prev, baseUrl: event.target.value, keyEnv: "", providerId: "" }))}
                     />
+                    {(agent.providers ?? []).length > 0 ? (
+                      <div className="flex flex-wrap gap-2" role="group" aria-label="服务商">
+                        {(agent.providers ?? []).map((provider) => (
+                          <Button
+                            key={provider.id}
+                            type="button"
+                            size="xs"
+                            variant={form.providerId === provider.id ? "default" : "outline"}
+                            onClick={() => {
+                              setTestResult(null)
+                              setForm((prev) => ({
+                                ...prev,
+                                baseUrl: provider.baseUrl,
+                                keyEnv: provider.keyEnv,
+                                providerId: provider.id,
+                                model: provider.defaultModel && !prev.model.trim() ? provider.defaultModel : prev.model,
+                              }))
+                            }}
+                          >
+                            {provider.label}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : null}
+                    {selectedProvider ? (
+                      <FieldDescription>
+                        <a href={selectedProvider.docUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                          官方说明
+                        </a>
+                      </FieldDescription>
+                    ) : null}
                     {agent.baseUrlPresets.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
                         {agent.baseUrlPresets.map((preset) => (
@@ -361,7 +394,7 @@ export function SetupWizard({
                             type="button"
                             size="xs"
                             variant="outline"
-                            onClick={() => setField("baseUrl", preset.value)}
+                            onClick={() => setForm((prev) => ({ ...prev, baseUrl: preset.value, keyEnv: "", providerId: "" }))}
                           >
                             {preset.label}
                           </Button>
@@ -389,7 +422,7 @@ export function SetupWizard({
                       <FieldLabel htmlFor="setup-model">模型（可选）</FieldLabel>
                       <Input
                         id="setup-model"
-                        placeholder="留空使用 Agent 默认模型"
+                        placeholder={form.mode === "compatible" && selectedProvider?.models[0] ? `例如 ${selectedProvider.models[0]}` : "留空使用 Agent 默认模型"}
                         value={form.model}
                         onChange={(event) => setField("model", event.target.value)}
                       />

@@ -69,7 +69,7 @@ describe('manyoyo setup (command line wizard)', () => {
 
     test('follows the web wizard: four numbered steps, official or compatible access, Base URL before the key, default hints say "默认选N"', async () => {
         const agent = require('../lib/setup').listSetupAgents()[0];
-        const customIndex = String(agent.baseUrlPresets.length + 1);
+        const customIndex = String(agent.providers.length + agent.baseUrlPresets.length + 1);
         const prompter = scripted({
             // Agent=1、接入方式=2(兼容)、凭据种类=1、Base URL=自定义(末项)、地址、模型、工作目录、软件源=n
             answers: ['1', '2', '1', customIndex, 'https://llm.example.com/v1', 'm-1', '', 'n'],
@@ -90,6 +90,33 @@ describe('manyoyo setup (command line wizard)', () => {
         expect(config.runs.claude.env.ANTHROPIC_MODEL).toBe('m-1');
     });
 
+    test('compatible service presets: picks a provider, writes its Base URL, key variable and required default model', async () => {
+        const agent = require('../lib/setup').listSetupAgents()[0];
+        const index = agent.providers.findIndex(item => item.id === 'deepseek') + 1;
+        const prompter = scripted({
+            // Agent=1、兼容=2、凭据种类=1、Base URL=DeepSeek、模型=回车(用默认)、工作目录、软件源=n
+            answers: ['1', '2', '1', String(index), '', '', 'n'],
+            secrets: ['tok-123456', 'password1', 'password1']
+        });
+        expect(await runSetupCli(baseDeps(prompter))).toBe(0);
+        const env = readConfig().runs.claude.env;
+        expect(env.ANTHROPIC_BASE_URL).toBe('https://api.deepseek.com/anthropic');
+        expect(env.ANTHROPIC_AUTH_TOKEN).toBe('tok-123456');
+        expect(env.ANTHROPIC_MODEL).toBe('deepseek-flash[1m]');
+        expect(logs.join('\n')).toContain('官方说明：https://api-docs.deepseek.com/');
+    });
+
+    test('compatible service presets: a provider that wants ANTHROPIC_API_KEY writes that variable', async () => {
+        const agent = require('../lib/setup').listSetupAgents()[0];
+        const index = agent.providers.findIndex(item => item.id === 'kimi-code') + 1;
+        const prompter = scripted({ answers: ['1', '2', '1', String(index), '', '', 'n'], secrets: ['tok-123456', 'password1', 'password1'] });
+        expect(await runSetupCli(baseDeps(prompter))).toBe(0);
+        const env = readConfig().runs.claude.env;
+        expect(env.ANTHROPIC_API_KEY).toBe('tok-123456');
+        expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+        expect(env.ANTHROPIC_MODEL).toBeUndefined();
+    });
+
     test('the official mode does not ask for a Base URL and writes none', async () => {
         const prompter = scripted({ answers: ['1', '1', '1', '', '', 'n'], secrets: ['tok-123456', 'password1', 'password1'] });
         expect(await runSetupCli(baseDeps(prompter))).toBe(0);
@@ -99,7 +126,7 @@ describe('manyoyo setup (command line wizard)', () => {
 
     test('a compatible service without a Base URL exits without writing', async () => {
         const agent = require('../lib/setup').listSetupAgents()[0];
-        const prompter = scripted({ answers: ['1', '2', '1', String(agent.baseUrlPresets.length + 1), ''], secrets: ['tok-123456'] });
+        const prompter = scripted({ answers: ['1', '2', '1', String(agent.providers.length + agent.baseUrlPresets.length + 1), ''], secrets: ['tok-123456'] });
         expect(await runSetupCli(baseDeps(prompter))).toBe(1);
         expect(fs.existsSync(configPath)).toBe(false);
     });

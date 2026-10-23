@@ -50,6 +50,8 @@ manyoyo run -n <容器名> -- -c      # 继续最近一次会话
 
 在终端里用 Claude Code，任务完成时会响铃提醒（网页里不响）。新镜像（2.3.0 起）才带这个设置，旧容器需要重建。
 
+向导的「兼容服务」里，Claude Code 可以一键选 DeepSeek、智谱、Kimi、阿里云百炼、腾讯云、火山方舟、MiniMax 等服务商，自动填好 Base URL（官方说明链接在旁边）。Codex 暂不提供预设。
+
 环境变量（`anthropic_claudecode.env`）：
 
 ```bash
