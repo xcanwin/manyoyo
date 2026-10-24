@@ -47,7 +47,7 @@ export function useConfirmDialog() {
         if (!next) settle(false)
       }}
     >
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent size="sm">
         <DialogTitle>{request?.title}</DialogTitle>
         <DialogDescription className="whitespace-pre-wrap break-all">
           {request?.message}
@@ -56,7 +56,10 @@ export function useConfirmDialog() {
           <Button variant="outline" onClick={() => settle(false)}>
             {request?.cancelLabel || "取消"}
           </Button>
-          <Button onClick={() => settle(true)}>{request?.confirmLabel || "继续"}</Button>
+          {/* 删除 / 重置这类危险操作用 destructive（STYLE.md 第 6 节） */}
+          <Button variant={/删除|重置|清除/.test(request?.confirmLabel ?? "") ? "destructive" : "default"} onClick={() => settle(true)}>
+            {request?.confirmLabel || "继续"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

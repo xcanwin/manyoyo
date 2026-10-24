@@ -1,12 +1,17 @@
 import * as React from "react"
 
+import { KeyValueList } from "@/components/key-value-list"
+import { PageHeader } from "@/components/page-header"
+import { QuickChatSetupDialog } from "@/components/quick-chat-setup-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { QuickChatSetupDialog } from "@/components/quick-chat-setup-dialog"
-import { Spinner } from "@/components/ui/spinner"
+import { Card, CardContent } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { apiGet } from "@/lib/api"
 
-export function QuickChatSettingsView({ onSaved }: { onSaved?: () => void } = {}) {
+export function QuickChatSettingsView({
+  onSaved,
+}: { onSaved?: () => void } = {}) {
   const [path, setPath] = React.useState<string | null>(null)
   const [run, setRun] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -33,41 +38,48 @@ export function QuickChatSettingsView({ onSaved }: { onSaved?: () => void } = {}
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
-        配置好后，容器 / AGENT 列表顶部的"快捷对话"按钮会在下面这个目录下新建按时间命名的子目录，自动创建容器和
-        AGENT，免去手动新建的步骤。
-      </p>
+      <PageHeader
+        title="快捷对话"
+        description="配置好后，容器 / AGENT 列表顶部的“快捷对话”按钮会在下面这个目录下新建按时间命名的子目录，自动创建容器和 AGENT，免去手动新建的步骤。"
+        actions={
+          <Button
+            type="button"
+            variant={configured ? "outline" : "default"}
+            onClick={() => setSetupOpen(true)}
+          >
+            {configured ? "修改" : "设置"}
+          </Button>
+        }
+      />
 
       {loading ? (
-        <div className="flex h-24 items-center justify-center">
-          <Spinner className="size-5" />
+        <div className="flex flex-col gap-2" role="status" aria-label="加载中">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
         </div>
       ) : error ? (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : (
-        <div className="rounded-lg border px-4">
-          <div className="flex items-center justify-between border-b py-2 text-sm last:border-b-0">
-            <span className="flex items-baseline gap-2 text-muted-foreground">
-              工作目录
-              <span className="font-mono text-xs">quickChatPath</span>
-            </span>
-            <span className="font-medium">{path || "未设置"}</span>
-          </div>
-          <div className="flex items-center justify-between py-2 text-sm">
-            <span className="flex items-baseline gap-2 text-muted-foreground">
-              运行配置
-              <span className="font-mono text-xs">run</span>
-            </span>
-            <span className="font-medium">{run || "未设置"}</span>
-          </div>
-        </div>
+        <Card>
+          <CardContent>
+            <KeyValueList
+              items={[
+                {
+                  label: "工作目录",
+                  value: path ? (
+                    <span className="font-mono">{path}</span>
+                  ) : (
+                    "未设置"
+                  ),
+                },
+                { label: "运行配置", value: run || "未设置" },
+              ]}
+            />
+          </CardContent>
+        </Card>
       )}
-
-      <Button type="button" variant="outline" onClick={() => setSetupOpen(true)} className="w-fit">
-        {configured ? "修改" : "设置"}
-      </Button>
 
       <QuickChatSetupDialog
         open={setupOpen}

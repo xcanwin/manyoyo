@@ -135,6 +135,7 @@ async function type(id: string, value: string) {
 }
 
 beforeEach(() => {
+  vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
   container = document.createElement("div")
   document.body.appendChild(container)
   root = createRoot(container)

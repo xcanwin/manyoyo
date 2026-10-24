@@ -1,8 +1,12 @@
 import * as React from "react"
 
+import { Hint } from "@/components/hint"
+import { KeyValueList } from "@/components/key-value-list"
+import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
+import { Card, CardContent } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { apiGet } from "@/lib/api"
 import { formatBytes } from "@/lib/format"
 
@@ -15,15 +19,6 @@ type CapacityReport = {
   notes: string[]
 }
 
-function StatRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between border-b py-2 text-sm last:border-b-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
-    </div>
-  )
-}
-
 export function CapacityEstimateView() {
   const [report, setReport] = React.useState<CapacityReport | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -34,7 +29,9 @@ export function CapacityEstimateView() {
     setError("")
     apiGet("/api/system/capacity")
       .then((data) => setReport(data as unknown as CapacityReport))
-      .catch((err) => setError(err instanceof Error ? err.message : "加载容量预估失败"))
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "加载容量预估失败")
+      )
       .finally(() => setLoading(false))
   }, [])
 
@@ -44,16 +41,26 @@ export function CapacityEstimateView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">基于当前镜像与宿主机磁盘剩余空间的粗略估算，仅供参考。</p>
-        <Button type="button" variant="outline" size="sm" onClick={load} disabled={loading}>
-          刷新
-        </Button>
-      </div>
+      <PageHeader
+        title="容量预估"
+        description="基于当前镜像与宿主机磁盘剩余空间的粗略估算，仅供参考。"
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            onClick={load}
+            disabled={loading}
+          >
+            刷新
+          </Button>
+        }
+      />
 
       {loading ? (
-        <div className="flex h-32 items-center justify-center">
-          <Spinner className="size-5" />
+        <div className="flex flex-col gap-2" role="status" aria-label="加载中">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
         </div>
       ) : error ? (
         <Alert variant="destructive">
@@ -61,28 +68,54 @@ export function CapacityEstimateView() {
         </Alert>
       ) : report ? (
         <>
-          <div className="rounded-lg border p-4 text-center">
-            <p className="text-xs text-muted-foreground">预计还能新建容器数</p>
-            <p className="text-4xl font-semibold tracking-tight">
-              {report.estimatedAdditionalContainers === null ? "未知" : report.estimatedAdditionalContainers}
-            </p>
-          </div>
-
-          <div className="rounded-lg border px-4">
-            <StatRow label="镜像" value={report.image.reference} />
-            <StatRow label="镜像体积" value={formatBytes(report.image.sizeBytes)} />
-            <StatRow
-              label="单容器平均可写层体积"
-              value={`${formatBytes(report.container.averageWritableBytes)}${report.container.sampledCount > 0 ? `（取样 ${report.container.sampledCount} 个容器）` : "（无历史数据，按保守假设）"}`}
-            />
-            <StatRow label="宿主机磁盘剩余空间" value={formatBytes(report.disk.availableBytes)} />
-            <StatRow label="检测路径" value={report.disk.path} />
-          </div>
+          <Card>
+            <CardContent>
+              <KeyValueList
+                items={[
+                  {
+                    label: "预计还能新建容器数",
+                    value:
+                      report.estimatedAdditionalContainers === null
+                        ? "未知"
+                        : report.estimatedAdditionalContainers,
+                  },
+                  {
+                    label: "镜像",
+                    value: (
+                      <span className="font-mono">
+                        {report.image.reference}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: "镜像体积",
+                    value: formatBytes(report.image.sizeBytes),
+                  },
+                  {
+                    label: "单容器平均可写层体积",
+                    value: `${formatBytes(report.container.averageWritableBytes)}${report.container.sampledCount > 0 ? `（取样 ${report.container.sampledCount} 个容器）` : "（无历史数据，按保守假设）"}`,
+                  },
+                  {
+                    label: "宿主机磁盘剩余空间",
+                    value: formatBytes(report.disk.availableBytes),
+                  },
+                  {
+                    label: "检测路径",
+                    value: (
+                      <span className="font-mono">{report.disk.path}</span>
+                    ),
+                  },
+                ]}
+              />
+            </CardContent>
+          </Card>
 
           {report.notes.length > 0 ? (
-            <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+            <ul className="flex list-disc flex-col gap-1 pl-4">
               {report.notes.map((note, index) => (
-                <li key={index}>{note}</li>
+                <li key={index}>
+                  <Hint>{note}</Hint>
+                </li>
               ))}
             </ul>
           ) : null}

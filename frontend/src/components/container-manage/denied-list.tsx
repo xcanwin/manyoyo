@@ -5,6 +5,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { formatDateTime } from "@/lib/format"
 import type { DeniedRecord } from "@/lib/container-manage"
 
+import { Hint } from "@/components/hint"
 function Row({ record, disabled, onAllow }: { record: DeniedRecord; disabled: boolean; onAllow: (host: string) => void }) {
   return (
     <div className="flex items-center gap-2 text-sm">
@@ -39,7 +40,7 @@ export function DeniedList({
       {normal.length ? (
         normal.map((record) => <Row key={`${record.host}:${record.port}`} record={record} disabled={disabled} onAllow={onAllow} />)
       ) : (
-        <p className="text-xs text-muted-foreground">暂无</p>
+        <Hint className="block">暂无</Hint>
       )}
       {background.length ? (
         <Collapsible>

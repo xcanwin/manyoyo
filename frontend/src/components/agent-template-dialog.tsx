@@ -13,7 +13,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import {
   Select,
   SelectContent,
@@ -22,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { apiGet, apiPut, type SessionSummary } from "@/lib/api"
 import { CLI_PROMPT_TEMPLATES } from "@/lib/agent-templates"
@@ -60,7 +66,8 @@ export function AgentTemplateDialog({
   // 渲染期间对比"当前应该加载哪个会话的模板"来重置 loading/error，而不是
   // 在 effect 里同步 setState；effect 只保留真正的异步拉取
   const openSignature = open && session ? session.name : null
-  const [prevOpenSignature, setPrevOpenSignature] = React.useState(openSignature)
+  const [prevOpenSignature, setPrevOpenSignature] =
+    React.useState(openSignature)
   if (openSignature !== prevOpenSignature) {
     setPrevOpenSignature(openSignature)
     if (openSignature !== null) {
@@ -92,7 +99,9 @@ export function AgentTemplateDialog({
         )?.[0]
         setCli(matchedCli || CUSTOM_CLI)
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "加载模板失败"))
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "加载模板失败")
+      )
       .finally(() => setLoading(false))
   }, [open, sessionName, isDefaultAgent])
 
@@ -116,7 +125,10 @@ export function AgentTemplateDialog({
       const body = isDefaultAgent
         ? { containerAgentPromptCommand: template }
         : { agentPromptCommandOverride: cli === INHERIT_CLI ? "" : template }
-      await apiPut(`/api/sessions/${encodeURIComponent(session.name)}/agent-template`, body)
+      await apiPut(
+        `/api/sessions/${encodeURIComponent(session.name)}/agent-template`,
+        body
+      )
       onOpenChange(false)
       onSaved()
     } catch (err) {
@@ -128,7 +140,7 @@ export function AgentTemplateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>设置 CLI / Agent 模板</DialogTitle>
           <DialogDescription>
@@ -138,7 +150,14 @@ export function AgentTemplateDialog({
           </DialogDescription>
         </DialogHeader>
         {loading ? (
-          <p className="text-sm text-muted-foreground">加载中...</p>
+          <div
+            className="flex flex-col gap-2"
+            role="status"
+            aria-label="加载中"
+          >
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
         ) : (
           <FieldGroup>
             <Field>
@@ -162,8 +181,14 @@ export function AgentTemplateDialog({
                     ) : null}
                     <SelectItem value={CUSTOM_CLI}>自定义</SelectItem>
                     {["claude", "codex", "gemini", "opencode"].map((id) => (
-                      <SelectItem key={id} value={id} disabled={!isAgentAvailable(id)}>
-                        {isAgentAvailable(id) ? id : `${id}（${AGENT_UNAVAILABLE_HINT}）`}
+                      <SelectItem
+                        key={id}
+                        value={id}
+                        disabled={!isAgentAvailable(id)}
+                      >
+                        {isAgentAvailable(id)
+                          ? id
+                          : `${id}（${AGENT_UNAVAILABLE_HINT}）`}
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -172,7 +197,9 @@ export function AgentTemplateDialog({
             </Field>
             <Field>
               <FieldLabel htmlFor="agent-template-command">
-                {isDefaultAgent ? "容器级 agentPromptCommand" : "当前 AGENT 覆盖"}
+                {isDefaultAgent
+                  ? "容器级 agentPromptCommand"
+                  : "当前 AGENT 覆盖"}
               </FieldLabel>
               <Textarea
                 id="agent-template-command"
@@ -185,7 +212,9 @@ export function AgentTemplateDialog({
                 value={template}
                 onChange={(event) => setTemplate(event.target.value)}
               />
-              <FieldDescription>模板需包含 {"{prompt}"} 占位符。</FieldDescription>
+              <FieldDescription>
+                模板需包含 {"{prompt}"} 占位符。
+              </FieldDescription>
             </Field>
             {error ? (
               <Alert variant="destructive">
@@ -195,6 +224,13 @@ export function AgentTemplateDialog({
           </FieldGroup>
         )}
         <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
+            取消
+          </Button>
           <Button onClick={handleSave} disabled={loading || saving}>
             {saving ? "保存中..." : "保存"}
           </Button>

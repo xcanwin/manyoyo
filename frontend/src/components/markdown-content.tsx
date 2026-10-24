@@ -147,7 +147,7 @@ export const MarkdownContent = React.memo(
             if (!next) setPendingUrl(null)
           }}
         >
-          <DialogContent className="sm:max-w-sm">
+          <DialogContent size="sm">
             <DialogTitle>打开外部链接</DialogTitle>
             <DialogDescription className="break-all">{pendingUrl}</DialogDescription>
             <DialogFooter>

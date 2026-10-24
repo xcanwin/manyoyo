@@ -2,18 +2,17 @@ import * as React from "react"
 
 import { useAgentAvailability } from "@/hooks/use-agent-availability"
 import { AGENT_UNAVAILABLE_HINT } from "@/lib/setup"
-import { cn } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { configLabel } from "@/lib/config-labels"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldGroup } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -29,15 +28,23 @@ import { apiGet, apiPost } from "@/lib/api"
 import { expandTemplate, formatNow } from "@/lib/name-template"
 import { CLI_PROMPT_TEMPLATES, normalizeYolo } from "@/lib/agent-templates"
 import { DirectoryPickerDialog } from "@/components/directory-picker-dialog"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { AutostartEditor } from "@/components/container-manage/autostart-editor"
 import { SystemPromptEditor } from "@/components/container-manage/system-prompt-editor"
 import { EnvEditor } from "@/components/container-manage/env-editor"
 import { NetworkEditor } from "@/components/container-manage/network-editor"
-import { cleanPolicy, defaultPolicy, networkForCreate, parseEnvText, policyProblems, policyRisks, type NetworkPolicy } from "@/lib/container-manage"
-import { ChevronDownIcon } from "lucide-react"
+import {
+  cleanPolicy,
+  defaultPolicy,
+  networkForCreate,
+  parseEnvText,
+  policyProblems,
+  policyRisks,
+  type NetworkPolicy,
+} from "@/lib/container-manage"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 
+import { KeyLabel } from "@/components/key-label"
+import { SectionToggle } from "@/components/section-toggle"
 type CreateContainerForm = {
   run: string
   hostPath: string
@@ -101,12 +108,18 @@ function parseLines(text: string): string[] {
 
 function parseEnvForm(text: string): Record<string, string> | undefined {
   const { entries } = parseEnvText(text)
-  return entries.length ? Object.fromEntries(entries.map((entry) => [entry.key, entry.value])) : undefined
+  return entries.length
+    ? Object.fromEntries(entries.map((entry) => [entry.key, entry.value]))
+    : undefined
 }
 
 function buildCreateOptions(form: CreateContainerForm) {
   const options: Record<string, unknown> = {}
-  type StringKey = { [K in keyof CreateContainerForm]: CreateContainerForm[K] extends string ? K : never }[keyof CreateContainerForm]
+  type StringKey = {
+    [K in keyof CreateContainerForm]: CreateContainerForm[K] extends string
+      ? K
+      : never
+  }[keyof CreateContainerForm]
   const stringFields: StringKey[] = [
     "hostPath",
     "containerName",
@@ -133,8 +146,14 @@ function buildCreateOptions(form: CreateContainerForm) {
   if (form.autostart.trim()) options.autostart = form.autostart
   if (form.autostartOnServe) options.autostartOnServe = true
   // 没改过内容就不带，由服务端按所选运行配置算默认值
-  if (!form.systemPromptEnabled || form.systemPrompt !== form.systemPromptDefault) {
-    options.systemPrompt = { enabled: form.systemPromptEnabled, text: form.systemPrompt }
+  if (
+    !form.systemPromptEnabled ||
+    form.systemPrompt !== form.systemPromptDefault
+  ) {
+    options.systemPrompt = {
+      enabled: form.systemPromptEnabled,
+      text: form.systemPrompt,
+    }
   }
   // 放开类的改动（自定义）已在编辑器里确认过，这里带上 confirmRisk
   const network = networkForCreate(form.network)
@@ -143,30 +162,6 @@ function buildCreateOptions(form: CreateContainerForm) {
     options.confirmRisk = true
   }
   return options
-}
-
-// 字段标签：中文名 + 灰色小字配置键（与系统设置同写法）
-function KeyLabel({ htmlFor, k, hint }: { htmlFor: string; k: string; hint?: string }) {
-  return (
-    <FieldLabel htmlFor={htmlFor}>
-      {configLabel([k]).title}
-      <span className="font-mono text-xs font-normal text-muted-foreground">{k}</span>
-      {hint ? <span className="text-xs font-normal text-muted-foreground">{hint}</span> : null}
-    </FieldLabel>
-  )
-}
-
-// 与字段标签同级的折叠标题：加粗文字 + 右侧箭头，默认收起
-function SectionToggle({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <Collapsible className="border-t pt-2">
-      <CollapsibleTrigger className="group/section -mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-sm font-semibold outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50">
-        {title}
-        <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]/section:rotate-180" />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="pt-2">{children}</CollapsibleContent>
-    </Collapsible>
-  )
 }
 
 export function CreateContainerDialog({
@@ -213,19 +208,37 @@ export function CreateContainerDialog({
       // 这里展开成具体值显示，同一次打开共用一个时间；目录在点“创建”时才建
       const suggestion = await apiGet("/api/system/new-container-defaults")
         .then((info) => {
-          const vars = { now: formatNow(), quickChatPath: String(info.quickChatPath || "") }
-          const name = expandTemplate(String(info.containerName || ""), vars).value
+          const vars = {
+            now: formatNow(),
+            quickChatPath: String(info.quickChatPath || ""),
+          }
+          const name = expandTemplate(
+            String(info.containerName || ""),
+            vars
+          ).value
           const host = expandTemplate(String(info.hostPath || ""), vars)
-          const container = expandTemplate(String(info.containerPath || ""), vars).value
-          return { name, host: host.value, container, createHost: host.templated }
+          const container = expandTemplate(
+            String(info.containerPath || ""),
+            vars
+          ).value
+          return {
+            name,
+            host: host.value,
+            container,
+            createHost: host.templated,
+          }
         })
         .catch(() => null)
       setSuggestedDir(suggestion?.createHost ? suggestion.host : "")
       setSuggestedContainerPath(suggestion?.container ?? "")
       setForm({
         ...DEFAULT_FORM,
-        hostPath: suggestion ? suggestion.host : String(defaults.hostPath || ""),
-        containerPath: suggestion ? suggestion.container : String(defaults.containerPath || ""),
+        hostPath: suggestion
+          ? suggestion.host
+          : String(defaults.hostPath || ""),
+        containerPath: suggestion
+          ? suggestion.container
+          : String(defaults.containerPath || ""),
         containerName: suggestion?.name ?? "",
         imageName: String(defaults.imageName || ""),
         imageVersion: String(defaults.imageVersion || ""),
@@ -267,7 +280,9 @@ export function CreateContainerDialog({
   function handleRunChange(value: string | null) {
     const runName = value ?? ""
     const preset = runName ? runs[runName] : undefined
-    const normalizedYolo = preset?.yolo ? normalizeYolo(String(preset.yolo)) : ""
+    const normalizedYolo = preset?.yolo
+      ? normalizeYolo(String(preset.yolo))
+      : ""
     const agentPromptCommand = preset?.agentPromptCommand
       ? String(preset.agentPromptCommand)
       : normalizedYolo
@@ -276,12 +291,16 @@ export function CreateContainerDialog({
     setForm((prev) => {
       // 运行配置自己写了 hostPath：把目录留空，让服务端按运行配置走（请求里的值会盖过运行配置，
       // 且运行配置里的路径可能带 ~，不能原样回填）；换成没写 hostPath 的运行配置或取消选择，再恢复预填的目录
-      const presetHasHost = typeof preset?.hostPath === "string" && preset.hostPath.trim() !== ""
+      const presetHasHost =
+        typeof preset?.hostPath === "string" && preset.hostPath.trim() !== ""
       let hostFields: Partial<CreateContainerForm> = {}
       if (presetHasHost) {
         hostFields = { hostPath: "", containerPath: "" }
       } else if (suggestedDir && !prev.hostPath.trim()) {
-        hostFields = { hostPath: suggestedDir, containerPath: suggestedContainerPath }
+        hostFields = {
+          hostPath: suggestedDir,
+          containerPath: suggestedContainerPath,
+        }
       }
       return {
         ...prev,
@@ -315,26 +334,40 @@ export function CreateContainerDialog({
     }
     // 放开类的改动（自定义模式已在编辑器里确认过）：范围很大的出站规则、绑定 0.0.0.0 的端口暴露在这里确认
     const risks = policyRisks(defaultPolicy(), cleanPolicy(form.network))
-    if (risks.includes("wide") && !(await confirm({
-      title: "放开范围很大的规则？",
-      message: "新增的允许规则覆盖范围很大（任何地址、内网、云元数据、整个 /8 以上的网段，或类似 *.co.uk 的公共后缀通配），可能让容器越过原有的网络限制。",
-      confirmLabel: "确认放开",
-    }))) return
-    if (risks.includes("publicBind") && !(await confirm({
-      title: "让局域网 / 公网可见？",
-      message: "端口暴露绑定了 0.0.0.0：能访问到这台机器的任何设备（局域网，服务器在公网时是整个互联网）都可以访问这个宿主机端口，并直达容器里的服务。请确认防火墙已按需限制来源。",
-      confirmLabel: "确认暴露",
-    }))) return
+    if (
+      risks.includes("wide") &&
+      !(await confirm({
+        title: "放开范围很大的规则？",
+        message:
+          "新增的允许规则覆盖范围很大（任何地址、内网、云元数据、整个 /8 以上的网段，或类似 *.co.uk 的公共后缀通配），可能让容器越过原有的网络限制。",
+        confirmLabel: "确认放开",
+      }))
+    )
+      return
+    if (
+      risks.includes("publicBind") &&
+      !(await confirm({
+        title: "让局域网 / 公网可见？",
+        message:
+          "端口暴露绑定了 0.0.0.0：能访问到这台机器的任何设备（局域网，服务器在公网时是整个互联网）都可以访问这个宿主机端口，并直达容器里的服务。请确认防火墙已按需限制来源。",
+        confirmLabel: "确认暴露",
+      }))
+    )
+      return
     setSubmitting(true)
     setError("")
     try {
       const createOptions = buildCreateOptions(form)
       // 预填的目录还没建：此刻才建（用户改成别的路径就不动，那个路径本来就得存在）
       if (suggestedDir && form.hostPath.trim() === suggestedDir) {
-        const made = await apiPost("/api/fs/directories/mkdir", { path: suggestedDir })
-        const dir = typeof made.path === "string" && made.path ? made.path : suggestedDir
+        const made = await apiPost("/api/fs/directories/mkdir", {
+          path: suggestedDir,
+        })
+        const dir =
+          typeof made.path === "string" && made.path ? made.path : suggestedDir
         createOptions.hostPath = dir
-        if (form.containerPath.trim() === suggestedDir) createOptions.containerPath = dir
+        if (form.containerPath.trim() === suggestedDir)
+          createOptions.containerPath = dir
       }
       const body: Record<string, unknown> = {}
       if (form.run) body.run = form.run
@@ -351,27 +384,25 @@ export function CreateContainerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={cn(
-          "flex max-h-[85vh] flex-col sm:max-w-xl lg:max-w-3xl",
-          // 目录选择弹窗嵌套打开时，base-ui 的 Dialog 会复用外层已有的遮罩层，
-          // 不会再单独给这层弹窗加虚化，这里手动虚化+禁用交互，避免误点到背后的表单
-          pickerOpen && "pointer-events-none opacity-40 blur-[2px]"
-        )}
-      >
-        <DialogHeader className="shrink-0">
+      <DialogContent size="lg">
+        <DialogHeader>
           <DialogTitle>新建容器会话</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-4">
-          <div className="-mx-4 min-h-0 flex-1 overflow-y-auto px-4">
-            <FieldGroup className="gap-4">
+        <form
+          onSubmit={handleSubmit}
+          className="flex min-h-0 flex-1 flex-col gap-4"
+        >
+          <DialogBody>
+            <FieldGroup>
               <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2">
                 <Field>
                   <KeyLabel htmlFor="create-run" k="run" />
                   <Select value={form.run} onValueChange={handleRunChange}>
                     <SelectTrigger id="create-run" className="w-full">
                       <SelectValue placeholder="(不使用 run)">
-                        {(value: string | null) => (value ? runLabel(value, runLabels) : "(不使用 run)")}
+                        {(value: string | null) =>
+                          value ? runLabel(value, runLabels) : "(不使用 run)"
+                        }
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -460,7 +491,10 @@ export function CreateContainerDialog({
                       setField("containerMode", value ?? "")
                     }
                   >
-                    <SelectTrigger id="create-container-mode" className="w-full">
+                    <SelectTrigger
+                      id="create-container-mode"
+                      className="w-full"
+                    >
                       <SelectValue placeholder="(跟随默认)" />
                     </SelectTrigger>
                     <SelectContent>
@@ -514,8 +548,14 @@ export function CreateContainerDialog({
                     <SelectContent>
                       <SelectGroup>
                         {["claude", "codex", "gemini", "opencode"].map((id) => (
-                          <SelectItem key={id} value={id} disabled={!isAgentAvailable(id)}>
-                            {isAgentAvailable(id) ? id : `${id}（${AGENT_UNAVAILABLE_HINT}）`}
+                          <SelectItem
+                            key={id}
+                            value={id}
+                            disabled={!isAgentAvailable(id)}
+                          >
+                            {isAgentAvailable(id)
+                              ? id
+                              : `${id}（${AGENT_UNAVAILABLE_HINT}）`}
                           </SelectItem>
                         ))}
                       </SelectGroup>
@@ -523,7 +563,10 @@ export function CreateContainerDialog({
                   </Select>
                 </Field>
                 <Field>
-                  <KeyLabel htmlFor="create-agent-prompt-command" k="agentPromptCommand" />
+                  <KeyLabel
+                    htmlFor="create-agent-prompt-command"
+                    k="agentPromptCommand"
+                  />
                   <Input
                     id="create-agent-prompt-command"
                     placeholder="例如 codex exec --plain-text {prompt}"
@@ -536,7 +579,11 @@ export function CreateContainerDialog({
               </div>
 
               <Field>
-                <KeyLabel htmlFor="create-volumes" k="volumes" hint="每行一项" />
+                <KeyLabel
+                  htmlFor="create-volumes"
+                  k="volumes"
+                  hint="每行一项"
+                />
                 <Textarea
                   id="create-volumes"
                   placeholder="例如 /path/to/data:/data"
@@ -580,20 +627,24 @@ export function CreateContainerDialog({
                   text={form.systemPrompt}
                   onTextChange={(value) => setField("systemPrompt", value)}
                   enabled={form.systemPromptEnabled}
-                  onEnabledChange={(value) => setField("systemPromptEnabled", value)}
+                  onEnabledChange={(value) =>
+                    setField("systemPromptEnabled", value)
+                  }
                 />
               </SectionToggle>
             </FieldGroup>
-          </div>
+          </DialogBody>
 
           {/* 错误放在滚动区外、按钮上方：表单很长时放在最底下用户根本看不到 */}
           {error ? (
             <Alert variant="destructive" className="shrink-0" role="alert">
-              <AlertDescription className="break-words">{error}</AlertDescription>
+              <AlertDescription className="break-words">
+                {error}
+              </AlertDescription>
             </Alert>
           ) : null}
 
-          <DialogFooter className="shrink-0">
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
@@ -614,7 +665,9 @@ export function CreateContainerDialog({
         open={pickerOpen}
         onOpenChange={setPickerOpen}
         initialPath={form.hostPath}
-        onSelect={(path) => setForm((prev) => ({ ...prev, hostPath: path, containerPath: path }))}
+        onSelect={(path) =>
+          setForm((prev) => ({ ...prev, hostPath: path, containerPath: path }))
+        }
       />
     </Dialog>
   )

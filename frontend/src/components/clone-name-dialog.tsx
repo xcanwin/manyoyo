@@ -63,7 +63,7 @@ export function CloneNameDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{mode === "duplicate" ? "复制容器" : "创建相同配置容器"}</DialogTitle>
           <DialogDescription>

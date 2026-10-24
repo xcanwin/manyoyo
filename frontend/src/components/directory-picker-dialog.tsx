@@ -1,5 +1,6 @@
 import * as React from "react"
 import { ArrowUpIcon, FolderIcon } from "lucide-react"
+import { Hint } from "@/components/hint"
 
 import { apiGet, apiPost, type DirectoryEntry } from "@/lib/api"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -39,8 +40,12 @@ export function DirectoryPickerDialog({
     apiGet(`/api/fs/directories?${params.toString()}`)
       .then((data) => {
         setCurrentPath(String(data.currentPath || ""))
-        setParentPath(typeof data.parentPath === "string" ? data.parentPath : "")
-        setEntries(Array.isArray(data.entries) ? (data.entries as DirectoryEntry[]) : [])
+        setParentPath(
+          typeof data.parentPath === "string" ? data.parentPath : ""
+        )
+        setEntries(
+          Array.isArray(data.entries) ? (data.entries as DirectoryEntry[]) : []
+        )
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "加载目录失败")
@@ -78,21 +83,23 @@ export function DirectoryPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[80vh] flex-col sm:max-w-lg">
-        <DialogHeader className="shrink-0">
+      <DialogContent size="md">
+        <DialogHeader>
           <DialogTitle>选择目录</DialogTitle>
         </DialogHeader>
 
         <div className="flex shrink-0 items-center gap-2">
           <Button
             variant="outline"
-            size="icon-sm"
+            size="icon"
+            aria-label="上一级目录"
+            title="上一级目录"
             disabled={!parentPath}
             onClick={() => load(parentPath)}
           >
             <ArrowUpIcon />
           </Button>
-          <Input value={currentPath} readOnly className="h-8 font-mono" />
+          <Input value={currentPath} readOnly className="font-mono" />
         </div>
 
         {error ? (
@@ -104,18 +111,16 @@ export function DirectoryPickerDialog({
         {/* 固定高度而不是随目录/文件数量伸缩，避免弹窗跟着内容多少上下抖动 */}
         <div className="h-72 shrink-0 overflow-y-auto rounded-md border">
           <div className="flex flex-col gap-0.5 p-2">
-            {loading ? (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">加载中...</div>
-            ) : null}
+            {loading ? <Hint className="px-2 py-1.5">加载中...</Hint> : null}
             {!loading && entries.length === 0 ? (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">空目录</div>
+              <Hint className="px-2 py-1.5">空目录</Hint>
             ) : null}
             {entries.map((entry) => (
               <button
                 key={entry.path}
                 type="button"
                 onClick={() => load(entry.path)}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted"
               >
                 <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
                 <span className="truncate">{entry.name}</span>
@@ -129,15 +134,18 @@ export function DirectoryPickerDialog({
             placeholder="新建目录名称"
             value={newDirName}
             onChange={(event) => setNewDirName(event.target.value)}
-            className="h-8"
           />
-          <Button type="button" variant="outline" size="sm" onClick={handleCreateDir}>
+          <Button type="button" variant="outline" onClick={handleCreateDir}>
             新建目录
           </Button>
         </div>
 
-        <DialogFooter className="shrink-0">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
             取消
           </Button>
           <Button

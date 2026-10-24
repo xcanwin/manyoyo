@@ -1,9 +1,17 @@
 import * as React from "react"
 
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { toast } from "sonner"
+import { PencilIcon, PlayIcon, Trash2Icon } from "lucide-react"
+
+import { DataTable, type DataColumn } from "@/components/data-table"
+import { Hint } from "@/components/hint"
+import { PageHeader } from "@/components/page-header"
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -16,7 +24,21 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
@@ -46,8 +68,13 @@ const EXTRA_ENV_LABELS: Record<string, string> = {
   ENABLE_TOOL_SEARCH: "关闭工具搜索",
 }
 
+
+// 服务商下拉里“自定义地址”这一项的取值
+const CUSTOM_PROVIDER = "__custom__"
+
 type Notice = { tone: "success" | "error"; text: string; detail?: string }
 
+// 系统设置里的“模型服务”：一套服务 = 一个运行配置。界面上不出现变量名；Key 只显示末 4 位，保存和测试都在服务端完成
 // 系统设置里的“模型服务”：一套服务 = 一个运行配置。界面上不出现变量名；Key 只显示末 4 位，保存和测试都在服务端完成
 export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
   const [data, setData] = React.useState<ModelServicesData | null>(null)
@@ -96,7 +123,9 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
     setBusy(`test:${name}`)
     try {
       const result = await testModelService(name)
-      setResults((prev) => ({ ...prev, [name]: noticeOf(result) }))
+      const notice = noticeOf(result)
+      setResults((prev) => ({ ...prev, [name]: notice }))
+      if (notice.tone === "success") toast.success(`${name}：${notice.text}`)
     } catch (err) {
       setResults((prev) => ({
         ...prev,
@@ -140,6 +169,7 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
     try {
       applyChange(await deleteModelService(service.name))
       setDeleting(null)
+      toast.success(`已删除 ${service.name}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除失败")
       setDeleting(null)
@@ -176,169 +206,202 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
     })
   }
 
-  if (!data && !error) return <Spinner />
+  const services = data?.services ?? []
+  const fixable = services.filter(
+    (service) => Object.keys(service.missingExtraEnv ?? {}).length > 0
+  )
+  const failed = services.filter(
+    (service) => results[service.name]?.tone === "error"
+  )
+
+  // 状态：测试过的显示结果，没测过的显示“未测试”；缺附加设置的显示“需要修复”
+  function statusOf(service: ModelService) {
+    const result = results[service.name]
+    if (busy === `test:${service.name}`) return <Spinner />
+    if (result) {
+      return (
+        <Badge variant={result.tone === "success" ? "success" : "destructive"}>
+          {result.tone === "success" ? "可用" : "不可用"}
+        </Badge>
+      )
+    }
+    if (Object.keys(service.missingExtraEnv ?? {}).length > 0) {
+      return <Badge variant="warning">需要修复</Badge>
+    }
+    return <Badge variant="secondary">未测试</Badge>
+  }
+
+  const columns: DataColumn<ModelService>[] = [
+    {
+      key: "agent",
+      header: "Agent",
+      render: (s) => s.agentLabel,
+      primary: true,
+    },
+    { key: "provider", header: "服务商", render: (s) => s.providerLabel },
+    { key: "name", header: "配置名", render: (s) => s.name, mono: true },
+    {
+      key: "model",
+      header: "默认模型",
+      render: (s) => s.model || "—",
+      mono: true,
+    },
+    {
+      key: "key",
+      header: "Key",
+      render: (s) => s.keyTail || "未填写",
+      mono: true,
+    },
+    { key: "status", header: "状态", render: statusOf },
+  ]
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
-        每一项是一套“服务商 +
-        Key”。添加后可以在新建容器、快捷对话里直接选用；已有容器不受影响。
-      </p>
+      <PageHeader
+        title="模型服务"
+        description="每一项是一套“服务商 + Key”。添加后可以在新建容器、快捷对话里直接选用；已有容器不受影响。"
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy !== ""}
+              onClick={() => void openImport()}
+            >
+              {busy === "import" ? <Spinner data-icon="inline-start" /> : null}
+              从本机导入
+            </Button>
+            <Button
+              type="button"
+              onClick={() =>
+                setDialog({ mode: "create", form: EMPTY_SERVICE_FORM })
+              }
+            >
+              添加模型服务
+            </Button>
+          </>
+        }
+      />
       {error ? (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
-      {data && data.services.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          还没有模型服务，点下面的“添加模型服务”。
-        </p>
-      ) : null}
-      <div className="flex flex-col gap-2">
-        {(data?.services ?? []).map((service) => {
-          const result = results[service.name]
-          return (
-            <div
-              key={service.name}
-              className="flex flex-col gap-2 rounded-lg border p-3"
-              data-testid={`model-service-${service.name}`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex min-w-0 flex-col gap-1">
-                  <span className="text-sm font-semibold">
-                    {serviceTitle(service)}
-                  </span>
-                  <span className="text-xs [overflow-wrap:anywhere] text-muted-foreground">
-                    {service.authMode === "subscription" ? "订阅令牌" : "Key"}{" "}
-                    {service.keyTail || "未填写"}
-                    {service.model ? ` · 模型 ${service.model}` : ""} · 配置名{" "}
-                    {service.name}
-                    {service.quickChatDefault ? " · 快捷对话在用" : ""}
-                  </span>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={busy !== ""}
-                    onClick={() => void handleTest(service.name)}
-                  >
-                    {busy === `test:${service.name}` ? <Spinner /> : null}
-                    测试
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={busy !== ""}
-                    onClick={() => openEdit(service)}
-                  >
-                    编辑
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={busy !== ""}
-                    onClick={() => setDeleting(service)}
-                  >
-                    删除
-                  </Button>
-                </div>
-              </div>
-              {service.missingExtraEnv &&
-              Object.keys(service.missingExtraEnv).length > 0 ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-amber-600">
-                  <span>
-                    这家服务需要附加设置（
-                    {Object.keys(service.missingExtraEnv)
-                      .map((key) => EXTRA_ENV_LABELS[key] ?? "附加设置")
-                      .join("、")}
-                    ），缺了模型可能调不了工具。
-                  </span>
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="outline"
-                    disabled={busy !== ""}
-                    onClick={() => void handleFix(service.name)}
-                  >
-                    一键修复
-                  </Button>
-                </div>
-              ) : null}
-              {result ? (
-                <p
-                  role="status"
-                  className={
-                    result.tone === "success"
-                      ? "text-xs text-emerald-600"
-                      : "text-xs text-destructive"
-                  }
+      {data && data.suggestions.length > 0
+        ? data.suggestions.map((item) => (
+            <Alert key={`${item.from}:${item.agent}`}>
+              <AlertDescription>
+                发现可以直接复用的 Key：{item.label}
+              </AlertDescription>
+              <AlertAction className="top-1/2 -translate-y-1/2">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={busy !== ""}
+                  onClick={() => void handleReuse(item.from, item.agent)}
                 >
-                  {result.text}
-                  {result.detail ? (
-                    <details className="mt-1 text-muted-foreground">
-                      <summary className="cursor-pointer">详情</summary>
-                      <pre className="mt-1 max-h-32 overflow-auto font-mono break-all whitespace-pre-wrap">
-                        {result.detail}
-                      </pre>
-                    </details>
+                  {busy === `reuse:${item.from}:${item.agent}` ? (
+                    <Spinner data-icon="inline-start" />
                   ) : null}
-                </p>
-              ) : null}
-            </div>
-          )
-        })}
-      </div>
+                  一键添加
+                </Button>
+              </AlertAction>
+            </Alert>
+          ))
+        : null}
 
-      {data && data.suggestions.length > 0 ? (
-        <div className="flex flex-col gap-2 rounded-lg border border-dashed p-3">
-          <span className="text-sm font-semibold">发现可以直接复用的 Key</span>
-          {data.suggestions.map((item) => (
-            <div
-              key={`${item.from}:${item.agent}`}
-              className="flex items-center justify-between gap-2"
+      {fixable.map((service) => (
+        <Alert key={service.name} variant="warning">
+          <AlertDescription>
+            {serviceTitle(service)}（{service.name}）需要附加设置（
+            {Object.keys(service.missingExtraEnv ?? {})
+              .map((key) => EXTRA_ENV_LABELS[key] ?? "附加设置")
+              .join("、")}
+            ），缺了模型可能调不了工具。
+          </AlertDescription>
+          <AlertAction className="top-1/2 -translate-y-1/2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy !== ""}
+              onClick={() => void handleFix(service.name)}
             >
-              <span className="text-sm">{item.label}</span>
-              <Button
-                type="button"
-                size="sm"
-                disabled={busy !== ""}
-                onClick={() => void handleReuse(item.from, item.agent)}
-              >
-                {busy === `reuse:${item.from}:${item.agent}` ? (
-                  <Spinner />
-                ) : null}
-                一键添加
-              </Button>
-            </div>
-          ))}
-        </div>
-      ) : null}
+              一键修复
+            </Button>
+          </AlertAction>
+        </Alert>
+      ))}
 
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() =>
-            setDialog({ mode: "create", form: EMPTY_SERVICE_FORM })
-          }
-        >
-          添加模型服务
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy !== ""}
-          onClick={() => void openImport()}
-        >
-          {busy === "import" ? <Spinner /> : null}
-          从本机导入
-        </Button>
-      </div>
+      {failed.map((service) => {
+        const result = results[service.name]
+        return (
+          <Alert key={service.name} variant="destructive" role="status">
+            <AlertDescription>
+              {serviceTitle(service)}（{service.name}）：{result.text}
+              {result.detail ? (
+                <details className="mt-2">
+                  <summary className="cursor-pointer">详情</summary>
+                  <pre className="mt-2 max-h-32 overflow-auto font-mono text-xs break-all whitespace-pre-wrap">
+                    {result.detail}
+                  </pre>
+                </details>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        )
+      })}
+
+      <DataTable
+        label="模型服务"
+        columns={columns}
+        rows={services}
+        loading={!data && !error}
+        rowKey={(s) => s.name}
+        rowTestId={(s) => `model-service-${s.name}`}
+        empty={{
+          title: "还没有模型服务",
+          description: "添加一套“服务商 + Key”，之后新建容器时直接选用。",
+        }}
+        actions={(service) => (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="测试"
+              title="测试"
+              disabled={busy !== ""}
+              onClick={() => void handleTest(service.name)}
+            >
+              <PlayIcon />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="编辑"
+              title="编辑"
+              disabled={busy !== ""}
+              onClick={() => openEdit(service)}
+            >
+              <PencilIcon />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="删除"
+              title="删除"
+              disabled={busy !== ""}
+              onClick={() => setDeleting(service)}
+            >
+              <Trash2Icon />
+            </Button>
+          </>
+        )}
+      />
 
       {importing ? (
         <ImportDialog
@@ -372,7 +435,7 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
         open={deleting !== null}
         onOpenChange={(open) => (open ? null : setDeleting(null))}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>删除模型服务</DialogTitle>
             <DialogDescription>
@@ -391,6 +454,7 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
             </Button>
             <Button
               type="button"
+              variant="destructive"
               disabled={busy !== ""}
               onClick={() => deleting && void handleDelete(deleting)}
             >
@@ -476,21 +540,20 @@ function ServiceDialog({
 
   return (
     <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg">
-        <DialogHeader className="shrink-0">
+      <DialogContent size="lg">
+        <DialogHeader>
           <DialogTitle>{editing ? "编辑模型服务" : "添加模型服务"}</DialogTitle>
           <DialogDescription>
             Key 只保存在本机配置里，页面上只显示末 4 位。
           </DialogDescription>
         </DialogHeader>
-        <div className="-mx-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4">
+        <DialogBody>
           <FieldGroup>
             {!editing ? (
               <Field>
                 <FieldLabel>Agent</FieldLabel>
                 <ToggleGroup
                   variant="outline"
-                  size="sm"
                   value={[form.agent]}
                   onValueChange={(values) =>
                     values[0] &&
@@ -516,7 +579,6 @@ function ServiceDialog({
                 <FieldLabel>登录方式</FieldLabel>
                 <ToggleGroup
                   variant="outline"
-                  size="sm"
                   value={[form.mode]}
                   disabled={editing}
                   onValueChange={(values) =>
@@ -545,44 +607,46 @@ function ServiceDialog({
               </Field>
             ) : !editing ? (
               <Field>
-                <FieldLabel>服务商</FieldLabel>
-                <div className="flex flex-wrap gap-2">
-                  {(agent?.providers ?? []).map((item) => (
-                    <Button
-                      key={item.id}
-                      type="button"
-                      size="xs"
-                      variant={
-                        form.providerId === item.id ? "default" : "outline"
+                <FieldLabel htmlFor="ms-provider">服务商</FieldLabel>
+                <Select
+                  value={form.providerId || CUSTOM_PROVIDER}
+                  onValueChange={(value) => {
+                    const item = agent?.providers.find((p) => p.id === value)
+                    if (item) {
+                      patch({
+                        providerId: item.id,
+                        baseUrl: item.baseUrl,
+                        model: form.model || item.defaultModel,
+                      })
+                    } else {
+                      patch({ providerId: "", baseUrl: "" })
+                    }
+                  }}
+                >
+                  <SelectTrigger id="ms-provider" className="w-full">
+                    <SelectValue>
+                      {(value: string | null) =>
+                        agent?.providers.find((p) => p.id === value)?.label ??
+                        "自定义地址"
                       }
-                      onClick={() =>
-                        patch({
-                          providerId: item.id,
-                          baseUrl: item.baseUrl,
-                          model: form.model || item.defaultModel,
-                        })
-                      }
-                    >
-                      {item.label}
-                    </Button>
-                  ))}
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant={form.providerId === "" ? "default" : "outline"}
-                    onClick={() => patch({ providerId: "", baseUrl: "" })}
-                  >
-                    自定义地址
-                  </Button>
-                </div>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {(agent?.providers ?? []).map((item) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={CUSTOM_PROVIDER}>
+                        自定义地址
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
                 {provider ? (
                   <FieldDescription>
-                    <a
-                      href={provider.docUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline"
-                    >
+                    <a href={provider.docUrl} target="_blank" rel="noreferrer">
                       官方说明
                     </a>
                     {provider.extraEnv &&
@@ -681,8 +745,8 @@ function ServiceDialog({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           ) : null}
-        </div>
-        <DialogFooter className="shrink-0">
+        </DialogBody>
+        <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             取消
           </Button>
@@ -733,7 +797,7 @@ function ImportDialog({
 
   return (
     <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>从本机导入</DialogTitle>
           <DialogDescription>
@@ -741,20 +805,23 @@ function ImportDialog({
           </DialogDescription>
         </DialogHeader>
         {preview.candidates.length === 0 ? (
-          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-            <span>本机没有找到可导入的 Key。会在这些地方找：</span>
-            {preview.sources.map((item) => (
-              <span key={item.agent}>
-                {item.label}：{item.where}
-              </span>
-            ))}
-          </div>
+          <Empty className="border">
+            <EmptyHeader>
+              <EmptyTitle>本机没有找到可导入的 Key</EmptyTitle>
+              <EmptyDescription>
+                会在这些地方找：
+                {preview.sources
+                  .map((item) => ` ${item.label}（${item.where}）`)
+                  .join("；")}
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <div className="flex flex-col gap-2">
             {preview.candidates.map((item) => (
               <label
                 key={item.id}
-                className="flex items-start gap-2 rounded-lg border p-3 text-sm"
+                className="flex items-start gap-2 rounded-lg border p-3"
               >
                 <input
                   type="checkbox"
@@ -770,23 +837,21 @@ function ImportDialog({
                   }
                 />
                 <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="font-semibold">
+                  <span className="font-medium">
                     {item.agentLabel} · {item.providerLabel}
                   </span>
-                  <span className="text-xs [overflow-wrap:anywhere] text-muted-foreground">
+                  <Hint className="[overflow-wrap:anywhere]">
                     Key {item.keyTail}
                     {item.baseUrl ? ` · ${item.baseUrl}` : ""}
                     {item.model ? ` · 模型 ${item.model}` : ""}
-                  </span>
+                  </Hint>
                   {item.duplicate ? (
-                    <span className="text-xs text-muted-foreground">
-                      已经有用同一个 Key 的服务
-                    </span>
+                    <Hint>已经有用同一个 Key 的服务</Hint>
                   ) : null}
                   {item.invalid ? (
-                    <span className="text-xs text-destructive">
+                    <Badge variant="destructive" className="w-fit">
                       不能导入：{item.invalid}
-                    </span>
+                    </Badge>
                   ) : null}
                 </span>
               </label>

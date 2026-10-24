@@ -53,6 +53,7 @@ async function click(el: HTMLElement | undefined) {
 }
 
 beforeEach(() => {
+  vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
   container = document.createElement("div")
   document.body.appendChild(container)
   root = createRoot(container)
@@ -74,8 +75,8 @@ describe("DoctorPanel", () => {
   test("lists every check with status, reason and next step", async () => {
     api.fetchDoctor.mockResolvedValue(broken)
     await mount()
-    const items = Array.from(container.querySelectorAll("li"))
-    expect(items.map((li) => li.dataset.status)).toEqual(["ok", "error", "warning"])
+    const items = Array.from(container.querySelectorAll("[data-testid^='doctor-check-']"))
+    expect(items.map((row) => row.querySelector<HTMLElement>("[data-status]")!.dataset.status)).toEqual(["ok", "error", "warning"])
     expect(text()).toContain("失败")
     expect(text()).toContain("警告")
     expect(text()).toContain("下一步：启动 podman daemon 后重试。")

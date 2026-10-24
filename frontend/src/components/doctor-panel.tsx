@@ -1,16 +1,27 @@
 import * as React from "react"
-import { CheckIcon, CircleAlertIcon, TriangleAlertIcon } from "lucide-react"
 
+import { DataTable, type DataColumn } from "@/components/data-table"
+import { Hint } from "@/components/hint"
+import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import { fetchDoctor, hasFixableIssue, runDoctorFix, STATUS_LABEL, type DoctorCheck, type DoctorReport } from "@/lib/doctor"
+import {
+  fetchDoctor,
+  hasFixableIssue,
+  runDoctorFix,
+  STATUS_LABEL,
+  type DoctorCheck,
+  type DoctorReport,
+} from "@/lib/doctor"
 
-function StatusIcon({ status }: { status: DoctorCheck["status"] }) {
-  if (status === "ok") return <CheckIcon className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden />
-  if (status === "warning") return <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
-  return <CircleAlertIcon className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
-}
+// 检查结果的状态色（STYLE.md 第 3 节）：通过 = success，警告 = warning，失败 = destructive
+const STATUS_VARIANT = {
+  ok: "success",
+  warning: "warning",
+  error: "destructive",
+} as const
 
 export function DoctorPanel() {
   const [report, setReport] = React.useState<DoctorReport | null>(null)
@@ -48,23 +59,79 @@ export function DoctorPanel() {
 
   const busy = loading || fixing
 
+  const columns: DataColumn<DoctorCheck>[] = [
+    {
+      key: "summary",
+      header: "检查项",
+      primary: true,
+      render: (check) => check.summary,
+    },
+    {
+      key: "status",
+      header: "结果",
+      render: (check) => (
+        <Badge
+          variant={STATUS_VARIANT[check.status]}
+          data-status={check.status}
+        >
+          {STATUS_LABEL[check.status]}
+        </Badge>
+      ),
+    },
+    {
+      key: "next",
+      header: "下一步",
+      render: (check) => (
+        <span className="flex flex-col gap-1 whitespace-normal">
+          {check.status !== "ok" && check.action ? (
+            <span>下一步：{check.action}</span>
+          ) : null}
+          {check.status !== "ok" && check.detail ? (
+            <Hint className="break-all">{check.detail}</Hint>
+          ) : null}
+          {check.fix?.attempted || check.fix?.message ? (
+            <span
+              className={
+                check.fix.fixed ? "text-success" : "text-muted-foreground"
+              }
+            >
+              {check.fix.fixed ? "已修复" : "未修复"}：{check.fix.message}
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
+  ]
+
   return (
     <div className="flex flex-col gap-4" data-testid="doctor-panel">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">检查容器环境、镜像与配置是否可用，并给出下一步。</p>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={busy}>
-            {loading ? <Spinner data-icon="inline-start" /> : null}
-            重新检查
-          </Button>
-          {hasFixableIssue(report) ? (
-            <Button type="button" size="sm" onClick={() => void handleFix()} disabled={busy}>
-              {fixing ? <Spinner data-icon="inline-start" /> : null}
-              尝试自动修复
+      <PageHeader
+        title="环境检查"
+        description="检查容器环境、镜像与配置是否可用，并给出下一步。"
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void load()}
+              disabled={busy}
+            >
+              {loading ? <Spinner data-icon="inline-start" /> : null}
+              重新检查
             </Button>
-          ) : null}
-        </div>
-      </div>
+            {hasFixableIssue(report) ? (
+              <Button
+                type="button"
+                onClick={() => void handleFix()}
+                disabled={busy}
+              >
+                {fixing ? <Spinner data-icon="inline-start" /> : null}
+                尝试自动修复
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
       {error ? (
         <Alert variant="destructive">
@@ -72,36 +139,15 @@ export function DoctorPanel() {
         </Alert>
       ) : null}
 
-      {report ? (
-        <ul className="flex flex-col divide-y rounded-lg border">
-          {report.checks.map((check) => (
-            <li key={check.code} className="flex gap-2 p-3 text-sm" data-status={check.status}>
-              <StatusIcon status={check.status} />
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="font-medium">
-                  {check.summary}
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">{STATUS_LABEL[check.status]}</span>
-                </span>
-                {check.status !== "ok" && check.action ? (
-                  <span className="text-muted-foreground">下一步：{check.action}</span>
-                ) : null}
-                {check.status !== "ok" && check.detail ? (
-                  <span className="break-all text-xs text-muted-foreground">{check.detail}</span>
-                ) : null}
-                {check.fix?.attempted || check.fix?.message ? (
-                  <span className={check.fix.fixed ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}>
-                    {check.fix.fixed ? "已修复" : "未修复"}：{check.fix.message}
-                  </span>
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : loading ? (
-        <div className="flex h-24 items-center justify-center">
-          <Spinner />
-        </div>
-      ) : null}
+      <DataTable
+        label="环境检查"
+        columns={columns}
+        rows={report?.checks ?? []}
+        loading={!report && loading}
+        rowKey={(check) => check.code}
+        rowTestId={(check) => `doctor-check-${check.code}`}
+        empty={{ title: error ? "检查失败" : "还没有检查结果" }}
+      />
     </div>
   )
 }

@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -27,9 +28,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 
+import { Hint } from "@/components/hint"
 const LEVEL_OPTIONS = [
   { value: "all", label: "全部级别" },
   { value: "WARN,ERROR", label: "仅警告与错误" },
@@ -47,20 +54,18 @@ function formatLogTime(ts: string): string {
 function LogRow({ entry }: { entry: ServeLogEntry }) {
   const extras = formatLogExtra(entry.extra)
   return (
-    <div className="flex flex-col gap-1 py-2 text-sm">
+    <div className="flex flex-col gap-1 py-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-xs text-muted-foreground">
-          {formatLogTime(entry.ts)}
-        </span>
+        <Hint mono>{formatLogTime(entry.ts)}</Hint>
         <Badge variant={logLevelBadgeVariant(entry.level)}>{entry.level}</Badge>
-        <span className="min-w-0 break-words font-medium">{entry.message}</span>
+        <span className="min-w-0 break-words">{entry.message}</span>
       </div>
       {extras.length ? (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 pl-1 font-mono text-xs text-muted-foreground">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 pl-1">
           {extras.map((item) => (
-            <span key={item} className="break-all">
+            <Hint key={item} mono className="break-all">
               {item}
-            </span>
+            </Hint>
           ))}
         </div>
       ) : null}
@@ -103,9 +108,13 @@ export function LogsDialog({
     setLoading(true)
     setError("")
     try {
-      const data = (await apiGet(`/api/logs?${buildQuery()}`)) as unknown as ServeLogPage
+      const data = (await apiGet(
+        `/api/logs?${buildQuery()}`
+      )) as unknown as ServeLogPage
       setEntries(Array.isArray(data.entries) ? data.entries : [])
-      setNextEndOffset(typeof data.nextEndOffset === "number" ? data.nextEndOffset : null)
+      setNextEndOffset(
+        typeof data.nextEndOffset === "number" ? data.nextEndOffset : null
+      )
       if (!date && data.date) setDate(data.date)
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载日志失败")
@@ -122,8 +131,13 @@ export function LogsDialog({
       const data = (await apiGet(
         `/api/logs?${buildQuery(nextEndOffset)}`
       )) as unknown as ServeLogPage
-      setEntries((prev) => [...prev, ...(Array.isArray(data.entries) ? data.entries : [])])
-      setNextEndOffset(typeof data.nextEndOffset === "number" ? data.nextEndOffset : null)
+      setEntries((prev) => [
+        ...prev,
+        ...(Array.isArray(data.entries) ? data.entries : []),
+      ])
+      setNextEndOffset(
+        typeof data.nextEndOffset === "number" ? data.nextEndOffset : null
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载更早日志失败")
     } finally {
@@ -151,7 +165,7 @@ export function LogsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[80vh] max-h-[80vh] flex-col sm:max-w-3xl">
+      <DialogContent size="wide">
         <DialogHeader>
           <DialogTitle>运行日志</DialogTitle>
           <DialogDescription>
@@ -175,13 +189,17 @@ export function LogsDialog({
               </SelectGroup>
             </SelectContent>
           </Select>
-          <Select value={level} onValueChange={(value) => setLevel(value ?? "all")}>
+          <Select
+            value={level}
+            onValueChange={(value) => setLevel(value ?? "all")}
+          >
             <SelectTrigger className="w-36">
               {/* base-ui 的 SelectValue 默认把原始 value 直接渲染出来（会显示成 "all"），
                   用 children 函数映射回可读标签 */}
               <SelectValue>
                 {(value: string) =>
-                  LEVEL_OPTIONS.find((item) => item.value === value)?.label ?? "全部级别"
+                  LEVEL_OPTIONS.find((item) => item.value === value)?.label ??
+                  "全部级别"
                 }
               </SelectValue>
             </SelectTrigger>
@@ -202,7 +220,11 @@ export function LogsDialog({
             className="w-56"
           />
           <Button variant="outline" onClick={load} disabled={loading}>
-            {loading ? <Spinner data-icon="inline-start" /> : <RefreshCwIcon data-icon="inline-start" />}
+            {loading ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <RefreshCwIcon data-icon="inline-start" />
+            )}
             刷新
           </Button>
         </div>
@@ -213,10 +235,10 @@ export function LogsDialog({
           </Alert>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <DialogBody className="gap-0">
           {loading && !entries.length ? (
             <div className="flex h-full items-center justify-center">
-              <Spinner className="size-6" />
+              <Spinner />
             </div>
           ) : entries.length ? (
             <div className="flex flex-col divide-y [&>*]:shrink-0">
@@ -225,7 +247,12 @@ export function LogsDialog({
               ))}
               {nextEndOffset !== null ? (
                 <div className="flex justify-center py-3">
-                  <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                  >
                     {loadingMore ? <Spinner data-icon="inline-start" /> : null}
                     载入更早
                   </Button>
@@ -233,17 +260,21 @@ export function LogsDialog({
               ) : null}
             </div>
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
-              <p className="text-sm font-medium">没有匹配的日志</p>
-              <p className="text-sm text-muted-foreground">换个日期或放宽筛选条件试试。</p>
-            </div>
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>没有匹配的日志</EmptyTitle>
+                <EmptyDescription>
+                  换个日期或放宽筛选条件试试。
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
-        </div>
+        </DialogBody>
 
-        <Separator className="shrink-0" />
-        <p className="shrink-0 text-xs text-muted-foreground">
-          日志文件在 ~/.manyoyo/logs/serve/ 下按天存放，这里按需分页读取，不会整份载入。
-        </p>
+        <Hint className="shrink-0">
+          日志文件在 ~/.manyoyo/logs/serve/
+          下按天存放，这里按需分页读取，不会整份载入。
+        </Hint>
       </DialogContent>
     </Dialog>
   )

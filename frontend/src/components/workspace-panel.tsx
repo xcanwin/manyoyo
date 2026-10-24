@@ -128,6 +128,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { TRACE_ALIGN_EVENT, TraceBlock } from "@/components/trace-block"
 import { ContainerManagePanel } from "@/components/container-manage/container-manage-panel"
 
+import { Hint } from "@/components/hint"
 type View = "activity" | "files" | "terminal" | "changes" | "container" | "config" | "detail"
 
 const VIEW_LABELS: Record<View, string> = {
@@ -224,7 +225,7 @@ function InfoCard({ title, rows }: { title: string; rows: InfoRow[] }) {
                 <span className="truncate text-sm font-medium">{row.value}</span>
               )}
             </div>
-            {row.detail ? <p className="text-xs text-muted-foreground">{row.detail}</p> : null}
+            {row.detail ? <Hint className="block">{row.detail}</Hint> : null}
           </div>
         ))}
       </CardContent>

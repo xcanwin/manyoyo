@@ -18,6 +18,7 @@ import {
   serializeEnv,
 } from "@/lib/container-manage"
 
+import { Hint } from "@/components/hint"
 // 环境变量编辑：默认是表格（名字含 KEY / TOKEN / SECRET… 的值遮罩，点眼睛显示），也可切到原始文本。
 // 唯一数据源是 text（与容器里 /run/manyoyo/env 同一格式），表格每次编辑都回写成文本。
 type FileRow = { path: string }
@@ -203,7 +204,7 @@ export function EnvEditor({
             </Button>
           </div>
           {entries.length === 0 ? (
-            <p className="text-xs text-muted-foreground">还没有环境变量。</p>
+            <Hint className="block">还没有环境变量。</Hint>
           ) : null}
         </div>
       )}

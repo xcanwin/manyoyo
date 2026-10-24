@@ -26,6 +26,7 @@ import {
   switchPreset,
 } from "@/lib/container-manage"
 
+import { Hint } from "@/components/hint"
 const PRESETS: Preset[] = ["restricted", "allowlist", "custom"]
 const BIND_OPTIONS = [
   { value: "127.0.0.1", label: "127.0.0.1（仅本机）" },
@@ -174,7 +175,7 @@ export function NetworkEditor({
             width: "w-14",
             render: (row) => {
               const active = forwards.some((f) => f.bind === row.bind && String(f.hostPort) === row.hostPort && String(f.port) === row.port)
-              if (!active) return <span className="text-xs text-muted-foreground">—</span>
+              if (!active) return <Hint>—</Hint>
               const hosts = row.bind === "0.0.0.0"
                 ? Array.from(new Set([...hostIps, window.location.hostname]))
                 : [row.bind]

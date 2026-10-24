@@ -85,7 +85,7 @@ const flush = () =>
   })
 const byText = (text: string) =>
   Array.from(document.body.querySelectorAll("button")).find(
-    (el) => el.textContent?.trim() === text
+    (el) => el.textContent?.trim() === text || el.getAttribute("aria-label") === text
   ) as HTMLButtonElement | undefined
 const click = async (text: string) => {
   const el = byText(text)
@@ -106,6 +106,21 @@ const typeInto = async (id: string, value: string) => {
   })
 }
 const pageText = () => document.body.textContent ?? ""
+// 服务商是下拉：点开触发器，再点选项
+const pickProvider = async (label: string) => {
+  await act(async () => {
+    ;(document.getElementById("ms-provider") as HTMLElement).click()
+  })
+  await flush()
+  const option = Array.from(document.body.querySelectorAll('[role="option"]')).find(
+    (el) => el.textContent?.trim() === label
+  ) as HTMLElement
+  if (!option) throw new Error(`找不到服务商 ${label}`)
+  await act(async () => {
+    option.click()
+  })
+  await flush()
+}
 
 describe("ModelServicesPanel", () => {
   const calls: { method: string; url: string; body: unknown }[] = []
@@ -116,6 +131,11 @@ describe("ModelServicesPanel", () => {
     document.body.appendChild(container)
     root = createRoot(container)
     calls.length = 0
+    vi.stubGlobal("matchMedia", () => ({
+      matches: false,
+      addEventListener() {},
+      removeEventListener() {},
+    }))
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string, init?: RequestInit) => {
@@ -186,7 +206,8 @@ describe("ModelServicesPanel", () => {
   test("列出已有服务（只有 Key 末 4 位）和复用建议，一键添加后自动测试", async () => {
     const onSaved = vi.fn()
     await mount(onSaved)
-    expect(pageText()).toContain("Claude Code · 智谱 GLM")
+    expect(pageText()).toContain("Claude Code")
+    expect(pageText()).toContain("智谱 GLM")
     expect(pageText()).toContain("…1111")
     await click("一键添加")
     await flush()
@@ -198,13 +219,13 @@ describe("ModelServicesPanel", () => {
       calls.some((c) => c.url === "/api/model-services/codex-zhipu/test")
     ).toBe(true)
     expect(onSaved).toHaveBeenCalled()
-    expect(pageText()).toContain("连接成功")
+    expect(pageText()).toContain("可用")
   })
 
   test("添加：选服务商后只发 providerId，不发地址和变量名", async () => {
     await mount()
     await click("添加模型服务")
-    await click("智谱 GLM")
+    await pickProvider("智谱 GLM")
     await typeInto("ms-key", "k-secret-1234")
     await click("保存")
     expect(post("/api/model-services")?.body).toEqual({
@@ -217,11 +238,11 @@ describe("ModelServicesPanel", () => {
   test("选了服务商就把预设的 Base URL 显示出来（只读）", async () => {
     await mount()
     await click("添加模型服务")
-    await click("智谱 GLM")
+    await pickProvider("智谱 GLM")
     const input = document.getElementById("ms-base-url") as HTMLInputElement
     expect(input.value).toBe("https://z.test/anthropic")
     expect(input.readOnly).toBe(true)
-    await click("自定义地址")
+    await pickProvider("自定义地址")
     expect(
       (document.getElementById("ms-base-url") as HTMLInputElement).readOnly
     ).toBe(false)

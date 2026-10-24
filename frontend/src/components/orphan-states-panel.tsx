@@ -1,9 +1,11 @@
 import * as React from "react"
 import { Trash2Icon } from "lucide-react"
 
+import { DataTable, type DataColumn } from "@/components/data-table"
+import { Hint } from "@/components/hint"
+import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { apiDelete, apiGet } from "@/lib/api"
 import { formatDateTime } from "@/lib/format"
@@ -47,39 +49,61 @@ export function OrphanStatesPanel() {
     }
   }
 
-  if (orphans === null) {
-    return (
-      <div className="flex justify-center py-6">
-        <Spinner className="size-5" />
-      </div>
-    )
-  }
+  const columns: DataColumn<Orphan>[] = [
+    {
+      key: "name",
+      header: "容器",
+      primary: true,
+      render: (orphan) => orphan.name || "（未命名）",
+    },
+    {
+      key: "id",
+      header: "状态目录",
+      render: (orphan) => orphan.id,
+      mono: true,
+    },
+    {
+      key: "createdAt",
+      header: "创建时间",
+      render: (orphan) =>
+        orphan.createdAt ? (
+          <Hint>{formatDateTime(orphan.createdAt)}</Hint>
+        ) : (
+          "—"
+        ),
+    },
+  ]
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm text-muted-foreground">
-        容器管理数据（环境变量、自启动、网络规则）按容器单独保存。下面是已经找不到对应容器的残留，确认不再需要后可以删除。
-      </p>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="容器状态"
+        description="容器管理数据（环境变量、自启动、网络规则）按容器单独保存。下面是已经找不到对应容器的残留，确认不再需要后可以删除。"
+      />
       {error ? (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
-      {orphans.length === 0 && !error ? <p className="text-sm text-muted-foreground">没有残留。</p> : null}
-      {orphans.map((orphan) => (
-        <div key={orphan.id} className="flex items-center gap-2 rounded-lg border p-2 text-sm">
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{orphan.name || "（未命名）"}</p>
-            <p className="truncate font-mono text-xs text-muted-foreground">
-              {orphan.id}
-              {orphan.createdAt ? ` · 创建于 ${formatDateTime(orphan.createdAt)}` : ""}
-            </p>
-          </div>
-          <Button variant="ghost" size="icon-sm" aria-label={`删除 ${orphan.name || orphan.id}`} onClick={() => void remove(orphan)}>
+      <DataTable
+        label="残留的容器状态"
+        columns={columns}
+        rows={orphans ?? []}
+        loading={orphans === null}
+        rowKey={(orphan) => orphan.id}
+        empty={{ title: "没有残留" }}
+        actions={(orphan) => (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`删除 ${orphan.name || orphan.id}`}
+            title="删除"
+            onClick={() => void remove(orphan)}
+          >
             <Trash2Icon />
           </Button>
-        </div>
-      ))}
+        )}
+      />
       {dialog}
     </div>
   )

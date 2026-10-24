@@ -51,23 +51,23 @@ export function useUnsavedChangesDialog() {
         if (!next && !saving) settle("cancel")
       }}
     >
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent size="sm">
         <DialogTitle className="sr-only">有未保存的修改</DialogTitle>
-        <DialogDescription className="text-foreground">
+        <DialogDescription>
           是否要保存对 {request?.fileName} 的更改？
           <br />
           如果不保存，你的更改将丢失。
         </DialogDescription>
         <DialogFooter>
-          <Button disabled={saving} onClick={handleSave}>
-            {saving ? <Spinner data-icon="inline-start" /> : null}
-            保存
+          <Button variant="outline" disabled={saving} onClick={() => settle("cancel")}>
+            取消
           </Button>
           <Button variant="outline" disabled={saving} onClick={() => settle("proceed")}>
             不保存
           </Button>
-          <Button variant="outline" disabled={saving} onClick={() => settle("cancel")}>
-            取消
+          <Button disabled={saving} onClick={handleSave}>
+            {saving ? <Spinner data-icon="inline-start" /> : null}
+            保存
           </Button>
         </DialogFooter>
       </DialogContent>

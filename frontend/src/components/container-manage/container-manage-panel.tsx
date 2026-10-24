@@ -26,6 +26,7 @@ import {
 } from "@/lib/container-manage"
 import { formatDateTime } from "@/lib/format"
 
+import { Hint } from "@/components/hint"
 type AutostartState = { script: string; autostartOnServe: boolean }
 type SystemPromptState = { enabled: boolean; text: string }
 
@@ -337,7 +338,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-5xl flex-col gap-4 p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">管理容器 {containerName} 的环境变量、网络与自启动，改动不需要重建容器。</p>
+          <Hint className="block">管理容器 {containerName} 的环境变量、网络与自启动，改动不需要重建容器。</Hint>
           <Button variant="ghost" size="icon-sm" aria-label="重新加载" disabled={loading} onClick={() => void load(true)}>
             <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
           </Button>
@@ -367,7 +368,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
               </Alert>
             ) : null}
             {envState?.mtime ? (
-              <p className="text-xs text-muted-foreground">文件最后修改：{formatDateTime(envState.mtime)}</p>
+              <Hint className="block">文件最后修改：{formatDateTime(envState.mtime)}</Hint>
             ) : null}
             {envMessage && !(envMessage.tone === "ok" && envDirty) ? (
               <Alert variant={envMessage.tone === "ok" ? "default" : "destructive"}>

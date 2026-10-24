@@ -48,6 +48,7 @@ import {
   type Mirrors,
 } from "@/lib/mirrors"
 
+import { Hint } from "@/components/hint"
 const STEP_TITLES = ["选择 Agent", "接入方式", "工作目录", "保存并开始"]
 const POLL_INTERVAL_MS = 2000
 
@@ -263,7 +264,7 @@ export function SetupWizard({
               ))}
             </div>
             {!readiness.ready && readiness.blockedReason ? (
-              <p className="text-xs text-muted-foreground">{readiness.blockedReason}（完成前可先填写前三步）</p>
+              <Hint className="block">{readiness.blockedReason}（完成前可先填写前三步）</Hint>
             ) : null}
             {readiness.items.some((item) => item.state === "failed") ? (
               <div className="flex flex-col gap-2">
@@ -317,9 +318,9 @@ export function SetupWizard({
                     )}
                   >
                     <span className="text-sm font-medium">{item.label}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <Hint>
                       {isAgentUnavailable(item) ? AGENT_UNAVAILABLE_HINT : (AGENT_BLURBS[item.id] ?? "")}
-                    </span>
+                    </Hint>
                   </button>
                 ))}
                 {agents.length === 0 && !error ? <Spinner className="mx-auto my-4" /> : null}
@@ -453,7 +454,7 @@ export function SetupWizard({
                         测试连接
                       </Button>
                       {!readiness.ready ? (
-                        <p className="text-xs text-muted-foreground">{readiness.blockedReason}，就绪后可测试连接</p>
+                        <Hint className="block">{readiness.blockedReason}，就绪后可测试连接</Hint>
                       ) : null}
                       {testResult ? (
                         <Alert
@@ -515,9 +516,9 @@ export function SetupWizard({
                   </Button>
                   {mirrorsOpen ? (
                     <>
-                      <p className="text-xs text-muted-foreground">
+                      <Hint className="block">
                         容器里安装软件用的 apt / npm / pip 源。不改就用官方默认源；网络慢时可选镜像加速，只对之后新建的容器生效。
-                      </p>
+                      </Hint>
                       <MirrorSettings
                         mirrors={effectiveMirrors}
                         presets={mirrorPresets}
@@ -581,7 +582,7 @@ export function SetupWizard({
                   </FieldGroup>
                 ) : null}
                 {!readiness.ready ? (
-                  <p className="text-xs text-muted-foreground">{readiness.blockedReason}，就绪后可保存并进入</p>
+                  <Hint className="block">{readiness.blockedReason}，就绪后可保存并进入</Hint>
                 ) : null}
               </div>
             ) : null}

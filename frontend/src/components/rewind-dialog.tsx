@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import { apiPost, type ChatMessage } from "@/lib/api"
+import { Hint } from "@/components/hint"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog"
@@ -98,7 +99,7 @@ export function RewindDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => (!next && !busy ? onClose() : undefined)}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="lg">
         <DialogTitle>回退到这里</DialogTitle>
         <DialogDescription>这条提示词会放回输入框，它和之后的内容会被撤销。</DialogDescription>
         {loading ? (
@@ -107,18 +108,20 @@ export function RewindDialog({
           </div>
         ) : null}
         {preview ? (
-          <div className="flex flex-col gap-2 text-sm">
+          <div className="flex flex-col gap-2">
             <p>{filesText}</p>
             {okFiles && okFiles.files.length > 0 ? (
-              <ul className="max-h-40 overflow-y-auto rounded-md border bg-muted/30 p-2 font-mono text-xs" data-rewind-files>
+              <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border bg-muted/30 p-2" data-rewind-files>
                 {okFiles.files.map((file) => (
                   <li key={file.path} className="flex gap-2">
-                    <span className="w-10 shrink-0 text-muted-foreground">{ACTION_LABELS[file.action]}</span>
-                    <span className="min-w-0 break-all">{file.path}</span>
+                    <Hint className="w-10 shrink-0">{ACTION_LABELS[file.action]}</Hint>
+                    <Hint mono className="min-w-0 break-all">{file.path}</Hint>
                   </li>
                 ))}
                 {okFiles.total > 20 ? (
-                  <li className="text-muted-foreground">…还有 {okFiles.total - 20} 个</li>
+                  <li>
+                    <Hint>…还有 {okFiles.total - 20} 个</Hint>
+                  </li>
                 ) : null}
               </ul>
             ) : null}
@@ -130,21 +133,21 @@ export function RewindDialog({
             <AlertDescription className="break-words">{error}</AlertDescription>
           </Alert>
         ) : null}
-        <DialogFooter className="flex-col gap-2 sm:flex-col">
-          <Button disabled={!preview || busy !== null || !filesOk} onClick={() => void run("both")}>
-            {busy === "both" ? <Spinner data-icon="inline-start" /> : null}
-            恢复对话和文件
-          </Button>
-          <Button variant="outline" disabled={!preview || busy !== null} onClick={() => void run("conversation")}>
-            {busy === "conversation" ? <Spinner data-icon="inline-start" /> : null}
-            只恢复对话
+        <DialogFooter>
+          <Button variant="outline" disabled={busy !== null} onClick={onClose}>
+            取消
           </Button>
           <Button variant="outline" disabled={!preview || busy !== null || !filesOk} onClick={() => void run("files")}>
             {busy === "files" ? <Spinner data-icon="inline-start" /> : null}
             只恢复文件
           </Button>
-          <Button variant="ghost" disabled={busy !== null} onClick={onClose}>
-            取消
+          <Button variant="outline" disabled={!preview || busy !== null} onClick={() => void run("conversation")}>
+            {busy === "conversation" ? <Spinner data-icon="inline-start" /> : null}
+            只恢复对话
+          </Button>
+          <Button disabled={!preview || busy !== null || !filesOk} onClick={() => void run("both")}>
+            {busy === "both" ? <Spinner data-icon="inline-start" /> : null}
+            恢复对话和文件
           </Button>
         </DialogFooter>
       </DialogContent>

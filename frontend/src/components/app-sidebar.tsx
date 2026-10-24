@@ -906,7 +906,7 @@ export function AppSidebar({
           if (!next) settleRemoveDialog(null)
         }}
       >
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent size="sm">
           <DialogTitle>{removeDialog?.title}</DialogTitle>
           <DialogDescription>{removeDialog?.message}</DialogDescription>
           <DialogFooter>

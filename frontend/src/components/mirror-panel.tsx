@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import { MirrorSettings } from "@/components/mirror-settings"
+import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -21,18 +22,28 @@ export function MirrorPanel({ onSaved }: { onSaved?: () => void } = {}) {
   const [presets, setPresets] = React.useState<MirrorPresets>(emptyPresets())
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
-  const [message, setMessage] = React.useState<{ tone: "ok" | "error"; text: string } | null>(null)
+  const [message, setMessage] = React.useState<{
+    tone: "ok" | "error"
+    text: string
+  } | null>(null)
 
   React.useEffect(() => {
     let cancelled = false
-    Promise.all([fetchSetupStatus(), fetchMirrorPresets().catch(() => emptyPresets())])
+    Promise.all([
+      fetchSetupStatus(),
+      fetchMirrorPresets().catch(() => emptyPresets()),
+    ])
       .then(([status, list]) => {
         if (cancelled) return
         setMirrors({ ...emptyMirrors(), ...(status.mirrors ?? {}) })
         setPresets(list)
       })
       .catch((err) => {
-        if (!cancelled) setMessage({ tone: "error", text: err instanceof Error ? err.message : "加载失败" })
+        if (!cancelled)
+          setMessage({
+            tone: "error",
+            text: err instanceof Error ? err.message : "加载失败",
+          })
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -55,7 +66,10 @@ export function MirrorPanel({ onSaved }: { onSaved?: () => void } = {}) {
       setMessage({ tone: "ok", text: "已保存，之后新建的容器会使用这些软件源" })
       onSaved?.()
     } catch (err) {
-      setMessage({ tone: "error", text: err instanceof Error ? err.message : "保存失败" })
+      setMessage({
+        tone: "error",
+        text: err instanceof Error ? err.message : "保存失败",
+      })
     } finally {
       setSaving(false)
     }
@@ -64,13 +78,19 @@ export function MirrorPanel({ onSaved }: { onSaved?: () => void } = {}) {
   if (loading) return <Spinner />
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm text-muted-foreground">
-        默认使用各工具的官方源。改完只对之后新建的容器生效，已有容器不变。
-      </p>
-      <MirrorSettings mirrors={mirrors} presets={presets} onChange={setMirrors} idPrefix="settings-mirror" />
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="软件源"
+        description="默认使用各工具的官方源。改完只对之后新建的容器生效，已有容器不变。"
+      />
+      <MirrorSettings
+        mirrors={mirrors}
+        presets={presets}
+        onChange={setMirrors}
+        idPrefix="settings-mirror"
+      />
       {message ? (
-        <Alert variant={message.tone === "error" ? "destructive" : undefined}>
+        <Alert variant={message.tone === "error" ? "destructive" : "success"}>
           <AlertDescription>{message.text}</AlertDescription>
         </Alert>
       ) : null}

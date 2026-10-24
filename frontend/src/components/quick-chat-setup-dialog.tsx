@@ -24,6 +24,7 @@ import {
 import { apiGet, apiPut } from "@/lib/api"
 import { fetchModelServices, runLabel, runLabelMap } from "@/lib/model-services"
 
+import { Hint } from "@/components/hint"
 const DEFAULT_QUICK_CHAT_PATH = "~/.manyoyo/work/"
 
 export function QuickChatSetupDialog({
@@ -65,7 +66,10 @@ export function QuickChatSetupDialog({
     apiGet("/api/config")
       .then((data) => {
         const parsed = (data.parsed || {}) as Record<string, unknown>
-        const runsMap = parsed.runs && typeof parsed.runs === "object" ? (parsed.runs as Record<string, unknown>) : {}
+        const runsMap =
+          parsed.runs && typeof parsed.runs === "object"
+            ? (parsed.runs as Record<string, unknown>)
+            : {}
         setRuns(Object.keys(runsMap))
       })
       .catch(() => setRuns([]))
@@ -98,7 +102,7 @@ export function QuickChatSetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>设置快捷对话</DialogTitle>
           <DialogDescription>
@@ -108,9 +112,12 @@ export function QuickChatSetupDialog({
         </DialogHeader>
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor="quick-chat-path">
+            <FieldLabel
+              htmlFor="quick-chat-path"
+              className="items-baseline gap-2"
+            >
               工作目录
-              <span className="font-mono text-xs font-normal text-muted-foreground">quickChatPath</span>
+              <Hint mono>quickChatPath</Hint>
             </FieldLabel>
             <div className="flex gap-2">
               <Input
@@ -119,20 +126,29 @@ export function QuickChatSetupDialog({
                 value={path}
                 onChange={(event) => setPath(event.target.value)}
               />
-              <Button type="button" variant="outline" onClick={() => setPickerOpen(true)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPickerOpen(true)}
+              >
                 选择
               </Button>
             </div>
           </Field>
           <Field>
-            <FieldLabel htmlFor="quick-chat-run">
+            <FieldLabel
+              htmlFor="quick-chat-run"
+              className="items-baseline gap-2"
+            >
               运行配置
-              <span className="font-mono text-xs font-normal text-muted-foreground">run</span>
+              <Hint mono>run</Hint>
             </FieldLabel>
             <Select value={run} onValueChange={(value) => setRun(value ?? "")}>
               <SelectTrigger id="quick-chat-run" className="w-full">
                 <SelectValue placeholder="选择一个运行配置">
-                  {(value: string | null) => (value ? runLabel(value, runLabels) : "选择一个运行配置")}
+                  {(value: string | null) =>
+                    value ? runLabel(value, runLabels) : "选择一个运行配置"
+                  }
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -153,7 +169,12 @@ export function QuickChatSetupDialog({
           ) : null}
         </FieldGroup>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
             取消
           </Button>
           <Button type="button" onClick={handleSave} disabled={saving}>

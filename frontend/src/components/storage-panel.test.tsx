@@ -19,6 +19,7 @@ describe("StoragePanel", () => {
   let opened: string[]
   let calls: string[]
   beforeEach(() => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
     calls = []
     opened = []
     vi.stubGlobal(
@@ -45,7 +46,7 @@ describe("StoragePanel", () => {
 
   test("工作目录自动算体积，用户项目目录要点了才算；在用的目录不能删", async () => {
     const container = await mount()
-    const items = container.querySelectorAll("[data-storage-row]")
+    const items = container.querySelectorAll("[data-testid^='storage-row-']")
     expect(items).toHaveLength(5)
     expect(calls.filter((call) => call.includes("/api/storage/size"))).toHaveLength(2)
     expect(items[3].textContent).toContain("空目录")
@@ -58,14 +59,14 @@ describe("StoragePanel", () => {
 
   test("列出已删除容器的历史，并能查看目录内容", async () => {
     const container = await mount()
-    expect(container.querySelectorAll("[data-storage-history]")).toHaveLength(1)
-    expect(container.querySelector("[data-storage-history]")!.textContent).toContain("2.0 KB")
+    expect(container.querySelectorAll("[data-testid^='storage-history-']")).toHaveLength(1)
+    expect(container.querySelector("[data-testid^='storage-history-']")!.textContent).toContain("2.0 KB")
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="查看 /h/work/a"]')!.click())
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20))
     })
     expect(calls).toContain("GET /api/storage/files?path=%2Fh%2Fwork%2Fa&sub=")
-    expect(document.body.querySelectorAll("[data-storage-entry]")).toHaveLength(2)
+    expect(document.body.querySelectorAll("[data-testid^='storage-entry-']")).toHaveLength(2)
   })
 
   test("“无关联容器且为空”分类只列空目录，删除空目录按 emptyOnly 逐个删除", async () => {
@@ -73,7 +74,7 @@ describe("StoragePanel", () => {
     const filterButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.startsWith("无关联容器且为空"))!
     expect(filterButton.textContent).toContain("有2个")
     await act(async () => filterButton.click())
-    expect(Array.from(container.querySelectorAll("[data-storage-row]")).map((row) => row.textContent)).toEqual([
+    expect(Array.from(container.querySelectorAll("[data-testid^='storage-row-']")).map((row) => row.textContent)).toEqual([
       expect.stringContaining("/h/work/e1"),
       expect.stringContaining("/h/work/e2"),
     ])
@@ -89,13 +90,13 @@ describe("StoragePanel", () => {
 
   test("当前容器加黑底标签，容器名右边有进入按钮，侧栏里没有的容器不给按钮", async () => {
     const container = await mount()
-    const liveRow = container.querySelectorAll("[data-storage-row]")[1]
+    const liveRow = container.querySelectorAll("[data-testid^='storage-row-']")[1]
     expect(liveRow.textContent).toContain("当前容器")
-    expect(container.querySelectorAll("[data-storage-row]")[0].textContent).not.toContain("当前容器")
+    expect(container.querySelectorAll("[data-testid^='storage-row-']")[0].textContent).not.toContain("当前容器")
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="进入 live-1"]')!.click())
     expect(opened).toEqual(["live-1"])
     expect(container.querySelector('button[aria-label="进入 not-in-sidebar"]')).toBeNull()
-    expect(container.querySelector("[data-storage-history]")!.querySelector('button[aria-label="进入 gone-1"]')).not.toBeNull()
+    expect(container.querySelector("[data-testid^='storage-history-']")!.querySelector('button[aria-label="进入 gone-1"]')).not.toBeNull()
   })
 
   test("没有关联容器的行，关联容器一格是空白；表头叫“关联容器”和“容器”", async () => {
@@ -104,18 +105,18 @@ describe("StoragePanel", () => {
     expect(headers).toContain("关联容器")
     expect(headers).toContain("容器")
     expect(headers).not.toContain("会话")
-    const cells = container.querySelectorAll("[data-storage-row]")[2].querySelectorAll("td")
+    const cells = container.querySelectorAll("[data-testid^='storage-row-']")[2].querySelectorAll("td")
     expect(cells[2].textContent).toBe("")
   })
 
   test("版式统一：两块都有小标题，列顺序是 名称 → 占用 → …，图标按钮同一个大小，删除全部历史在小字下面", async () => {
     const container = await mount()
-    const headings = Array.from(container.querySelectorAll("p.font-semibold")).map((p) => p.textContent)
+    const headings = Array.from(container.querySelectorAll("h1")).map((h) => h.textContent)
     expect(headings).toEqual(["宿主机工作目录", "已删除容器的对话历史"])
     const tables = container.querySelectorAll("table")
-    expect(Array.from(tables[0].querySelectorAll("th")).map((th) => th.textContent)).toEqual(["宿主机目录", "占用", "关联容器", "修改时间"])
-    expect(Array.from(tables[1].querySelectorAll("th")).map((th) => th.textContent)).toEqual(["容器", "占用", "最后更新"])
-    const historyRow = container.querySelector("[data-storage-history]")!
+    expect(Array.from(tables[0].querySelectorAll("th")).map((th) => th.textContent)).toEqual(["宿主机目录", "占用", "关联容器", "修改时间", ""])
+    expect(Array.from(tables[1].querySelectorAll("th")).map((th) => th.textContent)).toEqual(["容器", "占用", "最后更新", ""])
+    const historyRow = container.querySelector("[data-testid^='storage-history-']")!
     expect(historyRow.querySelector('button[aria-label="删除历史 gone-1"]')).not.toBeNull()
     expect(historyRow.querySelectorAll("td")[0].textContent).toContain("gone-1")
     const sizes = new Set(

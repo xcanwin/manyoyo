@@ -12,7 +12,11 @@ import { QuickChatSettingsView } from "@/components/quick-chat-settings-view"
 import { AgentInstructionsPanel } from "@/components/agent-instructions-panel"
 import { ModelServicesPanel } from "@/components/model-services-panel"
 import { BasicSettings } from "@/components/basic-settings"
-import { isNotifyEnabled, notificationSupported, setNotifyEnabled } from "@/lib/attention"
+import {
+  isNotifyEnabled,
+  notificationSupported,
+  setNotifyEnabled,
+} from "@/lib/attention"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useTheme } from "@/components/theme-provider"
 import {
@@ -23,14 +27,38 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field"
+import { Hint } from "@/components/hint"
+import { KeyLabel } from "@/components/key-label"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -42,11 +70,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { apiErrorData, apiGet, apiPut } from "@/lib/api"
 import { rebaseLeafEdits, type LeafEdit } from "@/lib/config-rebase"
 import { configLabel } from "@/lib/config-labels"
-import { applyTextReplacements, findValueRangeByPath, upsertTopLevelValue } from "@/lib/json5-path-edit"
+import {
+  applyTextReplacements,
+  findValueRangeByPath,
+  upsertTopLevelValue,
+} from "@/lib/json5-path-edit"
 
 // 与后端 SENSITIVE_CONFIG_KEY_PATTERN（lib/web/server.js）保持一致，
 // 命中的字段一律当密钥处理：不回显真实值，留空即视为不修改
-const SENSITIVE_KEY_PATTERN = /(pass(word)?|passwd|secret|token|api(?:_|-)?key|auth(?:_|-)?token|oauth(?:_|-)?token)$/i
+const SENSITIVE_KEY_PATTERN =
+  /(pass(word)?|passwd|secret|token|api(?:_|-)?key|auth(?:_|-)?token|oauth(?:_|-)?token)$/i
 
 type ConfigCategory = {
   id: string
@@ -54,19 +87,26 @@ type ConfigCategory = {
   keys: string[]
   // 左侧导航里按作用范围分组：界面只影响当前浏览器；新容器默认值只对之后创建的容器生效
   group: string
-  // 窄屏左栏（w-20）放不下时用的短名
-  shortLabel?: string
 }
 
-// 窄屏左栏只有 w-20，组标题用短名
-const GROUP_SHORT_LABELS: Record<string, string> = {
-  界面: "界面",
-  Agent: "Agent",
-  新容器默认值: "新容器",
-  镜像: "镜像",
-  "MANYOYO 服务": "服务",
-  宿主机与维护: "维护",
-}
+// 右侧是表格 / 面板的分类占满宽度，其余表单类分类限制 max-w-2xl、靠左（STYLE.md 第 8 节）
+const WIDE_CATEGORIES = new Set([
+  "model-services",
+  "storage",
+  "orphans",
+  "doctor",
+  "capacity",
+])
+
+// 左栏 / 手机分类下拉里的分组顺序
+const GROUPS = [
+  "界面",
+  "Agent",
+  "新容器默认值",
+  "镜像",
+  "MANYOYO 服务",
+  "宿主机与维护",
+]
 
 const CATEGORIES: ConfigCategory[] = [
   // 主题是前端本地记忆（theme-provider 存 localStorage），不落进 manyoyo.json，
@@ -78,15 +118,44 @@ const CATEGORIES: ConfigCategory[] = [
   {
     id: "basic",
     label: "基础",
-    keys: ["containerName", "hostPath", "containerPath", "imageName", "imageVersion", "containerMode"],
+    keys: [
+      "containerName",
+      "hostPath",
+      "containerPath",
+      "imageName",
+      "imageVersion",
+      "containerMode",
+    ],
     group: "新容器默认值",
   },
-  { id: "runtime", label: "启动环境", keys: ["envFile", "env", "volumes", "ports", "first"], group: "新容器默认值" },
-  { id: "command", label: "运行命令", keys: ["shellPrefix", "shell", "shellSuffix", "agentPromptCommand", "yolo", "quiet"], group: "新容器默认值" },
+  {
+    id: "runtime",
+    label: "启动环境",
+    keys: ["envFile", "env", "volumes", "ports", "first"],
+    group: "新容器默认值",
+  },
+  {
+    id: "command",
+    label: "运行命令",
+    keys: [
+      "shellPrefix",
+      "shell",
+      "shellSuffix",
+      "agentPromptCommand",
+      "yolo",
+      "quiet",
+    ],
+    group: "新容器默认值",
+  },
   { id: "runs", label: "运行配置", keys: ["runs"], group: "新容器默认值" },
   { id: "mirrors", label: "软件源", keys: [], group: "新容器默认值" },
   { id: "build", label: "构建参数", keys: ["imageBuildArgs"], group: "镜像" },
-  { id: "web", label: "Web 服务", keys: ["serverUser", "serverPass", "serve"], group: "MANYOYO 服务" },
+  {
+    id: "web",
+    label: "Web 服务",
+    keys: ["serverUser", "serverPass", "serve"],
+    group: "MANYOYO 服务",
+  },
   { id: "plugins", label: "插件", keys: ["plugins"], group: "MANYOYO 服务" },
   { id: "doctor", label: "环境检查", keys: [], group: "宿主机与维护" },
   { id: "capacity", label: "容量预估", keys: [], group: "宿主机与维护" },
@@ -97,7 +166,10 @@ const CATEGORIES: ConfigCategory[] = [
 // 任务结束时的浏览器通知：开关只存在这台设备上；浏览器只在 HTTPS 或 localhost 下允许通知
 function NotifySetting() {
   const supported = notificationSupported()
-  const [enabled, setEnabled] = React.useState(() => supported && isNotifyEnabled() && Notification.permission === "granted")
+  const [enabled, setEnabled] = React.useState(
+    () =>
+      supported && isNotifyEnabled() && Notification.permission === "granted"
+  )
   const [hint, setHint] = React.useState("")
 
   async function handleChange(next: boolean) {
@@ -107,7 +179,10 @@ function NotifySetting() {
       setEnabled(false)
       return
     }
-    const permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission
+    const permission =
+      Notification.permission === "default"
+        ? await Notification.requestPermission()
+        : Notification.permission
     if (permission !== "granted") {
       setHint("浏览器没有允许通知，请在网站设置里打开")
       return
@@ -121,10 +196,17 @@ function NotifySetting() {
       <div className="flex flex-col gap-1">
         <FieldLabel htmlFor="notify-finished">任务结束时通知</FieldLabel>
         <FieldDescription>
-          {supported ? hint || "页面在后台时，任务结束弹出系统通知（只写会话名）" : "需要用 HTTPS 或 localhost 打开才能使用"}
+          {supported
+            ? hint || "页面在后台时，任务结束弹出系统通知（只写会话名）"
+            : "需要用 HTTPS 或 localhost 打开才能使用"}
         </FieldDescription>
       </div>
-      <Switch id="notify-finished" checked={enabled} disabled={!supported} onCheckedChange={(value) => void handleChange(Boolean(value))} />
+      <Switch
+        id="notify-finished"
+        checked={enabled}
+        disabled={!supported}
+        onCheckedChange={(value) => void handleChange(Boolean(value))}
+      />
     </Field>
   )
 }
@@ -153,7 +235,10 @@ function classifyLeaf(key: string, value: unknown): LeafKind {
 
 function leafValueToEditText(kind: LeafKind, value: unknown): string {
   if (kind === "boolean") return value ? "true" : "false"
-  if (kind === "array") return Array.isArray(value) ? value.map((item) => String(item)).join("\n") : ""
+  if (kind === "array")
+    return Array.isArray(value)
+      ? value.map((item) => String(item)).join("\n")
+      : ""
   if (kind === "secret") return ""
   if (kind === "number") return typeof value === "number" ? String(value) : ""
   if (value === null || value === undefined) return ""
@@ -192,15 +277,14 @@ function leafEditTextToValue(kind: LeafKind, text: string): unknown {
 
 type LeafCommit = (path: string[], valueText: string, jsValue: unknown) => void
 
-// 字段标签：中文名加粗，键名跟在后面用灰色等宽小字，对照 JSON 视图时能一眼对上
-function ConfigFieldLabel({ path, htmlFor }: { path: string[]; htmlFor?: string }) {
-  const label = configLabel(path)
-  return (
-    <FieldLabel htmlFor={htmlFor} className="items-baseline gap-2">
-      <span className={cn("font-medium", label.mono && "font-mono")}>{label.title}</span>
-      {!label.mono ? <span className="font-mono text-xs font-normal text-muted-foreground">{label.key}</span> : null}
-    </FieldLabel>
-  )
+function ConfigFieldLabel({
+  path,
+  htmlFor,
+}: {
+  path: string[]
+  htmlFor?: string
+}) {
+  return <KeyLabel path={path} htmlFor={htmlFor} />
 }
 
 function ConfigFieldDescription({ path }: { path: string[] }) {
@@ -208,14 +292,26 @@ function ConfigFieldDescription({ path }: { path: string[] }) {
   return desc ? <FieldDescription>{desc}</FieldDescription> : null
 }
 
-function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unknown; onCommit: LeafCommit }) {
+function ConfigLeafField({
+  path,
+  value,
+  onCommit,
+}: {
+  path: string[]
+  value: unknown
+  onCommit: LeafCommit
+}) {
   const label = path[path.length - 1]
   const fieldId = `config-field-${path.join(".")}`
   const kind = classifyLeaf(label, value)
   const [text, setText] = React.useState(() => leafValueToEditText(kind, value))
 
   function commit(nextText: string) {
-    onCommit(path, leafEditTextToJsonLiteral(kind, nextText), leafEditTextToValue(kind, nextText))
+    onCommit(
+      path,
+      leafEditTextToJsonLiteral(kind, nextText),
+      leafEditTextToValue(kind, nextText)
+    )
   }
 
   if (kind === "boolean") {
@@ -284,7 +380,13 @@ function ConfigLeafField({ path, value, onCommit }: { path: string[]; value: unk
     return (
       <Field>
         <ConfigFieldLabel path={path} htmlFor={fieldId} />
-        <Input id={fieldId} value={text} onChange={(event) => setText(event.target.value)} onBlur={() => commit(text)} inputMode="decimal" />
+        <Input
+          id={fieldId}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onBlur={() => commit(text)}
+          inputMode="decimal"
+        />
         <ConfigFieldDescription path={path} />
       </Field>
     )
@@ -322,10 +424,16 @@ function ConfigValueGroup({
     const label = configLabel(path)
     const children =
       entries.length === 0 ? (
-        <p className="text-sm text-muted-foreground">空</p>
+        <p className="text-muted-foreground">空</p>
       ) : (
         entries.map(([key, item]) => (
-          <ConfigValueGroup key={key} path={[...path, key]} value={item} onCommit={onCommit} depth={depth + 1} />
+          <ConfigValueGroup
+            key={key}
+            path={[...path, key]}
+            value={item}
+            onCommit={onCommit}
+            depth={depth + 1}
+          />
         ))
       )
     // 一级对象：一张卡片，标题 + 说明在卡片头
@@ -333,11 +441,15 @@ function ConfigValueGroup({
       return (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-baseline gap-2 text-sm font-semibold">
-              <span className={cn(label.mono && "font-mono")}>{label.title}</span>
-              {!label.mono ? <span className="font-mono text-xs font-normal text-muted-foreground">{label.key}</span> : null}
+            <CardTitle className="flex items-baseline gap-2">
+              <span className={cn(label.mono && "font-mono")}>
+                {label.title}
+              </span>
+              {!label.mono ? <Hint mono>{label.key}</Hint> : null}
             </CardTitle>
-            {label.desc ? <CardDescription>{label.desc}</CardDescription> : null}
+            {label.desc ? (
+              <CardDescription>{label.desc}</CardDescription>
+            ) : null}
           </CardHeader>
           <CardContent className="flex flex-col gap-4">{children}</CardContent>
         </Card>
@@ -346,16 +458,21 @@ function ConfigValueGroup({
     // 二级及以下：不再套框，小标题加说明，子字段整体左缩进并带一条竖线；
     // 标题和子字段之间不画分割线（子字段本来就属于它）
     return (
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-baseline gap-2">
-            <h4 className={cn("text-sm font-semibold", label.mono && "font-mono")}>{label.title}</h4>
-            {!label.mono ? <span className="font-mono text-xs text-muted-foreground">{label.key}</span> : null}
-          </div>
-          {label.desc ? <p className="text-xs text-muted-foreground">{label.desc}</p> : null}
+      <FieldSet>
+        <div className="flex flex-col gap-1">
+          <FieldLegend
+            variant="label"
+            className="mb-0 flex items-baseline gap-2"
+          >
+            <span className={cn(label.mono && "font-mono")}>{label.title}</span>
+            {!label.mono ? <Hint mono>{label.key}</Hint> : null}
+          </FieldLegend>
+          {label.desc ? (
+            <FieldDescription>{label.desc}</FieldDescription>
+          ) : null}
         </div>
         <div className="flex flex-col gap-4 border-l-2 pl-3">{children}</div>
-      </section>
+      </FieldSet>
     )
   }
   return <ConfigLeafField path={path} value={value} onCommit={onCommit} />
@@ -372,7 +489,16 @@ function CategoryFields({
 }) {
   const presentKeys = category.keys.filter((key) => key in liveParsed)
   if (presentKeys.length === 0) {
-    return <p className="p-4 text-sm text-muted-foreground">当前配置中该分类暂无内容，如需新增字段请切换到 JSON 视图编辑。</p>
+    return (
+      <Empty className="border">
+        <EmptyHeader>
+          <EmptyTitle>这个分类暂无内容</EmptyTitle>
+          <EmptyDescription>
+            如需新增字段，请切换到 JSON 视图编辑。
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
   }
   const leafKeys = presentKeys.filter((key) => !isPlainObject(liveParsed[key]))
   const objectKeys = presentKeys.filter((key) => isPlainObject(liveParsed[key]))
@@ -383,35 +509,65 @@ function CategoryFields({
           <CardContent>
             <FieldGroup>
               {leafKeys.map((key) => (
-                <ConfigValueGroup key={key} path={[key]} value={liveParsed[key]} onCommit={onCommit} />
+                <ConfigValueGroup
+                  key={key}
+                  path={[key]}
+                  value={liveParsed[key]}
+                  onCommit={onCommit}
+                />
               ))}
             </FieldGroup>
           </CardContent>
         </Card>
       ) : null}
       {objectKeys.map((key) => (
-        <ConfigValueGroup key={key} path={[key]} value={liveParsed[key]} onCommit={onCommit} />
+        <ConfigValueGroup
+          key={key}
+          path={[key]}
+          value={liveParsed[key]}
+          onCommit={onCommit}
+        />
       ))}
     </div>
   )
 }
 
-function RunsCategoryFields({ liveParsed, onCommit }: { liveParsed: Record<string, unknown>; onCommit: LeafCommit }) {
+function RunsCategoryFields({
+  liveParsed,
+  onCommit,
+}: {
+  liveParsed: Record<string, unknown>
+  onCommit: LeafCommit
+}) {
   const runs = isPlainObject(liveParsed.runs) ? liveParsed.runs : {}
   const runNames = Object.keys(runs)
   const [selected, setSelected] = React.useState(runNames[0] || "")
   // runs 增删（切回分类视图后 key 集合可能变化）不用 setState 同步，直接在渲染时兜底选中第一个
-  const effectiveSelected = runNames.includes(selected) ? selected : runNames[0] || ""
+  const effectiveSelected = runNames.includes(selected)
+    ? selected
+    : runNames[0] || ""
 
   if (runNames.length === 0) {
-    return <p className="p-4 text-sm text-muted-foreground">当前未配置任何 run，可在 JSON 视图中添加。</p>
+    return (
+      <Empty className="border">
+        <EmptyHeader>
+          <EmptyTitle>还没有运行配置</EmptyTitle>
+          <EmptyDescription>
+            可在 JSON 视图中添加，或到「模型服务」里添加一套。
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
   }
 
   return (
     <div className="flex flex-col gap-4">
       <Field>
         <FieldLabel>选择 run</FieldLabel>
-        <Select value={effectiveSelected} onValueChange={(value) => setSelected(value ?? "")}>
+        <Select
+          value={effectiveSelected}
+          onValueChange={(value) => setSelected(value ?? "")}
+        >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="选择 run" />
           </SelectTrigger>
@@ -455,9 +611,12 @@ export function SystemSettingsDialog({
 }) {
   const [path, setPath] = React.useState("")
   const [raw, setRaw] = React.useState("")
-  const [liveParsed, setLiveParsed] = React.useState<Record<string, unknown>>({})
+  const [liveParsed, setLiveParsed] = React.useState<Record<string, unknown>>(
+    {}
+  )
   const [formVersion, setFormVersion] = React.useState(0)
   const [viewMode, setViewMode] = React.useState<"form" | "json">("form")
+  const isMobile = useIsMobile()
   const [activeCategory, setActiveCategory] = React.useState(CATEGORIES[0].id)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -472,7 +631,10 @@ export function SystemSettingsDialog({
   const jsonDirtyRef = React.useRef(false)
   // JSON 文本每被改一次就 +1：保存期间又改了，成功后不能把“已手改”标记清掉
   const jsonEditSeqRef = React.useRef(0)
-  const [jsonConflict, setJsonConflict] = React.useState<{ etag: string; raw: string } | null>(null)
+  const [jsonConflict, setJsonConflict] = React.useState<{
+    etag: string
+    raw: string
+  } | null>(null)
   const { theme, setTheme } = useTheme()
 
   const load = React.useCallback(() => {
@@ -495,7 +657,9 @@ export function SystemSettingsDialog({
         setFormVersion((v) => v + 1)
         setViewMode("form")
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "加载配置失败"))
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "加载配置失败")
+      )
       .finally(() => setLoading(false))
   }, [])
 
@@ -503,25 +667,38 @@ export function SystemSettingsDialog({
     if (open) queueMicrotask(() => load())
   }, [open, load])
 
-  function handleLeafCommit(fieldPath: string[], valueText: string, jsValue: unknown) {
+  function handleLeafCommit(
+    fieldPath: string[],
+    valueText: string,
+    jsValue: unknown
+  ) {
     editsRef.current = [...editsRef.current, { path: fieldPath, valueText }]
     setRaw((prevRaw) => {
       const range = findValueRangeByPath(prevRaw, fieldPath)
       if (!range) {
         // 配置里原来没有的顶层字段（基础分类里新填的）：加进去；留空不用加
-        if (fieldPath.length === 1 && valueText !== '""') return upsertTopLevelValue(prevRaw, fieldPath[0], valueText)
+        if (fieldPath.length === 1 && valueText !== '""')
+          return upsertTopLevelValue(prevRaw, fieldPath[0], valueText)
         return prevRaw
       }
-      return applyTextReplacements(prevRaw, [{ start: range.start, end: range.end, text: valueText }])
+      return applyTextReplacements(prevRaw, [
+        { start: range.start, end: range.end, text: valueText },
+      ])
     })
-    setLiveParsed((prev) => setAtPath(prev, fieldPath, jsValue) as Record<string, unknown>)
+    setLiveParsed(
+      (prev) => setAtPath(prev, fieldPath, jsValue) as Record<string, unknown>
+    )
   }
 
   // 在最新的服务端内容上重放自己改过的字段，并换成最新的版本号。
   // 返回 null：JSON 文本被手改过，没法重放；返回 { unparsable: true }：最新内容无法解析（被改坏了），什么都不动，保住用户的修改。
   function rebaseOnto(fresh: { raw: string; etag: string }) {
     if (jsonDirtyRef.current) return null
-    const result = rebaseLeafEdits(fresh.raw, editsRef.current, baseRawRef.current)
+    const result = rebaseLeafEdits(
+      fresh.raw,
+      editsRef.current,
+      baseRawRef.current
+    )
     let parsed: Record<string, unknown>
     try {
       if (!fresh.raw.trim()) throw new Error("empty")
@@ -543,7 +720,10 @@ export function SystemSettingsDialog({
   async function handleSubPanelSaved() {
     try {
       const data = await apiGet("/api/config")
-      const fresh = { raw: String(data.raw || ""), etag: String(data.etag || "") }
+      const fresh = {
+        raw: String(data.raw || ""),
+        etag: String(data.etag || ""),
+      }
       if (jsonDirtyRef.current) {
         // JSON 文本手改过，没法按字段合并：立刻让用户选，而不是稍后点保存时才悄悄覆盖掉子面板刚写的值
         setJsonConflict(fresh)
@@ -561,8 +741,12 @@ export function SystemSettingsDialog({
 
   function describeRebase(result: { missing: string[]; overridden: string[] }) {
     const parts = ["配置文件刚被其他地方修改过，已在最新内容上保存你的修改。"]
-    if (result.overridden.length) parts.push(`${result.overridden.join("、")} 两边都改了，以你的为准。`)
-    if (result.missing.length) parts.push(`${result.missing.join("、")} 在最新内容里已经不存在，这项修改没有保存。`)
+    if (result.overridden.length)
+      parts.push(`${result.overridden.join("、")} 两边都改了，以你的为准。`)
+    if (result.missing.length)
+      parts.push(
+        `${result.missing.join("、")} 在最新内容里已经不存在，这项修改没有保存。`
+      )
     return parts.join("")
   }
 
@@ -585,13 +769,17 @@ export function SystemSettingsDialog({
           etagRef.current = String(data.etag || "")
           editsRef.current = editsRef.current.slice(sentEdits)
           baseRawRef.current = nextRaw
-          if (jsonEditSeqRef.current === sentJsonSeq) jsonDirtyRef.current = false
+          if (jsonEditSeqRef.current === sentJsonSeq)
+            jsonDirtyRef.current = false
           setSuccess(rebased ? describeRebase(rebased) : "已保存")
           return
         } catch (err) {
           const { status, data } = apiErrorData(err)
           if (status !== 409 || data.conflict !== true) throw err
-          const fresh = { raw: String(data.raw || ""), etag: String(data.etag || "") }
+          const fresh = {
+            raw: String(data.raw || ""),
+            etag: String(data.etag || ""),
+          }
           if (jsonDirtyRef.current) {
             setJsonConflict(fresh)
             return
@@ -599,11 +787,15 @@ export function SystemSettingsDialog({
           const result = rebaseOnto(fresh)
           if (!result) return
           if (result.unparsable) {
-            setError("配置文件当前无法解析（可能被其他地方改坏了），你的修改还在这里；修好文件后再保存，或点“重新加载”放弃修改")
+            setError(
+              "配置文件当前无法解析（可能被其他地方改坏了），你的修改还在这里；修好文件后再保存，或点“重新加载”放弃修改"
+            )
             return
           }
           if (attempt === 1) {
-            setError("配置文件一直在被其他地方修改，你的修改还没有保存，请再点一次保存")
+            setError(
+              "配置文件一直在被其他地方修改，你的修改还没有保存，请再点一次保存"
+            )
             return
           }
           nextRaw = result.raw
@@ -627,21 +819,35 @@ export function SystemSettingsDialog({
       setError("")
       setViewMode("form")
     } catch (err) {
-      setError(err instanceof Error ? `JSON 内容有误，无法切回分类设置：${err.message}` : "JSON 内容有误，无法切回分类设置")
+      setError(
+        err instanceof Error
+          ? `JSON 内容有误，无法切回分类设置：${err.message}`
+          : "JSON 内容有误，无法切回分类设置"
+      )
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={`flex h-[80vh] max-h-[80vh] flex-col ${activeCategory === "storage" ? "sm:max-w-[min(96vw,90rem)]" : "sm:max-w-4xl"}`}>
-        <DialogHeader className="shrink-0">
+      <DialogContent size="wide">
+        <DialogHeader>
           <DialogTitle>系统设置</DialogTitle>
-          <DialogDescription>{path || "~/.manyoyo/manyoyo.json"}</DialogDescription>
+          <DialogDescription>
+            {path || "~/.manyoyo/manyoyo.json"}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-hidden">
           {loading ? (
-            <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">加载中...</div>
+            <div
+              className="flex flex-col gap-2"
+              role="status"
+              aria-label="加载中"
+            >
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </div>
           ) : viewMode === "json" ? (
             <div className="h-full min-h-72">
               {/* 配置文件是 JSON5：key 不带引号、可以写注释和尾逗号。用 json 模式解析
@@ -662,67 +868,116 @@ export function SystemSettingsDialog({
             <Tabs
               value={activeCategory}
               onValueChange={(value) => setActiveCategory(String(value))}
-              orientation="vertical"
-              className="h-full min-h-72"
+              orientation={isMobile ? "horizontal" : "vertical"}
+              className="h-full min-h-72 max-md:flex-col"
             >
-              {/* 移动端屏宽有限，分类栏收窄把空间让给右侧表单 */}
-              {/* 分类多，窄屏或矮窗口放不下：限制在弹窗高度内、从顶部排起，超出可以上下滚动 */}
-              <TabsList variant="line" className="max-h-full w-20 shrink-0 justify-start overflow-y-auto sm:w-36">
-                {CATEGORIES.map((category, index) => (
-                  <React.Fragment key={category.id}>
-                    {index === 0 || CATEGORIES[index - 1].group !== category.group ? (
-                      <div
-                        aria-hidden="true"
-                        data-group={category.group}
-                        className={cn("w-full self-stretch px-2 pb-1 text-left text-xs text-muted-foreground", index > 0 && "pt-3")}
+              {/* 手机上左侧分类栏变成顶部的分类下拉（STYLE.md 第 12 节） */}
+              {isMobile ? (
+                <Select
+                  value={activeCategory}
+                  onValueChange={(value) =>
+                    setActiveCategory(String(value ?? CATEGORIES[0].id))
+                  }
+                >
+                  <SelectTrigger aria-label="设置分类" className="w-full">
+                    <SelectValue>
+                      {(value: string | null) =>
+                        CATEGORIES.find((c) => c.id === value)?.label
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GROUPS.map((group) => (
+                      <SelectGroup key={group}>
+                        <SelectLabel>{group}</SelectLabel>
+                        {CATEGORIES.filter((c) => c.group === group).map(
+                          (c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.label}
+                            </SelectItem>
+                          )
+                        )}
+                      </SelectGroup>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                /* 分类多、矮窗口放不下：限制在弹窗高度内、从顶部排起，超出可以上下滚动 */
+                <TabsList
+                  variant="line"
+                  className="max-h-full w-40 shrink-0 justify-start overflow-y-auto"
+                >
+                  {CATEGORIES.map((category, index) => (
+                    <React.Fragment key={category.id}>
+                      {index === 0 ||
+                      CATEGORIES[index - 1].group !== category.group ? (
+                        <Hint
+                          aria-hidden="true"
+                          data-group={category.group}
+                          className={cn(
+                            "block w-full self-stretch px-2 pb-1 text-left",
+                            index > 0 && "pt-3"
+                          )}
+                        >
+                          {category.group}
+                        </Hint>
+                      ) : null}
+                      <TabsTrigger
+                        value={category.id}
+                        className="text-foreground after:hidden hover:bg-muted/60 group-data-[variant=line]/tabs-list:hover:bg-muted/60 dark:text-foreground group-data-[variant=line]/tabs-list:data-active:bg-muted dark:group-data-[variant=line]/tabs-list:data-active:bg-muted"
                       >
-                        <span className="sm:hidden">{GROUP_SHORT_LABELS[category.group] || category.group}</span>
-                        <span className="hidden sm:inline">{category.group}</span>
-                      </div>
-                    ) : null}
-                    <TabsTrigger
-                      value={category.id}
-                      className="text-foreground after:hidden hover:bg-muted/60 group-data-[variant=line]/tabs-list:hover:bg-muted/60 group-data-[variant=line]/tabs-list:data-active:bg-muted dark:group-data-[variant=line]/tabs-list:data-active:bg-muted dark:text-foreground"
-                    >
-                      {category.shortLabel ? (
-                        <>
-                          <span className="sm:hidden">{category.shortLabel}</span>
-                          <span className="hidden sm:inline">{category.label}</span>
-                        </>
-                      ) : (
-                        category.label
-                      )}
-                    </TabsTrigger>
-                  </React.Fragment>
-                ))}
-              </TabsList>
-              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-1 pr-1 pl-4">
+                        {category.label}
+                      </TabsTrigger>
+                    </React.Fragment>
+                  ))}
+                </TabsList>
+              )}
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-1 pr-1 md:pl-4">
                 {CATEGORIES.map((category) => (
-                  <TabsContent key={category.id} value={category.id} className="mt-0">
+                  <TabsContent
+                    key={category.id}
+                    value={category.id}
+                    className={cn(
+                      "mt-0",
+                      !WIDE_CATEGORIES.has(category.id) && "max-w-2xl"
+                    )}
+                  >
                     {category.id === "page" ? (
                       <FieldGroup>
                         <Field>
                           <FieldLabel>主题</FieldLabel>
                           <ToggleGroup
                             variant="outline"
-                            size="sm"
                             value={[theme]}
                             onValueChange={(values) => {
                               const next = values[0]
-                              if (next) setTheme(next as "light" | "dark" | "system")
+                              if (next)
+                                setTheme(next as "light" | "dark" | "system")
                             }}
                           >
-                            <ToggleGroupItem value="light">浅色</ToggleGroupItem>
+                            <ToggleGroupItem value="light">
+                              浅色
+                            </ToggleGroupItem>
                             <ToggleGroupItem value="dark">深色</ToggleGroupItem>
-                            <ToggleGroupItem value="system">跟随系统</ToggleGroupItem>
+                            <ToggleGroupItem value="system">
+                              跟随系统
+                            </ToggleGroupItem>
                           </ToggleGroup>
                         </Field>
                         <NotifySetting />
                       </FieldGroup>
                     ) : category.id === "runs" ? (
-                      <RunsCategoryFields key={formVersion} liveParsed={liveParsed} onCommit={handleLeafCommit} />
+                      <RunsCategoryFields
+                        key={formVersion}
+                        liveParsed={liveParsed}
+                        onCommit={handleLeafCommit}
+                      />
                     ) : category.id === "basic" ? (
-                      <BasicSettings key={formVersion} liveParsed={liveParsed} onCommit={handleLeafCommit} />
+                      <BasicSettings
+                        key={formVersion}
+                        liveParsed={liveParsed}
+                        onCommit={handleLeafCommit}
+                      />
                     ) : category.id === "capacity" ? (
                       <CapacityEstimateView />
                     ) : category.id === "mirrors" ? (
@@ -730,7 +985,11 @@ export function SystemSettingsDialog({
                     ) : category.id === "doctor" ? (
                       <DoctorPanel />
                     ) : category.id === "storage" ? (
-                      <StoragePanel currentContainer={currentContainer} openableContainers={openableContainers} onOpenContainer={onOpenContainer} />
+                      <StoragePanel
+                        currentContainer={currentContainer}
+                        openableContainers={openableContainers}
+                        onOpenContainer={onOpenContainer}
+                      />
                     ) : category.id === "orphans" ? (
                       <OrphanStatesPanel />
                     ) : category.id === "model-services" ? (
@@ -740,7 +999,12 @@ export function SystemSettingsDialog({
                     ) : category.id === "agent-instructions" ? (
                       <AgentInstructionsPanel onSaved={handleSubPanelSaved} />
                     ) : (
-                      <CategoryFields key={formVersion} category={category} liveParsed={liveParsed} onCommit={handleLeafCommit} />
+                      <CategoryFields
+                        key={formVersion}
+                        category={category}
+                        liveParsed={liveParsed}
+                        onCommit={handleLeafCommit}
+                      />
                     )}
                   </TabsContent>
                 ))}
@@ -755,7 +1019,7 @@ export function SystemSettingsDialog({
           </Alert>
         ) : null}
         {success ? (
-          <Alert className="shrink-0">
+          <Alert variant="success" className="shrink-0">
             <AlertDescription>{success}</AlertDescription>
           </Alert>
         ) : null}
@@ -763,38 +1027,47 @@ export function SystemSettingsDialog({
           <Alert variant="destructive" className="shrink-0">
             <AlertDescription className="flex flex-wrap items-center gap-2">
               配置文件刚被其他地方修改过，还没有保存。
-              <Button variant="outline" size="xs" onClick={load}>
+              <Button variant="outline" size="sm" onClick={load}>
                 重新加载（放弃我的修改）
               </Button>
-              <Button variant="outline" size="xs" onClick={() => void handleSave({ forceEtag: jsonConflict.etag })}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  void handleSave({ forceEtag: jsonConflict.etag })
+                }
+              >
                 仍然保存（覆盖对方的修改）
               </Button>
             </AlertDescription>
           </Alert>
         ) : null}
 
-        <DialogFooter className="shrink-0 sm:flex-row sm:justify-between">
+        <DialogFooter className="sm:justify-between">
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="w-full sm:w-auto"
-            onClick={viewMode === "form" ? () => setViewMode("json") : switchToFormView}
+            onClick={
+              viewMode === "form" ? () => setViewMode("json") : switchToFormView
+            }
             disabled={loading}
           >
             {viewMode === "form" ? "显示 JSON 设置" : "返回分类设置"}
           </Button>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <Button
               type="button"
               variant="outline"
-              className="w-full sm:w-auto"
               onClick={load}
               disabled={loading || saving}
             >
               重新加载
             </Button>
-            <Button type="button" className="w-full sm:w-auto" onClick={() => void handleSave()} disabled={loading || saving}>
+            <Button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={loading || saving}
+            >
               {saving ? "保存中..." : "保存"}
             </Button>
           </div>
