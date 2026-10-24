@@ -97,6 +97,15 @@ describe("getReadiness", () => {
   })
 })
 
+describe("buildEnvBody extraEnv", () => {
+  test("兼容服务带上服务商的附加变量，官方接入不带", () => {
+    const extraEnv = { ENABLE_TOOL_SEARCH: "false" }
+    const base = { apiKey: "k", baseUrl: "https://x.test/anthropic", extraEnv }
+    expect(buildEnvBody(claude, form({ ...base, mode: "compatible" }))).toMatchObject(extraEnv)
+    expect(buildEnvBody(claude, form({ ...base, mode: "official" }))).toEqual({ ANTHROPIC_AUTH_TOKEN: "k" })
+  })
+})
+
 describe("validateStep", () => {
   test("step 1 needs an agent", () => {
     expect(validateStep(1, form(), null)).toMatch(/选择/)
@@ -109,6 +118,11 @@ describe("validateStep", () => {
     expect(validateStep(2, form({ mode: "subscription", apiKey: "k" }), claude)).toMatch(/即将支持/)
     expect(validateStep(2, form({ mode: "compatible", apiKey: "k" }), claude)).toMatch(/Base URL/)
     expect(validateStep(2, form({ mode: "compatible", apiKey: "k", baseUrl: "ftp://x" }), claude)).toMatch(/http/)
+    // Codex 接兼容服务不指定模型会用 OpenAI 的默认模型名，第三方直接报错
+    const codex: SetupAgent = { ...claude, id: "codex", modelKey: "OPENAI_MODEL" }
+    const codexForm = { mode: "compatible" as const, apiKey: "k", baseUrl: "https://x.test/v1" }
+    expect(validateStep(2, form(codexForm), codex)).toMatch(/模型/)
+    expect(validateStep(2, form({ ...codexForm, model: "m" }), codex)).toBe("")
     expect(validateStep(2, form({ mode: "compatible", apiKey: "k", baseUrl: "https://x.example/v1" }), claude)).toBe("")
   })
 

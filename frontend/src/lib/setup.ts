@@ -10,6 +10,8 @@ export type SetupProvider = {
   keyEnv: string
   models: string[]
   defaultModel: string
+  // 这家服务必须附带的变量（如智谱的 ENABLE_TOOL_SEARCH=false），选中服务商时一起写入
+  extraEnv?: Record<string, string>
 }
 export type SetupAgent = {
   id: string
@@ -39,7 +41,7 @@ export type SetupStatus = {
   passwordSet: boolean
   mirrors?: { apt: string; npm: string; pip: string }
 }
-export type ConnectionCategory = "success" | "network" | "auth" | "missing_cli" | "other"
+export type ConnectionCategory = "success" | "no_tools" | "quota" | "model" | "network" | "auth" | "missing_cli" | "other"
 export type ConnectionResult = { category: ConnectionCategory; message: string; detail: string }
 
 export type AccessMode = "official" | "compatible" | "subscription"
@@ -54,6 +56,7 @@ export type SetupForm = {
   keyEnv?: string
   // 选中的服务商预设 id，用来显示“官方说明”和模型占位
   providerId?: string
+  extraEnv?: Record<string, string>
 }
 
 export const AGENT_BLURBS: Record<string, string> = {
@@ -132,6 +135,7 @@ export function validateStep(step: 1 | 2 | 3, form: SetupForm, agent: SetupAgent
     if (form.mode === "compatible") {
       if (!form.baseUrl.trim()) return "请填写兼容服务的 Base URL"
       if (!isValidBaseUrl(form.baseUrl)) return "Base URL 必须以 http:// 或 https:// 开头"
+      if (agent?.id === "codex" && !form.model.trim()) return "Codex 接兼容服务必须填写模型名"
     }
     return ""
   }
@@ -144,6 +148,7 @@ export function buildEnvBody(agent: SetupAgent, form: SetupForm): Record<string,
   const key = form.apiKey.trim()
   if (key) env[form.mode === "compatible" && form.keyEnv ? form.keyEnv : getModeKeyEnvName(agent)] = key
   if (form.mode === "compatible" && form.baseUrl.trim()) env[agent.baseUrlKey] = form.baseUrl.trim()
+  if (form.mode === "compatible") Object.assign(env, form.extraEnv ?? {})
   if (form.model.trim()) env[agent.modelKey] = form.model.trim()
   return env
 }

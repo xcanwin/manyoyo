@@ -1678,7 +1678,7 @@ exit 0
             }
         });
 
-        test('codex yolo 的交互命令带上由 shell 展开的 -c openai_base_url（codex 不认 OPENAI_BASE_URL 环境变量）', () => {
+        test('codex yolo 的交互命令带上由 shell 展开的自定义 provider（codex 不认 OPENAI_BASE_URL 环境变量）', () => {
             const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-codex-url-'));
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-codex-url-home-'));
             const statePath = path.join(tempDir, 'state.txt');
@@ -1761,7 +1761,8 @@ exit 0
                 const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n').filter(Boolean);
                 const interactive = dockerArgs.find(line => line.startsWith('exec -i -t codex-url-test /bin/bash -c codex'));
                 expect(interactive).toBeDefined();
-                expect(interactive).toContain('/bin/bash -c codex ${OPENAI_BASE_URL:+-c "openai_base_url=\\"$OPENAI_BASE_URL\\""} --dangerously-bypass-approvals-and-sandbox');
+                expect(interactive).toContain('/bin/bash -c codex ${OPENAI_BASE_URL:+-c model_provider=manyoyo');
+                expect(interactive).toContain('model_providers.manyoyo.wire_api=responses} ${OPENAI_MODEL:+--model "$OPENAI_MODEL"} --dangerously-bypass-approvals-and-sandbox');
             } finally {
                 fs.rmSync(tempDir, { recursive: true, force: true });
                 fs.rmSync(tempHome, { recursive: true, force: true });

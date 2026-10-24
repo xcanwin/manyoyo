@@ -6333,7 +6333,8 @@ exit 1
                 const fakeDocker = path.join(tempHost, 'fake-docker.sh');
                 fs.writeFileSync(fakeDocker, `#!/bin/sh
 case "${mode}" in
-  ok) echo OK; exit 0 ;;
+  ok) echo mp-42; exit 0 ;;
+  notools) echo "I cannot run commands"; exit 0 ;;
   auth) echo "Error 401 Unauthorized ${SECRET}" >&2; exit 1 ;;
   network) echo "getaddrinfo ENOTFOUND api.anthropic.com" >&2; exit 1 ;;
   other) echo "boom" >&2; exit 3 ;;
@@ -6349,6 +6350,7 @@ esac
 
         test.each([
             ['ok', 'success'],
+            ['notools', 'no_tools'],
             ['auth', 'auth'],
             ['network', 'network'],
             ['timeout', 'network'],
@@ -6367,18 +6369,19 @@ esac
             });
         });
 
-        test('codex 的连接测试命令带上由 shell 展开的 -c openai_base_url（地址只在 env 里，不进命令文本）', async () => {
+        test('codex 的连接测试命令带上由 shell 展开的自定义 provider（地址只在 env 里，不进命令文本）', async () => {
             let logFile;
             await withSetupServer(tempHost => {
                 logFile = path.join(tempHost, 'exec-args.log');
                 const fakeDocker = path.join(tempHost, 'fake-docker.sh');
-                fs.writeFileSync(fakeDocker, `#!/bin/sh\necho "$@" >> ${logFile}\necho OK\nexit 0\n`, { mode: 0o755 });
+                fs.writeFileSync(fakeDocker, `#!/bin/sh\necho "$@" >> ${logFile}\necho mp-42\nexit 0\n`, { mode: 0o755 });
                 return { dockerCmd: fakeDocker, dockerExecArgs: () => '' };
             }, async ({ call }) => {
                 const res = await call('POST', '/api/setup/test-connection', { agent: 'codex', env: { OPENAI_API_KEY: SECRET, OPENAI_BASE_URL: 'https://llm.example.com/v1' } });
                 expect(res.response.status).toBe(200);
                 const logged = fs.readFileSync(logFile, 'utf-8');
-                expect(logged).toContain('${OPENAI_BASE_URL:+-c "openai_base_url=\\"$OPENAI_BASE_URL\\""}');
+                expect(logged).toContain('model_providers.manyoyo.env_key=OPENAI_API_KEY');
+                expect(logged).toContain('${OPENAI_MODEL:+--model');
                 expect(logged).not.toContain('llm.example.com');
                 expect(logged).not.toContain(SECRET);
             });

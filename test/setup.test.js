@@ -102,6 +102,13 @@ describe('setup helpers', () => {
         expect(classifyConnectionResult({ exitCode: 1, output: 'getaddrinfo ENOTFOUND api.example.com' }).category).toBe('network');
         expect(classifyConnectionResult({ exitCode: 124, output: '' }).category).toBe('network');
         expect(classifyConnectionResult({ exitCode: 2, output: 'segfault' }).category).toBe('other');
+        expect(classifyConnectionResult({ exitCode: 1, output: 'HTTP 429 Too Many Requests' }).category).toBe('quota');
+        expect(classifyConnectionResult({ exitCode: 1, output: '{"code":"1113","message":"余额不足或无可用资源包"}' }).category).toBe('quota');
+        expect(classifyConnectionResult({ exitCode: 1, output: 'The model `glm-9` does not exist' }).category).toBe('model');
+        expect(classifyConnectionResult({ exitCode: 1, output: 'Model metadata for x not found' }).category).toBe('other');
+        // 退出码 0 但没读回命令输出：能连通却调不了工具
+        expect(classifyConnectionResult({ exitCode: 0, output: 'only tool is ToolSearch' }, [], { expectOutput: 'mp-42' }).category).toBe('no_tools');
+        expect(classifyConnectionResult({ exitCode: 0, output: 'mp-42' }, [], { expectOutput: 'mp-42' }).category).toBe('success');
     });
 
     test('detail never echoes secrets and is truncated', () => {

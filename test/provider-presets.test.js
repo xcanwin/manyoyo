@@ -24,9 +24,10 @@ describe('服务商预设', () => {
         }
     });
 
-    test('Codex 只收官方文档确认支持 Responses 的四家；DeepSeek（文档没讲 Codex）和 Gemini / OpenCode 没有', () => {
-        expect(providersForAgent('codex').map(item => item.id)).toEqual(['zhipu', 'kimi', 'volcengine', 'minimax']);
+    test('Codex 只收确认支持 Responses 的五家（DeepSeek 文档没讲，但用真实 Key 实测对话和调工具都通）；Gemini / OpenCode 没有', () => {
+        expect(providersForAgent('codex').map(item => item.id)).toEqual(['deepseek', 'zhipu', 'kimi', 'volcengine', 'minimax']);
         expect(providersForAgent('codex').map(item => item.baseUrl)).toEqual([
+            'https://api.deepseek.com',
             'https://open.bigmodel.cn/api/v1',
             'https://api.moonshot.cn/v1',
             'https://ark.cn-beijing.volces.com/api/coding/v3',
@@ -52,10 +53,28 @@ describe('服务商预设', () => {
         expect(byId.zhipu.defaultModel).toBe('');
     });
 
+    // Codex 不认 OPENAI_MODEL 之外的默认模型，第三方必须显式带模型：实测过的两家有默认值
+    test('Codex 的智谱 / DeepSeek 带默认模型；智谱的 Claude 条目带 ENABLE_TOOL_SEARCH=false，DeepSeek 不带', () => {
+        const codex = Object.fromEntries(providersForAgent('codex').map(item => [item.id, item]));
+        expect(codex.zhipu.defaultModel).toBe('glm-5.3');
+        expect(codex.deepseek.defaultModel).toBe('deepseek-flash');
+        const claude = Object.fromEntries(providersForAgent('claude').map(item => [item.id, item]));
+        expect(claude.zhipu.extraEnv).toEqual({ ENABLE_TOOL_SEARCH: 'false' });
+        expect(claude.deepseek.extraEnv).toEqual({});
+        // extraEnv 里的变量都得能通过向导的保存校验
+        const profile = buildAgentRunProfile('claude', { ANTHROPIC_AUTH_TOKEN: 'k-123456', ...claude.zhipu.extraEnv }, {});
+        expect(profile.env.ENABLE_TOOL_SEARCH).toBe('false');
+        for (const item of providersForAgent('claude')) {
+            for (const name of Object.keys(item.extraEnv)) {
+                expect(AGENT_ENV_SCHEMA.claude.env.map(e => e.name)).toContain(name);
+            }
+        }
+    });
+
     test('经 listSetupAgents 下发，且 ANTHROPIC_API_KEY 能通过向导的保存校验', () => {
         const claude = listSetupAgents().find(agent => agent.id === 'claude');
         expect(claude.providers.length).toBeGreaterThan(0);
-        expect(listSetupAgents().find(agent => agent.id === 'codex').providers.length).toBe(4);
+        expect(listSetupAgents().find(agent => agent.id === 'codex').providers.length).toBe(5);
         const profile = buildAgentRunProfile('claude', { ANTHROPIC_API_KEY: 'k-123456', ANTHROPIC_BASE_URL: 'https://api.kimi.ai/coding/' }, {});
         expect(profile.env.ANTHROPIC_API_KEY).toBe('k-123456');
     });

@@ -158,7 +158,7 @@ export function SetupWizard({
   }, [ready])
 
   function setField<K extends keyof SetupForm>(key: K, value: SetupForm[K]) {
-    setForm((prev) => ({ ...prev, [key]: value, ...(key === "agentId" ? { keyEnv: "", providerId: "" } : {}) }))
+    setForm((prev) => ({ ...prev, [key]: value, ...(key === "agentId" ? { keyEnv: "", providerId: "", extraEnv: undefined } : {}) }))
     if (key !== "hostPath") setTestResult(null)
   }
 
@@ -353,7 +353,7 @@ export function SetupWizard({
                       inputMode="url"
                       placeholder={baseUrlPlaceholder(agent)}
                       value={form.baseUrl}
-                      onChange={(event) => setForm((prev) => ({ ...prev, baseUrl: event.target.value, keyEnv: "", providerId: "" }))}
+                      onChange={(event) => setForm((prev) => ({ ...prev, baseUrl: event.target.value, keyEnv: "", providerId: "", extraEnv: undefined }))}
                     />
                     {(agent.providers ?? []).length > 0 ? (
                       <div className="flex flex-wrap gap-2" role="group" aria-label="服务商">
@@ -370,6 +370,7 @@ export function SetupWizard({
                                 baseUrl: provider.baseUrl,
                                 keyEnv: provider.keyEnv,
                                 providerId: provider.id,
+                                extraEnv: provider.extraEnv,
                                 model: provider.defaultModel && !prev.model.trim() ? provider.defaultModel : prev.model,
                               }))
                             }}
@@ -394,7 +395,7 @@ export function SetupWizard({
                             type="button"
                             size="xs"
                             variant="outline"
-                            onClick={() => setForm((prev) => ({ ...prev, baseUrl: preset.value, keyEnv: "", providerId: "" }))}
+                            onClick={() => setForm((prev) => ({ ...prev, baseUrl: preset.value, keyEnv: "", providerId: "", extraEnv: undefined }))}
                           >
                             {preset.label}
                           </Button>

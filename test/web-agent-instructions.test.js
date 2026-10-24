@@ -175,15 +175,26 @@ describe('审查回归：说明内容不能影响其他参数，提示词里的 
     });
 });
 
-describe('Codex 兼容服务：OPENAI_BASE_URL 要变成 -c openai_base_url', () => {
+describe('Codex 兼容服务：OPENAI_BASE_URL 要变成自定义 model_provider', () => {
     test('网页对话的 codex exec / exec resume 命令都带上由 shell 展开的占位，不把地址拼进命令', () => {
         const first = buildWebAgentExecCommand('codex exec --skip-git-repo-check {prompt}', 'hi', 'codex', {});
         const resumed = buildWebAgentExecCommand('codex exec --skip-git-repo-check {prompt}', 'hi', 'codex', { sessionId: 'sess-1' });
         for (const command of [first, resumed]) {
-            expect(command).toContain('${OPENAI_BASE_URL:+-c "openai_base_url=\\"$OPENAI_BASE_URL\\""}');
+            expect(command).toContain('${OPENAI_BASE_URL:+-c model_provider=manyoyo');
+            expect(command).toContain('model_providers.manyoyo.env_key=OPENAI_API_KEY');
             expect(command).not.toMatch(/https?:\/\//);
         }
         expect(resumed).toContain('exec resume');
+    });
+
+    // codex 不允许 --model 出现两次：会话里选了模型就以它为准，不再追加环境变量里的
+    test('会话里选了模型时只有一个 --model', () => {
+        const picked = buildWebAgentExecCommand('codex exec --skip-git-repo-check {prompt}', 'hi', 'codex', { model: 'picked-model' });
+        expect(picked.match(/--model/g)).toHaveLength(1);
+        expect(picked).toContain("--model 'picked-model'");
+        expect(picked).not.toContain('OPENAI_MODEL');
+        const none = buildWebAgentExecCommand('codex exec --skip-git-repo-check {prompt}', 'hi', 'codex', {});
+        expect(none).toContain('${OPENAI_MODEL:+--model "$OPENAI_MODEL"}');
     });
 
     test('用户模板里已经写了 openai_base_url 就以用户的为准；非 codex 的命令不受影响', () => {
