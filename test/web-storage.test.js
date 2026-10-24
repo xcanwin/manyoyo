@@ -86,6 +86,17 @@ describe('web storage', () => {
         expect(byName['20261001-000008']).toMatchObject({ managed: false, deletable: false });
     });
 
+    test('快捷对话目录里全是时间戳目录（专用目录）：没有历史记录的也算自己的，可删', async () => {
+        const { home, workRoot, historyDir } = setup();
+        const quick = path.join(home, 'manyoyo_work');
+        fs.mkdirSync(path.join(quick, '20261001-000020'), { recursive: true });
+        fs.mkdirSync(path.join(quick, '20261001-000021'));
+        fs.writeFileSync(path.join(quick, '.DS_Store'), '');
+        const listing = await storage.buildStorageListing({ workRoots: [workRoot], extraWorkRoots: [quick], homeDir: home, historyDir, dockerExecAsync: fakeDocker({}) });
+        expect(listing.rows).toHaveLength(2);
+        expect(listing.rows.every(row => row.managed && row.deletable)).toBe(true);
+    });
+
     test('快捷对话目录配成 /、HOME、HOME 的上级或相对路径时忽略', async () => {
         const { home, workRoot, historyDir } = setup();
         fs.mkdirSync(path.join(home, '20261001-000009'));

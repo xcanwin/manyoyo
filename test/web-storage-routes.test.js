@@ -163,6 +163,7 @@ describe('Web Server 磁盘占用接口', () => {
         const stray = path.join(quickRoot, '20261001-000002');
         fs.mkdirSync(known);
         fs.mkdirSync(stray);
+        fs.mkdirSync(path.join(quickRoot, 'my-notes'));
         try {
             await withServer(async ({ baseUrl, tempHost, cookie }) => {
                 writeHistoryFile(path.join(tempHost, 'web-history'), 'gone', { applied: { hostPath: known } });
