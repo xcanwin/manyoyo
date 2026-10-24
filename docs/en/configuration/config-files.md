@@ -105,6 +105,7 @@ These fields only take effect in the global config, not in `runs.<name>`.
 | `serverPass` | string | random | Login password, env var `MANYOYO_SERVER_PASS` |
 | `serve.title` | string | shown dynamically by session Agent name | Once set (even to an empty string) it is fixed; `runs.<name>.serve` beats global |
 | `serve.quickChat` | object | none | Web "Quick Chat": `path` is the work root, `run` is the `runs.<name>` to use |
+| `serve.setupSkipped` | boolean | none | Written as `true` by the web UI after the first-run wizard is skipped, so it stops popping up; remove it or set `false` to bring it back |
 
 For auth and public listening, see [Web Service](../guide/web.md) and [Security](../guide/security.md).
 

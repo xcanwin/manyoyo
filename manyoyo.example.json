@@ -86,12 +86,14 @@
     // 一旦设置 title，则固定显示该值（不再随会话变化），留空字符串 "" 即固定显示为空
     // quickChat 是网页端"快捷对话"按钮的配置：path 为工作根目录（每次点击按时间戳建子目录），
     // run 为使用哪个 runs.<name> 配置；也可以在网页「系统设置 > 快捷对话」里填写，效果一样
+    // setupSkipped 为 true 表示用户点过首次向导的“跳过”，之后不再自动弹出（网页写入，一般不用手写）
     // "serve": {
     //     "title": "My MANYOYO",
     //     "quickChat": {
     //         "path": "~/.manyoyo/work/",
     //         "run": "claude"
-    //     }
+    //     },
+    //     "setupSkipped": true
     // },
 
     // 可选插件（manyoyo playwright）：容器内浏览器默认就能用，这里只放少量可调项

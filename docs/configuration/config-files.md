@@ -105,6 +105,7 @@ description: "~/.manyoyo/manyoyo.json 的全部字段、合并规则与最小示
 | `serverPass` | 字符串 | 随机生成 | 登录密码，环境变量 `MANYOYO_SERVER_PASS` |
 | `serve.title` | 字符串 | 按会话 Agent 名动态显示 | 一旦设置（含空字符串）即固定显示；`runs.<name>.serve` 优先于全局 |
 | `serve.quickChat` | 对象 | 无 | 网页「快捷对话」：`path` 为工作根目录，`run` 为使用的 `runs.<name>` |
+| `serve.setupSkipped` | 布尔 | 无 | 点过首次向导的“跳过”后由网页写入 `true`，之后不再自动弹出向导；删掉或改成 `false` 可恢复 |
 
 认证与对外监听的注意事项见 [网页服务](../guide/web.md) 与 [安全说明](../guide/security.md)。
 
