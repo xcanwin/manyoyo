@@ -5900,6 +5900,21 @@ describe('Web Server Setup API', () => {
             expect(res.json.needsSetup).toBe(false);
             expect(res.json.configuredAgents).toEqual(['claude']);
 
+            // 运行配置不叫 claude 也算已配置；跳过标记落盘后不再弹向导
+            fs.writeFileSync(configPath, '{ runs: { "claude-glm": { yolo: "c", env: { ANTHROPIC_AUTH_TOKEN: "sk-x" } } } }');
+            res = await call('GET', '/api/setup/status');
+            expect(res.json.needsSetup).toBe(false);
+            expect(res.json.configuredAgents).toEqual(['claude']);
+
+            fs.writeFileSync(configPath, '{ // keep me\n runs: {} }');
+            expect((await call('GET', '/api/setup/status')).json.needsSetup).toBe(true);
+            res = await call('POST', '/api/setup/skip', {});
+            expect(res.response.status).toBe(200);
+            expect(fs.readFileSync(configPath, 'utf8')).toContain('// keep me');
+            res = await call('GET', '/api/setup/status');
+            expect(res.json.needsSetup).toBe(false);
+            expect(res.json.setupSkipped).toBe(true);
+
             fs.writeFileSync(configPath, '{ broken');
             res = await call('GET', '/api/setup/status');
             expect(res.json.configError).toEqual(expect.any(String));

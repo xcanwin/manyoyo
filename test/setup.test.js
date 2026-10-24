@@ -37,6 +37,19 @@ describe('setup helpers', () => {
         })).toEqual(['claude', 'codex']);
     });
 
+    test('configured agents are recognised under any run name', () => {
+        expect(getConfiguredAgents({
+            runs: {
+                'claude-glm': { yolo: 'c', env: { ANTHROPIC_AUTH_TOKEN: 'k' } },
+                'my-codex': { yolo: 'cx', env: { OPENAI_API_KEY: 'k' } },
+                'by-shell': { shell: 'IS_SANDBOX=1 claude --x', env: { ANTHROPIC_AUTH_TOKEN: 'k' } },
+                'gemini-ds': { env: { GEMINI_API_KEY: 'k' } },
+                'unknown-thing': { env: { OPENAI_API_KEY: 'k' } },
+                'claude-empty': { yolo: 'c', env: {} }
+            }
+        })).toEqual(['claude', 'codex', 'gemini']);
+    });
+
     test('builds a run profile with defaults', () => {
         const profile = buildAgentRunProfile('claude', { ANTHROPIC_AUTH_TOKEN: ' sk-abc ', ANTHROPIC_MODEL: '' }, { defaultHostPath: '/w' });
         expect(profile).toEqual({

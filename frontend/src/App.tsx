@@ -15,7 +15,7 @@ import { sessionDisplayTitle, type SessionSummary } from "@/lib/api"
 import { Toaster } from "@/components/ui/sonner"
 import { useAttention } from "@/hooks/use-attention"
 import { withAttentionBadge } from "@/lib/attention"
-import { fetchSetupStatus } from "@/lib/setup"
+import { fetchSetupStatus, skipSetup } from "@/lib/setup"
 import { buildSessionHash, parseSessionHash, pickMostRecentSession } from "@/lib/session-url"
 
 // 侧边栏收起（offcanvas）后 Sidebar 本身平移出屏幕，但这根拖拽线之前是按 sidebarWidth
@@ -144,7 +144,10 @@ export function App() {
 
   if (setupPhase === "checking") return <div className="min-h-svh" />
   if (setupPhase === "wizard") {
-    return <SetupWizard onFinished={handleSetupFinished} onSkip={() => setSetupPhase("done")} />
+    return <SetupWizard onFinished={handleSetupFinished} onSkip={() => {
+          setSetupPhase("done")
+          skipSetup().catch(() => {})
+        }} />
   }
 
   return (

@@ -27,6 +27,7 @@ export type SetupAgent = {
 }
 export type SetupStatus = {
   needsSetup: boolean
+  setupSkipped?: boolean
   configuredAgents: string[]
   configError: string | null
   runtime: { status: string; message: string }
@@ -184,6 +185,9 @@ export const saveAgent = (agent: string, env: Record<string, string>, hostPath: 
   apiPost("/api/setup/agent", { agent, env, hostPath })
 // 与快捷对话一致：在工作目录下建一个带时间戳的子目录，宿主机路径和容器内路径相同。
 // 不传 containerPath 时服务端会退回它自己的启动目录（安装时通常是用户主目录），首个容器就会挂到 $HOME。
+// 跳过向导要落盘，否则刷新后又弹
+export const skipSetup = () => apiPost("/api/setup/skip", {})
+
 export async function createAgentSession(run: string, workPath: string): Promise<string> {
   const requestedDir = `${workPath.replace(/\/+$/, "")}/${formatTimestampCompact(new Date())}`
   const made = await apiPost("/api/fs/directories/mkdir", { path: requestedDir })
