@@ -185,3 +185,48 @@ describe('Web Server 磁盘占用接口', () => {
         }
     });
 });
+
+describe('容器被删后的重建不再退回 serve 启动目录', () => {
+    async function recreate({ history, validateHostPath }) {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-recreate-'));
+        const port = await getFreePort();
+        const runCalls = [];
+        let created = false;
+        let handle = null;
+        try {
+            if (history) writeHistoryFile(path.join(tempHost, 'web-history'), 'gone-1', history(tempHost));
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                hostPath: '/srv/serve-cwd',
+                validateHostPath: validateHostPath || (() => {}),
+                containerExists: () => created,
+                dockerExecArgs: args => {
+                    if (args[0] === 'run') { runCalls.push(args); created = true; }
+                    return '';
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const cookie = await loginAndGetCookie(baseUrl);
+            const res = await request(`${baseUrl}/api/sessions/gone-1/fs/list?path=/`, { headers: { Cookie: cookie } });
+            return { runCalls, status: res.response.status, tempHost };
+        } finally {
+            if (handle && handle.close) await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    }
+
+    test('历史里有创建参数：按历史里的 hostPath 重建，不用 serve 的启动目录', async () => {
+        const { runCalls } = await recreate({
+            history: tempHost => ({ runtimeSnapshot: { hostPath: path.join(tempHost, 'proj'), containerPath: '/workspace' } })
+        });
+        const joined = runCalls.map(args => args.join(' ')).join('\n');
+        expect(joined).toContain('proj:/workspace');
+        expect(joined).not.toContain('/srv/serve-cwd');
+    });
+
+    test('没有历史：仍用 serve 配置，但必须过路径校验（校验不过就不创建）', async () => {
+        const { runCalls } = await recreate({
+            validateHostPath: () => { throw new Error('禁止挂载 HOME'); }
+        });
+        expect(runCalls).toHaveLength(0);
+    });
+});
