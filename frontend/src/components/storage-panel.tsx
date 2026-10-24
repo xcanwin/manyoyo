@@ -137,11 +137,11 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
   }
 
   async function removeHistories(targets: DeletedHistory[], title: string, message: string) {
-    if (!(await confirm({ title, message, confirmLabel: "清理" }))) return
+    if (!(await confirm({ title, message, confirmLabel: "删除" }))) return
     try {
       for (const item of targets) await apiDelete("/api/storage/histories", { name: item.name })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "清理失败")
+      setError(err instanceof Error ? err.message : "删除失败")
       await load(true)
       return
     }
@@ -161,12 +161,12 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
   const emptyRows = rows.filter(isCleanableEmpty)
   const shown = filter === "empty" ? emptyRows : rows
   const openable = new Set(openableContainers)
-  // 容器名后面：当前容器标签 + 进入该容器的按钮（侧栏里没有这个容器时不显示按钮）
+  // 容器名后面：当前容器标签 + 进入该容器的按钮（侧栏里没有这个容器时不显示按钮）。所有图标按钮同一个大小
   const containerTags = (name: string) => (
     <>
       {name === currentContainer ? <Badge className="ml-2">当前容器</Badge> : null}
       {onOpenContainer && openable.has(name) ? (
-        <Button variant="ghost" size="icon-xs" className="ml-1 align-middle" aria-label={`进入 ${name}`} title="进入该容器" onClick={() => onOpenContainer(name)}>
+        <Button variant="ghost" size="icon-sm" className="ml-1 align-middle" aria-label={`进入 ${name}`} title="进入该容器" onClick={() => onOpenContainer(name)}>
           <ArrowRightIcon />
         </Button>
       ) : null}
@@ -177,14 +177,15 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
-          删除容器不会删掉它的工作目录。下面按目录列出占用，容器已删除或无人使用的工作目录可以在这里清理；你自己的项目目录只展示，不会被删除。
-        </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold">宿主机工作目录</p>
         <Button variant="outline" size="icon-sm" aria-label="刷新" title="刷新" onClick={() => void load()}>
           <RefreshCwIcon />
         </Button>
       </div>
+      <p className="text-xs text-muted-foreground">
+        删除容器不会删掉它的工作目录。下面按目录列出占用，容器已删除或无人使用的工作目录可以在这里删除；你自己的项目目录只展示，不会被删除。
+      </p>
       {error ? (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -209,9 +210,9 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
           <thead className="border-b bg-muted/50">
             <tr>
               <th className={TH}>宿主机目录</th>
+              <th className={`${TH} text-right`}>占用</th>
               <th className={TH}>关联容器</th>
               <th className={TH}>修改时间</th>
-              <th className={`${TH} text-right`}>占用</th>
             </tr>
           </thead>
           <tbody>
@@ -228,12 +229,12 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
                   <span className="font-mono break-all">{row.path}</span>
                   {row.managed ? "" : <span className="ml-2 text-xs text-muted-foreground">非 MANYOYO 工作目录</span>}
                   <span className="ml-2 whitespace-nowrap align-middle">
-                    <Button variant="ghost" size="icon-xs" aria-label={`查看 ${row.path}`} title="查看宿主机目录" onClick={() => setBrowsing(row.path)}>
+                    <Button variant="ghost" size="icon-sm" aria-label={`查看 ${row.path}`} title="查看宿主机目录" onClick={() => setBrowsing(row.path)}>
                       <FolderOpenIcon />
                     </Button>
                     <Button
                       variant="ghost"
-                      size="icon-xs"
+                      size="icon-sm"
                       aria-label={`删除 ${row.path}`}
                       title={row.deletable ? "删除宿主机目录" : row.managed ? "还有容器在用" : "不是 MANYOYO 创建的目录，不能删除"}
                       disabled={!row.deletable}
@@ -242,6 +243,17 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
                       <Trash2Icon />
                     </Button>
                   </span>
+                </td>
+                <td className={`${TD} text-right whitespace-nowrap tabular-nums`}>
+                  {row.empty ? (
+                    <span className="text-muted-foreground">空目录</span>
+                  ) : sizes[row.path] === undefined && !row.managed ? (
+                    <Button variant="ghost" size="xs" onClick={() => void loadSize(row.path, generation.current)}>
+                      计算体积
+                    </Button>
+                  ) : (
+                    sizeText(sizes[row.path])
+                  )}
                 </td>
                 <td className={TD}>
                   {row.sessions.length
@@ -254,51 +266,39 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
                     : null}
                 </td>
                 <td className={`${TD} whitespace-nowrap text-muted-foreground`}>{formatDateTime(row.mtimeMs)}</td>
-                <td className={`${TD} text-right whitespace-nowrap tabular-nums`}>
-                  {row.empty ? (
-                    <span className="text-muted-foreground">空目录</span>
-                  ) : sizes[row.path] === undefined && !row.managed ? (
-                    <Button variant="ghost" size="xs" onClick={() => void loadSize(row.path, generation.current)}>
-                      计算体积
-                    </Button>
-                  ) : (
-                    sizeText(sizes[row.path])
-                  )}
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <div className="flex flex-col gap-2 border-t pt-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-semibold">已删除容器的对话历史</p>
-          {histories.length > 0 ? (
+      <div className="flex flex-col gap-3 border-t pt-3">
+        <p className="text-sm font-semibold">已删除容器的对话历史</p>
+        <p className="text-xs text-muted-foreground">容器删掉后，网页里的对话记录还在。确认不再需要的可以删除；容器还在的不会出现在这里。</p>
+        {histories.length > 0 ? (
+          <div>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void removeHistories(histories, "清理全部已删除容器的历史？", `共 ${histories.length} 份（${formatBytes(historyTotal)}），对话记录会被永久删除。`)}
+              onClick={() => void removeHistories(histories, "删除全部历史？", `共 ${histories.length} 份（${formatBytes(historyTotal)}），对话记录会被永久删除。`)}
             >
-              清理全部
+              删除全部历史
             </Button>
-          ) : null}
-        </div>
-        <p className="text-xs text-muted-foreground">容器删掉后，网页里的对话记录还在。确认不再需要的可以清理；容器还在的不会出现在这里。</p>
+          </div>
+        ) : null}
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full border-collapse text-sm">
             <thead className="border-b bg-muted/50">
               <tr>
                 <th className={TH}>容器</th>
-                <th className={TH}>最后更新</th>
                 <th className={`${TH} text-right`}>占用</th>
-                <th className={`${TH} text-right`}>操作</th>
+                <th className={TH}>最后更新</th>
               </tr>
             </thead>
             <tbody>
               {histories.length === 0 ? (
                 <tr>
-                  <td className={`${TD} text-muted-foreground`} colSpan={4}>
+                  <td className={`${TD} text-muted-foreground`} colSpan={3}>
                     没有。
                   </td>
                 </tr>
@@ -308,19 +308,19 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
                   <td className={`${TD} break-all`}>
                     {item.name}
                     {containerTags(item.name)}
-                  </td>
-                  <td className={`${TD} whitespace-nowrap text-muted-foreground`}>{formatDateTime(item.updatedAt)}</td>
-                  <td className={`${TD} text-right whitespace-nowrap tabular-nums`}>{formatBytes(item.bytes)}</td>
-                  <td className={`${TD} text-right`}>
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={`清理 ${item.name}`}
-                      onClick={() => void removeHistories([item], "清理这份历史？", `${item.name}\n对话记录会被永久删除。`)}
+                      className="ml-1 align-middle"
+                      aria-label={`删除历史 ${item.name}`}
+                      title="删除这份对话历史"
+                      onClick={() => void removeHistories([item], "删除这份历史？", `${item.name}\n对话记录会被永久删除。`)}
                     >
                       <Trash2Icon />
                     </Button>
                   </td>
+                  <td className={`${TD} text-right whitespace-nowrap tabular-nums`}>{formatBytes(item.bytes)}</td>
+                  <td className={`${TD} whitespace-nowrap text-muted-foreground`}>{formatDateTime(item.updatedAt)}</td>
                 </tr>
               ))}
             </tbody>

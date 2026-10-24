@@ -52,7 +52,7 @@ describe("StoragePanel", () => {
     expect(items[3].textContent).not.toContain("4.0")
     expect(items[0].textContent).toContain("3.0 MB")
     expect(items[2].textContent).toContain("计算体积")
-    const buttons = container.querySelectorAll<HTMLButtonElement>('button[aria-label^="删除"]')
+    const buttons = container.querySelectorAll<HTMLButtonElement>('button[aria-label^="删除 /"]')
     expect(Array.from(buttons).map((button) => button.disabled)).toEqual([false, true, true, false, false])
   })
 
@@ -105,6 +105,24 @@ describe("StoragePanel", () => {
     expect(headers).toContain("容器")
     expect(headers).not.toContain("会话")
     const cells = container.querySelectorAll("[data-storage-row]")[2].querySelectorAll("td")
-    expect(cells[1].textContent).toBe("")
+    expect(cells[2].textContent).toBe("")
+  })
+
+  test("版式统一：两块都有小标题，列顺序是 名称 → 占用 → …，图标按钮同一个大小，删除全部历史在小字下面", async () => {
+    const container = await mount()
+    const headings = Array.from(container.querySelectorAll("p.font-semibold")).map((p) => p.textContent)
+    expect(headings).toEqual(["宿主机工作目录", "已删除容器的对话历史"])
+    const tables = container.querySelectorAll("table")
+    expect(Array.from(tables[0].querySelectorAll("th")).map((th) => th.textContent)).toEqual(["宿主机目录", "占用", "关联容器", "修改时间"])
+    expect(Array.from(tables[1].querySelectorAll("th")).map((th) => th.textContent)).toEqual(["容器", "占用", "最后更新"])
+    const historyRow = container.querySelector("[data-storage-history]")!
+    expect(historyRow.querySelector('button[aria-label="删除历史 gone-1"]')).not.toBeNull()
+    expect(historyRow.querySelectorAll("td")[0].textContent).toContain("gone-1")
+    const sizes = new Set(
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-label^="查看 "], button[aria-label^="删除 "], button[aria-label^="进入 "], button[aria-label^="删除历史 "]')).map((button) => button.className.match(/size-\d+/)?.[0] ?? button.className)
+    )
+    expect(sizes.size).toBe(1)
+    const deleteAll = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "删除全部历史")!
+    expect(deleteAll.parentElement!.previousElementSibling!.textContent).toContain("容器删掉后")
   })
 })
