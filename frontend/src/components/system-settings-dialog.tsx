@@ -10,6 +10,7 @@ import { DoctorPanel } from "@/components/doctor-panel"
 import { MirrorPanel } from "@/components/mirror-panel"
 import { QuickChatSettingsView } from "@/components/quick-chat-settings-view"
 import { AgentInstructionsPanel } from "@/components/agent-instructions-panel"
+import { ModelServicesPanel } from "@/components/model-services-panel"
 import { BasicSettings } from "@/components/basic-settings"
 import { isNotifyEnabled, notificationSupported, setNotifyEnabled } from "@/lib/attention"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -71,6 +72,7 @@ const CATEGORIES: ConfigCategory[] = [
   // 主题是前端本地记忆（theme-provider 存 localStorage），不落进 manyoyo.json，
   // keys 留空即可，跟 quick-chat/capacity 一样走自定义渲染分支
   { id: "page", label: "页面", keys: [], group: "界面" },
+  { id: "model-services", label: "模型服务", keys: [], group: "Agent" },
   { id: "quick-chat", label: "快捷对话", keys: [], group: "Agent" },
   { id: "agent-instructions", label: "系统提示词", keys: [], group: "Agent" },
   {
@@ -731,6 +733,8 @@ export function SystemSettingsDialog({
                       <StoragePanel currentContainer={currentContainer} openableContainers={openableContainers} onOpenContainer={onOpenContainer} />
                     ) : category.id === "orphans" ? (
                       <OrphanStatesPanel />
+                    ) : category.id === "model-services" ? (
+                      <ModelServicesPanel onSaved={handleSubPanelSaved} />
                     ) : category.id === "quick-chat" ? (
                       <QuickChatSettingsView onSaved={handleSubPanelSaved} />
                     ) : category.id === "agent-instructions" ? (
