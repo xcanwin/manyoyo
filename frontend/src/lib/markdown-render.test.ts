@@ -167,6 +167,16 @@ describe("图片与路径（容器上下文）", () => {
     expect(html).not.toContain('data-open-path="//evil.com/x"')
   })
 
+  test("行内代码里的相对路径按工作目录解析后可点击", () => {
+    const rel = { ...ctx, baseDir: "/work/proj" }
+    const html = renderMarkdownToHtml("`./a.txt` `a.txt` `./aaa/` `./././aaa` `src/b.ts` `../x.md` `aaa` `npm test` `console.log`", false, rel).html
+    for (const p of ["/work/proj/a.txt", "/work/proj/aaa", "/work/proj/src/b.ts", "/work/x.md"]) {
+      expect(html).toContain(`data-open-path="${p}"`)
+    }
+    expect(html.match(/data-open-path/g)?.length).toBe(6)
+    expect(html).not.toContain('data-open-path="/work/proj/npm test"')
+  })
+
   test("没开 pathLinks 时不生成可点击路径", () => {
     const { html } = renderMarkdownToHtml("`/work/a.ts`", false, { ...ctx, pathLinks: false })
     expect(html).not.toContain("data-open-path")

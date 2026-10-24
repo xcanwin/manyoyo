@@ -101,6 +101,17 @@ function isOpenablePath(href: string): boolean {
   return ABSOLUTE_PATH.test(href) && !href.startsWith("/api/")
 }
 
+// 行内代码里的相对路径：./ ../ 开头、中间带 /、或常见扩展名的单个文件名；裸单词（aaa）不算
+const RELATIVE_PATH = /^(?:\.{1,2}\/|[\w.-]+\/|[\w.-]+\.(?:txt|md|json|jsonc|ya?ml|toml|js|mjs|cjs|jsx|tsx?|py|sh|html|css|csv|png|jpe?g|gif|webp|svg|go|java|rs|c|h|cpp|sql|xml|zip|tar|gz|pdf)$)[^\s`<>"':]*$/
+
+function resolveCodePath(text: string, baseDir: string): string | null {
+    if (isOpenablePath(text)) return text
+    if (!RELATIVE_PATH.test(text)) return null
+    const resolved = joinContainerPath(baseDir, text)
+    if (!resolved) return null
+    return resolved.length > 1 ? resolved.replace(/\/+$/, "") : resolved
+}
+
 function postProcess(fragment: DocumentFragment, ctx?: MarkdownContext) {
   const doc = fragment.ownerDocument
   let highlightBudget = HIGHLIGHT_MESSAGE_MAX_CHARS
@@ -149,10 +160,11 @@ function postProcess(fragment: DocumentFragment, ctx?: MarkdownContext) {
   for (const code of Array.from(fragment.querySelectorAll("code"))) {
     if (code.closest("pre") || code.closest("a")) continue
     const text = code.textContent || ""
-    if (!isOpenablePath(text)) continue
+    const path = resolveCodePath(text, ctx.baseDir || "/")
+    if (!path) continue
     const a = doc.createElement("a")
     a.setAttribute("href", "#")
-    a.setAttribute("data-open-path", text)
+    a.setAttribute("data-open-path", path)
     code.replaceWith(a)
     a.appendChild(code)
   }
