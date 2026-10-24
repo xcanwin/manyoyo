@@ -66,18 +66,18 @@ describe("StoragePanel", () => {
     expect(document.body.querySelectorAll("[data-storage-entry]")).toHaveLength(2)
   })
 
-  test("“无关联会话且为空”分类只列空目录，清理全部按 emptyOnly 逐个删除", async () => {
+  test("“无关联容器且为空”分类只列空目录，清理空目录按 emptyOnly 逐个删除", async () => {
     const container = await mount()
-    const filterButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.startsWith("无关联会话且为空"))!
-    expect(filterButton.textContent).toContain("2")
+    const filterButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.startsWith("无关联容器且为空"))!
+    expect(filterButton.textContent).toContain("有2个")
     await act(async () => filterButton.click())
     expect(Array.from(container.querySelectorAll("[data-storage-row]")).map((row) => row.textContent)).toEqual([
       expect.stringContaining("/h/work/e1"),
       expect.stringContaining("/h/work/e2"),
     ])
-    const clearAll = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "清理全部")!
+    const clearAll = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "清理空目录")!
     await act(async () => clearAll.click())
-    const confirmButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find((button) => button.textContent === "清理全部")!
+    const confirmButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find((button) => button.textContent === "清理空目录")!
     await act(async () => confirmButton.click())
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20))

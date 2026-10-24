@@ -110,9 +110,9 @@ export function StoragePanel() {
 
   async function removeAllEmpty(targets: StorageRow[]) {
     const ok = await confirm({
-      title: "清理全部空目录？",
-      message: `共 ${targets.length} 个没有关联会话的空目录会被删除（只删空目录，里面有任何文件的不会动）。`,
-      confirmLabel: "清理全部",
+      title: "清理空目录？",
+      message: `共 ${targets.length} 个没有关联容器的空目录会被删除（只删空目录，里面有任何文件的不会动）。`,
+      confirmLabel: "清理空目录",
     })
     if (!ok) return
     let failed = 0
@@ -171,26 +171,26 @@ export function StoragePanel() {
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button variant={filter === "all" ? "secondary" : "outline"} size="sm" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
-          {`全部 ${rows.length}`}
+          {`全部有${rows.length}个`}
         </Button>
         <Button variant={filter === "empty" ? "secondary" : "outline"} size="sm" aria-pressed={filter === "empty"} onClick={() => setFilter("empty")}>
-          {`无关联会话且为空 ${emptyRows.length}`}
+          {`无关联容器且为空有${emptyRows.length}个`}
         </Button>
         {filter === "empty" && emptyRows.length > 0 ? (
           <Button variant="outline" size="sm" onClick={() => void removeAllEmpty(emptyRows)}>
-            清理全部
+            清理空目录
           </Button>
         ) : null}
-        <span className="ml-auto text-xs text-muted-foreground">{`已算出的体积合计 ${formatBytes(known)}`}</span>
+        <span className="ml-auto text-xs text-muted-foreground">{`已算出的占用合计 ${formatBytes(known)}`}</span>
       </div>
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full min-w-[48rem] border-collapse text-sm">
           <thead className="border-b bg-muted/50">
             <tr>
               <th className={TH}>宿主机目录</th>
-              <th className={TH}>关联会话</th>
+              <th className={TH}>关联容器</th>
               <th className={TH}>修改时间</th>
-              <th className={`${TH} text-right`}>体积</th>
+              <th className={`${TH} text-right`}>占用</th>
               <th className={`${TH} text-right`}>操作</th>
             </tr>
           </thead>
@@ -213,7 +213,7 @@ export function StoragePanel() {
                     ? row.sessions.map((session) => (
                         <div key={session.name}>{`${session.name}（${SESSION_STATE_LABEL[session.state]}）`}</div>
                       ))
-                    : "—"}
+                    : null}
                 </td>
                 <td className={`${TD} whitespace-nowrap text-muted-foreground`}>{formatDateTime(row.mtimeMs)}</td>
                 <td className={`${TD} text-right whitespace-nowrap tabular-nums`}>
@@ -268,7 +268,7 @@ export function StoragePanel() {
               <tr>
                 <th className={TH}>会话</th>
                 <th className={TH}>最后更新</th>
-                <th className={`${TH} text-right`}>体积</th>
+                <th className={`${TH} text-right`}>占用</th>
                 <th className={`${TH} text-right`}>操作</th>
               </tr>
             </thead>
