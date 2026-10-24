@@ -1,0 +1,151 @@
+'use strict';
+
+const JSON5 = require('json5');
+const {
+    listModelServices,
+    suggestReuse,
+    buildNewService,
+    buildReuseService,
+    buildServiceEdit,
+    applyConfigOps
+} = require('../lib/model-services');
+
+const GLM_KEY = 'glm-secret-key-aaaa1111';
+const DS_KEY = 'ds-secret-key-bbbb2222';
+
+// 模仿真实配置：运行配置不叫 claude / codex，env 里有数字值，带注释
+const RAW = `{
+    // 全局注释
+    "serve": { "quickChat": { "run": "claude-ds" } },
+    "runs": {
+        "claude-glm": {
+            "containerName": "my-claude-glm-{now}",
+            "yolo": "c",
+            "env": {
+                "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
+                "ANTHROPIC_AUTH_TOKEN": "${GLM_KEY}",
+                "API_TIMEOUT_MS": 3000000
+            }
+        },
+        "claude-ds": {
+            "yolo": "cc",
+            "env": {
+                "ANTHROPIC_AUTH_TOKEN": "${DS_KEY}",
+                "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic/", // 30分钟
+                "ANTHROPIC_MODEL": "deepseek-flash[1m]"
+            }
+        },
+        "mine": { "yolo": "c", "env": { "ANTHROPIC_AUTH_TOKEN": "x-custom-key-1234", "ANTHROPIC_BASE_URL": "https://llm.example.com" } },
+        "no-key": { "yolo": "c", "env": {} }
+    }
+}
+`;
+const config = JSON5.parse(RAW);
+
+describe('listModelServices', () => {
+    test('认出任意名字的运行配置、服务商和 Agent，没有 Key 的不列', () => {
+        const list = listModelServices(config);
+        expect(list.map(item => item.name)).toEqual(['claude-glm', 'claude-ds', 'mine']);
+        const byName = Object.fromEntries(list.map(item => [item.name, item]));
+        expect(byName['claude-glm']).toMatchObject({ agent: 'claude', providerId: 'zhipu', providerLabel: '智谱 GLM', keyTail: '…1111' });
+        // Base URL 末尾多一个斜杠也认得出
+        expect(byName['claude-ds']).toMatchObject({ providerId: 'deepseek', model: 'deepseek-flash[1m]' });
+        expect(byName.mine).toMatchObject({ providerId: '', providerLabel: '自定义地址' });
+    });
+
+    test('响应里没有 Key 本身', () => {
+        const text = JSON.stringify({ list: listModelServices(config), suggestions: suggestReuse(config) });
+        expect(text).not.toContain(GLM_KEY);
+        expect(text).not.toContain(DS_KEY);
+        expect(text).not.toContain('x-custom-key');
+    });
+});
+
+describe('suggestReuse', () => {
+    test('智谱和 DeepSeek 的 Key 也能给 Codex 用；自定义地址不建议', () => {
+        const list = suggestReuse(config);
+        expect(list.map(item => `${item.from}->${item.agent}:${item.providerId}`)).toEqual(['claude-glm->codex:zhipu', 'claude-ds->codex:deepseek']);
+        expect(list[0].label).toBe('智谱 GLM 的 Key 也能给 Codex 用');
+    });
+
+    test('已经有用同一个 Key 的 Codex 服务就不再建议', () => {
+        const next = JSON5.parse(RAW);
+        next.runs['codex-glm'] = { yolo: 'cx', env: { OPENAI_API_KEY: GLM_KEY, OPENAI_BASE_URL: 'https://open.bigmodel.cn/api/v1', OPENAI_MODEL: 'glm-5.3' } };
+        expect(suggestReuse(next).map(item => item.providerId)).toEqual(['deepseek']);
+    });
+});
+
+describe('buildReuseService / buildNewService', () => {
+    test('复用智谱 Key 给 Codex：同一个 Key，地址和模型按预设，名字不冲突，不改原来的', () => {
+        const { name, profile } = buildReuseService(config, 'claude-glm', 'codex');
+        expect(name).toBe('codex-zhipu');
+        expect(profile.yolo).toBe('cx');
+        expect(profile.env).toEqual({ OPENAI_API_KEY: GLM_KEY, OPENAI_BASE_URL: 'https://open.bigmodel.cn/api/v1', OPENAI_MODEL: 'glm-5.3' });
+        const taken = JSON5.parse(RAW);
+        taken.runs['codex-zhipu'] = { yolo: 'cx', env: {} };
+        expect(buildReuseService(taken, 'claude-glm', 'codex').name).toBe('codex-zhipu-2');
+    });
+
+    test('新增：Claude 智谱自动带 ENABLE_TOOL_SEARCH=false；DeepSeek 不带；自定义地址的 Codex 必须有模型', () => {
+        expect(buildNewService(config, { agent: 'claude', providerId: 'zhipu', key: 'k-123456' }).profile.env)
+            .toMatchObject({ ANTHROPIC_AUTH_TOKEN: 'k-123456', ENABLE_TOOL_SEARCH: 'false' });
+        expect(buildNewService(config, { agent: 'claude', providerId: 'deepseek', key: 'k-123456' }).profile.env)
+            .not.toHaveProperty('ENABLE_TOOL_SEARCH');
+        expect(() => buildNewService(config, { agent: 'codex', baseUrl: 'https://x.test/v1', key: 'k-123456' })).toThrow(/模型/);
+        expect(buildNewService(config, { agent: 'codex', baseUrl: 'https://x.test/v1', key: 'k-123456', model: 'm1' }).name).toBe('codex-custom');
+    });
+
+    test('校验：重名、非法名字、非法值、没有这家的预设、空 Key', () => {
+        expect(() => buildNewService(config, { agent: 'claude', providerId: 'zhipu', key: 'k-123456', name: 'claude-glm' })).toThrow(/已有/);
+        expect(() => buildNewService(config, { agent: 'claude', providerId: 'zhipu', key: 'k-123456', name: '../x' })).toThrow(/名字/);
+        expect(() => buildNewService(config, { agent: 'claude', providerId: 'zhipu', key: 'a;b' })).toThrow();
+        expect(() => buildNewService(config, { agent: 'codex', providerId: 'aliyun', key: 'k-123456' })).toThrow(/预设/);
+        expect(() => buildNewService(config, { agent: 'claude', providerId: 'zhipu', key: '  ' })).toThrow(/Key/);
+        expect(() => buildNewService(config, { agent: 'nope', key: 'k' })).toThrow(/不支持/);
+    });
+
+    test('订阅令牌：只有 Claude 支持，不带 Base URL', () => {
+        const { profile } = buildNewService(config, { agent: 'claude', subscription: true, key: 'oauth-token-123456' });
+        expect(profile.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'oauth-token-123456' });
+        expect(() => buildNewService(config, { agent: 'codex', subscription: true, key: 'x' })).toThrow();
+    });
+});
+
+describe('buildServiceEdit + applyConfigOps', () => {
+    test('换 Key 只动这一个变量，其它运行配置和注释原样保留', () => {
+        const { ops } = buildServiceEdit(config, 'claude-ds', { key: 'ds-new-key-9999' });
+        const out = applyConfigOps(RAW, ops);
+        const parsed = JSON5.parse(out);
+        expect(parsed.runs['claude-ds'].env.ANTHROPIC_AUTH_TOKEN).toBe('ds-new-key-9999');
+        expect(parsed.runs['claude-glm']).toEqual(config.runs['claude-glm']);
+        expect(out).toContain('// 全局注释');
+        expect(out).toContain('// 30分钟');
+    });
+
+    test('key 留空表示不改；清空模型会删掉该变量', () => {
+        expect(buildServiceEdit(config, 'claude-ds', { key: '', model: 'deepseek-flash[1m]' }).ops.map(o => o.path.join('.'))).toEqual(['runs.claude-ds.env.ANTHROPIC_MODEL']);
+        const { ops } = buildServiceEdit(config, 'claude-ds', { model: '' });
+        const parsed = JSON5.parse(applyConfigOps(RAW, ops));
+        expect(parsed.runs['claude-ds'].env).not.toHaveProperty('ANTHROPIC_MODEL');
+        expect(parsed.runs['claude-ds'].env.ANTHROPIC_AUTH_TOKEN).toBe(DS_KEY);
+    });
+
+    test('保存订阅令牌后，同一个运行配置里的 API Key 类变量和 Base URL 被删掉', () => {
+        const { ops } = buildServiceEdit(config, 'claude-glm', { key: 'oauth-token-123456', subscription: true });
+        const env = JSON5.parse(applyConfigOps(RAW, ops)).runs['claude-glm'].env;
+        expect(env).toEqual({ API_TIMEOUT_MS: 3000000, CLAUDE_CODE_OAUTH_TOKEN: 'oauth-token-123456' });
+    });
+
+    test('新增运行配置落盘后其余内容不变', () => {
+        const { name, profile } = buildReuseService(config, 'claude-glm', 'codex');
+        const out = applyConfigOps(RAW, [{ type: 'set', path: ['runs', name], value: profile }]);
+        const parsed = JSON5.parse(out);
+        expect(parsed.runs['codex-zhipu'].env.OPENAI_API_KEY).toBe(GLM_KEY);
+        expect(parsed.runs['claude-ds']).toEqual(config.runs['claude-ds']);
+        expect(out).toContain('// 30分钟');
+    });
+
+    test('找不到的服务报错', () => {
+        expect(() => buildServiceEdit(config, 'nope', { key: 'k-123456' })).toThrow(/找不到/);
+    });
+});

@@ -139,3 +139,42 @@ describe('向导写配置产出的文件能被严格 JSON 解析', () => {
         expect(parsed.serve.quickChat.run).toBe('claude');
     });
 });
+
+describe('removeValueByPath', () => {
+    const { removeValueByPath } = require('../lib/json5-text-edit');
+    const JSON5 = require('json5');
+    const sample = `{
+    // 顶部注释
+    "runs": {
+        "a": {
+            "env": { "K": "1", "ANTHROPIC_AUTH_TOKEN": "tok", /* x */ "Z": 3 }, // 行尾注释
+            "yolo": "c" // 最后一项
+        },
+        "b": { "yolo": "cx" }
+    }
+}
+`;
+
+    test('删除整个运行配置，其余内容和注释原样保留', () => {
+        const out = removeValueByPath(sample, ['runs', 'a']);
+        expect(JSON5.parse(out)).toEqual({ runs: { b: { yolo: 'cx' } } });
+        expect(out).toContain('// 顶部注释');
+        expect(out).not.toContain('行尾注释');
+    });
+
+    test('删除中间 / 最后一项属性', () => {
+        let out = removeValueByPath(sample, ['runs', 'a', 'env', 'ANTHROPIC_AUTH_TOKEN']);
+        expect(JSON5.parse(out).runs.a.env).toEqual({ K: '1', Z: 3 });
+        out = removeValueByPath(sample, ['runs', 'a', 'yolo']);
+        expect(JSON5.parse(out).runs.a).toEqual({ env: { K: '1', ANTHROPIC_AUTH_TOKEN: 'tok', Z: 3 } });
+        expect(out).toContain('行尾注释');
+        out = removeValueByPath(sample, ['runs', 'b']);
+        expect(JSON5.parse(out).runs).toHaveProperty('a');
+    });
+
+    test('路径不存在时原样返回', () => {
+        expect(removeValueByPath(sample, ['runs', 'nope'])).toBe(sample);
+        expect(removeValueByPath(sample, ['nope', 'x'])).toBe(sample);
+        expect(removeValueByPath(sample, ['runs', 'a', 'env', 'K', 'deeper'])).toBe(sample);
+    });
+});

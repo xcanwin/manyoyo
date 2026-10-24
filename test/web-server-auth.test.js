@@ -6324,6 +6324,126 @@ exit 1
         });
     });
 
+    describe('model services', () => {
+        const GLM = 'glm-secret-key-aaaa1111';
+        const DS = 'ds-secret-key-bbbb2222';
+        const RAW = `{
+    // 注释要保留
+    "runs": {
+        "claude-glm": { "yolo": "c", "env": { "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic", "ANTHROPIC_AUTH_TOKEN": "${GLM}" } },
+        "claude-ds": { "yolo": "cc", "env": { "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic", "ANTHROPIC_AUTH_TOKEN": "${DS}" } } // 行尾
+    }
+}
+`;
+        const JSON5 = require('json5');
+
+        test('所有接口都要认证；写接口缺 X-Requested-With 返回 403', async () => {
+            const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-ms-auth-'));
+            const port = await getFreePort();
+            let handle = null;
+            try {
+                handle = await startWebServer(buildServerOptions(tempHost, port));
+                const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+                for (const [method, route] of [['GET', '/api/model-services'], ['POST', '/api/model-services'], ['PUT', '/api/model-services/x'], ['DELETE', '/api/model-services/x'], ['POST', '/api/model-services/x/test']]) {
+                    const res = await request(`${baseUrl}${route}`, { method, headers: { 'Content-Type': 'application/json' }, body: method === 'GET' || method === 'DELETE' ? undefined : '{}' });
+                    expect(res.response.status).toBe(401);
+                }
+                const cookie = await loginAndGetCookie(baseUrl);
+                const noCsrf = await request(`${baseUrl}/api/model-services`, { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json', 'X-Requested-With': '' }, body: '{}' });
+                expect(noCsrf.response.status).toBe(403);
+            } finally {
+                if (handle && typeof handle.close === 'function') await handle.close();
+                fs.rmSync(tempHost, { recursive: true, force: true });
+            }
+        });
+
+        test('列表 / 一键复用 / 编辑 / 删除：Key 不出现在任何响应里，注释和其它运行配置保留', async () => {
+            await withSetupServer(() => ({}), async ({ call, configPath }) => {
+                fs.writeFileSync(configPath, RAW);
+                const seen = [];
+                const track = res => { seen.push(res.text); return res; };
+
+                let res = track(await call('GET', '/api/model-services'));
+                expect(res.response.status).toBe(200);
+                expect(res.json.services.map(item => [item.name, item.providerId, item.keyTail])).toEqual([
+                    ['claude-glm', 'zhipu', '…1111'],
+                    ['claude-ds', 'deepseek', '…2222']
+                ]);
+                expect(res.json.suggestions.map(item => `${item.from}->${item.agent}`)).toEqual(['claude-glm->codex', 'claude-ds->codex']);
+
+                res = track(await call('POST', '/api/model-services', { reuseFrom: 'claude-glm', agent: 'codex' }));
+                expect(res.response.status).toBe(200);
+                expect(res.json.name).toBe('codex-zhipu');
+                expect(res.json.suggestions.map(item => item.from)).toEqual(['claude-ds']);
+                let parsed = JSON5.parse(fs.readFileSync(configPath, 'utf8'));
+                expect(parsed.runs['codex-zhipu'].env).toEqual({ OPENAI_API_KEY: GLM, OPENAI_BASE_URL: 'https://open.bigmodel.cn/api/v1', OPENAI_MODEL: 'glm-5.3' });
+                expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
+
+                res = track(await call('PUT', '/api/model-services/claude-ds', { key: 'ds-new-key-9999', model: 'deepseek-flash[1m]' }));
+                expect(res.response.status).toBe(200);
+                parsed = JSON5.parse(fs.readFileSync(configPath, 'utf8'));
+                expect(parsed.runs['claude-ds'].env).toMatchObject({ ANTHROPIC_AUTH_TOKEN: 'ds-new-key-9999', ANTHROPIC_MODEL: 'deepseek-flash[1m]' });
+                expect(parsed.runs['claude-glm'].env.ANTHROPIC_AUTH_TOKEN).toBe(GLM);
+
+                res = track(await call('DELETE', '/api/model-services/codex-zhipu'));
+                expect(res.response.status).toBe(200);
+                expect(JSON5.parse(fs.readFileSync(configPath, 'utf8')).runs).not.toHaveProperty('codex-zhipu');
+                const raw = fs.readFileSync(configPath, 'utf8');
+                expect(raw).toContain('// 注释要保留');
+                expect(raw).toContain('// 行尾');
+
+                for (const text of seen) {
+                    expect(text).not.toContain(GLM);
+                    expect(text).not.toContain(DS);
+                    expect(text).not.toContain('ds-new-key-9999');
+                }
+            });
+        });
+
+        test('非法请求被拒绝且不改配置：重名、没有预设、找不到、坏 JSON', async () => {
+            await withSetupServer(() => ({}), async ({ call, configPath }) => {
+                fs.writeFileSync(configPath, RAW);
+                for (const [method, route, body] of [
+                    ['POST', '/api/model-services', { agent: 'claude', providerId: 'zhipu', key: 'k-123456', name: 'claude-glm' }],
+                    ['POST', '/api/model-services', { agent: 'codex', providerId: 'aliyun', key: 'k-123456' }],
+                    ['POST', '/api/model-services', { reuseFrom: 'nope', agent: 'codex' }],
+                    ['PUT', '/api/model-services/nope', { key: 'k-123456' }],
+                    ['DELETE', '/api/model-services/nope', undefined]
+                ]) {
+                    const res = await call(method, route, body);
+                    expect(res.response.status).toBe(400);
+                    expect(res.json.error).toEqual(expect.any(String));
+                }
+                expect(fs.readFileSync(configPath, 'utf8')).toBe(RAW);
+                expect((await call('POST', '/api/model-services/nope/test', {})).response.status).toBe(404);
+            });
+        });
+
+        test('删除快捷对话默认的服务时一并清掉 serve.quickChat.run', async () => {
+            await withSetupServer(() => ({}), async ({ call, configPath }) => {
+                fs.writeFileSync(configPath, RAW.replace('"runs"', '"serve": { "quickChat": { "run": "claude-ds", "path": "/tmp/x" } },\n    "runs"'));
+                const res = await call('DELETE', '/api/model-services/claude-ds');
+                expect(res.response.status).toBe(200);
+                const parsed = JSON5.parse(fs.readFileSync(configPath, 'utf8'));
+                expect(parsed.serve.quickChat).toEqual({ path: '/tmp/x' });
+            });
+        });
+
+        test('测试连接用已保存的 Key，结果带分类；Key 不出现在响应里', async () => {
+            await withSetupServer(tempHost => {
+                const fakeDocker = path.join(tempHost, 'fake-docker.sh');
+                fs.writeFileSync(fakeDocker, '#!/bin/sh\necho mp-42\nexit 0\n', { mode: 0o755 });
+                return { dockerCmd: fakeDocker, dockerExecArgs: () => '' };
+            }, async ({ call, configPath }) => {
+                fs.writeFileSync(configPath, RAW);
+                const res = await call('POST', '/api/model-services/claude-glm/test', {});
+                expect(res.response.status).toBe(200);
+                expect(res.json.category).toBe('success');
+                expect(res.text).not.toContain(GLM);
+            });
+        });
+    });
+
     describe('test-connection', () => {
         const SECRET = 'sk-ant-verysecretvalue99';
 
