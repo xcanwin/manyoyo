@@ -140,8 +140,36 @@ describe('manyoyo setup (command line wizard)', () => {
         expect(raw).toContain('// 我的注释');
         const config = JSON5.parse(raw);
         expect(config.containerRuntime).toBe('docker');
-        expect(config.runs.claude.volumes).toEqual(['/data:/data']);
-        expect(config.runs.claude.env.ANTHROPIC_AUTH_TOKEN).toBe('tok-123456');
+        // 已有的 runs.claude 原样保留，新的一套另起名字
+        expect(config.runs.claude).toEqual({ volumes: ['/data:/data'] });
+        expect(config.runs['claude-official'].env.ANTHROPIC_AUTH_TOKEN).toBe('tok-123456');
+    });
+
+    test('已有同名运行配置时新增一套（名字带服务商），绝不覆盖；重复新增再加数字', async () => {
+        fs.mkdirSync(path.dirname(configPath), { recursive: true });
+        fs.writeFileSync(configPath, '{ runs: { claude: { env: { ANTHROPIC_AUTH_TOKEN: "old-key-1234" } } } }');
+        const agent = require('../lib/setup').listSetupAgents()[0];
+        const zhipuIndex = agent.providers.findIndex(item => item.id === 'zhipu') + 1;
+        for (let i = 0; i < 2; i += 1) {
+            // Agent=1(claude)、兼容服务、Base URL=智谱预设、模型留空、工作目录默认、不配软件源
+            const prompter = scripted({ answers: ['1', '2', '1', String(zhipuIndex), '', '', 'n'], secrets: [`zhipu-key-${i}-5678`, 'password1', 'password1'] });
+            expect(await runSetupCli(baseDeps(prompter))).toBe(0);
+        }
+        const config = readConfig();
+        expect(config.runs.claude.env.ANTHROPIC_AUTH_TOKEN).toBe('old-key-1234');
+        expect(config.runs['claude-zhipu'].env).toMatchObject({ ANTHROPIC_AUTH_TOKEN: 'zhipu-key-0-5678', ENABLE_TOOL_SEARCH: 'false' });
+        expect(config.runs['claude-zhipu-2'].env.ANTHROPIC_AUTH_TOKEN).toBe('zhipu-key-1-5678');
+    });
+
+    test('Codex 接兼容服务必须指定模型：没有默认模型的服务商留空会退出且不写配置', async () => {
+        const agents = require('../lib/setup').listSetupAgents();
+        const codexIndex = agents.findIndex(item => item.id === 'codex') + 1;
+        const codex = agents[codexIndex - 1];
+        const kimiIndex = codex.providers.findIndex(item => item.id === 'kimi') + 1;
+        const prompter = scripted({ answers: [String(codexIndex), '2', String(kimiIndex), ''], secrets: ['kimi-key-123456'] });
+        expect(await runSetupCli(baseDeps(prompter))).toBe(1);
+        expect(logs.join('\n')).toContain('必须指定模型');
+        expect(fs.existsSync(configPath)).toBe(false);
     });
 
     test('password: rejects weak ones and mismatches, then accepts', async () => {
