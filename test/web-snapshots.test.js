@@ -85,6 +85,56 @@ describe('快照', () => {
         expect(snap.parseSnapshotOutput(out).sha).toMatch(/^[0-9a-f]{40}$/);
     });
 
+    describe('限额：大文件与快照仓库大小', () => {
+        const MB = 1024 * 1024;
+        const bigFile = (name, mb) => fs.closeSync(fs.openSync(path.join(work, name), 'w')) || fs.truncateSync(path.join(work, name), mb * MB);
+
+        test('没被忽略的单个文件超过 20MB：这一轮不拍快照（显示“目录太大”）；没超过就正常', () => {
+            write('a.txt', '1');
+            bigFile('data.bin', 21);
+            expect(take('big')).toEqual({ skipped: 'too-large' });
+            fs.rmSync(path.join(work, 'data.bin'));
+            bigFile('ok.bin', 19);
+            expect(take('ok').sha).toMatch(/^[0-9a-f]{40}$/);
+        });
+
+        test('被 .gitignore 忽略的大文件不算；已经在快照里的小文件后来涨到超过 20MB（被改过）才算', () => {
+            write('.gitignore', 'dataset/\n');
+            fs.mkdirSync(path.join(work, 'dataset'));
+            fs.truncateSync(fs.openSync(path.join(work, 'dataset', 'huge.bin'), 'w') && path.join(work, 'dataset', 'huge.bin'), 500 * MB);
+            write('grow.txt', 'small');
+            expect(take('ignored').sha).toMatch(/^[0-9a-f]{40}$/);
+            bigFile('grow.txt', 25);
+            expect(take('grown')).toEqual({ skipped: 'too-large' });
+        });
+
+        test('影子仓库超过上限：不再拍（阈值可注入，测试用很小的值）', () => {
+            write('a.txt', '1');
+            expect(take('first').sha).toMatch(/^[0-9a-f]{40}$/);
+            const out = sh(snap.buildSnapshotCommand(work, 'again', gitDir, { maxRepoKb: 1 }));
+            expect(snap.parseSnapshotOutput(out)).toEqual({ skipped: 'too-large' });
+            // 默认上限 1GB，正常仓库不受影响
+            expect(take('default').sha).toMatch(/^[0-9a-f]{40}$/);
+        });
+
+        test('大文件出现在“回退”前的现状快照里：不回退文件，文件原样不动（宁可不回退）', () => {
+            write('a.txt', 'a1');
+            const first = take('first');
+            write('a.txt', 'a2');
+            bigFile('data.bin', 21);
+            const result = snap.parseRestoreOutput(sh(snap.buildRestoreCommand(work, first.sha, gitDir)));
+            expect(result).toEqual({ ok: false, reason: 'too-large' });
+            expect(read('a.txt')).toBe('a2');
+        });
+
+        test('带限额的检查在 3 秒门槛之内：5000 个文件的目录一次快照小于 3 秒', () => {
+            for (let i = 0; i < 5000; i += 1) write(`d${i % 50}/f${i}.txt`, String(i));
+            const started = Date.now();
+            expect(take('many').sha).toMatch(/^[0-9a-f]{40}$/);
+            expect(Date.now() - started).toBeLessThan(3000);
+        }, 20000);
+    });
+
     test('路径、提交说明里的引号 / 空格 / 命令替换不会被执行', () => {
         const odd = path.join(root, `we ird'dir "x" $(touch pwned) \`touch pwned\``);
         fs.mkdirSync(odd);
