@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { fetchModelServices, runLabel, runLabelMap } from "@/lib/model-services"
 import { apiGet, apiPost } from "@/lib/api"
 import { expandTemplate, formatNow } from "@/lib/name-template"
 import { CLI_PROMPT_TEMPLATES, normalizeYolo } from "@/lib/agent-templates"
@@ -181,6 +182,8 @@ export function CreateContainerDialog({
   const [error, setError] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
   const [runs, setRuns] = React.useState<Record<string, RunPreset>>({})
+  // 运行配置的友好名字（模型服务识别出来的才有）
+  const [runLabels, setRunLabels] = React.useState<Record<string, string>>({})
   const [pickerOpen, setPickerOpen] = React.useState(false)
   // 默认建议的工作目录（工作目录根/时间戳，和快捷对话一样）：只是预填，点“创建”时才真的建目录
   const [suggestedDir, setSuggestedDir] = React.useState("")
@@ -197,6 +200,9 @@ export function CreateContainerDialog({
           ? (parsed.runs as Record<string, RunPreset>)
           : {}
       setRuns(runsMap)
+      fetchModelServices()
+        .then((result) => setRunLabels(runLabelMap(result.services)))
+        .catch(() => setRunLabels({}))
 
       const defaults = (data.defaults || {}) as Record<string, unknown>
       // 系统提示词的初始内容 = 系统设置里的默认 + 补充（各自开关生效）
@@ -364,13 +370,15 @@ export function CreateContainerDialog({
                   <KeyLabel htmlFor="create-run" k="run" />
                   <Select value={form.run} onValueChange={handleRunChange}>
                     <SelectTrigger id="create-run" className="w-full">
-                      <SelectValue placeholder="(不使用 run)" />
+                      <SelectValue placeholder="(不使用 run)">
+                        {(value: string | null) => (value ? runLabel(value, runLabels) : "(不使用 run)")}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
                         {Object.keys(runs).map((run) => (
                           <SelectItem key={run} value={run}>
-                            {run}
+                            {runLabel(run, runLabels)}
                           </SelectItem>
                         ))}
                       </SelectGroup>

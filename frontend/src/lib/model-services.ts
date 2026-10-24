@@ -95,3 +95,10 @@ export function buildEditBody(form: ServiceForm, syncContainers = false): Record
 export function resultTone(result: ConnectionResult): "success" | "error" {
   return result.category === "success" ? "success" : "error"
 }
+
+// 运行配置下拉里的显示名：Claude Code · 智谱 GLM（claude-glm）；不是模型服务的运行配置仍显示原名
+export function runLabelMap(services: Pick<ModelService, "name" | "agentLabel" | "providerLabel">[]): Record<string, string> {
+  return Object.fromEntries(services.map((item) => [item.name, `${serviceTitle(item)}（${item.name}）`]))
+}
+
+export const runLabel = (name: string, labels: Record<string, string>) => labels[name] ?? name

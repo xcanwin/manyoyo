@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { buildCreateBody, buildEditBody, EMPTY_SERVICE_FORM, serviceTitle, validateServiceForm } from "@/lib/model-services"
+import { runLabel, runLabelMap, buildCreateBody, buildEditBody, EMPTY_SERVICE_FORM, serviceTitle, validateServiceForm } from "@/lib/model-services"
 
 const form = (over = {}) => ({ ...EMPTY_SERVICE_FORM, ...over })
 
@@ -38,4 +38,10 @@ describe("请求体", () => {
 
 test("serviceTitle", () => {
   expect(serviceTitle({ agentLabel: "Claude Code", providerLabel: "智谱 GLM" })).toBe("Claude Code · 智谱 GLM")
+})
+
+test("runLabelMap：模型服务显示成“Agent · 服务商（配置名）”，其它运行配置显示原名", () => {
+  const labels = runLabelMap([{ name: "claude-glm", agentLabel: "Claude Code", providerLabel: "智谱 GLM" }])
+  expect(runLabel("claude-glm", labels)).toBe("Claude Code · 智谱 GLM（claude-glm）")
+  expect(runLabel("other", labels)).toBe("other")
 })

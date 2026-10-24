@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { apiGet, apiPut } from "@/lib/api"
+import { fetchModelServices, runLabel, runLabelMap } from "@/lib/model-services"
 
 const DEFAULT_QUICK_CHAT_PATH = "~/.manyoyo/work/"
 
@@ -41,6 +42,7 @@ export function QuickChatSetupDialog({
   const [path, setPath] = React.useState(DEFAULT_QUICK_CHAT_PATH)
   const [run, setRun] = React.useState("")
   const [runs, setRuns] = React.useState<string[]>([])
+  const [runLabels, setRunLabels] = React.useState<Record<string, string>>({})
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [error, setError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
@@ -67,6 +69,9 @@ export function QuickChatSetupDialog({
         setRuns(Object.keys(runsMap))
       })
       .catch(() => setRuns([]))
+    fetchModelServices()
+      .then((result) => setRunLabels(runLabelMap(result.services)))
+      .catch(() => setRunLabels({}))
   }, [open])
 
   async function handleSave() {
@@ -126,13 +131,15 @@ export function QuickChatSetupDialog({
             </FieldLabel>
             <Select value={run} onValueChange={(value) => setRun(value ?? "")}>
               <SelectTrigger id="quick-chat-run" className="w-full">
-                <SelectValue placeholder="选择一个运行配置" />
+                <SelectValue placeholder="选择一个运行配置">
+                  {(value: string | null) => (value ? runLabel(value, runLabels) : "选择一个运行配置")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   {runs.map((name) => (
                     <SelectItem key={name} value={name}>
-                      {name}
+                      {runLabel(name, runLabels)}
                     </SelectItem>
                   ))}
                 </SelectGroup>
