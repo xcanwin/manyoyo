@@ -54,6 +54,10 @@ describe('release-verify workflow', () => {
         // 与 macOS 游客验证不同：这里不跳过虚拟机
         expect(job).not.toContain('MANYOYO_TEST_SKIP_MACHINE');
         expect(job).toContain('--rm-on-exit');
+        // CI 嵌套虚拟机里导入镜像要 16.5–17.8 分钟：等 30 分钟（360 × 5 秒），任务上限要比它长
+        expect(job).toContain('for _ in $(seq 1 360); do');
+        const limit = Number((job.match(/timeout-minutes: (\d+)/) || [])[1]);
+        expect(limit).toBeGreaterThanOrEqual(40);
     });
 
     test('the upgrade job also handles a split previous .run (picks files from SHA256SUMS, runs volume 1)', () => {

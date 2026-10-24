@@ -71,7 +71,9 @@ jobs:
           mkdir -p image
           docker pull --platform "${{ matrix.platform }}" "${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}"
           echo "id=$(docker image inspect -f '{{.Id}}' "${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}" | sed 's/^sha256://')" >> "$GITHUB_OUTPUT"
-          docker save "${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}" | gzip -n > "image/manyoyo-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}.tar.gz"
+          # 压缩是这一步的瓶颈（单线程 gzip 约 130 秒）：pigz 多线程、级别相同，输出仍是标准 gzip，体积不变，结果与线程数无关
+          command -v pigz >/dev/null 2>&1 || { sudo apt-get update -qq && sudo apt-get install -y -qq pigz; }
+          docker save "${IMAGE_NAME}:${{ steps.version.outputs.imageVersion }}" | pigz -n > "image/manyoyo-${{ steps.version.outputs.imageVersion }}-${{ matrix.arch }}.tar.gz"
           ls -lh image
 
       # 缓存只保存“扫描通过”这件事（空标记文件）：key 含镜像 ID、允许列表和扫描器的哈希，任何一个变了都会重新扫。

@@ -134,6 +134,15 @@ describe('build-packages workflow (macOS + Linux in one run)', () => {
         expect(jobBlock('build-linux')).not.toContain('pigz');
     });
 
+    test('the image archive is compressed with pigz (same level, standard gzip), keeping pipefail', () => {
+        const job = jobBlock('image-archive');
+        // 单线程 gzip 是这一步的瓶颈（6 次发布实测 130–214 秒）
+        expect(job).toMatch(/docker save "[^"]+" \| pigz -n > /);
+        expect(job).not.toMatch(/\| gzip -n >/);
+        expect(job).not.toMatch(/pigz -n -[0-9]/); // 不改压缩级别：体积不能变大
+        expect(job).toContain('set -o pipefail');
+    });
+
     test('can be called by the release pipeline (workflow_call) and stays manually dispatchable', () => {
         const onBlock = text.slice(text.indexOf('\non:'), text.indexOf('\nenv:'));
         expect(onBlock).toContain('workflow_call:');

@@ -242,7 +242,8 @@ jobs:
   vm-intel:
     runs-on: macos-15-intel
     continue-on-error: true
-    timeout-minutes: 35
+    # 实测（6 次发布）：CI 的嵌套虚拟机里后台导入镜像要 16.5–17.8 分钟，原来 20 分钟的等待一半次数会误报失败；等待放宽到 30 分钟，任务上限随之加大
+    timeout-minutes: 45
     steps:
       - name: Download and verify (anonymous)
         run: |
@@ -268,7 +269,7 @@ jobs:
           m="$HOME/.manyoyo/bin/manyoyo"
           test "$("$m" -v)" = "$ver"
           "$m" podman machine list || true
-          for _ in $(seq 1 240); do
+          for _ in $(seq 1 360); do
             ls "$HOME"/.manyoyo/.install/image-loaded-* >/dev/null 2>&1 && break
             sleep 5
           done
