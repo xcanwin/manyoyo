@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { OrphanStatesPanel } from "@/components/orphan-states-panel"
+import { StoragePanel } from "@/components/storage-panel"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -87,6 +88,7 @@ const CATEGORIES: ConfigCategory[] = [
   { id: "plugins", label: "插件", keys: ["plugins"], group: "MANYOYO 服务" },
   { id: "doctor", label: "环境检查", keys: [], group: "宿主机与维护" },
   { id: "capacity", label: "容量预估", keys: [], group: "宿主机与维护" },
+  { id: "storage", label: "磁盘占用", keys: [], group: "宿主机与维护" },
   { id: "orphans", label: "容器状态", keys: [], group: "宿主机与维护" },
 ]
 
@@ -719,6 +721,8 @@ export function SystemSettingsDialog({
                       <MirrorPanel onSaved={handleSubPanelSaved} />
                     ) : category.id === "doctor" ? (
                       <DoctorPanel />
+                    ) : category.id === "storage" ? (
+                      <StoragePanel />
                     ) : category.id === "orphans" ? (
                       <OrphanStatesPanel />
                     ) : category.id === "quick-chat" ? (
