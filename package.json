@@ -92,6 +92,8 @@
             "**/test/**/*.test.js"
         ],
         "testEnvironment": "node",
+        "globalSetup": "<rootDir>/test/support/global-setup.js",
+        "globalTeardown": "<rootDir>/test/support/global-teardown.js",
         "modulePathIgnorePatterns": [
             "<rootDir>/temp/",
             "<rootDir>/.claude/"
