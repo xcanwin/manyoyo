@@ -177,13 +177,18 @@ describe("SetupWizard", () => {
     expect(text()).toContain("第 3 / 4 步")
   })
 
-  test("subscription login is a disabled placeholder", async () => {
+  test("subscription login: Claude pastes a long-lived token; Codex is pointed to the container terminal", async () => {
     await mount(readyStatus)
     await click(radio("Claude Code"))
     await click(button("下一步"))
-    const subscription = radio("订阅登录") as HTMLButtonElement
-    expect(subscription.disabled).toBe(true)
-    expect(text()).toContain("即将支持")
+    await click(radio("订阅登录"))
+    expect(text()).toContain("claude setup-token")
+    expect(text()).toContain("订阅令牌")
+    await click(button("下一步"))
+    expect(text()).toContain("请粘贴订阅令牌")
+    await type("setup-api-key", "oauth-token-123456")
+    await click(button("下一步"))
+    expect(text()).toContain("第 3 / 4 步")
   })
 
   test("before the environment is ready, testing and saving are disabled with the reason shown", async () => {

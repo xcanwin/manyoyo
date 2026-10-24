@@ -108,7 +108,11 @@ export function getReadiness(status: SetupStatus | null): Readiness {
   return { ready, percent: Math.round((done / items.length) * 100), items, blockedReason }
 }
 
-export function getModeKeyEnvName(agent: SetupAgent): string {
+// 订阅登录用长期令牌（Claude 的 claude setup-token）；Codex 的订阅登录在容器终端里完成，不经过这里
+export const SUBSCRIPTION_KEY_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
+
+export function getModeKeyEnvName(agent: SetupAgent, mode: AccessMode = "official"): string {
+  if (mode === "subscription") return SUBSCRIPTION_KEY_ENV
   return agent.requiredAnyOf[0]
 }
 
@@ -130,7 +134,10 @@ export function isValidBaseUrl(value: string): boolean {
 export function validateStep(step: 1 | 2 | 3, form: SetupForm, agent: SetupAgent | null): string {
   if (step === 1) return agent ? "" : "请选择一个 Agent"
   if (step === 2) {
-    if (form.mode === "subscription") return "订阅登录即将支持，请先选择其它接入方式"
+    if (form.mode === "subscription") {
+      if (agent?.id !== "claude") return "Codex 的订阅登录要进容器终端运行 codex login --device-auth，向导里请先选其它接入方式"
+      return form.apiKey.trim() ? "" : "请粘贴订阅令牌"
+    }
     if (!form.apiKey.trim()) return "请填写 API Key"
     if (form.mode === "compatible") {
       if (!form.baseUrl.trim()) return "请填写兼容服务的 Base URL"
@@ -146,7 +153,7 @@ export function validateStep(step: 1 | 2 | 3, form: SetupForm, agent: SetupAgent
 export function buildEnvBody(agent: SetupAgent, form: SetupForm): Record<string, string> {
   const env: Record<string, string> = {}
   const key = form.apiKey.trim()
-  if (key) env[form.mode === "compatible" && form.keyEnv ? form.keyEnv : getModeKeyEnvName(agent)] = key
+  if (key) env[form.mode === "compatible" && form.keyEnv ? form.keyEnv : getModeKeyEnvName(agent, form.mode)] = key
   if (form.mode === "compatible" && form.baseUrl.trim()) env[agent.baseUrlKey] = form.baseUrl.trim()
   if (form.mode === "compatible") Object.assign(env, form.extraEnv ?? {})
   if (form.model.trim()) env[agent.modelKey] = form.model.trim()

@@ -54,7 +54,7 @@ const POLL_INTERVAL_MS = 2000
 const MODES: { id: AccessMode; label: string; disabled?: boolean }[] = [
   { id: "official", label: "官方 API Key" },
   { id: "compatible", label: "兼容服务" },
-  { id: "subscription", label: "订阅登录", disabled: true },
+  { id: "subscription", label: "订阅登录" },
 ]
 
 const STATE_LABEL = { done: "已就绪", doing: "准备中", waiting: "等待中", failed: "失败" } as const
@@ -406,15 +406,28 @@ export function SetupWizard({
                   </Field>
                 ) : null}
 
-                {form.mode !== "subscription" ? (
+                {form.mode === "subscription" && agent.id !== "claude" ? (
+                  <Alert>
+                    <AlertDescription>
+                      Codex 的订阅登录要在容器里完成：先选其它接入方式建好会话，再在容器的终端里运行 codex login --device-auth，按提示用浏览器登录。登录只在那个容器里有效，换容器要重新登录。
+                    </AlertDescription>
+                  </Alert>
+                ) : (
                   <>
+                    {form.mode === "subscription" ? (
+                      <Alert>
+                        <AlertDescription>
+                          在任意有浏览器的电脑上运行 claude setup-token，把得到的长期令牌粘贴到下面；也可以建好会话后，在容器的终端里运行 claude 按提示登录（凭据只在那个容器里）。
+                        </AlertDescription>
+                      </Alert>
+                    ) : null}
                     <Field>
-                      <FieldLabel htmlFor="setup-api-key">API Key</FieldLabel>
+                      <FieldLabel htmlFor="setup-api-key">{form.mode === "subscription" ? "订阅令牌" : "API Key"}</FieldLabel>
                       <Input
                         id="setup-api-key"
                         type="password"
                         autoComplete="off"
-                        placeholder="粘贴你的 Key（不会回显）"
+                        placeholder={form.mode === "subscription" ? "粘贴订阅令牌（不会回显）" : "粘贴你的 Key（不会回显）"}
                         value={form.apiKey}
                         onChange={(event) => setField("apiKey", event.target.value)}
                       />
@@ -467,10 +480,6 @@ export function SetupWizard({
                       ) : null}
                     </div>
                   </>
-                ) : (
-                  <Alert>
-                    <AlertDescription>订阅登录即将支持，目前请使用 API Key 或兼容服务。</AlertDescription>
-                  </Alert>
                 )}
               </FieldGroup>
             ) : null}
