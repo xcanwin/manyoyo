@@ -265,4 +265,71 @@ describe('web storage', () => {
         const size = await storage.directorySize(dir);
         expect(size.bytes).toBeGreaterThanOrEqual(300 * 1024);
     });
+
+    test('列表标出空目录；emptyOnly 只删空目录，非空的拒绝且不动文件', async () => {
+        const { workRoot, historyDir } = setup();
+        const empty = path.join(workRoot, '20261001-000030');
+        const full = path.join(workRoot, '20261001-000031');
+        fs.mkdirSync(empty);
+        fs.mkdirSync(full);
+        fs.writeFileSync(path.join(full, '.hidden'), 'x');
+        const listing = await storage.buildStorageListing({ workRoots: [workRoot], historyDir, dockerExecAsync: fakeDocker({}) });
+        const byName = Object.fromEntries(listing.rows.map(row => [path.basename(row.path), row]));
+        expect(byName['20261001-000030'].empty).toBe(true);
+        expect(byName['20261001-000031'].empty).toBe(false);
+        expect(await storage.removeManagedDirectory(listing, full, { emptyOnly: true })).toMatchObject({ ok: false, status: 409 });
+        expect(fs.existsSync(path.join(full, '.hidden'))).toBe(true);
+        expect(await storage.removeManagedDirectory(listing, empty, { emptyOnly: true })).toEqual({ ok: true });
+        expect(fs.existsSync(empty)).toBe(false);
+    });
+
+    describe('removeEmptyWorkDir', () => {
+        const base = (workRoot, extra = {}) => ({ workRoots: [workRoot], extraWorkRoots: [], homeDir: '/nonexistent-home', dockerExecAsync: fakeDocker({}), ...extra });
+
+        test('工作目录根里的空时间戳目录被删掉', async () => {
+            const { workRoot } = setup();
+            const dir = path.join(workRoot, '20261001-000040');
+            fs.mkdirSync(dir);
+            expect(await storage.removeEmptyWorkDir({ hostPath: dir, ...base(workRoot) })).toBe(true);
+            expect(fs.existsSync(dir)).toBe(false);
+            expect(fs.existsSync(workRoot)).toBe(true);
+        });
+
+        test('非空（含隐藏文件）不删；不在工作目录根里的不删；名字不是时间戳的不删', async () => {
+            const { home, workRoot } = setup();
+            const full = path.join(workRoot, '20261001-000041');
+            fs.mkdirSync(full);
+            fs.writeFileSync(path.join(full, '.env'), 'x');
+            const outside = path.join(home, 'project');
+            fs.mkdirSync(outside);
+            const named = path.join(workRoot, 'notes');
+            fs.mkdirSync(named);
+            expect(await storage.removeEmptyWorkDir({ hostPath: full, ...base(workRoot) })).toBe(false);
+            expect(await storage.removeEmptyWorkDir({ hostPath: outside, ...base(workRoot) })).toBe(false);
+            expect(await storage.removeEmptyWorkDir({ hostPath: named, ...base(workRoot) })).toBe(false);
+            expect(await storage.removeEmptyWorkDir({ hostPath: workRoot, ...base(workRoot) })).toBe(false);
+            expect([full, outside, named, workRoot].every(item => fs.existsSync(item))).toBe(true);
+        });
+
+        test('快捷对话目录里的空目录也删；别的容器还挂着它就不删', async () => {
+            const { home, workRoot } = setup();
+            const quick = path.join(home, 'manyoyo_work');
+            const dir = path.join(quick, '20261001-000042');
+            const busy = path.join(quick, '20261001-000043');
+            fs.mkdirSync(dir, { recursive: true });
+            fs.mkdirSync(busy);
+            const extra = { extraWorkRoots: [quick], homeDir: home };
+            expect(await storage.removeEmptyWorkDir({ hostPath: busy, ...base(workRoot, { ...extra, dockerExecAsync: fakeDocker({ other: { state: 'running', mounts: [busy] } }) }) })).toBe(false);
+            expect(await storage.removeEmptyWorkDir({ hostPath: dir, ...base(workRoot, extra) })).toBe(true);
+            expect(fs.existsSync(busy)).toBe(true);
+        });
+
+        test('运行时不可用时不删', async () => {
+            const { workRoot } = setup();
+            const dir = path.join(workRoot, '20261001-000044');
+            fs.mkdirSync(dir);
+            expect(await storage.removeEmptyWorkDir({ hostPath: dir, ...base(workRoot, { dockerExecAsync: fakeDocker({}, true) }) })).toBe(false);
+            expect(fs.existsSync(dir)).toBe(true);
+        });
+    });
 });

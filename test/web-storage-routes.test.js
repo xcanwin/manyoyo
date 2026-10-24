@@ -231,3 +231,53 @@ describe('容器被删后的重建不再退回 serve 启动目录', () => {
         expect(runCalls).toHaveLength(0);
     });
 });
+
+describe('删除容器连同历史时清掉空工作目录', () => {
+    async function removeWith({ withHistory, fill }) {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-rm-'));
+        const port = await getFreePort();
+        const workDir = path.join(tempHost, '.manyoyo-work', '20261001-000050');
+        fs.mkdirSync(workDir, { recursive: true });
+        if (fill) fs.writeFileSync(path.join(workDir, 'keep.txt'), 'x');
+        let exists = true;
+        let handle = null;
+        try {
+            writeHistoryFile(path.join(tempHost, 'web-history'), 'gone-2', { applied: { hostPath: workDir } });
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => exists,
+                removeContainer: () => { exists = false; },
+                dockerExecAsync: async () => ''
+            }));
+            fs.writeFileSync(path.join(tempHost, 'manyoyo.json'), JSON.stringify({ serve: { quickChat: { path: path.join(tempHost, '.manyoyo-work'), run: 'x' } } }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const cookie = await loginAndGetCookie(baseUrl);
+            const res = await request(`${baseUrl}/api/sessions/gone-2/remove`, {
+                method: 'POST',
+                headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ removeHistory: withHistory })
+            });
+            return { body: res.json, workDirExists: fs.existsSync(workDir) };
+        } finally {
+            if (handle && handle.close) await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    }
+
+    test('连同历史删除：空工作目录一起删', async () => {
+        const result = await removeWith({ withHistory: true, fill: false });
+        expect(result.body).toMatchObject({ removed: true, removedWorkDir: true });
+        expect(result.workDirExists).toBe(false);
+    });
+
+    test('工作目录里有文件：不动', async () => {
+        const result = await removeWith({ withHistory: true, fill: true });
+        expect(result.body.removedWorkDir).toBe(false);
+        expect(result.workDirExists).toBe(true);
+    });
+
+    test('保留历史时不动工作目录', async () => {
+        const result = await removeWith({ withHistory: false, fill: false });
+        expect(result.body.removedWorkDir).toBe(false);
+        expect(result.workDirExists).toBe(true);
+    });
+});

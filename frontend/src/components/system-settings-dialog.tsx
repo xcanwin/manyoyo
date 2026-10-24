@@ -625,7 +625,7 @@ export function SystemSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[80vh] max-h-[80vh] flex-col sm:max-w-4xl">
+      <DialogContent className={`flex h-[80vh] max-h-[80vh] flex-col ${activeCategory === "storage" ? "sm:max-w-[min(96vw,90rem)]" : "sm:max-w-4xl"}`}>
         <DialogHeader className="shrink-0">
           <DialogTitle>系统设置</DialogTitle>
           <DialogDescription>{path || "~/.manyoyo/manyoyo.json"}</DialogDescription>
