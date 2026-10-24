@@ -272,5 +272,15 @@ jobs:
           "$m" doctor || true
           "$m" run -n "vm-smoke-${GITHUB_RUN_ID}" --rm-on-exit -x /bin/sh -c 'echo vm-ok' 2>&1 | tee run.out
           grep -q vm-ok run.out
+          # 磁盘占用页靠挂载的 Source 判断目录在用：它必须和宿主机路径写法相同（macOS 私有 Podman 下的 M4 核对）
+          mkdir -p "$HOME/mount-check"
+          host_dir="$(cd "$HOME/mount-check" && pwd)"
+          image="$("$m" podman images --format '{{.Repository}}:{{.Tag}}' | grep '^ghcr.io/xcanwin/manyoyo:' | head -n 1)"
+          "$m" podman run -d --name "mount-check-${GITHUB_RUN_ID}" -v "${host_dir}:/mnt/check" "$image" sleep 60
+          source_dir="$("$m" podman inspect -f '{{range .Mounts}}{{.Source}}{{end}}' "mount-check-${GITHUB_RUN_ID}")"
+          echo "宿主机路径: ${host_dir}"
+          echo "挂载 Source: ${source_dir}"
+          "$m" podman rm -f "mount-check-${GITHUB_RUN_ID}" || true
+          test "$source_dir" = "$host_dir"
           "$m" uninstall --yes || true
           echo "macOS Intel 虚拟机验证通过"
