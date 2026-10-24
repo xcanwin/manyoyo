@@ -208,6 +208,7 @@ export default defineConfig({
               collapsed: false,
               items: [
                 { text: '命令行运行 Agent', link: '/guide/basic-usage' },
+                { text: '接入国内模型服务', link: '/guide/models' },
                 { text: '迁移已有 Agent 配置', link: '/guide/migrate' },
                 { text: '网页服务与远程访问', link: '/guide/web' },
                 { text: '管理容器的 env、网络与自启动', link: '/guide/container-manage' },
@@ -312,6 +313,7 @@ export default defineConfig({
               collapsed: false,
               items: [
                 { text: 'Run Agents from the CLI', link: '/en/guide/basic-usage' },
+                { text: 'Use Chinese Model Providers', link: '/en/guide/models' },
                 { text: 'Migrate Existing Agent Configs', link: '/en/guide/migrate' },
                 { text: 'Web Service and Remote Access', link: '/en/guide/web' },
                 { text: 'Manage env, network and autostart', link: '/en/guide/container-manage' },

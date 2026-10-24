@@ -51,7 +51,9 @@ describe('lib/agent-adapters withCodexBaseUrl', () => {
         }
     }
 
+    const baseUrlArgs = url => ['-c', `openai_base_url="${url}"`];
     const providerArgs = url => [
+        ...baseUrlArgs(url),
         '-c', 'model_provider=manyoyo',
         '-c', 'model_providers.manyoyo.name=manyoyo',
         '-c', `model_providers.manyoyo.base_url="${url}"`,
@@ -63,6 +65,7 @@ describe('lib/agent-adapters withCodexBaseUrl', () => {
         const command = withCodexBaseUrl('codex --dangerously-bypass-approvals-and-sandbox');
         expect(command).toContain('${OPENAI_BASE_URL:+');
         expect(command).toContain('env_key=OPENAI_API_KEY');
+        expect(command).not.toContain('OPENAI_API_KEY=');
         expect(command).toMatch(/^codex .*--dangerously-bypass-approvals-and-sandbox$/);
         expect(command).not.toMatch(/https?:/);
     });
@@ -82,8 +85,10 @@ describe('lib/agent-adapters withCodexBaseUrl', () => {
     });
 
     test.each([
-        ['有地址和模型', { OPENAI_BASE_URL: 'https://open.bigmodel.cn/api/v1', OPENAI_MODEL: 'glm-5.3' }, [...providerArgs('https://open.bigmodel.cn/api/v1'), '--model', 'glm-5.3']],
-        ['只有地址', { OPENAI_BASE_URL: 'http://127.0.0.1:18778/v1' }, providerArgs('http://127.0.0.1:18778/v1')],
+        ['有地址、Key 和模型', { OPENAI_BASE_URL: 'https://open.bigmodel.cn/api/v1', OPENAI_API_KEY: 'k', OPENAI_MODEL: 'glm-5.3' }, [...providerArgs('https://open.bigmodel.cn/api/v1'), '--model', 'glm-5.3']],
+        ['有地址、Key', { OPENAI_BASE_URL: 'http://127.0.0.1:18778/v1', OPENAI_API_KEY: 'k' }, providerArgs('http://127.0.0.1:18778/v1')],
+        // ChatGPT 登录（没有 OPENAI_API_KEY）+ 自定义地址：不能退化，仍是老写法，不换成要读 Key 的自定义 provider
+        ['只有地址（没有 Key）', { OPENAI_BASE_URL: 'https://chatgpt.com/backend-api/codex' }, baseUrlArgs('https://chatgpt.com/backend-api/codex')],
         ['只有模型', { OPENAI_MODEL: 'gpt-x' }, ['--model', 'gpt-x']],
         ['都没有', {}, []]
     ])('bash 展开（codex exec）：%s', (_label, envVars, expected) => {
@@ -91,7 +96,7 @@ describe('lib/agent-adapters withCodexBaseUrl', () => {
     });
 
     test('exec resume 同样展开', () => {
-        const envVars = { OPENAI_BASE_URL: 'https://api.deepseek.com', OPENAI_MODEL: 'deepseek-flash' };
+        const envVars = { OPENAI_BASE_URL: 'https://api.deepseek.com', OPENAI_API_KEY: 'k', OPENAI_MODEL: 'deepseek-flash' };
         expect(runShim(withCodexBaseUrl("codex exec resume --json sid 'hi'"), envVars))
             .toEqual(['exec', 'resume', ...providerArgs('https://api.deepseek.com'), '--model', 'deepseek-flash', '--json', 'sid', 'hi']);
     });
@@ -102,6 +107,6 @@ describe('lib/agent-adapters withCodexBaseUrl', () => {
         ["codex exec -m picked 'hi'", ['exec', ...providerArgs('https://x.test/v1'), '-m', 'picked', 'hi']],
         ["codex exec -c model=picked 'hi'", ['exec', ...providerArgs('https://x.test/v1'), '-c', 'model=picked', 'hi']]
     ])('命令已指定模型时 OPENAI_MODEL 不再追加：%s', (command, expected) => {
-        expect(runShim(withCodexBaseUrl(command), { OPENAI_BASE_URL: 'https://x.test/v1', OPENAI_MODEL: 'env-model' })).toEqual(expected);
+        expect(runShim(withCodexBaseUrl(command), { OPENAI_BASE_URL: 'https://x.test/v1', OPENAI_API_KEY: 'k', OPENAI_MODEL: 'env-model' })).toEqual(expected);
     });
 });

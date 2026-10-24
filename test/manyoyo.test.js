@@ -1761,8 +1761,8 @@ exit 0
                 const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n').filter(Boolean);
                 const interactive = dockerArgs.find(line => line.startsWith('exec -i -t codex-url-test /bin/bash -c codex'));
                 expect(interactive).toBeDefined();
-                expect(interactive).toContain('/bin/bash -c codex ${OPENAI_BASE_URL:+-c model_provider=manyoyo');
-                expect(interactive).toContain('model_providers.manyoyo.wire_api=responses} ${OPENAI_MODEL:+--model "$OPENAI_MODEL"} --dangerously-bypass-approvals-and-sandbox');
+                expect(interactive).toContain('/bin/bash -c codex ${OPENAI_BASE_URL:+-c "openai_base_url=');
+                expect(interactive).toContain('model_providers.manyoyo.wire_api=responses}} ${OPENAI_MODEL:+--model "$OPENAI_MODEL"} --dangerously-bypass-approvals-and-sandbox');
             } finally {
                 fs.rmSync(tempDir, { recursive: true, force: true });
                 fs.rmSync(tempHome, { recursive: true, force: true });

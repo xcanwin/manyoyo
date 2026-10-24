@@ -180,7 +180,7 @@ describe('Codex 兼容服务：OPENAI_BASE_URL 要变成自定义 model_provider
         const first = buildWebAgentExecCommand('codex exec --skip-git-repo-check {prompt}', 'hi', 'codex', {});
         const resumed = buildWebAgentExecCommand('codex exec --skip-git-repo-check {prompt}', 'hi', 'codex', { sessionId: 'sess-1' });
         for (const command of [first, resumed]) {
-            expect(command).toContain('${OPENAI_BASE_URL:+-c model_provider=manyoyo');
+            expect(command).toContain('${OPENAI_API_KEY:+-c model_provider=manyoyo');
             expect(command).toContain('model_providers.manyoyo.env_key=OPENAI_API_KEY');
             expect(command).not.toMatch(/https?:\/\//);
         }
