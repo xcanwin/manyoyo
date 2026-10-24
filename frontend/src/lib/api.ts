@@ -150,8 +150,6 @@ export type ChatMessage = {
   snapBefore?: string
   snapAfter?: string
   snapSkipped?: "too-large" | "unavailable"
-  // 从页面隐藏的一组（agent 仍记得）
-  hidden?: boolean
   // 这一轮因为 Agent 自己的模型地址被网络策略拦下而中止
   networkDenied?: { host: string; model?: boolean }
   streamTrace?: boolean

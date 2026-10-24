@@ -80,6 +80,28 @@ describe("applyMessagesResponse", () => {
     }
   })
 
+  test("只改了快照 / 图片 / 拦截标记的消息也要换成服务端版本（不能当成没变而沿用旧对象）", () => {
+    const changes: Partial<ChatMessage>[] = [
+      { snapBefore: "a".repeat(40) },
+      { snapAfter: "b".repeat(40) },
+      { snapSkipped: "too-large" },
+      { images: ["/run/manyoyo/uploads/x.png"] },
+      { networkDenied: { host: "api.example.com", model: true } },
+    ]
+    for (const change of changes) {
+      const local = [msg("a")]
+      const out = applyMessagesResponse(local, res([msg("a", change)], { mode: "page" }), null, false)
+      expect(out?.messages[0]).toMatchObject(change)
+    }
+    // 服务端去掉了某个字段，本地也要跟着消失
+    const out = applyMessagesResponse([msg("a", { snapSkipped: "too-large" })], res([msg("a")], { mode: "page" }), null, false)
+    expect(out?.messages[0].snapSkipped).toBeUndefined()
+    // 真的没变时仍然复用旧对象（不重渲染）
+    const same = [msg("a", { images: ["/run/manyoyo/uploads/x.png"], networkDenied: { host: "h" } })]
+    const kept = applyMessagesResponse(same, res([msg("a", { images: ["/run/manyoyo/uploads/x.png"], networkDenied: { host: "h" } })], { mode: "page" }), null, false)
+    expect(kept?.messages).toBe(same)
+  })
+
   test("tail：保留 anchor 及之前，替换之后的部分", () => {
     const local = [msg("a"), msg("b"), msg("c", { pending: true, content: "旧" })]
     const out = applyMessagesResponse(local, res([msg("c", { content: "新" }), msg("d")]), "b", true)

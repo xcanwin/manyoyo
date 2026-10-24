@@ -90,7 +90,14 @@ function sameMessage(a: ChatMessage, b: ChatMessage): boolean {
     // 本地有完整 trace、服务端给的是同一条的截断版：算同一份，保留本地的（展开中的内容不回退成“…”）
     (a.traceTruncated === b.traceTruncated || (!a.traceTruncated && b.traceTruncated === true)) &&
     a.clientMessageId === b.clientMessageId &&
-    (a.traceEvents?.length ?? 0) === (b.traceEvents?.length ?? 0)
+    (a.traceEvents?.length ?? 0) === (b.traceEvents?.length ?? 0) &&
+    // 这些字段会在原消息上就地改（如一轮结束后写回快照），漏比较就要刷新页面才生效
+    a.snapBefore === b.snapBefore &&
+    a.snapAfter === b.snapAfter &&
+    a.snapSkipped === b.snapSkipped &&
+    (a.images ?? []).join("\n") === (b.images ?? []).join("\n") &&
+    a.networkDenied?.host === b.networkDenied?.host &&
+    a.networkDenied?.model === b.networkDenied?.model
   )
 }
 

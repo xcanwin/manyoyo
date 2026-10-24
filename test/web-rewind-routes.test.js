@@ -240,21 +240,12 @@ describe('按轮快照、按轮改动、回退、隐藏', () => {
         });
     }, 60000);
 
-    test('隐藏这一组：用户消息、执行过程、回复都带 hidden，可取消；换新 epoch', async () => {
+    test('“从页面隐藏”已去掉：登录后请求原来的隐藏接口得到 404', async () => {
         await withServer(async ctx => {
             await threeRounds(ctx);
             const [, second] = await ctx.users();
-            const before = (await ctx.call('GET', '/api/sessions/demo/messages')).json.epoch;
-            expect((await ctx.call('POST', '/api/sessions/demo/messages/hide', { messageId: second.id })).json).toMatchObject({ ok: true, count: 3 });
-            const hidden = (await ctx.messages()).filter(m => m.hidden === true);
-            expect(hidden).toHaveLength(3);
-            expect(hidden[0].id).toBe(second.id);
-            expect(hidden.map(m => m.role)).toEqual(['user', 'assistant', 'assistant']);
-            const after = (await ctx.call('GET', '/api/sessions/demo/messages')).json.epoch;
-            expect(after).not.toBe(before);
-            await ctx.call('POST', '/api/sessions/demo/messages/hide', { messageId: second.id, hidden: false });
+            expect((await ctx.call('POST', '/api/sessions/demo/messages/hide', { messageId: second.id })).status).toBe(404);
             expect((await ctx.messages()).some(m => m.hidden)).toBe(false);
-            expect((await ctx.call('POST', '/api/sessions/demo/messages/hide', { messageId: 'nope' })).status).toBe(404);
         });
     }, 60000);
 
@@ -266,8 +257,7 @@ describe('按轮快照、按轮改动、回退、隐藏', () => {
                 ['GET', `/api/sessions/demo/git/rounds/changes?from=${from}&to=${from}`],
                 ['GET', `/api/sessions/demo/git/rounds/diff?from=${from}&to=${from}&path=a`],
                 ['POST', '/api/sessions/demo/rewind/preview'],
-                ['POST', '/api/sessions/demo/rewind'],
-                ['POST', '/api/sessions/demo/messages/hide']
+                ['POST', '/api/sessions/demo/rewind']
             ]) {
                 expect((await anon(method, p)).status).toBe(401);
             }
