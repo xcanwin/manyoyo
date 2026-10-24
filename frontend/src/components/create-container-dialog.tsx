@@ -538,14 +538,15 @@ export function CreateContainerDialog({
                   onEnabledChange={(value) => setField("systemPromptEnabled", value)}
                 />
               </SectionToggle>
-
-              {error ? (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              ) : null}
             </FieldGroup>
           </div>
+
+          {/* 错误放在滚动区外、按钮上方：表单很长时放在最底下用户根本看不到 */}
+          {error ? (
+            <Alert variant="destructive" className="shrink-0" role="alert">
+              <AlertDescription className="break-words">{error}</AlertDescription>
+            </Alert>
+          ) : null}
 
           <DialogFooter className="shrink-0">
             <Button
