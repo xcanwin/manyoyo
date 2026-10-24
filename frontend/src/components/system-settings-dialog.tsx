@@ -10,6 +10,7 @@ import { DoctorPanel } from "@/components/doctor-panel"
 import { MirrorPanel } from "@/components/mirror-panel"
 import { QuickChatSettingsView } from "@/components/quick-chat-settings-view"
 import { AgentInstructionsPanel } from "@/components/agent-instructions-panel"
+import { BasicSettings } from "@/components/basic-settings"
 import { isNotifyEnabled, notificationSupported, setNotifyEnabled } from "@/lib/attention"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useTheme } from "@/components/theme-provider"
@@ -39,7 +40,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { apiErrorData, apiGet, apiPut } from "@/lib/api"
 import { rebaseLeafEdits, type LeafEdit } from "@/lib/config-rebase"
 import { configLabel } from "@/lib/config-labels"
-import { applyTextReplacements, findValueRangeByPath } from "@/lib/json5-path-edit"
+import { applyTextReplacements, findValueRangeByPath, upsertTopLevelValue } from "@/lib/json5-path-edit"
 
 // 与后端 SENSITIVE_CONFIG_KEY_PATTERN（lib/web/server.js）保持一致，
 // 命中的字段一律当密钥处理：不回显真实值，留空即视为不修改
@@ -496,7 +497,11 @@ export function SystemSettingsDialog({
     editsRef.current = [...editsRef.current, { path: fieldPath, valueText }]
     setRaw((prevRaw) => {
       const range = findValueRangeByPath(prevRaw, fieldPath)
-      if (!range) return prevRaw
+      if (!range) {
+        // 配置里原来没有的顶层字段（基础分类里新填的）：加进去；留空不用加
+        if (fieldPath.length === 1 && valueText !== '""') return upsertTopLevelValue(prevRaw, fieldPath[0], valueText)
+        return prevRaw
+      }
       return applyTextReplacements(prevRaw, [{ start: range.start, end: range.end, text: valueText }])
     })
     setLiveParsed((prev) => setAtPath(prev, fieldPath, jsValue) as Record<string, unknown>)
@@ -706,6 +711,8 @@ export function SystemSettingsDialog({
                       </FieldGroup>
                     ) : category.id === "runs" ? (
                       <RunsCategoryFields key={formVersion} liveParsed={liveParsed} onCommit={handleLeafCommit} />
+                    ) : category.id === "basic" ? (
+                      <BasicSettings key={formVersion} liveParsed={liveParsed} onCommit={handleLeafCommit} />
                     ) : category.id === "capacity" ? (
                       <CapacityEstimateView />
                     ) : category.id === "mirrors" ? (

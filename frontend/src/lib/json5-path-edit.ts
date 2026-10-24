@@ -217,3 +217,17 @@ export function applyTextReplacements(text: string, replacements: TextReplacemen
     .sort((a, b) => b.start - a.start)
     .reduce((result, item) => `${result.slice(0, item.start)}${item.text}${result.slice(item.end)}`, text)
 }
+
+// 顶层属性不存在时新增一项（插在根对象开头，注释和已有内容原样保留）；已存在就替换它的值。
+// 配置文件还是空的就生成一个只有这一项的对象。valueText 必须是合法的 JSON 字面量。
+export function upsertTopLevelValue(text: string, key: string, valueText: string): string {
+  const existing = findValueRangeByPath(text, [key])
+  if (existing) return applyTextReplacements(text, [{ start: existing.start, end: existing.end, text: valueText }])
+  const entry = `${JSON.stringify(key)}: ${valueText}`
+  if (!text.trim()) return `{\n    ${entry}\n}\n`
+  const objectStart = findRootObjectStart(text)
+  if (objectStart === -1) return text
+  const next = text[skipTrivia(text, objectStart + 1)]
+  const insertion = `\n    ${entry}${next === "}" ? "" : ","}`
+  return `${text.slice(0, objectStart + 1)}${insertion}${text.slice(objectStart + 1)}`
+}

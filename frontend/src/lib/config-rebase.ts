@@ -1,4 +1,4 @@
-import { applyTextReplacements, findValueRangeByPath } from "./json5-path-edit"
+import { applyTextReplacements, findValueRangeByPath, upsertTopLevelValue } from "./json5-path-edit"
 
 export type LeafEdit = { path: string[]; valueText: string }
 
@@ -20,11 +20,19 @@ export function rebaseLeafEdits(
   const replacements: Array<{ start: number; end: number; text: string }> = []
   const missing: string[] = []
   const overridden: string[] = []
+  const added: LeafEdit[] = []
   for (const edit of latest.values()) {
     const label = edit.path.join(".")
     const range = findValueRangeByPath(freshRaw, edit.path)
     if (!range) {
-      missing.push(label)
+      // 打开时配置里就没有、是自己新填的顶层字段（基础分类里）：补上；
+      // 原来有、被别人删掉的，以及更深的路径，没法安全补，记为没保存
+      const existedAtOpen = baseRaw !== undefined && findValueRangeByPath(baseRaw, edit.path) !== null
+      if (edit.path.length === 1 && baseRaw !== undefined && !existedAtOpen) {
+        if (edit.valueText !== '""') added.push(edit)
+      } else {
+        missing.push(label)
+      }
       continue
     }
     if (baseRaw !== undefined) {
@@ -34,5 +42,7 @@ export function rebaseLeafEdits(
     }
     replacements.push({ start: range.start, end: range.end, text: edit.valueText })
   }
-  return { raw: applyTextReplacements(freshRaw, replacements), missing, overridden }
+  let raw = applyTextReplacements(freshRaw, replacements)
+  for (const edit of added) raw = upsertTopLevelValue(raw, edit.path[0], edit.valueText)
+  return { raw, missing, overridden }
 }

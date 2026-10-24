@@ -100,6 +100,7 @@ class FakeServer {
       this.setQuickChat(body.run)
       return { status: 200, body: { saved: true } }
     }
+    if (url === "/api/images") return { status: 200, body: { defaults: { imageName: "ghcr.io/xcanwin/manyoyo", imageVersion: "2.3.0-common" }, images: [] } }
     if (url === "/api/setup/status") return { status: 200, body: { mirrors: this.mirrors } }
     if (url === "/api/setup/agents") return { status: 200, body: { agents: [], mirrorPresets: { apt: [], npm: [{ label: "npmmirror", value: "https://registry.npmmirror.com/" }], pip: [] } } }
     if (url === "/api/setup/mirrors" && method === "POST") {
@@ -239,6 +240,32 @@ describe("系统设置：保存不覆盖别人的修改", () => {
     await click(saveOuter())
     expect(server.raw).toContain('hostPath: "/work/mine"')
     expect(server.raw).toContain('run: "claude-ds"')
+  })
+
+  test("⑩ 基础：配置里没有 imageName 也能填，保存后写进文件（注释保留）；没填的字段不会被写成空串", async () => {
+    install("{\n    // 用户的注释\n    runs: { claude: { yolo: \"c\" } },\n}")
+    await openDialog()
+    await openCategory("基础")
+    expect(document.body.textContent).not.toContain("暂无内容")
+    await typeInto(q("#config-field-imageName") as HTMLInputElement, "my/sandbox")
+    await typeInto(q("#config-field-imageVersion") as HTMLInputElement, "1.0.0-full")
+    await click(saveOuter())
+    expect(server.raw).toContain('"imageName": "my/sandbox"')
+    expect(server.raw).toContain('"imageVersion": "1.0.0-full"')
+    expect(server.raw).toContain("// 用户的注释")
+    expect(server.raw).not.toContain("hostPath")
+    expect(server.raw).not.toContain("containerName")
+  })
+
+  test("⑪ 基础：新填的字段在保存时遇到外部修改，仍然保存下来", async () => {
+    install(BASE_RAW)
+    await openDialog()
+    await openCategory("基础")
+    await typeInto(q("#config-field-imageName") as HTMLInputElement, "my/sandbox")
+    server.external('"/work/a"', '"/work/external"')
+    await click(saveOuter())
+    expect(server.raw).toContain('"imageName": "my/sandbox"')
+    expect(server.raw).toContain('hostPath: "/work/external"')
   })
 
   test("④ 弹窗开着时外部改了文件：点保存自动在最新内容上重放，两边的修改都在，并给出提示", async () => {
