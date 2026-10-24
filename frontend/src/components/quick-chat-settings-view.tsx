@@ -49,11 +49,17 @@ export function QuickChatSettingsView({ onSaved }: { onSaved?: () => void } = {}
       ) : (
         <div className="rounded-lg border px-4">
           <div className="flex items-center justify-between border-b py-2 text-sm last:border-b-0">
-            <span className="text-muted-foreground">工作目录</span>
+            <span className="flex items-baseline gap-2 text-muted-foreground">
+              工作目录
+              <span className="font-mono text-xs">quickChatPath</span>
+            </span>
             <span className="font-medium">{path || "未设置"}</span>
           </div>
           <div className="flex items-center justify-between py-2 text-sm">
-            <span className="text-muted-foreground">run</span>
+            <span className="flex items-baseline gap-2 text-muted-foreground">
+              运行配置
+              <span className="font-mono text-xs">run</span>
+            </span>
             <span className="font-medium">{run || "未设置"}</span>
           </div>
         </div>

@@ -75,7 +75,7 @@ export function QuickChatSetupDialog({
       return
     }
     if (!run) {
-      setError("请选择一个 run")
+      setError("请选择一个运行配置")
       return
     }
     setSaving(true)
@@ -103,7 +103,10 @@ export function QuickChatSetupDialog({
         </DialogHeader>
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor="quick-chat-path">工作目录</FieldLabel>
+            <FieldLabel htmlFor="quick-chat-path">
+              工作目录
+              <span className="font-mono text-xs font-normal text-muted-foreground">quickChatPath</span>
+            </FieldLabel>
             <div className="flex gap-2">
               <Input
                 id="quick-chat-path"
@@ -117,10 +120,13 @@ export function QuickChatSetupDialog({
             </div>
           </Field>
           <Field>
-            <FieldLabel htmlFor="quick-chat-run">run</FieldLabel>
+            <FieldLabel htmlFor="quick-chat-run">
+              运行配置
+              <span className="font-mono text-xs font-normal text-muted-foreground">run</span>
+            </FieldLabel>
             <Select value={run} onValueChange={(value) => setRun(value ?? "")}>
               <SelectTrigger id="quick-chat-run" className="w-full">
-                <SelectValue placeholder="选择一个 run" />
+                <SelectValue placeholder="选择一个运行配置" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
