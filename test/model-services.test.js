@@ -7,7 +7,9 @@ const {
     buildNewService,
     buildReuseService,
     buildServiceEdit,
-    applyConfigOps
+    applyConfigOps,
+    assertOpsApplied,
+    keyTail
 } = require('../lib/model-services');
 
 const GLM_KEY = 'glm-secret-key-aaaa1111';
@@ -165,5 +167,36 @@ describe('buildServiceEdit + applyConfigOps', () => {
 
     test('找不到的服务报错', () => {
         expect(() => buildServiceEdit(config, 'nope', { key: 'k-123456' })).toThrow(/找不到/);
+    });
+});
+
+describe('审查发现的边角', () => {
+    test('不存在或不是对象的运行配置不会被名字前缀认成服务，编辑报“找不到”而不是崩', () => {
+        const odd = { runs: { 'claude-null': null, 'claude-str': 'x', real: config.runs.mine } };
+        expect(listModelServices(odd).map(item => item.name)).toEqual(['real']);
+        expect(() => buildServiceEdit(config, 'claude-x', { key: 'k-123456' })).toThrow(/找不到/);
+    });
+
+    test('Codex 编辑时清空模型会让“有地址没模型”，拒绝；只换 Key 不受影响', () => {
+        const codex = { runs: { 'codex-x': { yolo: 'cx', env: { OPENAI_API_KEY: 'k-123456789012', OPENAI_BASE_URL: 'https://x.test/v1', OPENAI_MODEL: 'm1' } } } };
+        expect(() => buildServiceEdit(codex, 'codex-x', { model: '' })).toThrow(/模型/);
+        expect(buildServiceEdit(codex, 'codex-x', { model: 'm2' }).ops).toHaveLength(1);
+        // 老配置本来就没写模型：只换 Key 不被拦
+        delete codex.runs['codex-x'].env.OPENAI_MODEL;
+        expect(buildServiceEdit(codex, 'codex-x', { key: 'k-new-123456789' }).ops).toHaveLength(1);
+    });
+
+    test('太短的 Key 不显示末 4 位', () => {
+        expect(keyTail('12345678')).toBe('…');
+        expect(keyTail('123456789012')).toBe('…9012');
+        expect(keyTail('')).toBe('');
+    });
+
+    test('写盘前核对：键名带转义时局部替换改不到，报错而不是回报成功', () => {
+        const raw = '{ runs: { "a\\"b": { yolo: "c", env: { ANTHROPIC_AUTH_TOKEN: "k" } } } }';
+        const ops = [{ type: 'remove', path: ['runs', 'a"b'] }];
+        expect(() => assertOpsApplied(applyConfigOps(raw, ops), ops)).toThrow(/没能删除/);
+        const ok = [{ type: 'set', path: ['runs', 'new'], value: { yolo: 'c' } }];
+        expect(() => assertOpsApplied(applyConfigOps(RAW, ok), ok)).not.toThrow();
     });
 });

@@ -41,6 +41,22 @@ describe('容器里的 env 同步', () => {
         expect(state.readEnv(home, c.id).text).toBe('X=1\n');
     });
 
+    test('同一个 Key 用在别的地址上的容器不算（Claude 和 Codex、或两个模型共用 Key 时不误伤）', () => {
+        const a = make('a', 'OPENAI_API_KEY=k1\nOPENAI_BASE_URL=https://api.deepseek.com\n');
+        const b = make('b', 'OPENAI_API_KEY=k1\nOPENAI_BASE_URL=https://open.bigmodel.cn/api/v1\n');
+        const c = make('c', 'OPENAI_API_KEY=k1\n');
+        const using = findUsingContainers({ homeDir: home, containers: [a, b, c], keyEnv: 'OPENAI_API_KEY', keyValue: 'k1', baseUrlKey: 'OPENAI_BASE_URL', baseUrl: 'https://api.deepseek.com' });
+        expect(using.map(item => item.name)).toEqual(['a']);
+        // 服务没有地址（官方）就只看 Key
+        expect(findUsingContainers({ homeDir: home, containers: [a, b, c], keyEnv: 'OPENAI_API_KEY', keyValue: 'k1', baseUrlKey: 'OPENAI_BASE_URL', baseUrl: '' })).toHaveLength(3);
+    });
+
+    test('某个容器写不进去只跳过它，不抛错', () => {
+        const a = make('a', 'K=old\n');
+        const broken = { name: 'broken', id: 'ffffffffffffffff' };
+        expect(applyToContainers({ homeDir: home, targets: [broken, a], set: { K: 'new' }, remove: [] })).toEqual(['a']);
+    });
+
     test('没有 Key 或没有状态目录的容器不算在用', () => {
         expect(findUsingContainers({ homeDir: home, containers: [{ name: 'x', id: '0123456789abcdef' }], keyEnv: 'K', keyValue: 'v' })).toEqual([]);
         expect(findUsingContainers({ homeDir: home, containers: [], keyEnv: 'K', keyValue: '' })).toEqual([]);

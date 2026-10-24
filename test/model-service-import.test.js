@@ -76,6 +76,16 @@ describe('从本机导入', () => {
         expect(() => buildImportRuns(config, candidates, ['gemini'])).toThrow(/没有可导入/);
     });
 
+    test('Codex 有地址没模型的本机配置不能导入；ids 重复只建一条', () => {
+        write('.codex/auth.json', JSON.stringify({ OPENAI_API_KEY: CODEX_KEY }));
+        write('.codex/config.toml', 'openai_base_url = "https://api.deepseek.com"\n');
+        let candidates = scanLocalServices(home, {});
+        expect(toPreview(candidates)[0].invalid).toMatch(/模型/);
+        write('.codex/config.toml', 'model = "deepseek-flash"\nopenai_base_url = "https://api.deepseek.com"\n');
+        candidates = scanLocalServices(home, {});
+        expect(buildImportRuns({}, candidates, ['codex', 'codex']).map(item => item.name)).toEqual(['codex-deepseek']);
+    });
+
     test('值里有不允许的字符的不能导入', () => {
         write('.claude/settings.json', JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: 'a;b' } }));
         const candidates = scanLocalServices(home, {});

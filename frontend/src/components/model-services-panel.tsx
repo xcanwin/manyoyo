@@ -367,8 +367,9 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
           <DialogHeader>
             <DialogTitle>删除模型服务</DialogTitle>
             <DialogDescription>
-              只删除这项配置“{deleting?.name}
-              ”，已有容器不受影响（它们创建时已经带上了 Key）。
+              会删除运行配置“{deleting?.name}
+              ”的全部内容（包括你手写在里面的挂载目录等其它设置）。已有容器不受影响，它们创建时已经带上了
+              Key。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

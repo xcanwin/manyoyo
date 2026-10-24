@@ -6411,7 +6411,9 @@ exit 1
                     return { name, id: created.id };
                 };
                 const list = [
-                    create('uses-ds', `ANTHROPIC_AUTH_TOKEN=${DS}\nKEEP=1\n`),
+                    create('uses-ds', `ANTHROPIC_AUTH_TOKEN=${DS}\nANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\nKEEP=1\n`),
+                    // 同一个 Key 但地址不同：不是这个服务的容器，不能误伤
+                    create('same-key-other-url', `ANTHROPIC_AUTH_TOKEN=${DS}\nANTHROPIC_BASE_URL=https://elsewhere.test\n`),
                     create('uses-other', 'ANTHROPIC_AUTH_TOKEN=somebody-elses-key\n')
                 ];
                 return { networkManager: { ...fakeNetworkManager(), listManaged: async () => list } };
@@ -6429,12 +6431,13 @@ exit 1
                 res = await call('PUT', '/api/model-services/claude-ds', { key: 'ds-new-key-9999', syncContainers: true });
                 expect(res.json.updatedContainers).toEqual([]);
                 // 容器里还是最早的 DS（不等于 mid），所以不算在用，不会被误改
-                expect(containerState.readEnv(tempHost, made['uses-ds']).text).toBe(`ANTHROPIC_AUTH_TOKEN=${DS}\nKEEP=1\n`);
+                expect(containerState.readEnv(tempHost, made['uses-ds']).text).toBe(`ANTHROPIC_AUTH_TOKEN=${DS}\nANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\nKEEP=1\n`);
 
                 fs.writeFileSync(configPath, RAW);
                 res = await call('PUT', '/api/model-services/claude-ds', { key: 'ds-new-key-9999', syncContainers: true });
                 expect(res.json.updatedContainers).toEqual(['uses-ds']);
-                expect(containerState.readEnv(tempHost, made['uses-ds']).text).toBe('ANTHROPIC_AUTH_TOKEN=ds-new-key-9999\nKEEP=1\n');
+                expect(containerState.readEnv(tempHost, made['uses-ds']).text).toBe('ANTHROPIC_AUTH_TOKEN=ds-new-key-9999\nANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\nKEEP=1\n');
+                expect(containerState.readEnv(tempHost, made['same-key-other-url']).text).toBe(`ANTHROPIC_AUTH_TOKEN=${DS}\nANTHROPIC_BASE_URL=https://elsewhere.test\n`);
                 expect(containerState.readEnv(tempHost, made['uses-other']).text).toBe('ANTHROPIC_AUTH_TOKEN=somebody-elses-key\n');
                 expect(res.text).not.toContain('ds-new-key-9999');
             });
@@ -6486,6 +6489,8 @@ exit 1
                     ['POST', '/api/model-services', { agent: 'codex', providerId: 'aliyun', key: 'k-123456' }],
                     ['POST', '/api/model-services', { reuseFrom: 'nope', agent: 'codex' }],
                     ['PUT', '/api/model-services/nope', { key: 'k-123456' }],
+                    // 名字前缀像 Agent、但运行配置并不存在：报“找不到”，不是内部错误
+                    ['PUT', '/api/model-services/claude-x', { key: 'k-123456' }],
                     ['DELETE', '/api/model-services/nope', undefined]
                 ]) {
                     const res = await call(method, route, body);

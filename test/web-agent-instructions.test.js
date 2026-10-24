@@ -187,6 +187,17 @@ describe('Codex 兼容服务：OPENAI_BASE_URL 要变成自定义 model_provider
         expect(resumed).toContain('exec resume');
     });
 
+    // 提示词和系统说明里的字不能让注入失效（以前对渲染好的整条命令做“有没有写过”的判断）
+    test('提示词或系统说明里写了 model_provider / --model / openai_base_url 也照常注入', () => {
+        const prompt = 'explain model_provider and openai_base_url, git commit -m x --model y model=z';
+        const command = buildWebAgentExecCommand('codex exec --skip-git-repo-check {prompt}', prompt, 'codex', {
+            instructions: 'mention model_provider, openai_base_url, --model and model=x here'
+        });
+        expect(command).toContain('model_providers.manyoyo.env_key=OPENAI_API_KEY');
+        expect(command).toContain('${OPENAI_MODEL:+--model "$OPENAI_MODEL"}');
+        expect(command).toContain(`'${prompt}'`);
+    });
+
     // codex 不允许 --model 出现两次：会话里选了模型就以它为准，不再追加环境变量里的
     test('会话里选了模型时只有一个 --model', () => {
         const picked = buildWebAgentExecCommand('codex exec --skip-git-repo-check {prompt}', 'hi', 'codex', { model: 'picked-model' });
