@@ -56,6 +56,14 @@ describe('release-verify workflow', () => {
         expect(job).toContain('--rm-on-exit');
     });
 
+    test('the upgrade job also handles a split previous .run (picks files from SHA256SUMS, runs volume 1)', () => {
+        const upgrade = text.slice(text.indexOf('Install the previous release'));
+        // 8.6.12 起 macOS arm64 的完整包也分卷了，按固定的 `.run` 文件名下载会 404（8.7.0 发布后验证因此失败）
+        expect(upgrade).not.toMatch(/run_file="manyoyo-\$\{pver\}-[^"]*\.run"/);
+        expect(upgrade).toContain('\\.run(\\.[0-9]{3})?$');
+        expect(upgrade).toContain('run_file="$(printf \'%s\\n\' "$files" | head -n 1)"');
+    });
+
     test('every download retries transient network errors', () => {
         const curls = text.split('\n').filter(line => /\bcurl\b/.test(line) && !line.trim().startsWith('#'));
         expect(curls.length).toBeGreaterThanOrEqual(4);

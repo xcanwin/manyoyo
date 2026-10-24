@@ -183,10 +183,14 @@ jobs:
           pver="${prev#v}"
           echo "上一个版本: ${prev}，升级到 ${TAG}"
           mkdir -p "$RUNNER_TEMP/up" && cd "$RUNNER_TEMP/up"
-          run_file="manyoyo-${pver}-${{ matrix.os }}-${{ matrix.arch }}.run"
-          curl -sSL -f --retry 3 --retry-all-errors -O "${repo}/releases/download/${prev}/${run_file}"
           curl -sSL -f --retry 3 --retry-all-errors -O "${repo}/releases/download/${prev}/SHA256SUMS"
-          grep -q "$(if [ "${{ matrix.os }}" = macos ]; then shasum -a 256 "$run_file"; else sha256sum "$run_file"; fi | cut -d' ' -f1)  ${run_file}" SHA256SUMS
+          # 上一版本的完整包可能分卷（.run.001/.002…，8.6.12 起 macOS arm64 也超过 2 GiB）：按 SHA256SUMS 里的文件名下载并逐卷校验，对第 1 卷执行
+          files="$(awk '{print $2}' SHA256SUMS | grep -E "^manyoyo-${pver}-${{ matrix.os }}-${{ matrix.arch }}\.run(\.[0-9]{3})?$")"
+          for f in $files; do
+            curl -sSL -f --retry 3 --retry-all-errors -O "${repo}/releases/download/${prev}/${f}"
+            grep -q "$(if [ "${{ matrix.os }}" = macos ]; then shasum -a 256 "$f"; else sha256sum "$f"; fi | cut -d' ' -f1)  ${f}" SHA256SUMS
+          done
+          run_file="$(printf '%s\n' "$files" | head -n 1)"
           export HOME="$RUNNER_TEMP/home"
           mkdir -p "$HOME"
           if [ "${{ matrix.os }}" = macos ]; then
