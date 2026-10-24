@@ -613,7 +613,8 @@ async function request(url: string, options: RequestInit = {}) {
     data = {}
   }
   if (!response.ok) {
-    const error = typeof data.error === "string" ? data.error : `请求失败 (${response.status})`
+    const fallback = response.status === 413 ? "内容太大，被前面的代理拦住了（nginx 需调大 client_max_body_size）" : `请求失败 (${response.status})`
+    const error = typeof data.error === "string" ? data.error : fallback
     const detail = typeof data.detail === "string" ? data.detail : ""
     throw Object.assign(new Error(detail ? `${error}: ${detail}` : error), { status: response.status, data })
   }
@@ -628,42 +629,8 @@ export function apiErrorData(error: unknown): { status: number; data: Record<str
 
 export const apiGet = (url: string, signal?: AbortSignal) => request(url, signal ? { signal } : {})
 // 上传图片：原始请求体（不是 JSON），Content-Type 用图片自己的类型
-// TODO(临时): 手机上传失败排查用，弹窗打印完整报错，查完整段删除并换回 request
-export const apiUploadImage = async (url: string, file: File) => {
-  let status = 0
-  let headers = ""
-  let text = ""
-  try {
-    const response = await fetch(url, { method: "POST", body: file, headers: { "Content-Type": file.type, "X-Requested-With": "XMLHttpRequest" } })
-    status = response.status
-    headers = Array.from(response.headers.entries()).map(([k, v]) => `${k}: ${v}`).join("\n")
-    text = await response.text()
-    if (status === 401) {
-      window.location.href = "/auth/login"
-      throw new Error("未登录或登录已过期")
-    }
-    if (response.ok) return JSON.parse(text) as Record<string, unknown>
-  } catch (error) {
-    text = text || String(error)
-  }
-  const report = [
-    `url: ${url}`,
-    `page: ${window.location.href}`,
-    `file: name=${file.name} type=${file.type} size=${file.size}`,
-    `status: ${status}`,
-    `response headers:\n${headers}`,
-    `response body:\n${text.slice(0, 1500)}`,
-    `ua: ${navigator.userAgent}`,
-  ].join("\n")
-  window.prompt("上传失败，请全选复制发给开发者", report)
-  let message = ""
-  try {
-    message = (JSON.parse(text) as { error?: string }).error || ""
-  } catch {
-    // 非 JSON
-  }
-  throw new Error(message || `请求失败 (${status || "网络错误"})`)
-}
+export const apiUploadImage = (url: string, file: File) =>
+  request(url, { method: "POST", body: file, headers: { "Content-Type": file.type } })
 export const apiPost = (url: string, body?: unknown) =>
   request(url, { method: "POST", body: body === undefined ? "{}" : JSON.stringify(body) })
 export const apiPut = (url: string, body?: unknown, headers?: Record<string, string>) =>
