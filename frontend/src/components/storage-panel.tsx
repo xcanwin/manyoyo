@@ -2,7 +2,6 @@ import * as React from "react"
 import { FolderOpenIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { StorageBrowserDialog } from "@/components/storage-browser-dialog"
@@ -24,11 +23,6 @@ type StorageRow = {
 type DeletedHistory = { name: string; bytes: number; updatedAt: string }
 type SizeState = { bytes?: number; timedOut?: boolean; error?: boolean } | "loading" | undefined
 
-const STATUS_LABEL: Record<RowStatus, string> = {
-  "in-use": "使用中",
-  "history-only": "容器已删除",
-  unused: "无人使用",
-}
 const SESSION_STATE_LABEL: Record<SessionState, string> = { running: "运行中", stopped: "已停止", deleted: "已删除" }
 const SIZE_CONCURRENCY = 2
 type Filter = "all" | "empty"
@@ -76,7 +70,7 @@ export function StoragePanel() {
       setHistories(data.deletedHistories || [])
       setSizes({})
       // 工作目录自动算体积（两个一组，du 很慢时不把磁盘打满）；你自己的项目目录点了再算
-      const queue = list.filter((row) => row.managed).map((row) => row.path)
+      const queue = list.filter((row) => row.managed && !row.empty).map((row) => row.path)
       const worker = async () => {
         for (let path = queue.shift(); path !== undefined; path = queue.shift()) {
           if (round !== generation.current) return
@@ -190,11 +184,10 @@ export function StoragePanel() {
         <span className="ml-auto text-xs text-muted-foreground">{`已算出的体积合计 ${formatBytes(known)}`}</span>
       </div>
       <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full min-w-[56rem] border-collapse text-sm">
+        <table className="w-full min-w-[48rem] border-collapse text-sm">
           <thead className="border-b bg-muted/50">
             <tr>
               <th className={TH}>宿主机目录</th>
-              <th className={TH}>状态</th>
               <th className={TH}>关联会话</th>
               <th className={TH}>修改时间</th>
               <th className={`${TH} text-right`}>体积</th>
@@ -204,7 +197,7 @@ export function StoragePanel() {
           <tbody>
             {shown.length === 0 ? (
               <tr>
-                <td className={`${TD} text-muted-foreground`} colSpan={6}>
+                <td className={`${TD} text-muted-foreground`} colSpan={5}>
                   {error ? "" : filter === "empty" ? "没有符合条件的目录。" : "没有工作目录。"}
                 </td>
               </tr>
@@ -215,11 +208,7 @@ export function StoragePanel() {
                   {row.path}
                   {row.managed ? "" : <span className="ml-2 font-sans text-xs text-muted-foreground">非 MANYOYO 工作目录</span>}
                 </td>
-                <td className={`${TD} whitespace-nowrap`}>
-                  <Badge variant={row.status === "in-use" ? "default" : "secondary"}>{STATUS_LABEL[row.status]}</Badge>
-                  {row.empty ? <span className="ml-2 text-xs text-muted-foreground">空目录</span> : null}
-                </td>
-                <td className={`${TD} text-muted-foreground`}>
+                <td className={TD}>
                   {row.sessions.length
                     ? row.sessions.map((session) => (
                         <div key={session.name}>{`${session.name}（${SESSION_STATE_LABEL[session.state]}）`}</div>
@@ -228,7 +217,9 @@ export function StoragePanel() {
                 </td>
                 <td className={`${TD} whitespace-nowrap text-muted-foreground`}>{formatDateTime(row.mtimeMs)}</td>
                 <td className={`${TD} text-right whitespace-nowrap tabular-nums`}>
-                  {sizes[row.path] === undefined && !row.managed ? (
+                  {row.empty ? (
+                    <span className="text-muted-foreground">空目录</span>
+                  ) : sizes[row.path] === undefined && !row.managed ? (
                     <Button variant="ghost" size="xs" onClick={() => void loadSize(row.path, generation.current)}>
                       计算体积
                     </Button>
