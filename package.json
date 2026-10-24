@@ -2,9 +2,9 @@
     "name": "@xcanwin/manyoyo",
     "version": "8.6.11",
     "imageVersion": "2.3.0-common",
-    "playwrightCliVersion": "0.1.19",
-    "patchrightCoreVersion": "1.63.0",
-    "patchrightCoreIntegrity": "sha512-nuRJVTMVKoOFzY8vmwFqJZR3F0trUCKiPzDSgCOPq/yHHTefm9czILV23dXJsi5mvS7sCy7U1CqG7edA/21DtQ==",
+    "playwrightCliVersion": "0.1.22",
+    "patchrightCoreVersion": "1.64.1",
+    "patchrightCoreIntegrity": "sha512-nUWuqaaUVd60qepdDPv+i5g257F8jywbzn7aKV8fPRur4dmkFLxYV/xus8f69gKAB7+S/zfdYe0zA3mJkO6+0w==",
     "description": "MANYOYO（慢悠悠）– open-source AI coding agent sandbox: run Claude Code, Codex, Gemini CLI and OpenCode in YOLO mode safely inside Docker/Podman",
     "keywords": [
         "manyoyo",
@@ -73,7 +73,7 @@
     "dependencies": {
         "commander": "^15.0.0",
         "json5": "^2.2.3",
-        "patchright-core": "1.63.0",
+        "patchright-core": "1.64.1",
         "ws": "^8.21.3"
     },
     "devDependencies": {

@@ -50,7 +50,7 @@ manyoyo playwright logs     # 浏览器服务日志
 
 ## 宿主机上的 Agent 与 MCP
 
-- 宿主机上的 Agent 想用同一个浏览器：`up` 的输出末尾有一行 `PLAYWRIGHT_MCP_CONFIG=~/.manyoyo/plugin/playwright/host.json claude`，宿主机需安装**钉版本**的 CLI：`npm i -g @playwright/cli@0.1.19`（容器内客户端与宿主机浏览器服务要求 minor 版本完全一致，装别的版本会报 `428 Playwright version mismatch`；版本以 `package.json` 的 `playwrightCliVersion` 为准）。
+- 宿主机上的 Agent 想用同一个浏览器：`up` 的输出末尾有一行 `PLAYWRIGHT_MCP_CONFIG=~/.manyoyo/plugin/playwright/host.json claude`，宿主机需安装**钉版本**的 CLI：`npm i -g @playwright/cli@0.1.22`（容器内客户端与宿主机浏览器服务要求 minor 版本完全一致，装别的版本会报 `428 Playwright version mismatch`；版本以 `package.json` 的 `playwrightCliVersion` 为准）。
 - 想用 MCP 而不是 `playwright-cli`：`manyoyo playwright mcp-add` 打印在容器内注册命令（stdio，自动跟随当前模式，注册一次即可）。
 
 ## 反检测与已知限制

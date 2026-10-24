@@ -50,7 +50,7 @@ manyoyo playwright logs     # browser service logs
 
 ## Host-side agents and MCP
 
-- To let an agent on the host use the same browser, the end of the `up` output has a line like `PLAYWRIGHT_MCP_CONFIG=~/.manyoyo/plugin/playwright/host.json claude`; the host needs the **pinned** CLI: `npm i -g @playwright/cli@0.1.19` (the in-container client and the host browser service must have exactly the same minor version, otherwise you get `428 Playwright version mismatch`; the version is `playwrightCliVersion` in `package.json`).
+- To let an agent on the host use the same browser, the end of the `up` output has a line like `PLAYWRIGHT_MCP_CONFIG=~/.manyoyo/plugin/playwright/host.json claude`; the host needs the **pinned** CLI: `npm i -g @playwright/cli@0.1.22` (the in-container client and the host browser service must have exactly the same minor version, otherwise you get `428 Playwright version mismatch`; the version is `playwrightCliVersion` in `package.json`).
 - To use MCP instead of `playwright-cli`: `manyoyo playwright mcp-add` prints the in-container registration commands (stdio, follows the current mode automatically, register once).
 
 ## Anti-detection and known limits
