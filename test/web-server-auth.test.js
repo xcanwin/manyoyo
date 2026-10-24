@@ -2317,7 +2317,7 @@ process.exit(0);
                 body: JSON.stringify({ prompt: 'hello' })
             });
             expect(runRes.response.status).toBe(200);
-            expect(String(runRes.json.output || '')).toContain('codex exec --json');
+            expect(String(runRes.json.output || '')).toMatch(/codex exec .*--json/);
             expect(String(runRes.json.output || '')).not.toContain('--output-last-message');
             expect(String(runRes.json.output || '')).toContain("--skip-git-repo-check 'hello'");
 
@@ -3988,7 +3988,7 @@ process.exit(0);
                 expect.objectContaining({ type: 'meta', contextMode: 'first-turn' }),
                 expect.objectContaining({
                     type: 'result',
-                    output: expect.stringContaining("codex exec --json --skip-git-repo-check 'remember me'")
+                    output: expect.stringMatching(/codex exec .*--json --skip-git-repo-check 'remember me'/)
                 })
             ]));
             let persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
@@ -4005,8 +4005,9 @@ process.exit(0);
                 resumeAttempted: true,
                 resumeSucceeded: true
             }));
-            expect(stripAgentInstructions(turn2.json.output)).toContain(
-                `codex exec resume --json --skip-git-repo-check '${threadId}' 'what did I say'`
+            // 命令里还有一段由 shell 展开的 -c openai_base_url（codex 不认 OPENAI_BASE_URL 环境变量），所以不要求紧挨着
+            expect(stripAgentInstructions(turn2.json.output)).toMatch(
+                new RegExp(`codex exec resume .*--json --skip-git-repo-check '${threadId}' 'what did I say'`)
             );
             expect(turn2.json.output).not.toContain('以下是当前会话最近对话历史');
             persisted = JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'demo.json'), 'utf-8'));
