@@ -210,7 +210,7 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
           <thead className="border-b bg-muted/50">
             <tr>
               <th className={TH}>宿主机目录</th>
-              <th className={`${TH} text-right`}>占用</th>
+              <th className={TH}>占用</th>
               <th className={TH}>关联容器</th>
               <th className={TH}>修改时间</th>
             </tr>
@@ -244,7 +244,7 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
                     </Button>
                   </span>
                 </td>
-                <td className={`${TD} text-right whitespace-nowrap tabular-nums`}>
+                <td className={`${TD} whitespace-nowrap tabular-nums`}>
                   {row.empty ? (
                     <span className="text-muted-foreground">空目录</span>
                   ) : sizes[row.path] === undefined && !row.managed ? (
@@ -291,7 +291,7 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
             <thead className="border-b bg-muted/50">
               <tr>
                 <th className={TH}>容器</th>
-                <th className={`${TH} text-right`}>占用</th>
+                <th className={TH}>占用</th>
                 <th className={TH}>最后更新</th>
               </tr>
             </thead>
@@ -319,7 +319,7 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
                       <Trash2Icon />
                     </Button>
                   </td>
-                  <td className={`${TD} text-right whitespace-nowrap tabular-nums`}>{formatBytes(item.bytes)}</td>
+                  <td className={`${TD} whitespace-nowrap tabular-nums`}>{formatBytes(item.bytes)}</td>
                   <td className={`${TD} whitespace-nowrap text-muted-foreground`}>{formatDateTime(item.updatedAt)}</td>
                 </tr>
               ))}
