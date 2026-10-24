@@ -27,7 +27,7 @@ description: 一个配置文件、四层优先级和最小示例，几分钟搞�
 
 - `manyoyo run -r <name>` 读取 `runs.<name>`，只接受名称，不接受文件路径。
 - `envFile` 与 `--ef` 仅支持绝对路径。
-- `containerName` 支持 `{now}` 模板（展开为 `MMDD-HHmm`）。
+- `containerName`、`hostPath`、`containerPath` 支持模板：`{now}` 展开为 `年月日-时分秒`（如 `20261024-230915`），`{quickChatPath}` 展开为快捷对话目录（没设置就是 `~/.manyoyo/work`）。按模板生成的 `hostPath` 在真正创建容器时才会自动建。
 - 全部字段见[配置文件](./config-files.md)。
 
 ## 四层优先级

@@ -27,7 +27,7 @@ There is a single global config: `~/.manyoyo/manyoyo.json`, read automatically b
 
 - `manyoyo run -r <name>` reads `runs.<name>`; it takes a name, not a file path.
 - `envFile` and `--ef` accept absolute paths only.
-- `containerName` supports a `{now}` template (expands to `MMDD-HHmm`).
+- `containerName`, `hostPath` and `containerPath` support templates: `{now}` expands to `YYYYMMDD-HHmmss` (e.g. `20261024-230915`), and `{quickChatPath}` expands to the quick chat directory (`~/.manyoyo/work` if unset). A `hostPath` generated from a template is only created when the container is actually created.
 - All fields are listed in [Config files](./config-files.md).
 
 ## Four-layer priority

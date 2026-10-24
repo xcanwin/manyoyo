@@ -35,7 +35,7 @@ manyoyo run -r project-a
 }
 ```
 
-`containerName` supports the `{now}` template (expands to `MMDD-HHmm`).
+`containerName` supports the `{now}` template (expands to `YYYYMMDD-HHmmss`, e.g. `20261024-230915`).
 
 ## Choices on Exit
 

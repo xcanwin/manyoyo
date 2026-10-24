@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { apiGet, apiPost } from "@/lib/api"
-import { formatTimestampCompact } from "@/lib/format"
+import { expandTemplate, formatNow } from "@/lib/name-template"
 import { CLI_PROMPT_TEMPLATES, normalizeYolo } from "@/lib/agent-templates"
 import { DirectoryPickerDialog } from "@/components/directory-picker-dialog"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -184,6 +184,7 @@ export function CreateContainerDialog({
   const [pickerOpen, setPickerOpen] = React.useState(false)
   // 默认建议的工作目录（工作目录根/时间戳，和快捷对话一样）：只是预填，点“创建”时才真的建目录
   const [suggestedDir, setSuggestedDir] = React.useState("")
+  const [suggestedContainerPath, setSuggestedContainerPath] = React.useState("")
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
   const isAgentAvailable = useAgentAvailability(open)
 
@@ -202,19 +203,23 @@ export function CreateContainerDialog({
       const composed = await apiGet("/api/agent-instructions")
         .then((info) => String(info.composed || ""))
         .catch(() => "")
-      // 全局配置没写 hostPath 时，默认目录和容器名都像快捷对话那样按时间生成
+      // 默认值是模板（配置里写了就用配置的）：容器名 my-easy-{now}，宿主机目录与容器内目录 {quickChatPath}/{now}。
+      // 这里展开成具体值显示，同一次打开共用一个时间；目录在点“创建”时才建
       const suggestion = await apiGet("/api/system/new-container-defaults")
         .then((info) => {
-          if (info.enabled !== true || typeof info.root !== "string" || !info.root) return null
-          const timestamp = formatTimestampCompact(new Date())
-          return { dir: `${info.root.replace(/\/+$/, "")}/${timestamp}`, name: `my-easy-${timestamp}` }
+          const vars = { now: formatNow(), quickChatPath: String(info.quickChatPath || "") }
+          const name = expandTemplate(String(info.containerName || ""), vars).value
+          const host = expandTemplate(String(info.hostPath || ""), vars)
+          const container = expandTemplate(String(info.containerPath || ""), vars).value
+          return { name, host: host.value, container, createHost: host.templated }
         })
         .catch(() => null)
-      setSuggestedDir(suggestion?.dir ?? "")
+      setSuggestedDir(suggestion?.createHost ? suggestion.host : "")
+      setSuggestedContainerPath(suggestion?.container ?? "")
       setForm({
         ...DEFAULT_FORM,
-        hostPath: suggestion?.dir ?? String(defaults.hostPath || ""),
-        containerPath: suggestion?.dir ?? String(defaults.containerPath || ""),
+        hostPath: suggestion ? suggestion.host : String(defaults.hostPath || ""),
+        containerPath: suggestion ? suggestion.container : String(defaults.containerPath || ""),
         containerName: suggestion?.name ?? "",
         imageName: String(defaults.imageName || ""),
         imageVersion: String(defaults.imageVersion || ""),
@@ -270,7 +275,7 @@ export function CreateContainerDialog({
       if (presetHasHost) {
         hostFields = { hostPath: "", containerPath: "" }
       } else if (suggestedDir && !prev.hostPath.trim()) {
-        hostFields = { hostPath: suggestedDir, containerPath: suggestedDir }
+        hostFields = { hostPath: suggestedDir, containerPath: suggestedContainerPath }
       }
       return {
         ...prev,

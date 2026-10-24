@@ -61,18 +61,14 @@ const {
     formatServeLogValue,
     getServeProcessSnapshot
 } = require('../lib/serve-log');
+const { formatNow, resolveQuickChatPath, expandTemplate } = require('../lib/name-template');
 const { version: BIN_VERSION, imageVersion: IMAGE_VERSION_DEFAULT } = require('../package.json');
 const IMAGE_VERSION_BASE = String(IMAGE_VERSION_DEFAULT || '1.0.0').split('-')[0];
 const IMAGE_VERSION_HELP_EXAMPLE = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
 
-// Helper function to format date like bash $(date +%m%d-%H%M)
+// {now} 与默认容器名用的时间：年月日-时分秒（命令行与网页共用 lib/name-template.js）
 function formatDate() {
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hour = String(now.getHours()).padStart(2, '0');
-    const minute = String(now.getMinutes()).padStart(2, '0');
-    return `${month}${day}-${hour}${minute}`;
+    return formatNow();
 }
 
 function detectCommandName() {
@@ -95,6 +91,7 @@ const CONFIG = {
 // Default configuration
 let CONTAINER_NAME = `my-${formatDate()}`;
 let HOST_PATH = process.cwd();
+let HOST_PATH_TEMPLATED = false;
 let CONTAINER_PATH = HOST_PATH;
 let IMAGE_NAME = "ghcr.io/xcanwin/manyoyo";
 let IMAGE_VERSION = IMAGE_VERSION_DEFAULT || `${IMAGE_VERSION_BASE}-common`;
@@ -159,11 +156,7 @@ function normalizeCommandSuffix(suffix) {
 }
 
 function resolveContainerNameTemplate(name) {
-    if (typeof name !== 'string') {
-        return name;
-    }
-    const nowValue = formatDate();
-    return name.replace(/\{now\}|\$\{now\}/g, nowValue);
+    return expandTemplate(name, { now: formatDate() }).value;
 }
 
 function pickConfigValue(...values) {
@@ -1598,6 +1591,7 @@ https://github.com/xcanwin/manyoyo
         isServerStopMode,
         pickConfigValue,
         resolveContainerNameTemplate,
+        templateVars: { now: formatDate(), quickChatPath: resolveQuickChatPath(config) },
         normalizeCommandSuffix,
         normalizeJsonEnvMap,
         normalizeCliEnvMap,
@@ -1608,6 +1602,7 @@ https://github.com/xcanwin/manyoyo
     });
 
     HOST_PATH = resolvedRuntime.hostPath;
+    HOST_PATH_TEMPLATED = resolvedRuntime.hostPathTemplated === true;
     CONTAINER_NAME = resolvedRuntime.containerName;
     CONTAINER_PATH = resolvedRuntime.containerPath;
     IMAGE_NAME = resolvedRuntime.imageName;
@@ -1827,6 +1822,7 @@ function createRuntimeContext(modeState = {}) {
     return {
         containerName: CONTAINER_NAME,
         hostPath: HOST_PATH,
+        hostPathTemplated: HOST_PATH_TEMPLATED,
         containerPath: CONTAINER_PATH,
         imageName: IMAGE_NAME,
         imageVersion: IMAGE_VERSION,
@@ -1877,6 +1873,10 @@ function handleRemoveContainer(runtime) {
 }
 
 function validateHostPath(runtime) {
+    // 目录是按模板（{now} / {quickChatPath}）生成的：此刻才建，只在真的要用它的时候建
+    if (runtime.hostPathTemplated && !fs.existsSync(runtime.hostPath)) {
+        fs.mkdirSync(runtime.hostPath, { recursive: true });
+    }
     if (!fs.existsSync(runtime.hostPath)) {
         console.log(`${RED}⚠️  错误: 宿主机路径不存在: ${runtime.hostPath}${NC}`);
         process.exit(1);

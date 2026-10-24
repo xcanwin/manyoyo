@@ -35,7 +35,7 @@ manyoyo run -r project-a
 }
 ```
 
-`containerName` 支持 `{now}` 模板（展开为 `MMDD-HHmm`）。
+`containerName` 支持 `{now}` 模板（展开为 `年月日-时分秒`，如 `20261024-230915`）。
 
 ## 退出时的选择
 

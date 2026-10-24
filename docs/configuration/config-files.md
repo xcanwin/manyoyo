@@ -35,7 +35,7 @@ description: "~/.manyoyo/manyoyo.json 的全部字段、合并规则与最小示
 
 | 字段 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `containerName` | 字符串 | `my-{月日-时分}` | 容器名，支持 `{now}`（→ `MMDD-HHmm`） |
+| `containerName` | 字符串 | `my-{年月日-时分秒}` | 容器名，支持 `{now}`（→ `年月日-时分秒`，如 `20261024-230915`）；`hostPath` / `containerPath` 还支持 `{quickChatPath}` |
 | `hostPath` | 字符串 | 当前目录 | 挂载到容器的宿主机工作目录 |
 | `containerPath` | 字符串 | 同 `hostPath` | 容器内工作目录 |
 | `imageName` | 字符串 | `ghcr.io/xcanwin/manyoyo` | 镜像名（不含版本） |

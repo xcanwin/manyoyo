@@ -13,7 +13,7 @@ let roots: ReturnType<typeof createRoot>[] = []
 
 beforeEach(() => {
   calls = []
-  newDefaults = { enabled: true, root: "/home/u/manyoyo_work" }
+  newDefaults = { containerName: "my-easy-{now}", hostPath: "{quickChatPath}/{now}", containerPath: "{quickChatPath}/{now}", quickChatPath: "/home/u/manyoyo_work" }
   runs = {}
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }))
   vi.stubGlobal(
@@ -79,11 +79,11 @@ describe("新建容器的默认目录", () => {
     expect(onCreated).toHaveBeenCalledWith("created")
   })
 
-  test("全局配置写了 hostPath（接口返回未启用）：沿用原来的默认值，容器名留空，不建目录", async () => {
-    newDefaults = { enabled: false, root: "/x" }
+  test("配置里写了固定的容器名和 hostPath：原样用，不建目录", async () => {
+    newDefaults = { containerName: "my-fixed", hostPath: "/srv/serve-cwd", containerPath: "", quickChatPath: "/x" }
     await open()
     expect(input("create-host-path").value).toBe("/srv/serve-cwd")
-    expect(input("create-container-name").value).toBe("")
+    expect(input("create-container-name").value).toBe("my-fixed")
     await submit()
     expect(calls.some((call) => call.url === "/api/fs/directories/mkdir")).toBe(false)
   })

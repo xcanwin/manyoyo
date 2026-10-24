@@ -1078,7 +1078,7 @@ exit 0
                     }
                 );
                 const config = JSON.parse(output);
-                expect(config.containerName).toMatch(/^my-opencode-\d{4}-\d{4}$/);
+                expect(config.containerName).toMatch(/^my-opencode-\d{8}-\d{6}$/);
             } finally {
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }

@@ -35,7 +35,7 @@ Priority: command line > `runs.<name>` > global config > defaults.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `containerName` | string | `my-{MMDD-HHmm}` | Container name; supports `{now}` (-> `MMDD-HHmm`) |
+| `containerName` | string | `my-{YYYYMMDD-HHmmss}` | Container name; supports `{now}` (-> `YYYYMMDD-HHmmss`, e.g. `20261024-230915`); `hostPath` / `containerPath` also support `{quickChatPath}` |
 | `hostPath` | string | current directory | Host working directory mounted into the container |
 | `containerPath` | string | same as `hostPath` | Working directory inside the container |
 | `imageName` | string | `ghcr.io/xcanwin/manyoyo` | Image name (without version) |

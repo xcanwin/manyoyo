@@ -59,6 +59,19 @@ describe("系统设置 · 基础", () => {
     expect(container.textContent).toContain("默认（2.3.0-common）")
   })
 
+  test("没写时容器名显示 my-easy-{now}、两个目录显示 {quickChatPath}/{now}（只是显示，不提交）；写了就显示写的", async () => {
+    const onCommit = await mount({})
+    expect(input("config-field-containerName")!.value).toBe("my-easy-{now}")
+    expect(input("config-field-hostPath")!.value).toBe("{quickChatPath}/{now}")
+    expect(input("config-field-containerPath")!.value).toBe("{quickChatPath}/{now}")
+    expect(onCommit).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
+    root = createRoot(container)
+    await act(async () => root.render(<BasicSettings liveParsed={{ containerName: "my-dev", hostPath: "/srv/a" }} onCommit={onCommit} />))
+    expect(input("config-field-containerName")!.value).toBe("my-dev")
+    expect(input("config-field-hostPath")!.value).toBe("/srv/a")
+  })
+
   test("填容器名 / 目录：按字段提交", async () => {
     const onCommit = await mount({})
     await type(input("config-field-hostPath")!, "/work/a")

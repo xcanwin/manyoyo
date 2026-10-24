@@ -10,6 +10,7 @@ import {
   versionsOf,
   type LocalImage,
 } from "@/lib/image-options"
+import { DEFAULT_CONTAINER_NAME_TEMPLATE, DEFAULT_PATH_TEMPLATE } from "@/lib/name-template"
 import { cn } from "@/lib/utils"
 import { Card, CardContent } from "@/components/ui/card"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -37,8 +38,9 @@ function KeyLabel({ k, htmlFor }: { k: string; htmlFor: string }) {
 }
 
 // 留空 = 用默认值：配置里原来没有的字段不会因为留空被写进去
-function TextSetting({ k, value, placeholder, description, onCommit }: { k: string; value: string; placeholder: string; description?: string; onCommit: Commit }) {
-  const [text, setText] = React.useState(value)
+// defaultValue：配置里没写时显示的默认内容（只是显示，没改动就不会写进配置）
+function TextSetting({ k, value, defaultValue = "", placeholder, description, onCommit }: { k: string; value: string; defaultValue?: string; placeholder: string; description?: string; onCommit: Commit }) {
+  const [text, setText] = React.useState(value || defaultValue)
   const id = `config-field-${k}`
   return (
     <Field>
@@ -190,9 +192,30 @@ export function BasicSettings({ liveParsed, onCommit }: { liveParsed: Record<str
     <Card>
       <CardContent>
         <FieldGroup>
-          <TextSetting k="containerName" value={str("containerName")} placeholder="留空用默认，例如 my-{now}" description="支持 {now}（会换成当前时间）。" onCommit={onCommit} />
-          <TextSetting k="hostPath" value={str("hostPath")} placeholder="留空用 serve 的启动目录" description="挂进容器的宿主机目录。" onCommit={onCommit} />
-          <TextSetting k="containerPath" value={str("containerPath")} placeholder="留空与宿主机目录相同" onCommit={onCommit} />
+          <TextSetting
+            k="containerName"
+            value={str("containerName")}
+            defaultValue={DEFAULT_CONTAINER_NAME_TEMPLATE}
+            placeholder={DEFAULT_CONTAINER_NAME_TEMPLATE}
+            description="网页新建容器时的默认容器名；命令行没写时用 my-加时间。{now} 会换成当前时间（年月日-时分秒，如 20261024-230915）。"
+            onCommit={onCommit}
+          />
+          <TextSetting
+            k="hostPath"
+            value={str("hostPath")}
+            defaultValue={DEFAULT_PATH_TEMPLATE}
+            placeholder={DEFAULT_PATH_TEMPLATE}
+            description="挂进容器的宿主机目录。{quickChatPath} 是快捷对话的工作目录（没设置就是 ~/.manyoyo/work）；按模板生成的目录在创建时才会建。命令行没写时用当前目录。"
+            onCommit={onCommit}
+          />
+          <TextSetting
+            k="containerPath"
+            value={str("containerPath")}
+            defaultValue={DEFAULT_PATH_TEMPLATE}
+            placeholder={DEFAULT_PATH_TEMPLATE}
+            description="容器里看到的目录，写法同宿主机目录；清空则与宿主机目录相同。"
+            onCommit={onCommit}
+          />
           <ImageSettings name={str("imageName")} version={str("imageVersion")} info={info} onCommit={onCommit} />
           <Field>
             <KeyLabel k="containerMode" htmlFor="config-field-containerMode" />

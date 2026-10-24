@@ -124,7 +124,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 
 - 全局配置 `~/.manyoyo/manyoyo.json`（JSON5，支持注释），模板见 `manyoyo.example.json`；用户数据默认在 `~/.manyoyo/`。
 - 四层优先级：命令行 > `runs.<name>` > 全局配置 > 默认值。标量覆盖（`containerName`、`imageName`、`yolo`、`containerMode` 等）；`env` 是 map、按 key 覆盖；`envFile`、`volumes`、`ports`、`imageBuildArgs` 是数组，按「全局 → runs.<name> → 命令行」追加。`first.env` / `first.envFile` 沿用同样规则。
-- `envFile` 与 `--ef/--env-file` **仅支持绝对路径**；`containerName` 支持 `{now}` 模板（→ `MMDD-HHmm`）。
+- `envFile` 与 `--ef/--env-file` **仅支持绝对路径**；`containerName` / `hostPath` / `containerPath` 支持模板：`{now}`（→ `年月日-时分秒`，如 `20261024-230915`）与 `{quickChatPath}`（快捷对话目录，没配置就是 `~/.manyoyo/work`），命令行与网页共用 `lib/name-template.js`（一次解析只取一个时间；按模板生成的 `hostPath` 在真正创建容器时才建目录，`config show` 不建）。
 - 初始化配置：`manyoyo init [agents]` 会写入 `runs.<agent>`（含 `env` map）；目标已存在时逐个询问，`--yes` 自动覆盖。
 - 网页认证配置：`serverUser`、`serverPass`（环境变量 `MANYOYO_SERVER_USER`、`MANYOYO_SERVER_PASS`），优先级为 命令行 > 运行配置 > 全局配置 > 环境变量 > 默认值。
 - 网页服务监听：`serve [listen]` 仅支持 `<ip:port>`（IPv6 写作 `[ip]:port`），默认 `127.0.0.1:3000`。

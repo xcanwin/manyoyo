@@ -282,7 +282,7 @@ describe('删除容器连同历史时清掉空工作目录', () => {
     });
 });
 
-describe('新建容器的默认目录接口', () => {
+describe('新建容器的默认值接口', () => {
     async function fetchDefaults(config) {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-newdef-'));
         const port = await getFreePort();
@@ -300,17 +300,60 @@ describe('新建容器的默认目录接口', () => {
         }
     }
 
-    test('没配快捷对话目录：用默认工作目录；未登录 401；不会预先创建目录', async () => {
+    test('什么都没配：默认模板 + 默认工作目录；未登录 401；不会预先创建目录', async () => {
         const { tempHost, unauth, body } = await fetchDefaults(null);
         expect(unauth).toBe(401);
-        expect(body).toEqual({ enabled: true, root: path.join(tempHost, 'work') });
+        expect(body).toEqual({
+            containerName: 'my-easy-{now}',
+            hostPath: '{quickChatPath}/{now}',
+            containerPath: '{quickChatPath}/{now}',
+            quickChatPath: path.join(tempHost, 'work')
+        });
         expect(fs.existsSync(path.join(tempHost, 'work'))).toBe(false);
     });
 
-    test('配了快捷对话目录（带 ~ 和尾斜杠）：用它；全局配置里写了 hostPath 就不启用', async () => {
+    test('配了快捷对话目录（带 ~ 和尾斜杠）：quickChatPath 用它', async () => {
         const quick = await fetchDefaults({ serve: { quickChat: { path: '~/manyoyo_work/', run: 'x' } } });
-        expect(quick.body.root).toBe(path.join(require('os').homedir(), 'manyoyo_work'));
-        const explicit = await fetchDefaults({ hostPath: '/srv/mine' });
-        expect(explicit.body.enabled).toBe(false);
+        expect(quick.body.quickChatPath).toBe(path.join(quick.tempHost, 'manyoyo_work'));
+    });
+
+    test('配置里写了 hostPath / containerName：用配置的；没写 containerPath 就与宿主机目录相同', async () => {
+        const { body } = await fetchDefaults({ hostPath: '/srv/mine', containerName: 'my-dev-{now}' });
+        expect(body).toMatchObject({ containerName: 'my-dev-{now}', hostPath: '/srv/mine', containerPath: '' });
+    });
+});
+
+describe('按模板创建容器', () => {
+    test('配置里 hostPath 是 {quickChatPath}/{now}：创建时展开并建目录，容器名用同一个 {now}', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-tpl-'));
+        const port = await getFreePort();
+        const runCalls = [];
+        let created = false;
+        let handle = null;
+        try {
+            fs.writeFileSync(path.join(tempHost, 'manyoyo.json'), JSON.stringify({ hostPath: '{quickChatPath}/{now}', containerName: 'my-easy-{now}' }));
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => created,
+                dockerExecArgs: args => {
+                    if (args[0] === 'run') { runCalls.push(args.join(' ')); created = true; }
+                    return '';
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const cookie = await loginAndGetCookie(baseUrl);
+            const res = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            expect(res.response.status).toBe(200);
+            expect(res.json.name).toBe('my-easy-0101-0000');
+            const dir = path.join(tempHost, 'work', '0101-0000');
+            expect(fs.existsSync(dir)).toBe(true);
+            expect(runCalls.join('\n')).toContain(`${dir}:`);
+        } finally {
+            if (handle && handle.close) await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
     });
 });
