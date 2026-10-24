@@ -62,8 +62,8 @@ describe("改动视图", () => {
   })
 
   test("diff 行着色", () => {
-    expect(diffLineClass("+a")).toContain("emerald")
-    expect(diffLineClass("-a")).toContain("red")
+    expect(diffLineClass("+a")).toContain("success")
+    expect(diffLineClass("-a")).toContain("destructive")
     expect(diffLineClass("+++ b/a")).toBe("text-muted-foreground")
     expect(diffLineClass(" a")).toBe("")
   })

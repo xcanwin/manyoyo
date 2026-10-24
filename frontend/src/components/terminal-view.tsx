@@ -3,10 +3,13 @@ import { FitAddon } from "@xterm/addon-fit"
 import { Terminal } from "@xterm/xterm"
 import "@xterm/xterm/css/xterm.css"
 
-import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
 import type { SessionSummary } from "@/lib/api"
 import { canConnectTerminal, createResizeReporter, type ResizeReporter } from "@/lib/terminal-resize"
+import { Button } from "@/components/ui/button"
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { Hint } from "@/components/hint"
+import { Input } from "@/components/ui/input"
 
 const MIN_COLS = 40
 const MIN_ROWS = 12
@@ -72,6 +75,8 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
   const termRef = React.useRef<Terminal | null>(null)
   const mobileInputRef = React.useRef<HTMLInputElement | null>(null)
   const isMobile = useIsMobile()
+  // 手机上可点区域至少 40px（STYLE.md 第 12 节）
+  const keySize = isMobile ? "lg" : "sm"
   const [status, setStatus] = React.useState("")
   const [disconnected, setDisconnected] = React.useState(false)
   // 重连只发生在用户点击时：重连意味着新开一个 shell（旧进程随连接关闭已被
@@ -273,76 +278,78 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
 
   if (!session) {
     return (
-      <div className="flex h-full items-center justify-center bg-zinc-950 p-6 text-center text-sm text-zinc-400">
-        请先在左侧选择一个容器 / AGENT
-      </div>
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyTitle>请先在左侧选择一个容器 / AGENT</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
   if (historyOnly) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-1 bg-zinc-950 p-6 text-center text-sm text-zinc-400">
-        <p className="font-medium text-zinc-200">容器不可用</p>
-        <p>当前会话只有历史记录，没有可访问的运行中容器，无法连接终端。</p>
-      </div>
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyTitle>容器不可用</EmptyTitle>
+          <EmptyDescription>当前会话只有历史记录，没有可访问的运行中容器，无法连接终端。</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-zinc-950">
-      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-2 py-1.5">
+      <div className="flex shrink-0 items-center gap-2 border-b bg-background px-2 py-2">
         {/* 按钮组自己横向滚动，避免窄屏下被裁切导致 ctrl/alt 无法点击；
             状态文案放在同一行的右侧，省掉单独一行 */}
-        <div className="flex min-w-0 gap-1 overflow-x-auto">
+        <div className="flex min-w-0 gap-2 overflow-x-auto">
           {KEYBAR_KEYS.map((key) => (
-            <button
+            <Button
               key={key.label}
               type="button"
+              variant="outline"
+              size={keySize}
               onMouseDown={keepFocus}
               onClick={() => sendKey(key.data)}
-              className="shrink-0 rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800"
+              className="shrink-0 font-mono"
             >
               {key.label}
-            </button>
+            </Button>
           ))}
-          <button
+          <Button
             type="button"
+            variant={ctrlMode ? "default" : "outline"}
+            size={keySize}
+            aria-pressed={ctrlMode}
             onMouseDown={keepFocus}
             onClick={() => {
               setCtrlMode((value) => !value)
               if (!isMobile) termRef.current?.focus()
             }}
-            className={cn(
-              "shrink-0 rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
-              ctrlMode && "border-zinc-100 bg-zinc-100 text-zinc-900 hover:bg-zinc-100"
-            )}
+            className="shrink-0 font-mono"
           >
             ctrl
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant={altMode ? "default" : "outline"}
+            size={keySize}
+            aria-pressed={altMode}
             onMouseDown={keepFocus}
             onClick={() => {
               setAltMode((value) => !value)
               if (!isMobile) termRef.current?.focus()
             }}
-            className={cn(
-              "shrink-0 rounded border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300 hover:bg-zinc-800",
-              altMode && "border-zinc-100 bg-zinc-100 text-zinc-900 hover:bg-zinc-100"
-            )}
+            className="shrink-0 font-mono"
           >
             alt
-          </button>
+          </Button>
         </div>
-        <span className="shrink-0 truncate px-1 text-xs text-zinc-400">{status}</span>
+        <Hint className="shrink-0 truncate px-1">{status}</Hint>
         {disconnected ? (
-          <button
-            type="button"
-            onClick={() => setConnectSeq((value) => value + 1)}
-            className="shrink-0 rounded border border-zinc-600 px-2 py-0.5 text-xs text-zinc-200 hover:bg-zinc-800"
-          >
+          <Button type="button" variant="outline" size={keySize} onClick={() => setConnectSeq((value) => value + 1)} className="shrink-0">
             重连
-          </button>
+          </Button>
         ) : null}
       </div>
       {/* 内边距放在外层，终端容器自身不留内边距：fit 按容器实际高度取整行数，
@@ -355,13 +362,13 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
       </div>
       {isMobile ? (
         <form
-          className="flex shrink-0 items-center gap-2 border-t border-zinc-800 bg-zinc-900 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]"
+          className="flex shrink-0 items-center gap-2 border-t bg-background px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
           onSubmit={(event) => {
             event.preventDefault()
             submitMobileInput()
           }}
         >
-          <input
+          <Input
             ref={mobileInputRef}
             value={mobileInput}
             onChange={(event) => setMobileInput(event.target.value)}
@@ -371,14 +378,11 @@ export function TerminalView({ session }: { session: SessionSummary | null }) {
             autoCorrect="off"
             autoComplete="off"
             spellCheck={false}
-            className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
+            className="min-w-0 flex-1 font-mono"
           />
-          <button
-            type="submit"
-            className="shrink-0 rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800"
-          >
+          <Button type="submit" className="shrink-0">
             发送
-          </button>
+          </Button>
         </form>
       ) : null}
     </div>

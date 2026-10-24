@@ -1,5 +1,6 @@
 import { PlusIcon, Trash2Icon } from "lucide-react"
 
+import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -44,13 +45,13 @@ export function RowList<T extends Record<string, string>>({
   return (
     <div className="flex flex-col gap-2">
       {rows.length ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2">
           {columns.map((column) => (
-            <span key={column.key} className={cn("min-w-0 px-1", column.className ?? "flex-1")}>
+            <Hint key={column.key} className={cn("min-w-0 px-1", column.className ?? "flex-1")}>
               {column.label}
-            </span>
+            </Hint>
           ))}
-          <span className={cn("shrink-0 text-center", renderAction ? "w-24" : "w-8")}>操作</span>
+          <Hint className={cn("shrink-0 text-center", renderAction ? "w-24" : "w-8")}>操作</Hint>
         </div>
       ) : null}
       {rows.map((row, index) => (
@@ -105,7 +106,7 @@ export function RowList<T extends Record<string, string>>({
         </div>
       ))}
       <div>
-        <Button type="button" variant="outline" size="sm" disabled={disableAdd} onClick={() => onChange([...rows, newRow()])}>
+        <Button type="button" variant="outline" disabled={disableAdd} onClick={() => onChange([...rows, newRow()])}>
           <PlusIcon data-icon="inline-start" />
           {addLabel}
         </Button>

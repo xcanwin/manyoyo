@@ -17,6 +17,9 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { useResizableWidth } from "@/hooks/use-resizable-width"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { Hint } from "@/components/hint"
+import { Input } from "@/components/ui/input"
 import { CodeMirrorEditor } from "@/components/code-mirror-editor"
 import { MarkdownContent } from "@/components/markdown-content"
 import { PromptDialog } from "@/components/prompt-dialog"
@@ -49,9 +52,9 @@ function PathBar({ value, className }: { value: string; className?: string }) {
         className
       )}
     >
-      <span className="w-max shrink-0 font-mono text-xs whitespace-nowrap text-muted-foreground">
+      <Hint mono className="w-max shrink-0 whitespace-nowrap">
         {value}
-      </span>
+      </Hint>
     </div>
   )
 }
@@ -68,7 +71,7 @@ function EditablePathBar({ value, onSubmit, className }: { value: string; onSubm
     scrollToEnd()
   }, [value, scrollToEnd])
   return (
-    <input
+    <Input
       ref={inputRef}
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
@@ -91,10 +94,7 @@ function EditablePathBar({ value, onSubmit, className }: { value: string; onSubm
       autoCapitalize="off"
       autoCorrect="off"
       aria-label="当前路径，回车跳转"
-      className={cn(
-        "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 font-mono text-base text-muted-foreground outline-none md:text-sm focus:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30",
-        className
-      )}
+      className={cn("min-w-0 font-mono", className)}
     />
   )
 }
@@ -478,18 +478,22 @@ export function FilesPanel({
 
   if (!activeSession) {
     return (
-      <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-        请先在左侧选择一个容器 / AGENT
-      </div>
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyTitle>请先在左侧选择一个容器 / AGENT</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
   if (historyOnly) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-1 p-6 text-center text-sm text-muted-foreground">
-        <p className="font-medium text-foreground">容器不可用</p>
-        <p>当前会话只有历史记录，没有可访问的运行中容器。</p>
-      </div>
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyTitle>容器不可用</EmptyTitle>
+          <EmptyDescription>当前会话只有历史记录，没有可访问的运行中容器。</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
@@ -547,7 +551,7 @@ export function FilesPanel({
             ) : (
               <>
                 {entries.length === 0 ? (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">空目录</div>
+                  <Hint className="block px-2 py-1.5">空目录</Hint>
                 ) : null}
                 {entries.map((entry) => (
                   <button
@@ -556,8 +560,8 @@ export function FilesPanel({
                     data-entry-path={entry.path}
                     onClick={() => openEntry(entry)}
                     className={cn(
-                      "flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/8 @xs:flex-row @xs:items-center @xs:gap-2",
-                      selectedPath === entry.path && "bg-foreground/12 font-medium"
+                      "flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-foreground/8 @xs:flex-row @xs:items-center @xs:gap-2",
+                      selectedPath === entry.path && "bg-foreground/12"
                     )}
                     title={
                       entry.kind === "symlink" && entry.symlinkTarget
@@ -578,14 +582,14 @@ export function FilesPanel({
                     </span>
                     {/* 体积/修改时间靠右显示：挑日志、找刚改过的文件时全靠这两个值，
                         只有文件名的列表等于每个都得点开看。空间不够时优先保名字 */}
-                    <span className="shrink-0 pl-6 text-xs text-muted-foreground tabular-nums @xs:ml-auto @xs:pl-0">
+                    <Hint className="shrink-0 pl-6 tabular-nums @xs:ml-auto @xs:pl-0">
                       {[
                         entry.kind === "file" ? formatBytes(entry.size, "") : "",
                         formatDateTime(entry.mtimeMs),
                       ]
                         .filter(Boolean)
                         .join(" · ")}
-                    </span>
+                    </Hint>
                   </button>
                 ))}
               </>
@@ -610,7 +614,7 @@ export function FilesPanel({
                 {/* 当前文件的体积/可编辑性/是否被截断：不写出来的话，"编辑"按钮为什么
                     是灰的、内容为什么少了一截，都只能靠猜。窄屏放不下就整条隐藏 */}
                 {fileData ? (
-                  <span className="hidden shrink-0 text-xs whitespace-nowrap text-muted-foreground sm:inline">
+                  <Hint className="hidden shrink-0 whitespace-nowrap sm:inline">
                     {[
                       formatBytes(fileData.size, ""),
                       fileData.kind === "text" ? (isEditable ? "可编辑" : "只读") : "",
@@ -618,7 +622,7 @@ export function FilesPanel({
                     ]
                       .filter(Boolean)
                       .join(" · ")}
-                  </span>
+                  </Hint>
                 ) : null}
               </div>
               {fileData?.kind === "text" ? (
@@ -660,9 +664,11 @@ export function FilesPanel({
 
           <div className="min-h-0 flex-1 overflow-auto p-3">
             {!selectedPath ? (
-              <p className="p-6 text-center text-sm text-muted-foreground">
-                选择左侧的文件查看内容
-              </p>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyTitle>选择左侧的文件查看内容</EmptyTitle>
+                </EmptyHeader>
+              </Empty>
             ) : null}
             {fileLoading ? (
               <div className="flex h-32 items-center justify-center">
@@ -678,10 +684,10 @@ export function FilesPanel({
               <Alert variant="destructive">
                 <AlertDescription className="flex flex-wrap items-center gap-2">
                   文件已在容器里被修改。
-                  <Button variant="outline" size="xs" onClick={() => void handleReloadAfterConflict()}>
+                  <Button variant="outline" size="sm" onClick={() => void handleReloadAfterConflict()}>
                     重新加载
                   </Button>
-                  <Button variant="outline" size="xs" onClick={() => void handleSaveFile({ overwrite: true })}>
+                  <Button variant="outline" size="sm" onClick={() => void handleSaveFile({ overwrite: true })}>
                     仍然保存
                   </Button>
                 </AlertDescription>
@@ -696,7 +702,7 @@ export function FilesPanel({
                     className="max-w-full rounded-md border"
                   />
                 ) : fileData.kind === "binary" ? (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground">
                     二进制文件，无法预览（{fileData.size} 字节）
                   </p>
                 ) : mode === "edit" ? (
@@ -721,7 +727,7 @@ export function FilesPanel({
                   />
                 )}
                 {fileData.truncated ? (
-                  <p className="mt-2 text-xs text-muted-foreground">内容过大，已截断显示</p>
+                  <Hint className="mt-2 block">内容过大，已截断显示</Hint>
                 ) : null}
               </>
             ) : null}

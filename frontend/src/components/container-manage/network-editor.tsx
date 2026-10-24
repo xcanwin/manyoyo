@@ -2,6 +2,7 @@ import * as React from "react"
 import { ChevronDownIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -101,14 +102,13 @@ export function NetworkEditor({
   ]
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <Field>
         <FieldLabel>
-          出站 <span className="font-normal text-muted-foreground">容器访问外部</span>
+          出站 <Hint>容器访问外部</Hint>
         </FieldLabel>
         <ToggleGroup
           variant="outline"
-          size="sm"
           value={[policy.preset]}
           onValueChange={(values) => {
             const next = values[0] as Preset | undefined
@@ -131,14 +131,14 @@ export function NetworkEditor({
           onChange={(outbound) => onChange({ ...policy, outbound })}
         />
         {suggestions.length ? (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>环境变量里出现的域名（如 Agent 的模型服务，不放行就无法对话）：</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Hint>环境变量里出现的域名（如 Agent 的模型服务，不放行就无法对话）：</Hint>
             {suggestions.map((domain) => (
               <Button
                 key={domain}
                 type="button"
                 variant="outline"
-                size="xs"
+                size="sm"
                 onClick={() => onChange({ ...policy, outbound: [...policy.outbound.filter((rule) => ruleValue(rule, "outbound").trim()), newRule("outbound", domain)] })}
               >
                 + {domain}
@@ -148,11 +148,11 @@ export function NetworkEditor({
         ) : null}
       </Field>
 
-      <div className="border-t border-foreground/25" />
+      <Separator />
 
       <Field>
         <FieldLabel>
-          入站 <span className="font-normal text-muted-foreground">外部访问容器</span>
+          入站 <Hint>外部访问容器</Hint>
         </FieldLabel>
         <RuleTable
           direction="inbound"
@@ -172,7 +172,7 @@ export function NetworkEditor({
           newRow={() => ({ bind: "127.0.0.1", hostPort: "", port: "" })}
           addLabel="添加端口暴露"
           renderAction={showAccess ? {
-            width: "w-14",
+            width: "w-16",
             render: (row) => {
               const active = forwards.some((f) => f.bind === row.bind && String(f.hostPort) === row.hostPort && String(f.port) === row.port)
               if (!active) return <Hint>—</Hint>
@@ -181,7 +181,7 @@ export function NetworkEditor({
                 : [row.bind]
               return (
                 <DropdownMenu>
-                  <DropdownMenuTrigger render={<Button type="button" variant="outline" size="xs" />}>
+                  <DropdownMenuTrigger render={<Button type="button" variant="outline" size="sm" />}>
                     访问
                     <ChevronDownIcon data-icon="inline-end" />
                   </DropdownMenuTrigger>

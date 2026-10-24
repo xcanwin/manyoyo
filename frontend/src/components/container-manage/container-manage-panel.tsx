@@ -5,6 +5,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageHeader } from "@/components/page-header"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { AutostartEditor } from "@/components/container-manage/autostart-editor"
 import { SystemPromptEditor } from "@/components/container-manage/system-prompt-editor"
@@ -305,19 +307,21 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
 
   if (loading && !envState && !legacy) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Spinner className="size-6" />
+      <div className="flex flex-col gap-4 p-3 md:p-4" role="status" aria-label="加载中">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-40 w-full" />
       </div>
     )
   }
   if (loadError) {
     return (
-      <div className="flex flex-col gap-3 p-4">
+      <div className="flex flex-col gap-4 p-3 md:p-4">
         <Alert variant="destructive">
           <AlertDescription>{loadError}</AlertDescription>
         </Alert>
         <div>
-          <Button variant="outline" size="sm" onClick={() => void load()}>
+          <Button variant="outline" onClick={() => void load()}>
             重试
           </Button>
         </div>
@@ -326,7 +330,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
   }
   if (legacy !== null) {
     return (
-      <div className="p-4">
+      <div className="p-3 md:p-4">
         <Legacy message={legacy} />
       </div>
     )
@@ -336,22 +340,25 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto flex max-w-5xl flex-col gap-4 p-3 sm:p-4">
-        <div className="flex items-center justify-between gap-2">
-          <Hint className="block">管理容器 {containerName} 的环境变量、网络与自启动，改动不需要重建容器。</Hint>
-          <Button variant="ghost" size="icon-sm" aria-label="重新加载" disabled={loading} onClick={() => void load(true)}>
-            <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
-          </Button>
-        </div>
+      <div className="mx-auto flex max-w-5xl flex-col gap-4 p-3 md:p-4">
+        <PageHeader
+          title="设置容器"
+          description={`管理容器 ${containerName} 的环境变量、网络与自启动，改动不需要重建容器。`}
+          actions={
+            <Button variant="ghost" size="icon-sm" aria-label="重新加载" title="重新加载" disabled={loading} onClick={() => void load(true)}>
+              <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
+            </Button>
+          }
+        />
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">环境变量</CardTitle>
+            <CardTitle>环境变量</CardTitle>
             <CardDescription>
               保存后下一条命令起生效，已在运行的进程不受影响。容器里也可以直接编辑 /run/manyoyo/env。
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3">
+          <CardContent className="flex flex-col gap-4">
             <EnvEditor
               key={envRevision}
               value={envText}
@@ -371,11 +378,11 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
               <Hint className="block">文件最后修改：{formatDateTime(envState.mtime)}</Hint>
             ) : null}
             {envMessage && !(envMessage.tone === "ok" && envDirty) ? (
-              <Alert variant={envMessage.tone === "ok" ? "default" : "destructive"}>
+              <Alert variant={envMessage.tone === "ok" ? "success" : "destructive"}>
                 <AlertDescription className="flex flex-wrap items-center gap-2">
                   {envMessage.text}
                   {envMessage.tone === "conflict" ? (
-                    <Button variant="outline" size="xs" onClick={() => void load()}>
+                    <Button variant="outline" size="sm" onClick={() => void load()}>
                       重新加载
                     </Button>
                   ) : null}
@@ -384,7 +391,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
             ) : null}
           </CardContent>
           <CardFooter>
-            <Button size="sm" disabled={!envDirty || envSaving || envInvalid.length > 0} onClick={() => void saveEnv()}>
+            <Button disabled={!envDirty || envSaving || envInvalid.length > 0} onClick={() => void saveEnv()}>
               {envSaving ? <Spinner data-icon="inline-start" /> : null}
               保存环境变量
             </Button>
@@ -394,7 +401,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
         {net && policy ? (
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <CardTitle className="flex items-center gap-2">
                 网络
                 {status ? (
                   <Badge variant={status.tone === "ok" ? "secondary" : status.tone === "danger" ? "destructive" : "outline"}>
@@ -404,7 +411,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
               </CardTitle>
               <CardDescription>规则从上往下匹配，第一条命中的生效；保存后马上生效，不需要重启容器。</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3">
+            <CardContent className="flex flex-col gap-4">
               <NetworkEditor
                 key={revision}
                 policy={policy}
@@ -421,13 +428,13 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
                 </Alert>
               ) : null}
               {netMessage && !(netMessage.tone === "ok" && netDirty) ? (
-                <Alert variant={netMessage.tone === "ok" ? "default" : "destructive"}>
+                <Alert variant={netMessage.tone === "ok" ? "success" : "destructive"}>
                   <AlertDescription>{netMessage.text}</AlertDescription>
                 </Alert>
               ) : null}
             </CardContent>
             <CardFooter>
-              <Button size="sm" disabled={!netDirty || netSaving || netProblems.length > 0} onClick={() => void saveNetwork()}>
+              <Button disabled={!netDirty || netSaving || netProblems.length > 0} onClick={() => void saveNetwork()}>
                 {netSaving ? <Spinner data-icon="inline-start" /> : null}
                 保存网络规则
               </Button>
@@ -438,22 +445,22 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
         {net && (net.policy.preset === "allowlist" || (net.denied ?? []).length > 0) ? (
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-semibold">最近被拦截</CardTitle>
+              <CardTitle>最近被拦截</CardTitle>
               <CardDescription>容器想访问但被拦下的网站。网页打不开、点了没反应时先看这里，点「允许」马上生效。</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3">
+            <CardContent className="flex flex-col gap-4">
               <DeniedList denied={net.denied ?? []} disabled={netDirty} onAllow={(host) => void allowDenied(host)} />
               {deniedMessage ? (
-                <Alert variant={deniedMessage.tone === "ok" ? "default" : "destructive"}>
+                <Alert variant={deniedMessage.tone === "ok" ? "success" : "destructive"}>
                   <AlertDescription>{deniedMessage.text}</AlertDescription>
                 </Alert>
               ) : null}
             </CardContent>
             <CardFooter className="gap-2">
-              <Button size="sm" variant="outline" onClick={() => void load()}>
+              <Button variant="outline" onClick={() => void load()}>
                 刷新
               </Button>
-              <Button size="sm" variant="outline" disabled={!(net.denied ?? []).length} onClick={() => void clearDenied()}>
+              <Button variant="outline" disabled={!(net.denied ?? []).length} onClick={() => void clearDenied()}>
                 清空
               </Button>
             </CardFooter>
@@ -462,10 +469,10 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">自启动</CardTitle>
+            <CardTitle>自启动</CardTitle>
             <CardDescription>容器新建、重启后都会执行（网络规则下发完成之后才运行）；也可以立即运行一次。</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3">
+          <CardContent className="flex flex-col gap-4">
             <AutostartEditor
               idPrefix="manage"
               script={autostart.script}
@@ -474,7 +481,7 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
               onServeChange={(autostartOnServe) => setAutostart((prev) => ({ ...prev, autostartOnServe }))}
             />
             {autostartMessage && !(autostartMessage.tone === "ok" && autostartDirty) ? (
-              <Alert variant={autostartMessage.tone === "ok" ? "default" : "destructive"}>
+              <Alert variant={autostartMessage.tone === "ok" ? "success" : "destructive"}>
                 <AlertDescription>{autostartMessage.text}</AlertDescription>
               </Alert>
             ) : null}
@@ -485,14 +492,14 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
             ) : null}
           </CardContent>
           <CardFooter className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={!autostartDirty || autostartBusy} onClick={() => void saveAutostart()}>
+            <Button disabled={!autostartDirty || autostartBusy} onClick={() => void saveAutostart()}>
               保存自启动
             </Button>
-            <Button size="sm" variant="outline" disabled={autostartBusy || autostartDirty} onClick={() => void runAutostart()}>
+            <Button variant="outline" disabled={autostartBusy || autostartDirty} onClick={() => void runAutostart()}>
               <PlayIcon data-icon="inline-start" />
               立即运行
             </Button>
-            <Button size="sm" variant="outline" onClick={() => void refreshLog()}>
+            <Button variant="outline" onClick={() => void refreshLog()}>
               {log === null ? "查看日志" : "刷新日志"}
             </Button>
           </CardFooter>
@@ -500,10 +507,10 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">系统提示词</CardTitle>
+            <CardTitle>系统提示词</CardTitle>
             <CardDescription>告诉这个容器里的 Agent 它的使用环境。系统设置里的修改不会影响已有容器。</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3">
+          <CardContent className="flex flex-col gap-4">
             <SystemPromptEditor
               idPrefix="manage"
               text={prompt.text}
@@ -512,13 +519,13 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
               onEnabledChange={(enabled) => setPrompt((prev) => ({ ...prev, enabled }))}
             />
             {promptMessage && !(promptMessage.tone === "ok" && promptDirty) ? (
-              <Alert variant={promptMessage.tone === "ok" ? "default" : "destructive"}>
+              <Alert variant={promptMessage.tone === "ok" ? "success" : "destructive"}>
                 <AlertDescription>{promptMessage.text}</AlertDescription>
               </Alert>
             ) : null}
           </CardContent>
           <CardFooter>
-            <Button size="sm" disabled={!promptDirty || promptBusy} onClick={() => void savePrompt()}>
+            <Button disabled={!promptDirty || promptBusy} onClick={() => void savePrompt()}>
               保存系统提示词
             </Button>
           </CardFooter>

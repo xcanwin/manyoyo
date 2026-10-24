@@ -96,11 +96,13 @@ export function EnvEditor({
             }}
           />
           {fileStatus?.length ? (
-            <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+            <ul className="flex flex-col gap-1">
               {fileStatus.map((file) => (
-                <li key={file.path} className={file.error ? "text-destructive" : undefined}>
-                  {file.path}：{file.error || `${file.count} 个变量`}
-                  {file.invalid.length ? `，${file.invalid.length} 行被跳过（第 ${file.invalid.map((item) => item.line).join("、")} 行）` : ""}
+                <li key={file.path}>
+                  <Hint className={file.error ? "text-destructive" : undefined}>
+                    {file.path}：{file.error || `${file.count} 个变量`}
+                    {file.invalid.length ? `，${file.invalid.length} 行被跳过（第 ${file.invalid.map((item) => item.line).join("、")} 行）` : ""}
+                  </Hint>
                 </li>
               ))}
             </ul>
@@ -115,7 +117,6 @@ export function EnvEditor({
       <FieldLabel>直接填写的变量</FieldLabel>
       <ToggleGroup
         variant="outline"
-        size="sm"
         value={[view]}
         onValueChange={(values) => {
           const next = values[0]
@@ -138,10 +139,10 @@ export function EnvEditor({
       ) : (
         <div className="flex flex-col gap-2">
           {entries.length ? (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="w-2/5 px-1">变量名</span>
-              <span className="min-w-0 flex-1 px-1">变量值</span>
-              <span className="w-[4.5rem] shrink-0 text-center">操作</span>
+            <div className="flex items-center gap-2">
+              <Hint className="w-2/5 px-1">变量名</Hint>
+              <Hint className="min-w-0 flex-1 px-1">变量值</Hint>
+              <Hint className="w-[4.5rem] shrink-0 text-center">操作</Hint>
             </div>
           ) : null}
           {entries.map((entry, index) => {
@@ -193,12 +194,7 @@ export function EnvEditor({
             )
           })}
           <div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => commit([...entries, { key: "", value: "" }])}
-            >
+            <Button type="button" variant="outline" onClick={() => commit([...entries, { key: "", value: "" }])}>
               <PlusIcon data-icon="inline-start" />
               添加变量
             </Button>
@@ -213,7 +209,7 @@ export function EnvEditor({
         <Alert variant="destructive">
           <AlertDescription>
             <p>下面这些行不是合法的 KEY=VALUE，容器里会被跳过（保存时需先修正）：</p>
-            <ul className="mt-1 flex flex-col gap-0.5 font-mono text-xs">
+            <ul className="mt-2 flex flex-col gap-1 font-mono">
               {invalid.map((item) => (
                 <li key={item.line}>
                   第 {item.line} 行：{item.text}（{item.reason}）

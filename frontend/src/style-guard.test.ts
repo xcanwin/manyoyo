@@ -105,18 +105,11 @@ type Allow = Record<string, Record<string, [number, string]>>
 const ALLOW: Allow = {
   "components/agent-instructions-panel.tsx": { "font": [1, "待修（现状）"] },
   "components/app-sidebar.tsx": { "font": [15, "待修（现状）"], "raw-color": [2, "待修（现状）"] },
-  "components/changes-panel.tsx": { "font": [9, "待修（现状）"], "raw-color": [4, "待修（现状）"] },
+  "components/changes-panel.tsx": { "font": [1, "待修（现状）"] },
   "components/composer-images.tsx": { "font": [1, "待修（现状）"] },
   "components/composer-suggestions.tsx": { "font": [3, "待修（现状）"] },
-  "components/container-manage/container-manage-panel.tsx": { "font": [11, "待修（现状）"] },
-  "components/container-manage/denied-list.tsx": { "font": [4, "待修（现状）"] },
-  "components/container-manage/env-editor.tsx": { "font": [3, "待修（现状）"] },
-  "components/container-manage/network-editor.tsx": { "font": [1, "待修（现状）"] },
-  "components/container-manage/row-list.tsx": { "font": [1, "待修（现状）"] },
-  "components/container-manage/rule-table.tsx": { "font": [8, "待修（现状）"], "raw-color": [2, "待修（现状）"] },
-  "components/container-manage/target-input.tsx": { "font": [6, "待修（现状）"] },
+  "components/container-manage/container-manage-panel.tsx": { "font": [1, "待修（现状）"] },
   "components/data-table.tsx": { "font": [1, "手机卡片里的辅助档标签（Hint 之外的 span 内联）"] },
-  "components/files-panel.tsx": { "font": [14, "待修（现状）"] },
   "components/hint.tsx": { "font": [1, "定义“辅助档”本身（STYLE.md 第 2 节）"] },
   "components/html-preview-panel.tsx": { "dialog-size": [1, "待修（现状）"] },
   "components/key-value-list.tsx": { "font": [3, "定义“辅助档标签 + 正文值”本身"] },
@@ -128,10 +121,9 @@ const ALLOW: Allow = {
   "components/search-dialog.tsx": { "dialog-size": [1, "待修（现状）"], "font": [2, "待修（现状）"] },
   "components/section-toggle.tsx": { "font": [2, "定义折叠区标题（区块标题档）本身"] },
   "components/setup-wizard.tsx": { "font": [8, "待修（现状）"], "raw-color": [6, "待修（现状）"] },
-  "components/terminal-view.tsx": { "font": [10, "待修（现状）"] },
   "components/trace-block.tsx": { "font": [18, "待修（现状）"] },
   "components/update-banner.tsx": { "font": [1, "待修（现状）"] },
-  "components/workspace-panel.tsx": { "font": [18, "待修（现状）"] },
+  "components/workspace-panel.tsx": { "font": [4, "待修（现状）"] },
 }
 
 describe("style guard", () => {

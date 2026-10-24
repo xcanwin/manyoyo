@@ -5,6 +5,10 @@ import { cn } from "@/lib/utils"
 import { apiGet, type SessionSummary } from "@/lib/api"
 import type { RoundOption } from "@/lib/rounds"
 import { diffLineClass } from "@/lib/diff-lines"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { Hint } from "@/components/hint"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -104,14 +108,18 @@ export function ChangesPanel({
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           {rounds.length > 0 ? (
-            <div className="flex shrink-0 gap-1" role="group" aria-label="改动范围">
-              <Button size="xs" variant={mode === "round" ? "default" : "outline"} onClick={() => setMode("round")}>
-                按轮
-              </Button>
-              <Button size="xs" variant={mode === "head" ? "default" : "outline"} onClick={() => setMode("head")}>
-                与 HEAD 比较
-              </Button>
-            </div>
+            <ToggleGroup
+              variant="outline"
+              size="sm"
+              aria-label="改动范围"
+              value={[mode]}
+              onValueChange={(values) => {
+                if (values[0] === "round" || values[0] === "head") setMode(values[0])
+              }}
+            >
+              <ToggleGroupItem value="round">按轮</ToggleGroupItem>
+              <ToggleGroupItem value="head">与 HEAD 比较</ToggleGroupItem>
+            </ToggleGroup>
           ) : null}
           {mode === "round" && rounds.length > 0 && round ? (
             <Select value={round.id} onValueChange={(value) => setRoundId(String(value))}>
@@ -129,9 +137,9 @@ export function ChangesPanel({
               </SelectContent>
             </Select>
           ) : (
-            <span className="truncate text-sm text-muted-foreground">
+            <Hint className="truncate">
               {data?.repo ? `${data.files.length} 个文件有改动${data.truncated ? "（只显示前 500 个）" : ""}` : "工作目录的 git 改动"}
-            </span>
+            </Hint>
           )}
         </div>
         <Button variant="ghost" size="icon-sm" title="刷新" aria-label="刷新" onClick={load} disabled={loading}>
@@ -139,16 +147,32 @@ export function ChangesPanel({
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
-        {data && !data.repo ? <p className="p-4 text-sm text-muted-foreground">{mode === "round" ? "这一轮没有可比较的快照" : "工作目录不是 git 仓库"}</p> : null}
-        {data?.repo && data.files.length === 0 ? <p className="p-4 text-sm text-muted-foreground">没有改动</p> : null}
+        {error ? (
+          <Alert variant="destructive" className="m-3 w-auto">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+        {data && !data.repo ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>{mode === "round" ? "这一轮没有可比较的快照" : "工作目录不是 git 仓库"}</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
+        ) : null}
+        {data?.repo && data.files.length === 0 ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>没有改动</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
+        ) : null}
         {data?.repo
           ? data.files.map((file) => (
               <div key={file.path} className="border-b">
                 <button
                   type="button"
                   className={cn(
-                    "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted",
+                    "flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted",
                     selected === file.path && "bg-muted"
                   )}
                   onClick={() => openDiff(file)}
@@ -156,12 +180,12 @@ export function ChangesPanel({
                   <Badge variant="outline" className="w-14 shrink-0 justify-center">
                     {STATUS_LABELS[file.status] || file.status}
                   </Badge>
-                  <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{file.path}</span>
+                  <span className="min-w-0 flex-1 truncate font-mono">{file.path}</span>
                   {file.added !== null || file.deleted !== null ? (
-                    <span className="shrink-0 font-mono text-xs">
-                      <span className="text-emerald-600 dark:text-emerald-400">+{file.added ?? 0}</span>{" "}
-                      <span className="text-red-600 dark:text-red-400">-{file.deleted ?? 0}</span>
-                    </span>
+                    <Hint mono className="shrink-0">
+                      <span className="text-success">+{file.added ?? 0}</span>{" "}
+                      <span className="text-destructive">-{file.deleted ?? 0}</span>
+                    </Hint>
                   ) : null}
                 </button>
                 {selected === file.path ? (
@@ -179,7 +203,7 @@ export function ChangesPanel({
                             </div>
                           ))}
                         </pre>
-                        {diff.truncated ? <p className="px-3 pt-1 text-xs text-muted-foreground">内容过大，已截断显示</p> : null}
+                        {diff.truncated ? <Hint className="block px-3 pt-1">内容过大，已截断显示</Hint> : null}
                       </>
                     ) : null}
                   </div>

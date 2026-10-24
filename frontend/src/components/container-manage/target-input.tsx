@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { Hint } from "@/components/hint"
 import { Input } from "@/components/ui/input"
 import {
   type Candidate,
@@ -111,32 +112,32 @@ export function TargetInput({
         }}
       />
       {chip && !open ? (
-        <span className="pointer-events-none absolute top-1/2 right-2 max-w-[45%] -translate-y-1/2 truncate text-xs text-muted-foreground">{chip}</span>
+        <Hint className="pointer-events-none absolute top-1/2 right-2 max-w-[45%] -translate-y-1/2 truncate">{chip}</Hint>
       ) : null}
       {open && query.startsWith("@") ? (
         <div
           role="listbox"
           className="absolute top-[calc(100%+4px)] left-0 z-50 max-h-64 w-[max(100%,18rem)] overflow-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
         >
-          {items.length === 0 ? <div className="px-2 py-2 text-xs text-muted-foreground">没有匹配的对象</div> : null}
+          {items.length === 0 ? <Hint className="block px-2 py-2">没有匹配的对象</Hint> : null}
           {items.map((item, index) => {
             const heading = index === 0 || items[index - 1].group !== item.group ? item.group : ""
             return (
               <React.Fragment key={item.value}>
-                {heading ? <div className="px-2 pt-1.5 pb-0.5 text-xs text-muted-foreground">{heading}</div> : null}
+                {heading ? <Hint className="block px-2 pt-1.5 pb-0.5">{heading}</Hint> : null}
                 <div
                   role="option"
                   aria-selected={index === active}
-                  className={cn("flex cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1.5 text-sm", index === active ? "bg-accent" : "hover:bg-accent")}
+                  className={cn("flex cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1.5", index === active ? "bg-accent" : "hover:bg-accent")}
                   onMouseDown={(event) => {
                     event.preventDefault()
                     pick(item)
                   }}
                 >
-                  <span className="font-mono text-xs whitespace-nowrap">
+                  <span className="font-mono whitespace-nowrap">
                     @<Highlight text={item.value.slice(1)} hit={item.hit} />
                   </span>
-                  <span className="truncate text-xs text-muted-foreground">{item.desc}</span>
+                  <Hint className="truncate">{item.desc}</Hint>
                 </div>
               </React.Fragment>
             )

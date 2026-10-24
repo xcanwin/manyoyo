@@ -1,6 +1,7 @@
 import * as React from "react"
 import { ArrowDownIcon, ArrowUpIcon, LockIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
+import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -37,25 +38,25 @@ const ACTIONS: Array<{ value: Action; label: string }> = [
   { value: "deny", label: "拒绝" },
 ]
 const PROTOS: Proto[] = ["all", "tcp", "udp"]
-const actionTone = (action: Action) => (action === "allow" ? "text-emerald-600 dark:text-emerald-500" : "text-destructive")
+const actionTone = (action: Action) => (action === "allow" ? "text-success" : "text-destructive")
 
 const DESKTOP_GRID = "grid grid-cols-[4.25rem_minmax(0,1fr)_5.5rem_4rem_6.25rem] items-center gap-2"
 
 function LockedRow({ rule, containers, tip, mobile, ports = "全部", proto = "all" }: { rule: LockedRule; containers?: PeerOption[]; tip: string; mobile: boolean; ports?: string; proto?: string }) {
-  const fixed = "flex h-8 items-center gap-2 rounded-lg bg-muted/60 px-2 text-sm text-muted-foreground"
+  const fixed = "flex h-8 items-center gap-2 rounded-lg bg-muted/60 px-2 text-muted-foreground"
   const lock = (
     <Tooltip>
-      <TooltipTrigger render={<span className="inline-flex items-center gap-1 text-xs text-muted-foreground" />}>
+      <TooltipTrigger render={<Hint className="inline-flex items-center gap-1" />}>
         <LockIcon className="size-3.5" />
         {tip}
       </TooltipTrigger>
       <TooltipContent>{rule.why}</TooltipContent>
     </Tooltip>
   )
-  const action = <div className={cn(fixed, "font-semibold", actionTone(rule.action))}>{rule.action === "allow" ? "允许" : "拒绝"}</div>
+  const action = <div className={cn(fixed, actionTone(rule.action))}>{rule.action === "allow" ? "允许" : "拒绝"}</div>
   const target = (
     <div className={cn(fixed, "min-w-0")}>
-      <span className="font-mono text-xs leading-none text-foreground">{rule.target}</span>
+      <span className="font-mono leading-none text-foreground">{rule.target}</span>
       <span className="truncate leading-none">{describeTarget(rule.target, containers)}</span>
     </div>
   )
@@ -116,7 +117,7 @@ function UserRow({
 
   const action = (
     <Select value={rule.action} onValueChange={(next) => next && onChange({ ...rule, action: next as Action })}>
-      <SelectTrigger aria-label={`${label}第 ${n} 行动作`} className={cn("w-full min-w-0 font-semibold", actionTone(rule.action), off && "opacity-45")}>
+      <SelectTrigger aria-label={`${label}第 ${n} 行动作`} className={cn("w-full min-w-0", actionTone(rule.action), off && "opacity-45")}>
         <SelectValue>{(value: string) => ACTIONS.find((item) => item.value === value)?.label ?? value}</SelectValue>
       </SelectTrigger>
       <SelectContent>
@@ -212,9 +213,9 @@ function UserRow({
           {ops}
         </div>
       )}
-      {error ? <p className={cn("text-xs text-destructive", !mobile && "pl-[4.75rem]")}>{error}</p> : null}
+      {error ? <Hint className={cn("block text-destructive", !mobile && "pl-[4.75rem]")}>{error}</Hint> : null}
       {isShadowingRule(rule, direction, preset) ? (
-        <p className={cn("text-xs text-muted-foreground", !mobile && "pl-[4.75rem]")}>下面的规则不会生效</p>
+        <Hint className={cn("block", !mobile && "pl-[4.75rem]")}>下面的规则不会生效</Hint>
       ) : null}
     </div>
   )
@@ -248,12 +249,12 @@ export function RuleTable({
   return (
     <div className="flex flex-col gap-1.5">
       {!mobile ? (
-        <div className={cn(DESKTOP_GRID, "px-0.5 text-xs text-muted-foreground")}>
-          <span>动作</span>
-          <span>{third[0]}</span>
-          <span>{third[1]}</span>
-          <span>协议</span>
-          <span className="text-center">操作</span>
+        <div className={cn(DESKTOP_GRID, "px-0.5")}>
+          <Hint>动作</Hint>
+          <Hint>{third[0]}</Hint>
+          <Hint>{third[1]}</Hint>
+          <Hint>协议</Hint>
+          <Hint className="text-center">操作</Hint>
         </div>
       ) : null}
       {top.map((rule) => (
@@ -290,7 +291,7 @@ export function RuleTable({
         <LockedRow key={rule.target + rule.action} rule={rule} containers={containers} tip="模式默认" mobile={mobile} />
       ))}
       <div className="pt-1">
-        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...rules, newRule(direction, "", { proto: direction === "outbound" ? "all" : "tcp" })])}>
+        <Button type="button" variant="outline" onClick={() => onChange([...rules, newRule(direction, "", { proto: direction === "outbound" ? "all" : "tcp" })])}>
           <PlusIcon data-icon="inline-start" />
           {addLabel}
         </Button>

@@ -129,6 +129,9 @@ import { TRACE_ALIGN_EVENT, TraceBlock } from "@/components/trace-block"
 import { ContainerManagePanel } from "@/components/container-manage/container-manage-panel"
 
 import { Hint } from "@/components/hint"
+import { KeyValueList } from "@/components/key-value-list"
+import { PageHeader } from "@/components/page-header"
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 type View = "activity" | "files" | "terminal" | "changes" | "container" | "config" | "detail"
 
 const VIEW_LABELS: Record<View, string> = {
@@ -157,11 +160,12 @@ type RestoreNotice =
 
 type Tone = "ok" | "warn" | "danger" | "info"
 
-const TONE_BADGE_VARIANT: Record<Tone, "default" | "secondary" | "destructive" | "outline"> = {
-  ok: "secondary",
-  warn: "outline",
+// 状态色（STYLE.md 第 3 节）：正常 = success，需要注意 = warning，失败 = destructive，中性 = secondary
+const TONE_BADGE_VARIANT: Record<Tone, "secondary" | "success" | "warning" | "destructive"> = {
+  ok: "success",
+  warn: "warning",
   danger: "destructive",
-  info: "outline",
+  info: "secondary",
 }
 
 const TEMPLATE_SOURCE_LABELS: Record<string, string> = {
@@ -209,25 +213,25 @@ function InfoCard({ title, rows }: { title: string; rows: InfoRow[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col divide-y">
-        {rows.map((row) => (
-          <div key={row.label} className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-muted-foreground">
-                {configLabel([row.label]).mono ? row.label : configLabel([row.label]).title}
-                {configLabel([row.label]).mono ? null : <span className="ml-1.5 font-mono text-xs">{row.label}</span>}
-              </span>
-              {row.tone ? (
-                <Badge variant={TONE_BADGE_VARIANT[row.tone]}>{row.value}</Badge>
+      <CardContent>
+        <KeyValueList
+          items={rows.map((row) => {
+            const label = configLabel([row.label])
+            return {
+              label: label.mono ? (
+                row.label
               ) : (
-                <span className="truncate text-sm font-medium">{row.value}</span>
-              )}
-            </div>
-            {row.detail ? <Hint className="block">{row.detail}</Hint> : null}
-          </div>
-        ))}
+                <>
+                  {label.title} <Hint mono>{row.label}</Hint>
+                </>
+              ),
+              value: row.tone ? <Badge variant={TONE_BADGE_VARIANT[row.tone]}>{row.value}</Badge> : row.value,
+              detail: row.detail,
+            }
+          })}
+        />
       </CardContent>
     </Card>
   )
@@ -514,17 +518,21 @@ function ActivityView({
 
   if (!session) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
-        <p>请选择左侧的容器 / AGENT，或点击「新建容器」创建一个新会话。</p>
-      </div>
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyDescription>请选择左侧的容器 / AGENT，或点击「新建容器」创建一个新会话。</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
   if (!displayMessages.length) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
-        <p>还没有对话记录，在下方输入内容开始与 AGENT 交流。</p>
-      </div>
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyDescription>还没有对话记录，在下方输入内容开始与 AGENT 交流。</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
@@ -636,7 +644,7 @@ function ActivityView({
                         </>
                       )}
                     </div>
-                    <span className={cn("flex items-center gap-1 px-1 text-xs text-muted-foreground", message.role === "user" && message.mode === "agent" && "min-h-6")}>
+                    <Hint className={cn("flex items-center gap-1 px-1", message.role === "user" && message.mode === "agent" && "min-h-6")}>
                       {formatTime(message.timestamp)}
                       {message.interrupted ? " · 已停止" : ""}
                       {bubble.copyable ? (
@@ -654,7 +662,7 @@ function ActivityView({
                           <Undo2Icon />
                         </Button>
                       ) : null}
-                    </span>
+                    </Hint>
                   </>
                 )}
               </div>
@@ -681,9 +689,11 @@ function ActivityView({
 
 function EmptyPane({ text }: { text: string }) {
   return (
-    <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-      {text}
-    </div>
+    <Empty className="h-full">
+      <EmptyHeader>
+        <EmptyTitle>{text}</EmptyTitle>
+      </EmptyHeader>
+    </Empty>
   )
 }
 
@@ -699,7 +709,7 @@ function ConfigView({ detail }: { detail: SessionDetail | null }) {
     // 子项必须 shrink-0：flex 子项默认可压缩，卡片会被压扁到刚好塞满容器，
     // 容器因此认为"没有溢出"而不出滚动条，卡片内部内容却被裁掉看不见
     // （移动端高度有限时尤其明显）
-    <div className="flex h-full flex-col gap-3 overflow-auto p-4 [&>*]:shrink-0">
+    <div className="flex h-full flex-col gap-4 overflow-auto p-3 md:p-4 [&>*]:shrink-0">
       <InfoCard
         title="基础信息"
         rows={[
@@ -761,7 +771,7 @@ function DetailView({ detail }: { detail: SessionDetail | null }) {
     // 子项必须 shrink-0：flex 子项默认可压缩，卡片会被压扁到刚好塞满容器，
     // 容器因此认为"没有溢出"而不出滚动条，卡片内部内容却被裁掉看不见
     // （移动端高度有限时尤其明显）
-    <div className="flex h-full flex-col gap-3 overflow-auto p-4 [&>*]:shrink-0">
+    <div className="flex h-full flex-col gap-4 overflow-auto p-3 md:p-4 [&>*]:shrink-0">
       <InfoCard
         title="会话概览"
         rows={[
@@ -2013,9 +2023,9 @@ export function WorkspacePanel({
             </Badge>
           ) : null}
           {resumeIndicator.phase === "synced" ? (
-            <span role="status" className="shrink-0 text-xs font-normal text-muted-foreground">
+            <Hint role="status" className="shrink-0">
               已同步
-            </span>
+            </Hint>
           ) : null}
         </div>
         {resumeIndicator.phase === "syncing" ? (
@@ -2060,7 +2070,7 @@ export function WorkspacePanel({
         {creatingAgent ? (
           <div className="flex h-full flex-col items-center justify-center gap-2">
             <Spinner className="size-6" />
-            <p className="text-sm text-muted-foreground">正在创建 AGENT...</p>
+            <p className="text-muted-foreground">正在创建 AGENT...</p>
           </div>
         ) : view === "activity" ? (
           // 首次进入该会话（无缓存）才用加载态占位；切换回来时直接显示缓存的
@@ -2073,7 +2083,7 @@ export function WorkspacePanel({
             // 空会话：输入区放在中间，下面给几个常用任务（点一下只是填进输入框，不直接发送）；
             // 发出第一条后回到正常布局，输入区在底部
             <div className="flex h-full flex-col items-center justify-center gap-3 overflow-y-auto px-1 py-6">
-              <p className="text-base font-medium">想让 AGENT 做什么？</p>
+              <PageHeader title="想让 AGENT 做什么？" />
               <div className="w-full max-w-2xl">{composerNode}</div>
               <div className="flex max-w-2xl flex-wrap justify-center gap-2 px-3">
                 {STARTER_PROMPTS.map((text) => (

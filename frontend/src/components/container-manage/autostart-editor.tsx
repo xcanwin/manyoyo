@@ -18,7 +18,7 @@ export function AutostartEditor({
   idPrefix: string
 }) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <Field>
         <FieldLabel htmlFor={`${idPrefix}-autostart`}>自启动脚本（bash）</FieldLabel>
         <Textarea

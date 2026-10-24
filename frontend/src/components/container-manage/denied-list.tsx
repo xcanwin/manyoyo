@@ -1,21 +1,19 @@
-import { ChevronDownIcon } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { SectionToggle } from "@/components/section-toggle"
 import { formatDateTime } from "@/lib/format"
 import type { DeniedRecord } from "@/lib/container-manage"
 
 import { Hint } from "@/components/hint"
 function Row({ record, disabled, onAllow }: { record: DeniedRecord; disabled: boolean; onAllow: (host: string) => void }) {
   return (
-    <div className="flex items-center gap-2 text-sm">
+    <div className="flex items-center gap-2">
       <span className="min-w-0 flex-1 truncate" title={record.host}>
         {record.host}
       </span>
-      <span className="shrink-0 text-xs text-muted-foreground">
+      <Hint className="shrink-0">
         {record.count} 次 · {formatDateTime(record.last)}
-      </span>
-      <Button type="button" variant="outline" size="xs" disabled={disabled} onClick={() => onAllow(record.host)}>
+      </Hint>
+      <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => onAllow(record.host)}>
         允许
       </Button>
     </div>
@@ -43,17 +41,13 @@ export function DeniedList({
         <Hint className="block">暂无</Hint>
       )}
       {background.length ? (
-        <Collapsible>
-          <CollapsibleTrigger className="group/section flex w-full items-center justify-between gap-2 rounded-md py-0.5 text-left text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-            浏览器后台请求（{background.length}）
-            <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]/section:rotate-180" />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="flex flex-col gap-2 pt-2">
+        <SectionToggle title={`浏览器后台请求（${background.length}）`}>
+          <div className="flex flex-col gap-2">
             {background.map((record) => (
               <Row key={`${record.host}:${record.port}`} record={record} disabled={disabled} onAllow={onAllow} />
             ))}
-          </CollapsibleContent>
-        </Collapsible>
+          </div>
+        </SectionToggle>
       ) : null}
     </div>
   )
