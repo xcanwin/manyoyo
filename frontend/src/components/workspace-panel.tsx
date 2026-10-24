@@ -949,7 +949,8 @@ export function Composer({
   // 空输入/纯空白时发送按钮直接置灰，而不是点了没反应
   // 任务进行中输入框仍可用：agent 对话可以追加提示词（选插入时机）；系统命令不支持追加
   const hasImages = images.some((item) => item.status === "done")
-  const uploadingImages = images.some((item) => item.status === "uploading")
+  // 上传失败的图片也拦住发送：否则文字会悄悄不带图发出去，要用户先删掉或重选
+  const uploadingImages = images.some((item) => item.status !== "done")
   const sendDisabled = inputDisabled || (draft.trim() === "" && !hasImages) || uploadingImages || (sending && mode === "command")
 
   // 执行中有内容时才显示“插入时机”（只对 Agent 对话有意义）；执行中没内容时只留“停止”
@@ -1691,7 +1692,7 @@ export function WorkspacePanel({
     // 只发图片没写字：给一句默认的话（服务端要求提示词非空）
     const text = (fromDraft ? draft : overrideText).trim() || (sendImages.length ? "请看附图。" : "")
     if (!text || !activeSession) return
-    if (fromDraft && composerImages.uploading) return
+    if (fromDraft && composerImages.images.some((item) => item.status !== "done")) return
     const name = activeSession.name
     // 任务进行中只有 agent 对话能追加提示词；系统命令仍要等上一条跑完
     if ((sendingNames.has(name) || activeAgentRunning) && mode === "command") return
