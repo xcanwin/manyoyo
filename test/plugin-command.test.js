@@ -452,6 +452,24 @@ describe('probe（真实探测当前模式，发布流水线用）', () => {
         expect(sink.out).toContain('真实探测: 通过');
     });
 
+    test('podman 宿主机没装 catatonit（--init 报 lookup init binary）：不带 --init 重试，仍能通过', async () => {
+        const { plugin, sink } = newPlugin(home);
+        const runs = [];
+        plugin.runtimeCall = jest.fn(args => {
+            if (args[0] === 'image') return { status: 0, stdout: 'sha256:x', stderr: '' };
+            if (args[0] !== 'run') return { status: 0, stdout: '', stderr: '' };
+            runs.push(args);
+            return args.includes('--init')
+                ? { status: 126, stdout: '', stderr: 'Error: lookup init binary: exec: "catatonit": executable file not found in $PATH' }
+                : { status: 0, stdout: '"manyoyo-ok"\n', stderr: '' };
+        });
+        expect(await plugin.probeCommand()).toBe(0);
+        expect(runs).toHaveLength(2);
+        expect(runs[0]).toContain('--init');
+        expect(runs[1]).not.toContain('--init');
+        expect(sink.out).toContain('真实探测: 通过');
+    });
+
     test('默认模式：容器里没读到标题 / 镜像不存在 → 退出码 1 并给一句原因；不改任何状态', async () => {
         const { plugin, sink } = newPlugin(home);
         const calls = stubRuntime(plugin, { run: { status: 1, stdout: 'Error: browser launch failed\n', stderr: '' } });
