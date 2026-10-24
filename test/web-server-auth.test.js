@@ -6344,7 +6344,7 @@ exit 1
             try {
                 handle = await startWebServer(buildServerOptions(tempHost, port));
                 const baseUrl = `http://127.0.0.1:${handle.port || port}`;
-                for (const [method, route] of [['GET', '/api/model-services'], ['POST', '/api/model-services'], ['PUT', '/api/model-services/x'], ['DELETE', '/api/model-services/x'], ['POST', '/api/model-services/x/test']]) {
+                for (const [method, route] of [['GET', '/api/model-services'], ['GET', '/api/model-services/import-preview'], ['POST', '/api/model-services/import'], ['POST', '/api/model-services'], ['PUT', '/api/model-services/x'], ['DELETE', '/api/model-services/x'], ['POST', '/api/model-services/x/test']]) {
                     const res = await request(`${baseUrl}${route}`, { method, headers: { 'Content-Type': 'application/json' }, body: method === 'GET' || method === 'DELETE' ? undefined : '{}' });
                     expect(res.response.status).toBe(401);
                 }
@@ -6438,6 +6438,44 @@ exit 1
                 expect(containerState.readEnv(tempHost, made['uses-other']).text).toBe('ANTHROPIC_AUTH_TOKEN=somebody-elses-key\n');
                 expect(res.text).not.toContain('ds-new-key-9999');
             });
+        });
+
+        test('从本机导入：预览只有 Key 末 4 位；导入只写 env，不覆盖已有配置，响应里没有 Key', async () => {
+            const keys = ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL', 'CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL'];
+            const saved = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+            keys.forEach(key => delete process.env[key]);
+            try {
+                await withSetupServer(() => ({}), async ({ call, configPath, tempHost }) => {
+                    fs.writeFileSync(configPath, RAW);
+                    let res = await call('GET', '/api/model-services/import-preview');
+                    expect(res.response.status).toBe(200);
+                    expect(res.json.candidates).toEqual([]);
+                    expect(res.json.sources.map(item => item.agent)).toEqual(['claude', 'codex']);
+
+                    const localKey = 'local-claude-key-zzzz9999';
+                    fs.mkdirSync(path.join(tempHost, '.claude'), { recursive: true });
+                    fs.writeFileSync(path.join(tempHost, '.claude', 'settings.json'), JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: localKey, ANTHROPIC_BASE_URL: 'https://open.bigmodel.cn/api/anthropic' } }));
+                    res = await call('GET', '/api/model-services/import-preview');
+                    expect(res.json.candidates).toHaveLength(1);
+                    expect(res.json.candidates[0]).toMatchObject({ id: 'claude', providerLabel: '智谱 GLM', keyTail: '…9999', duplicate: false });
+                    expect(res.text).not.toContain(localKey);
+
+                    expect((await call('POST', '/api/model-services/import', { ids: [] })).response.status).toBe(400);
+                    expect((await call('POST', '/api/model-services/import', { ids: ['gemini'] })).response.status).toBe(400);
+                    res = await call('POST', '/api/model-services/import', { ids: ['claude'] });
+                    expect(res.response.status).toBe(200);
+                    expect(res.json.names).toEqual(['claude-zhipu']);
+                    expect(res.text).not.toContain(localKey);
+                    const parsed = JSON5.parse(fs.readFileSync(configPath, 'utf8'));
+                    expect(parsed.runs['claude-zhipu'].env.ANTHROPIC_AUTH_TOKEN).toBe(localKey);
+                    expect(parsed.runs['claude-glm'].env.ANTHROPIC_AUTH_TOKEN).toBe(GLM);
+                    // 再导入一次：Key 已存在，预览标成重复
+                    res = await call('GET', '/api/model-services/import-preview');
+                    expect(res.json.candidates[0].duplicate).toBe(true);
+                });
+            } finally {
+                keys.forEach(key => { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; });
+            }
         });
 
         test('非法请求被拒绝且不改配置：重名、没有预设、找不到、坏 JSON', async () => {

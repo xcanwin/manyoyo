@@ -54,6 +54,8 @@ describe("ModelServicesPanel", () => {
     vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET"
       calls.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      if (url.endsWith("/import-preview")) return jsonResponse({ candidates: [{ id: "codex", agent: "codex", agentLabel: "Codex", providerLabel: "官方", baseUrl: "", model: "", keyTail: "…9999", duplicate: false, invalid: "" }], sources: [] })
+      if (method === "POST" && url.endsWith("/import")) return jsonResponse({ ...SERVICES, names: ["codex-local"] })
       if (method === "GET" && url.endsWith("/containers")) return jsonResponse({ containers: ["box-1"] })
       if (method === "GET") return jsonResponse(SERVICES)
       if (url.endsWith("/test")) return jsonResponse({ category: "success", message: "连接成功", detail: "" })
@@ -115,6 +117,14 @@ describe("ModelServicesPanel", () => {
     // 有容器还在用旧设置时默认勾选“同时更新”
     expect(put?.body).toEqual({ model: "glm-5.3", baseUrl: "", syncContainers: true })
     expect(pageText()).not.toContain("同时更新")
+  })
+
+  test("从本机导入：先预览（只有末 4 位），确认后只发选中的 id", async () => {
+    await mount()
+    await click("从本机导入")
+    expect(pageText()).toContain("…9999")
+    await click("导入")
+    expect(post("/api/model-services/import")?.body).toEqual({ ids: ["codex"] })
   })
 
   test("删除要先确认，确认后才请求", async () => {

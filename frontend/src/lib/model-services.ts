@@ -102,3 +102,20 @@ export function runLabelMap(services: Pick<ModelService, "name" | "agentLabel" |
 }
 
 export const runLabel = (name: string, labels: Record<string, string>) => labels[name] ?? name
+
+export type ImportCandidate = {
+  id: string
+  agent: string
+  agentLabel: string
+  providerLabel: string
+  baseUrl: string
+  model: string
+  keyTail: string
+  duplicate: boolean
+  invalid: string
+}
+export type ImportPreview = { candidates: ImportCandidate[]; sources: { agent: string; label: string; where: string }[] }
+
+export const fetchImportPreview = () => apiGet("/api/model-services/import-preview") as unknown as Promise<ImportPreview>
+export const importLocalServices = (ids: string[]) =>
+  apiPost("/api/model-services/import", { ids }) as unknown as Promise<ModelServicesData & { names: string[] }>

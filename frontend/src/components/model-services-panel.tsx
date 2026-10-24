@@ -14,12 +14,15 @@ import {
   deleteModelService,
   EMPTY_SERVICE_FORM,
   fetchModelServices,
+  fetchImportPreview,
   fetchServiceContainers,
+  importLocalServices,
   resultTone,
   serviceTitle,
   testModelService,
   updateModelService,
   validateServiceForm,
+  type ImportPreview,
   type ModelService,
   type ModelServicesData,
   type ServiceForm,
@@ -36,6 +39,7 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
   const [results, setResults] = React.useState<Record<string, Notice>>({})
   const [dialog, setDialog] = React.useState<{ mode: "create" | "edit"; form: ServiceForm; name?: string } | null>(null)
   const [deleting, setDeleting] = React.useState<ModelService | null>(null)
+  const [importing, setImporting] = React.useState<ImportPreview | null>(null)
 
   const load = React.useCallback(() => {
     fetchModelServices()
@@ -96,6 +100,18 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除失败")
       setDeleting(null)
+    } finally {
+      setBusy("")
+    }
+  }
+
+  async function openImport() {
+    setBusy("import")
+    setError("")
+    try {
+      setImporting(await fetchImportPreview())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "读取本机配置失败")
     } finally {
       setBusy("")
     }
@@ -183,9 +199,26 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
         </div>
       ) : null}
 
-      <Button type="button" variant="outline" className="w-fit" onClick={() => setDialog({ mode: "create", form: EMPTY_SERVICE_FORM })}>
-        添加模型服务
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" onClick={() => setDialog({ mode: "create", form: EMPTY_SERVICE_FORM })}>
+          添加模型服务
+        </Button>
+        <Button type="button" variant="outline" disabled={busy !== ""} onClick={() => void openImport()}>
+          {busy === "import" ? <Spinner /> : null}
+          从本机导入
+        </Button>
+      </div>
+
+      {importing ? (
+        <ImportDialog
+          preview={importing}
+          onClose={() => setImporting(null)}
+          onImported={(next) => {
+            applyChange(next)
+            setImporting(null)
+          }}
+        />
+      ) : null}
 
       {dialog && data ? (
         <ServiceDialog
@@ -429,6 +462,97 @@ function ServiceDialog({
             <Button type="button" disabled={saving} onClick={() => void handleSave()}>
               {saving ? <Spinner /> : null}
               保存
+            </Button>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// 从本机已有的配置里读出 Key / 地址 / 模型，先预览再导入；不挂载本机目录，也不碰登录凭据
+function ImportDialog({
+  preview,
+  onClose,
+  onImported,
+}: {
+  preview: ImportPreview
+  onClose: () => void
+  onImported: (next: ModelServicesData) => void
+}) {
+  const importable = preview.candidates.filter((item) => !item.invalid)
+  const [picked, setPicked] = React.useState<string[]>(() => importable.filter((item) => !item.duplicate).map((item) => item.id))
+  const [error, setError] = React.useState("")
+  const [saving, setSaving] = React.useState(false)
+
+  async function handleImport() {
+    setSaving(true)
+    setError("")
+    try {
+      onImported(await importLocalServices(picked))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导入失败")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>从本机导入</DialogTitle>
+          <DialogDescription>只读取 Key、地址和模型，不会挂载本机目录，也不会读取登录凭据。</DialogDescription>
+        </DialogHeader>
+        {preview.candidates.length === 0 ? (
+          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+            <span>本机没有找到可导入的 Key。会在这些地方找：</span>
+            {preview.sources.map((item) => (
+              <span key={item.agent}>
+                {item.label}：{item.where}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {preview.candidates.map((item) => (
+              <label key={item.id} className="flex items-start gap-2 rounded-lg border p-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  disabled={Boolean(item.invalid)}
+                  checked={picked.includes(item.id)}
+                  onChange={(event) => setPicked((prev) => (event.target.checked ? [...prev, item.id] : prev.filter((id) => id !== item.id)))}
+                />
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="font-semibold">
+                    {item.agentLabel} · {item.providerLabel}
+                  </span>
+                  <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                    Key {item.keyTail}
+                    {item.baseUrl ? ` · ${item.baseUrl}` : ""}
+                    {item.model ? ` · 模型 ${item.model}` : ""}
+                  </span>
+                  {item.duplicate ? <span className="text-xs text-muted-foreground">已经有用同一个 Key 的服务</span> : null}
+                  {item.invalid ? <span className="text-xs text-destructive">不能导入：{item.invalid}</span> : null}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            取消
+          </Button>
+          {preview.candidates.length > 0 ? (
+            <Button type="button" disabled={saving || picked.length === 0} onClick={() => void handleImport()}>
+              {saving ? <Spinner /> : null}
+              导入
             </Button>
           ) : null}
         </DialogFooter>
