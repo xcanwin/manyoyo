@@ -241,6 +241,32 @@ describe("ModelServicesPanel", () => {
     expect(post("/api/model-services/import")?.body).toEqual({ ids: ["codex"] })
   })
 
+  test("测试失败：主提示是人话，原始报错放进可展开的详情", async () => {
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+      (url: string, init?: RequestInit) => {
+        const method = init?.method ?? "GET"
+        calls.push({
+          method,
+          url,
+          body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        })
+        if (url.endsWith("/test"))
+          return jsonResponse({
+            category: "auth",
+            message: "认证失败：Key 或令牌无效，请检查后重新填写",
+            detail: "401 Unauthorized request_id: abc",
+          })
+        return jsonResponse(SERVICES)
+      }
+    )
+    await mount()
+    await click("测试")
+    expect(pageText()).toContain("认证失败：Key 或令牌无效")
+    const details = document.body.querySelector("details") as HTMLDetailsElement
+    expect(details.open).toBe(false)
+    expect(details.textContent).toContain("request_id: abc")
+  })
+
   test("勾选“同时更新”后才带 syncContainers", async () => {
     await mount()
     await click("编辑")

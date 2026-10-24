@@ -10,10 +10,18 @@ Manage keys in the web UI under "System settings → Model services" — no hand
 ## Three steps in the web UI
 
 1. Open "System settings → Model services" and click "Add model service".
-2. Pick the agent and provider, paste the key, save. The provider's address, model and extra settings are filled in for you; after saving, a test runs automatically (the model must actually run a command and read the result back).
+2. Pick the agent (Claude Code by default — click "Codex" first to add Codex) and the provider, paste the key, save. The provider's address, model and extra settings are filled in for you; a blank name is generated automatically (like `codex-deepseek`, with a number added if taken). After saving, a test runs automatically (the model must actually run a command and read the result back); you can click "Test" in the list any time.
 3. When creating a container or a quick chat, pick it from the run-profile dropdown; it shows as "Claude Code · Zhipu GLM".
 
-If you already have a Claude Code key, a card appears saying "The Zhipu GLM key can also be used by Codex" — click "Add in one click" instead of typing it again. "Import from this machine" reads the keys, addresses and models already on this machine (read-only: it mounts no host directory and reads no login credentials).
+If you already have a Claude Code key, a dashed card below the list says "The Zhipu GLM key can also be used by Codex" — click "Add in one click" instead of typing it again; it is tested automatically, and green "Connected" means it works. "Import from this machine" reads the keys, addresses and models already on this machine (read-only: it mounts no host directory and reads no login credentials).
+
+## Reading the test result
+
+- Green "Connected": the key works and the model can run commands.
+- Red "Authentication failed": wrong key (or wrong plan); click "Edit" and fix it. "Details" has the server's own message.
+- Red "Quota or rate limit": balance or plan quota is used up, or a plan key is used against a pay-as-you-go address.
+- Red "Model not found": check the model name.
+- Red "Connected, but the model did not run the command": this service or model cannot use tools; try another model.
 
 ## Providers
 

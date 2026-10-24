@@ -46,7 +46,7 @@ const EXTRA_ENV_LABELS: Record<string, string> = {
   ENABLE_TOOL_SEARCH: "关闭工具搜索",
 }
 
-type Notice = { tone: "success" | "error"; text: string }
+type Notice = { tone: "success" | "error"; text: string; detail?: string }
 
 // 系统设置里的“模型服务”：一套服务 = 一个运行配置。界面上不出现变量名；Key 只显示末 4 位，保存和测试都在服务端完成
 export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
@@ -86,8 +86,9 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
       text:
         result.category === "success"
           ? "连接成功，模型能执行命令"
-          : result.message +
-            (result.detail ? `（${result.detail.slice(0, 120)}）` : ""),
+          : result.message,
+      // 原始报错放进可展开的详情，主提示只留人话
+      detail: result.category === "success" ? "" : result.detail,
     }
   }
 
@@ -278,6 +279,14 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
                   }
                 >
                   {result.text}
+                  {result.detail ? (
+                    <details className="mt-1 text-muted-foreground">
+                      <summary className="cursor-pointer">详情</summary>
+                      <pre className="mt-1 max-h-32 overflow-auto font-mono break-all whitespace-pre-wrap">
+                        {result.detail}
+                      </pre>
+                    </details>
+                  ) : null}
                 </p>
               ) : null}
             </div>
