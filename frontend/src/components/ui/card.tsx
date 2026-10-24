@@ -38,7 +38,8 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        // 本地修改：区块标题档 14px / 600（STYLE.md 第 2 节）
+        "font-heading text-sm leading-snug font-semibold",
         className
       )}
       {...props}

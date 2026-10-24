@@ -38,7 +38,8 @@
 - `lib/terminal-resize.ts`：终端 fit 后列数/行数变化的防抖上报（`{type:'resize',cols,rows}`）、容器尺寸为 0 不建连。
 - `lib/format.ts`：时间与体积的统一格式化（`formatDateTime` 固定 zh-CN 24 小时制 `MM/DD HH:mm`、`formatBytes`）。新增展示时间/体积的地方一律用它，别再各写一个 `toLocaleString()`。
 - `hooks/`：`use-mobile`（移动端断点）、`use-sessions`、`use-agent-recovery-poll`（页面隐藏时不发请求，可见后立刻补一次，退避计数不清零）、`use-resizable-width`、`use-confirm-dialog`、`use-unsaved-changes-dialog`。
-- `components/ui/`（26 个）：shadcn 原样组件，默认不改；要调样式先想能不能在调用处用 variant 解决。
+- `components/ui/`：shadcn 组件，默认不改；要调样式先想能不能在调用处用 variant 解决。**有本地修改的文件**（每处都有“本地修改 / 本地新增”注释，升级 shadcn 时用 `npx shadcn@latest add <组件> --diff` 合并，别直接 `--overwrite`）：`dialog.tsx`（`size` 档、`DialogBody`、嵌套弹窗也渲染遮罩 `forceRender`、父弹窗 `data-nested-dialog-open` 缩放变暗）、`sheet.tsx` / `alert-dialog.tsx`（共用 `overlay-class.ts` 的遮罩）、`card.tsx`（`CardTitle` 14px / 600）、`badge.tsx` / `alert.tsx`（`success` / `warning` variant）、`table.tsx`（表头 12px 灰色吸顶）；`index.css` 增加了 `--success` / `--warning`。`table.tsx`、`empty.tsx` 是 `npx shadcn@latest add` 装的（CLI 会写出 `from "cn"` 的错误导入并在 package.json 加一个 `cn` 依赖，装完要改成 `@/lib/utils` 并还原 package.json）。
+- 样式基础组件（规范见 `STYLE.md`）：`data-table.tsx`（只读数据列表，桌面表格 / 手机卡片，空状态与加载中）、`hint.tsx`（辅助档文字）、`page-header.tsx`（整页标题行 / 40px 工具栏）、`sticky-footer.tsx`（整页表单底部保存栏）、`key-value-list.tsx`（只读“名称：值”）；`src/style-guard.test.ts` 是守卫（弹窗尺寸、手写表格、原色、手写字号、space-*），白名单只减不增。
 
 ## 保存不覆盖别人的修改
 

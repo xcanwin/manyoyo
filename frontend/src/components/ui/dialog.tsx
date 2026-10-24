@@ -3,6 +3,8 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { OVERLAY_CLASS } from "@/components/ui/overlay-class"
+import { cva, type VariantProps } from "class-variance-authority"
 import { XIcon } from "lucide-react"
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
@@ -28,32 +30,48 @@ function DialogOverlay({
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
-      className={cn(
-        "fixed inset-0 isolate z-50 bg-black/45 duration-100 supports-backdrop-filter:backdrop-blur-md data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
-        className
-      )}
+      // 本地修改：嵌套的弹窗也渲染遮罩（base-ui 默认不渲染），下层被它盖住并虚化
+      forceRender
+      className={cn(OVERLAY_CLASS, className)}
       {...props}
     />
   )
 }
 
+// 本地新增：弹窗只用 size 选档（STYLE.md 第 8 节），调用处不写宽高。
+// sm / md 手机上居中并留边；lg / wide 手机（<768px）全屏，标题栏和底栏固定。
+const dialogContentVariants = cva(
+  "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 motion-reduce:animate-none motion-reduce:duration-0 data-nested-dialog-open:scale-[0.97] data-nested-dialog-open:brightness-75 data-nested-dialog-open:transition-[scale,filter]",
+  {
+    variants: {
+      size: {
+        sm: "sm:max-w-sm",
+        md: "sm:max-w-md",
+        lg: "flex max-h-dvh flex-col max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:ring-0 md:max-h-[85dvh] md:max-w-xl",
+        wide: "flex max-h-dvh flex-col max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:ring-0 md:h-[85dvh] md:max-w-[min(96vw,80rem)]",
+      },
+    },
+    defaultVariants: { size: "md" },
+  }
+)
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size,
   ...props
-}: DialogPrimitive.Popup.Props & {
-  showCloseButton?: boolean
-}) {
+}: DialogPrimitive.Popup.Props &
+  VariantProps<typeof dialogContentVariants> & {
+    showCloseButton?: boolean
+  }) {
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
-        className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-          className
-        )}
+        data-size={size ?? "md"}
+        className={cn(dialogContentVariants({ size }), className)}
         {...props}
       >
         {children}
@@ -100,7 +118,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        "-mx-4 -mb-4 flex shrink-0 flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-row sm:justify-end max-md:rounded-none",
         className
       )}
       {...props}
@@ -112,6 +130,17 @@ function DialogFooter({
         </DialogPrimitive.Close>
       )}
     </div>
+  )
+}
+
+// 本地新增：主体太长时只让主体滚动，标题和底栏固定（STYLE.md 第 8 节）
+function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-body"
+      className={cn("-mx-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4", className)}
+      {...props}
+    />
   )
 }
 
@@ -147,6 +176,7 @@ function DialogDescription({
 export {
   Dialog,
   DialogClose,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
