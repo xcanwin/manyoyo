@@ -50,7 +50,7 @@ manyoyo run -n <container> -- -c      # Continue the most recent session
 
 When you use Claude Code in a terminal, it rings the bell when a task finishes (not in the web UI). Only images from 2.3.0 on include this; recreate old containers.
 
-In the wizard's "Compatible service" step, Claude Code can pick DeepSeek, Zhipu, Kimi, Alibaba Bailian, Tencent Cloud, Volcengine Ark, MiniMax and more in one click; the Base URL is filled in for you (with a link to the official guide). Codex has no presets yet.
+In the wizard's "Compatible service" step, Claude Code can pick DeepSeek, Zhipu, Kimi, Alibaba Bailian, Tencent Cloud, Volcengine Ark, MiniMax and more in one click; the Base URL is filled in for you (with a link to the official guide). Codex can pick Zhipu, Kimi, Volcengine Ark and MiniMax (their Responses endpoints).
 
 Environment variables (`anthropic_claudecode.env`):
 

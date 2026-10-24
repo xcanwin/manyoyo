@@ -35,7 +35,7 @@ const { launchApp, getAppStatePath, openBrowser } = require('../lib/app-launcher
 const { initAgentConfigs } = require('../lib/init-config');
 const { buildImage } = require('../lib/image-build');
 const { resolveAgentResumeArg, buildAgentResumeCommand } = require('../lib/agent-resume');
-const { resolveYoloCommand } = require('../lib/agent-adapters');
+const { resolveYoloCommand, withCodexBaseUrl } = require('../lib/agent-adapters');
 const { runDoctorChecks, applyDoctorFixes } = require('../lib/doctor');
 const { resolveContainerMode } = require('../lib/container-modes');
 const { runPlaywrightCommand, buildContainerIntegration, mergeIntegration } = require('../lib/plugin');
@@ -2353,7 +2353,7 @@ async function executeInContainer(runtime, defaultCommand) {
     const exec = buildExecArgs({ homeDir: os.homedir(), dockerExecArgs }, runtime.containerName, {
         interactive: true,
         tty: true,
-        command: runtime.execCommand ? ['/bin/bash', '-c', runtime.execCommand] : ['/bin/bash']
+        command: runtime.execCommand ? ['/bin/bash', '-c', withCodexBaseUrl(runtime.execCommand)] : ['/bin/bash']
     });
     try {
         spawnSync(`${DOCKER_CMD}`, exec.args, { stdio: 'inherit', env: DOCKER_ENV });

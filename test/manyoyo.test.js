@@ -1677,6 +1677,96 @@ exit 0
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }
         });
+
+        test('codex yolo 的交互命令带上由 shell 展开的 -c openai_base_url（codex 不认 OPENAI_BASE_URL 环境变量）', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-codex-url-'));
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-codex-url-home-'));
+            const statePath = path.join(tempDir, 'state.txt');
+            const dockerLogPath = path.join(tempDir, 'docker.log');
+            const fakeDockerPath = path.join(tempDir, 'docker');
+
+            writeExecutable(fakeDockerPath, `#!/bin/sh
+echo "$@" >> "${dockerLogPath}"
+STATE_FILE="${statePath}"
+if [ "$1" = "--version" ]; then
+  echo "Docker version 26.0.0"
+  exit 0
+fi
+if [ "$1" = "ps" ] && [ "$3" = "-q" ]; then
+  [ -f "$STATE_FILE.id" ] && echo "fakecontainer"
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "--format" ]; then
+  echo "{\\"Name\\":\\"/$(cat "$STATE_FILE")\\",\\"Config\\":{\\"Labels\\":{\\"manyoyo.id\\":\\"$(cat "$STATE_FILE.id")\\"},\\"Env\\":[]},\\"NetworkSettings\\":{\\"Networks\\":{}},\\"State\\":{\\"Running\\":true,\\"Status\\":\\"running\\"}}"
+  exit 0
+fi
+if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
+  if [ -f "$STATE_FILE" ]; then
+    cat "$STATE_FILE"
+  fi
+  exit 0
+fi
+if [ "$1" = "run" ]; then
+  shift
+  while [ $# -gt 0 ]; do
+    if [ "$1" = "--label" ]; then
+      case "$2" in manyoyo.id=*) echo "\${2#manyoyo.id=}" > "$STATE_FILE.id";; esac
+    fi
+    if [ "$1" = "--name" ]; then
+      echo "$2" > "$STATE_FILE"
+    fi
+    shift
+  done
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "-f" ] && [ "$3" = "{{.State.Status}}" ]; then
+  echo "running"
+  exit 0
+fi
+if [ "$1" = "exec" ]; then
+  case "$*" in
+    *"-c first-fail"*)
+      exit 0
+      ;;
+  esac
+  exit 0
+fi
+if [ "$1" = "rm" ]; then
+  rm -f "$STATE_FILE"
+  exit 0
+fi
+exit 0
+`);
+
+            writeGlobalConfig(tempHome, {
+                runs: {
+                    demo: {
+                        containerName: 'codex-url-test',
+                        yolo: 'codex'
+                    }
+                }
+            });
+
+            try {
+                execSync(`node ${BIN_PATH} run -r demo`, {
+                    encoding: 'utf-8',
+                    input: '\n',
+                    stdio: 'pipe',
+                    env: {
+                        ...process.env,
+                        HOME: tempHome,
+                        PATH: `${tempDir}:${process.env.PATH}`
+                    }
+                });
+                const dockerArgs = fs.readFileSync(dockerLogPath, 'utf-8').trim().split('\n').filter(Boolean);
+                const interactive = dockerArgs.find(line => line.startsWith('exec -i -t codex-url-test /bin/bash -c codex'));
+                expect(interactive).toBeDefined();
+                expect(interactive).toContain('/bin/bash -c codex ${OPENAI_BASE_URL:+-c "openai_base_url=\\"$OPENAI_BASE_URL\\""} --dangerously-bypass-approvals-and-sandbox');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
     });
 
     // ==============================================================================

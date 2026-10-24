@@ -6348,6 +6348,23 @@ esac
             });
         });
 
+        test('codex 的连接测试命令带上由 shell 展开的 -c openai_base_url（地址只在 env 里，不进命令文本）', async () => {
+            let logFile;
+            await withSetupServer(tempHost => {
+                logFile = path.join(tempHost, 'exec-args.log');
+                const fakeDocker = path.join(tempHost, 'fake-docker.sh');
+                fs.writeFileSync(fakeDocker, `#!/bin/sh\necho "$@" >> ${logFile}\necho OK\nexit 0\n`, { mode: 0o755 });
+                return { dockerCmd: fakeDocker, dockerExecArgs: () => '' };
+            }, async ({ call }) => {
+                const res = await call('POST', '/api/setup/test-connection', { agent: 'codex', env: { OPENAI_API_KEY: SECRET, OPENAI_BASE_URL: 'https://llm.example.com/v1' } });
+                expect(res.response.status).toBe(200);
+                const logged = fs.readFileSync(logFile, 'utf-8');
+                expect(logged).toContain('${OPENAI_BASE_URL:+-c "openai_base_url=\\"$OPENAI_BASE_URL\\""}');
+                expect(logged).not.toContain('llm.example.com');
+                expect(logged).not.toContain(SECRET);
+            });
+        });
+
         test('a container that exits right away does not kill serve and is still removed', async () => {
             const dockerCalls = [];
             let waited = null;

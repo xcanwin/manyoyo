@@ -174,3 +174,21 @@ describe('审查回归：说明内容不能影响其他参数，提示词里的 
         }
     });
 });
+
+describe('Codex 兼容服务：OPENAI_BASE_URL 要变成 -c openai_base_url', () => {
+    test('网页对话的 codex exec / exec resume 命令都带上由 shell 展开的占位，不把地址拼进命令', () => {
+        const first = buildWebAgentExecCommand('codex exec --skip-git-repo-check {prompt}', 'hi', 'codex', {});
+        const resumed = buildWebAgentExecCommand('codex exec --skip-git-repo-check {prompt}', 'hi', 'codex', { sessionId: 'sess-1' });
+        for (const command of [first, resumed]) {
+            expect(command).toContain('${OPENAI_BASE_URL:+-c "openai_base_url=\\"$OPENAI_BASE_URL\\""}');
+            expect(command).not.toMatch(/https?:\/\//);
+        }
+        expect(resumed).toContain('exec resume');
+    });
+
+    test('用户模板里已经写了 openai_base_url 就以用户的为准；非 codex 的命令不受影响', () => {
+        const own = buildWebAgentExecCommand(`codex exec -c 'openai_base_url="http://mine"' {prompt}`, 'hi', 'codex', {});
+        expect(own).not.toContain('OPENAI_BASE_URL');
+        expect(buildWebAgentExecCommand('claude -p {prompt}', 'hi', 'claude', {})).not.toContain('OPENAI_BASE_URL');
+    });
+});
