@@ -119,9 +119,9 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
 
   async function removeAllEmpty(targets: StorageRow[]) {
     const ok = await confirm({
-      title: "清理空目录？",
+      title: "删除空目录？",
       message: `共 ${targets.length} 个没有关联容器的空目录会被删除（只删空目录，里面有任何文件的不会动）。`,
-      confirmLabel: "清理空目录",
+      confirmLabel: "删除空目录",
     })
     if (!ok) return
     let failed = 0
@@ -199,7 +199,7 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
         </Button>
         {filter === "empty" && emptyRows.length > 0 ? (
           <Button variant="outline" size="sm" onClick={() => void removeAllEmpty(emptyRows)}>
-            清理空目录
+            删除空目录
           </Button>
         ) : null}
         <span className="ml-auto text-xs text-muted-foreground">{`已算出的占用合计 ${formatBytes(known)}`}</span>
@@ -228,14 +228,14 @@ export function StoragePanel({ currentContainer = "", openableContainers = [], o
                   <span className="font-mono break-all">{row.path}</span>
                   {row.managed ? "" : <span className="ml-2 text-xs text-muted-foreground">非 MANYOYO 工作目录</span>}
                   <span className="ml-2 whitespace-nowrap align-middle">
-                    <Button variant="ghost" size="icon-xs" aria-label={`查看 ${row.path}`} title="查看内容" onClick={() => setBrowsing(row.path)}>
+                    <Button variant="ghost" size="icon-xs" aria-label={`查看 ${row.path}`} title="查看宿主机目录" onClick={() => setBrowsing(row.path)}>
                       <FolderOpenIcon />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon-xs"
                       aria-label={`删除 ${row.path}`}
-                      title={row.deletable ? "删除" : row.managed ? "还有容器在用" : "不是 MANYOYO 创建的目录，不能删除"}
+                      title={row.deletable ? "删除宿主机目录" : row.managed ? "还有容器在用" : "不是 MANYOYO 创建的目录，不能删除"}
                       disabled={!row.deletable}
                       onClick={() => void remove(row)}
                     >
