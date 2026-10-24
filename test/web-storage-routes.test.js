@@ -281,3 +281,36 @@ describe('删除容器连同历史时清掉空工作目录', () => {
         expect(result.workDirExists).toBe(true);
     });
 });
+
+describe('新建容器的默认目录接口', () => {
+    async function fetchDefaults(config) {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-newdef-'));
+        const port = await getFreePort();
+        let handle = null;
+        try {
+            if (config) fs.writeFileSync(path.join(tempHost, 'manyoyo.json'), JSON.stringify(config));
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const unauth = await request(`${baseUrl}/api/system/new-container-defaults`);
+            const res = await request(`${baseUrl}/api/system/new-container-defaults`, { headers: { Cookie: await loginAndGetCookie(baseUrl) } });
+            return { tempHost, unauth: unauth.response.status, body: res.json };
+        } finally {
+            if (handle && handle.close) await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    }
+
+    test('没配快捷对话目录：用默认工作目录；未登录 401；不会预先创建目录', async () => {
+        const { tempHost, unauth, body } = await fetchDefaults(null);
+        expect(unauth).toBe(401);
+        expect(body).toEqual({ enabled: true, root: path.join(tempHost, 'work') });
+        expect(fs.existsSync(path.join(tempHost, 'work'))).toBe(false);
+    });
+
+    test('配了快捷对话目录（带 ~ 和尾斜杠）：用它；全局配置里写了 hostPath 就不启用', async () => {
+        const quick = await fetchDefaults({ serve: { quickChat: { path: '~/manyoyo_work/', run: 'x' } } });
+        expect(quick.body.root).toBe(path.join(require('os').homedir(), 'manyoyo_work'));
+        const explicit = await fetchDefaults({ hostPath: '/srv/mine' });
+        expect(explicit.body.enabled).toBe(false);
+    });
+});

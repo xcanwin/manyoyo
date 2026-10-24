@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { apiGet, apiPost } from "@/lib/api"
+import { formatTimestampCompact } from "@/lib/format"
 import { CLI_PROMPT_TEMPLATES, normalizeYolo } from "@/lib/agent-templates"
 import { DirectoryPickerDialog } from "@/components/directory-picker-dialog"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -181,6 +182,8 @@ export function CreateContainerDialog({
   const [submitting, setSubmitting] = React.useState(false)
   const [runs, setRuns] = React.useState<Record<string, RunPreset>>({})
   const [pickerOpen, setPickerOpen] = React.useState(false)
+  // 默认建议的工作目录（工作目录根/时间戳，和快捷对话一样）：只是预填，点“创建”时才真的建目录
+  const [suggestedDir, setSuggestedDir] = React.useState("")
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
   const isAgentAvailable = useAgentAvailability(open)
 
@@ -199,10 +202,20 @@ export function CreateContainerDialog({
       const composed = await apiGet("/api/agent-instructions")
         .then((info) => String(info.composed || ""))
         .catch(() => "")
+      // 全局配置没写 hostPath 时，默认目录和容器名都像快捷对话那样按时间生成
+      const suggestion = await apiGet("/api/system/new-container-defaults")
+        .then((info) => {
+          if (info.enabled !== true || typeof info.root !== "string" || !info.root) return null
+          const timestamp = formatTimestampCompact(new Date())
+          return { dir: `${info.root.replace(/\/+$/, "")}/${timestamp}`, name: `my-easy-${timestamp}` }
+        })
+        .catch(() => null)
+      setSuggestedDir(suggestion?.dir ?? "")
       setForm({
         ...DEFAULT_FORM,
-        hostPath: String(defaults.hostPath || ""),
-        containerPath: String(defaults.containerPath || ""),
+        hostPath: suggestion?.dir ?? String(defaults.hostPath || ""),
+        containerPath: suggestion?.dir ?? String(defaults.containerPath || ""),
+        containerName: suggestion?.name ?? "",
         imageName: String(defaults.imageName || ""),
         imageVersion: String(defaults.imageVersion || ""),
         containerMode: String(defaults.containerMode || ""),
@@ -249,12 +262,24 @@ export function CreateContainerDialog({
       : normalizedYolo
         ? CLI_PROMPT_TEMPLATES[normalizedYolo]
         : undefined
-    setForm((prev) => ({
-      ...prev,
-      run: runName,
-      ...(normalizedYolo ? { yolo: normalizedYolo } : {}),
-      ...(agentPromptCommand ? { agentPromptCommand } : {}),
-    }))
+    setForm((prev) => {
+      // 运行配置自己写了 hostPath：把目录留空，让服务端按运行配置走（请求里的值会盖过运行配置，
+      // 且运行配置里的路径可能带 ~，不能原样回填）；换成没写 hostPath 的运行配置或取消选择，再恢复预填的目录
+      const presetHasHost = typeof preset?.hostPath === "string" && preset.hostPath.trim() !== ""
+      let hostFields: Partial<CreateContainerForm> = {}
+      if (presetHasHost) {
+        hostFields = { hostPath: "", containerPath: "" }
+      } else if (suggestedDir && !prev.hostPath.trim()) {
+        hostFields = { hostPath: suggestedDir, containerPath: suggestedDir }
+      }
+      return {
+        ...prev,
+        ...hostFields,
+        run: runName,
+        ...(normalizedYolo ? { yolo: normalizedYolo } : {}),
+        ...(agentPromptCommand ? { agentPromptCommand } : {}),
+      }
+    })
   }
 
   function handleCliChange(value: string | null) {
@@ -293,6 +318,13 @@ export function CreateContainerDialog({
     setError("")
     try {
       const createOptions = buildCreateOptions(form)
+      // 预填的目录还没建：此刻才建（用户改成别的路径就不动，那个路径本来就得存在）
+      if (suggestedDir && form.hostPath.trim() === suggestedDir) {
+        const made = await apiPost("/api/fs/directories/mkdir", { path: suggestedDir })
+        const dir = typeof made.path === "string" && made.path ? made.path : suggestedDir
+        createOptions.hostPath = dir
+        if (form.containerPath.trim() === suggestedDir) createOptions.containerPath = dir
+      }
       const body: Record<string, unknown> = {}
       if (form.run) body.run = form.run
       if (Object.keys(createOptions).length) body.createOptions = createOptions
