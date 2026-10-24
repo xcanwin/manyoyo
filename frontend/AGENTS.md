@@ -2,6 +2,7 @@
 
 根目录 `AGENTS.md` 的补充，仅在改动默认 Web 前端时适用。本目录是独立 Vite 项目：TypeScript + React + shadcn/ui + ES Modules，沿用目录内既有格式与工具链（根仓库的 CommonJS / 四空格约定不适用于此）。它是 `serve` 唯一的 Web 界面。
 
+- **样式规范见同目录的 `STYLE.md`（唯一出处），新增或改动任何界面前必读**：字号档位、颜色、间距与控件尺寸、表单、按钮、页面布局、弹窗尺寸与遮罩、表格、手机端、自查。
 - 开发：`npm run dev:web`；构建：`npm run build:web`（产出单文件 `lib/web/index.html`，随 `npm run prepack` 自动执行）。
 - 发布控制台页面（维护者工具，不进用户界面）：入口 `release.html` + `src/release/`，`npm run build:release`（仓库根目录）构建成 `scripts/release/console.html`；服务端与说明见根目录 `AGENTS.md` 的 `scripts/release/` 一条。
 - 测试：Vitest，用例与源码同目录（`*.test.ts` / `*.test.tsx`），`npm run test:web` 运行，也随 `npm test` / `npm run test:unit` 自动执行。
@@ -54,47 +55,7 @@
 
 手机访问是主要使用场景之一，新增或改动界面时默认要在窄屏下验证一遍：
 
+- 手机端的样式规则（弹窗全屏、表格变卡片、40px 可点区域、安全区、Sheet 边框压制、16px 输入框）见 `STYLE.md` 第 12 节；这里只记行为上的坑。
 - 断点统一走 `useIsMobile()`（768px），不要各处自己写 media query 判断。
-- shadcn 的 `Sheet` / `Dialog` 默认样式是按桌面分栏设计的（`data-[side=right]:w-3/4`、`data-[side=right]:border-l` 等），移动端全屏时这些宽度和**边框**都要显式压制，否则贴在屏幕边缘的边框会变成一条莫名其妙的竖线。压制必须带同样的 `data-[side=*]:` 前缀才够特异性，裸的 `w-full` / `border-l-0` 会被盖掉；只想在桌面端保留时配 `sm:` 变体（媒体查询规则排在后面，能压住无条件规则）。参考 `html-preview-panel.tsx`。
 - **xterm 在移动端接不住输入法**：合成阶段（候选词、联想）的内容不会进 `onData`，表现是键盘弹出、打字却什么都不显示。终端类输入不要指望它的隐藏 textarea，现在的做法是把那个 textarea 设成 `readOnly` + `inputmode="none"`（不再唤起会吞字的键盘），另给一条普通 `<input>` 输入条承接输入，见 `terminal-view.tsx`。
 - 虚拟键盘弹出会触发容器尺寸变化；依赖 `ResizeObserver` 的组件（如 xterm 的 `fitAddon`）要能接住这种抖动，并跳过尺寸为 0 的回调（标签页隐藏时是 `display:none`）。
-- 贴着屏幕底边的栏（composer、终端输入条、侧栏底部按钮）内边距写成 `pb-[max(<原值>,env(safe-area-inset-bottom))]`：`index.html` 的 viewport 带 `viewport-fit=cover`，加到主屏幕全屏运行时不避让会被 home 指示条压住；桌面端 `env()` 取 0，等价于原值。
-
-## 样式规范
-
-遵循 shadcn skill 的通用规则（Skill 工具，名称 `shadcn`），此外项目内额外约束几条容易回归的问题：
-
-- **hover / active 态必须肉眼可辨**：`index.css` 里 `--muted`/`--secondary`/`--accent` 与 `--background` 的 oklch lightness 差值曾经只有 0.005（背景改浅到 `oklch(0.975)` 但没跟着调这三个 token），导致 `ghost`/`outline`/`secondary` 变体的按钮、下拉菜单项、弹出面板选项在浅色主题下悬浮/选中几乎看不出变化。现状是三个 token 固定在 `oklch(0.93)`，与背景保持约 0.04 的差值——**改动这几个 CSS 变量或新增依赖它们的组件后，必须在浏览器里同时用亮色和暗色主题实测悬浮/选中态**，不能只看代码 diff 判断「应该能看见」。
-- **不用 className 覆盖 `Button`/`Input` 等组件自带的内边距、字号**（例如手写 `py-*`、`text-*` 覆盖默认值）。需要不同大小时用已有的 `size` variant（`xs`/`sm`/`default`/`lg`/`icon*`）；确实缺档位就去 `buttonVariants`（或对应组件的 `cva` 定义）里加一档，不要在调用处零散覆盖——否则各处按钮粗细不一致，且下次升级 shadcn 组件版本时这些覆盖会被悄悄绕过。
-- **`DialogContent` 是 `grid gap-4`，直接子元素之间才有间距**。表单类弹窗如果用 `<form>` 包住 `FieldGroup` + `DialogFooter`（提交需要整体在 `<form>` 里），`<form>` 本身会挡住这层 grid gap，字段和底部按钮栏会贴在一起——`<form>` 必须显式补 `className="flex flex-col gap-4"`。不需要 `<form>` 包裹时（`FieldGroup`/`DialogFooter` 直接作为 `DialogContent` 的子元素）不用管，gap 是自动的。参考 `prompt-dialog.tsx`、`create-container-dialog.tsx`、`clone-name-dialog.tsx`。
-- **确认类弹窗（删除确认、未保存修改提示等）一律用 `Dialog`，不用 `AlertDialog`**：base-ui 的 `AlertDialog` 语义上要求必须点按钮才能关闭，默认不响应背景点击、`AlertDialogContent` 也没有右上角关闭按钮；本项目约定所有弹窗都可以背景点击 / 右上角 ✕ 关闭（等价于「取消」），因此统一用 `Dialog` + 手动的「取消」`Button`（`variant="outline"`，`onClick` 里做取消逻辑），不要用 `AlertDialogCancel`。参考实现见 `src/hooks/use-confirm-dialog.tsx`、`use-unsaved-changes-dialog.tsx`。
-- 避免常驻高开销视觉效果：不要在常驻元素使用 `animation: ... infinite`，避免大面积叠加 `backdrop-filter` / `filter` 模糊；确需使用时仅限短时场景，并提供 `prefers-reduced-motion` 降级。
-
-## 字号与表单标准
-
-表单页（新建容器、系统设置、容器设置、各类弹窗）和界面框架只用下面几档，**调用处不手写 `text-xs` / `text-sm` / `text-[..px]` 覆盖**；缺档位就去基础组件里加。
-
-| 用途 | 字号 / 字重 | 说明 |
-|---|---|---|
-| 弹窗标题 | 16px / 500 | `DialogTitle` |
-| 卡片标题、折叠区标题、设置分组标题 | 14px / 600 | `CardTitle` 要显式写 `font-semibold`（默认只有 500） |
-| 字段标签、正文、按钮、输入框、下拉、表格单元 | 14px；标签 500，其余 400 | 按钮只用 `size`：默认和 `sm` 都是 14px，`xs`（12px）只留给表格行内的小操作 |
-| 说明、提示、表头、徽章、配置键 | 12px / 400，灰色 | `FieldDescription`、`CardDescription` 已是 12px；配置键用 `font-mono` |
-| 内容区（聊天正文里的代码块、执行过程说明、diff、日志行） | 13px / 12px 等宽 | 这是“被展示的内容”，不是界面字，不跟上面几档走；新增内容区组件沿用已有数值 |
-
-- **输入框、下拉、文本域**：手机 16px、桌面 14px（`text-base md:text-sm`，已写在 `ui/input|textarea|select`）。iOS 聚焦小于 16px 的输入框会自动放大整页，所以手机上必须 16px；等宽只加 `font-mono`，不要再写字号。代价是窄列里等宽变量名在手机上被截得更短，可接受。
-- **字段标签**写成“中文名 + 灰色 12px 等宽配置键”（`lib/config-labels.ts` 登记中文名；`create-container-dialog.tsx` 的 `KeyLabel`、`workspace-panel.tsx` 的 `InfoCard` 是现成写法）。不要直接把 `containerName` 这类英文键当标签。
-- **折叠区**（新建容器里的环境变量 / 网络 / 自启动命令）：每块上方一条分割线（`border-t`），标题行悬停加深 `hover:bg-muted`；展开态不另加背景或描边，避免和悬停、内部输入框的边框叠在一起。
-- **可点的列表项 / 标签页**（系统设置左栏、侧栏）：选中 = `bg-muted` 按钮底色，不用右侧竖线；未选中悬停 = 更浅一档的底色（`hover:bg-muted/60`），三种状态肉眼可辨。
-- **垂直居中**：同一行里混排等宽小字和 14px 正文、或混排含 `⌘` 这类回退字体字符时，给它们都加 `leading-none` 并让父级 `items-center`，否则看起来上下偏。
-- **自查**：改完用 CDP 在 1280 与 390 宽度各量一遍计算后的字号（遍历文字节点取 `getComputedStyle().fontSize`），再各截一张图；本标准之外出现的字号档要么是内容区，要么就是该修的。
-
-## 界面一致性与自查
-
-功能对、截图能用，不等于界面合格：上一轮容器管理页被人工纠正了十几处，全是一致性问题。新增或改动界面按下面做：
-
-- **先找同页已有范式再写新控件**：字段标签（加粗 label）；一行一项的列表编辑一律用 `RowList`（表头 + 每行输入 + 删除 + 下方添加 + 页脚保存）；卡片标题加粗、保存按钮放带底色的页脚；折叠区与既有字段标签同样式（`SectionToggle` / `denied-list.tsx` 的写法），默认收起。
-- **同类控件只用一个组件**；不发明复合文本语法（比如把“端口/协议”塞进一个输入框），拆成独立输入框和下拉。
-- **模块顺序按依赖关系排**；与已有字段语义重叠时先合并概念再做界面（别让两套 env 并存）。
-- **提示文字**：一句话、通俗、先说结果再说做法；按部署场景（本机 / 局域网 / 公网服务器）检查措辞。
-- **自查流程**：亮 / 暗主题 × 桌面 / 390px 手机宽度各截一张，与同页已有控件并排对比（标签粗细、对齐、按钮位置与尺寸、页脚、折叠区、文案长度）；再派一个只看截图和本节规则的子 agent 审查；问题清零再交付。

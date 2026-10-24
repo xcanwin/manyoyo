@@ -2,7 +2,7 @@
 
 MANYOYO（慢悠悠）是一款 AI 智能体 CLI 安全沙箱，为安全运行 AI 编程助手（Claude Code、Gemini、Codex、OpenCode）的 YOLO/SOLO 模式提供隔离的 Docker/Podman 容器环境。核心原则：最小改动、可验证、中英文文档一致。新增功能前先明确范围与安全影响，再动手改代码。
 
-**动 `lib/web/` 或 `frontend/` 之前，先读对应目录的 `AGENTS.md` 再看代码**——`lib/web/AGENTS.md`（Web 服务端：流式协议、终端 WebSocket、同步 IO 与保活的既有结论）、`frontend/AGENTS.md`（默认 Web 前端：组件地图、移动端与样式规范）。这两份写的都是读代码看不出来、踩过才知道的约束，跳过它们等于把同一个坑再踩一遍。
+**动 `lib/web/` 或 `frontend/` 之前，先读对应目录的 `AGENTS.md` 再看代码**——`lib/web/AGENTS.md`（Web 服务端：流式协议、终端 WebSocket、同步 IO 与保活的既有结论）、`frontend/AGENTS.md`（默认 Web 前端：组件地图、同步与移动端的坑）与 `frontend/STYLE.md`（前端样式规范的唯一出处：字号、颜色、表单、弹窗、表格、手机端；改任何界面前必读）。这几份写的都是读代码看不出来、踩过才知道的约束，跳过它们等于把同一个坑再踩一遍。
 
 - 运行环境：Node.js >= 22，容器运行时支持 `podman` 或 `docker`。macOS 离线包（及 Linux 离线包）自带 Node.js，完整 macOS 包还自带私有 Podman。
 - 默认镜像是 `ghcr.io/xcanwin/manyoyo`（本地没有时自动拉取）；向导与快捷对话的默认工作目录是 `~/.manyoyo/work/`（7.x 遗留的 `workpath/` 仅在卸载时询问）。
