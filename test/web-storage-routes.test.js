@@ -251,11 +251,47 @@ describe('容器被删后的重建不再退回 serve 启动目录', () => {
         expect(joined).not.toContain('/srv/serve-cwd');
     });
 
-    test('没有历史：仍用 serve 配置，但必须过路径校验（校验不过就不创建）', async () => {
-        const { runCalls } = await recreate({
-            validateHostPath: () => { throw new Error('禁止挂载 HOME'); }
-        });
+    test('没有历史、容器也不在：报错，不新建（不再猜参数）', async () => {
+        const { runCalls, status } = await recreate({});
         expect(runCalls).toHaveLength(0);
+        expect(status).toBeGreaterThanOrEqual(400);
+    });
+});
+
+describe('POST /api/sessions 不带 hostPath', () => {
+    test('默认挂 <quickChatPath>/<时间>，serve 的启动目录不出现在 run 参数里', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-createdef-'));
+        const port = await getFreePort();
+        const quick = path.join(tempHost, 'quick');
+        const runCalls = [];
+        let created = false;
+        let handle = null;
+        try {
+            fs.writeFileSync(path.join(tempHost, 'manyoyo.json'), JSON.stringify({ serve: { quickChat: { path: quick, run: 'x' } } }));
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                hostPath: '/srv/serve-cwd',
+                containerExists: () => created,
+                formatDate: () => '20261001-000060',
+                dockerExecArgs: args => {
+                    if (args[0] === 'run') { runCalls.push(args); created = true; }
+                    return '';
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const res = await request(`${baseUrl}/api/sessions`, {
+                method: 'POST',
+                headers: { Cookie: await loginAndGetCookie(baseUrl), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ createOptions: { containerName: 'def-1' } })
+            });
+            expect(res.response.status).toBe(200);
+            const joined = runCalls.map(args => args.join(' ')).join('\n');
+            expect(joined).toContain(`${quick}/20261001-000060:`);
+            expect(joined).not.toContain('/srv/serve-cwd');
+            expect(fs.existsSync(path.join(quick, '20261001-000060'))).toBe(true);
+        } finally {
+            if (handle && handle.close) await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
     });
 });
 

@@ -5260,20 +5260,21 @@ describe('Web Server Create Defaults', () => {
         }
     });
 
-    test('正常目录仍然照常预填', async () => {
+    test('配置里写的 hostPath 照常预填；serve 的启动目录不再预填', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-create-defaults-ok-'));
         const port = await getFreePort();
         let handle = null;
         try {
+            fs.writeFileSync(path.join(tempHost, 'manyoyo.json'), JSON.stringify({ hostPath: path.join(tempHost, 'proj') }));
             handle = await startWebServer(buildServerOptions(tempHost, port, {
-                hostPath: tempHost,
+                hostPath: '/srv/serve-cwd',
                 webHistoryDir: path.join(tempHost, 'web-history')
             }));
             const baseUrl = `http://127.0.0.1:${handle.port || port}`;
             const authCookie = await loginAndGetCookie(baseUrl);
 
             const res = await request(`${baseUrl}/api/config`, { headers: { Cookie: authCookie } });
-            expect(res.json.defaults.hostPath).toBe(tempHost);
+            expect(res.json.defaults.hostPath).toBe(path.join(tempHost, 'proj'));
         } finally {
             if (handle && typeof handle.close === 'function') {
                 await handle.close();
