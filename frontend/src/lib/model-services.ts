@@ -18,6 +18,8 @@ export type ModelService = {
 export type ReuseSuggestion = { from: string; agent: string; providerId: string; label: string }
 export type ModelServiceAgent = { id: string; label: string; providers: SetupProvider[] }
 export type ModelServicesData = {
+  // 编辑时勾选“同时更新容器”后，实际被更新的容器名
+  updatedContainers?: string[]
   services: ModelService[]
   suggestions: ReuseSuggestion[]
   agents: ModelServiceAgent[]
@@ -42,6 +44,8 @@ export const createModelService = (body: Record<string, unknown>) =>
   apiPost("/api/model-services", body) as unknown as Promise<ModelServicesData>
 export const updateModelService = (name: string, body: Record<string, unknown>) =>
   apiPut(`/api/model-services/${encodeURIComponent(name)}`, body) as unknown as Promise<ModelServicesData>
+export const fetchServiceContainers = (name: string) =>
+  apiGet(`/api/model-services/${encodeURIComponent(name)}/containers`) as unknown as Promise<{ containers: string[] }>
 export const deleteModelService = (name: string) =>
   apiDelete(`/api/model-services/${encodeURIComponent(name)}`) as unknown as Promise<ModelServicesData>
 export const testModelService = (name: string) =>
@@ -79,8 +83,9 @@ export function buildCreateBody(form: ServiceForm): Record<string, unknown> {
 }
 
 // 编辑请求体：Key 留空表示不改
-export function buildEditBody(form: ServiceForm): Record<string, unknown> {
+export function buildEditBody(form: ServiceForm, syncContainers = false): Record<string, unknown> {
   const body: Record<string, unknown> = { model: form.model.trim() }
+  if (syncContainers) body.syncContainers = true
   if (form.key.trim()) body.key = form.key.trim()
   if (form.mode === "subscription") body.subscription = true
   else body.baseUrl = form.baseUrl.trim()

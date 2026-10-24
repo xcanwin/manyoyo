@@ -54,6 +54,7 @@ describe("ModelServicesPanel", () => {
     vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET"
       calls.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      if (method === "GET" && url.endsWith("/containers")) return jsonResponse({ containers: ["box-1"] })
       if (method === "GET") return jsonResponse(SERVICES)
       if (url.endsWith("/test")) return jsonResponse({ category: "success", message: "连接成功", detail: "" })
       if (method === "POST") {
@@ -111,7 +112,9 @@ describe("ModelServicesPanel", () => {
     await click("保存")
     const put = calls.find((c) => c.method === "PUT")
     expect(put?.url).toBe("/api/model-services/claude-glm")
-    expect(put?.body).toEqual({ model: "glm-5.3", baseUrl: "" })
+    // 有容器还在用旧设置时默认勾选“同时更新”
+    expect(put?.body).toEqual({ model: "glm-5.3", baseUrl: "", syncContainers: true })
+    expect(pageText()).not.toContain("同时更新")
   })
 
   test("删除要先确认，确认后才请求", async () => {

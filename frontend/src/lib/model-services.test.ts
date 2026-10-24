@@ -32,6 +32,7 @@ describe("请求体", () => {
   test("编辑：Key 留空不发 key", () => {
     expect(buildEditBody(form({ baseUrl: "https://x.test", model: "m" }))).toEqual({ model: "m", baseUrl: "https://x.test" })
     expect(buildEditBody(form({ key: "new", baseUrl: "" }))).toEqual({ model: "", key: "new", baseUrl: "" })
+    expect(buildEditBody(form({ key: "new" }), true)).toMatchObject({ syncContainers: true })
   })
 })
 

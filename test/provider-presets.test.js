@@ -1,6 +1,6 @@
 'use strict';
 
-const { PROVIDER_PRESETS, providersForAgent } = require('../lib/provider-presets');
+const { PROVIDER_PRESETS, providersForAgent, thirdPartyCodexModels, findProviderByBaseUrl } = require('../lib/provider-presets');
 const { AGENT_ENV_SCHEMA } = require('../lib/init-config');
 const { listSetupAgents, buildAgentRunProfile } = require('../lib/setup');
 
@@ -77,5 +77,21 @@ describe('服务商预设', () => {
         expect(listSetupAgents().find(agent => agent.id === 'codex').providers.length).toBe(5);
         const profile = buildAgentRunProfile('claude', { ANTHROPIC_API_KEY: 'k-123456', ANTHROPIC_BASE_URL: 'https://api.kimi.ai/coding/' }, {});
         expect(profile.env.ANTHROPIC_API_KEY).toBe('k-123456');
+    });
+});
+
+describe('Codex 第三方模型下拉', () => {
+    test('没配 OPENAI_BASE_URL 不是第三方（走 codex 自己的目录）', () => {
+        expect(thirdPartyCodexModels({})).toBeNull();
+        expect(thirdPartyCodexModels({ OPENAI_API_KEY: 'k' })).toBeNull();
+        expect(thirdPartyCodexModels(null)).toBeNull();
+    });
+
+    test('认得的服务商列预设模型，当前模型不在里面时补上；认不得的只列当前模型', () => {
+        expect(thirdPartyCodexModels({ OPENAI_BASE_URL: 'https://api.deepseek.com/', OPENAI_MODEL: 'deepseek-flash' }).map(m => m.value)).toEqual(['deepseek-flash']);
+        expect(thirdPartyCodexModels({ OPENAI_BASE_URL: 'https://open.bigmodel.cn/api/v1', OPENAI_MODEL: 'glm-x' }).map(m => m.value)).toEqual(['glm-5.3', 'glm-x']);
+        expect(thirdPartyCodexModels({ OPENAI_BASE_URL: 'https://llm.example.com/v1', OPENAI_MODEL: 'm1' })).toEqual([{ value: 'm1', label: 'm1', description: '' }]);
+        expect(thirdPartyCodexModels({ OPENAI_BASE_URL: 'https://llm.example.com/v1' })).toEqual([]);
+        expect(findProviderByBaseUrl('codex', 'HTTPS://API.DEEPSEEK.COM')).toMatchObject({ id: 'deepseek' });
     });
 });

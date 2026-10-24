@@ -14,6 +14,7 @@ import {
   deleteModelService,
   EMPTY_SERVICE_FORM,
   fetchModelServices,
+  fetchServiceContainers,
   resultTone,
   serviceTitle,
   testModelService,
@@ -242,10 +243,26 @@ function ServiceDialog({
   const [form, setForm] = React.useState<ServiceForm>(initial)
   const [error, setError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
+  // 编辑时：还在用这个服务旧设置的容器（创建时 Key 已写进它们的环境变量，改配置不会自动跟着变）
+  const [using, setUsing] = React.useState<string[]>([])
+  const [sync, setSync] = React.useState(true)
   const agent = data.agents.find((item) => item.id === form.agent) ?? data.agents[0]
   const provider = agent?.providers.find((item) => item.id === form.providerId) ?? null
   const subscriptionOnly = form.mode === "subscription"
   const editing = mode === "edit"
+
+  React.useEffect(() => {
+    if (!editing || !name) return
+    let cancelled = false
+    fetchServiceContainers(name)
+      .then((result) => {
+        if (!cancelled) setUsing(result.containers ?? [])
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [editing, name])
 
   function patch(next: Partial<ServiceForm>) {
     setError("")
@@ -260,7 +277,7 @@ function ServiceDialog({
     }
     setSaving(true)
     try {
-      onSaved(editing && name ? await updateModelService(name, buildEditBody(form)) : await createModelService(buildCreateBody(form)))
+      onSaved(editing && name ? await updateModelService(name, buildEditBody(form, sync && using.length > 0)) : await createModelService(buildCreateBody(form)))
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败")
     } finally {
@@ -381,6 +398,12 @@ function ServiceDialog({
                     placeholder={provider?.models[0] || (form.agent === "codex" ? "Codex 接兼容服务必须填写" : "可选")}
                     onChange={(event) => patch({ model: event.target.value })}
                   />
+                </Field>
+              ) : null}
+              {editing && using.length > 0 ? (
+                <Field orientation="horizontal">
+                  <input id="ms-sync" type="checkbox" checked={sync} onChange={(event) => setSync(event.target.checked)} />
+                  <FieldLabel htmlFor="ms-sync">同时更新 {using.length} 个还在用旧设置的容器（{using.join("、")}），下一轮对话生效</FieldLabel>
                 </Field>
               ) : null}
               {!editing ? (

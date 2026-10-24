@@ -6400,6 +6400,46 @@ exit 1
             });
         });
 
+        test('改了 Key：能查到还在用旧 Key 的容器，勾选同步后只更新它们的 env（下一轮对话生效）', async () => {
+            const containerState = require('../lib/container-state');
+            const made = {};
+            await withSetupServer(tempHost => {
+                const create = (name, text) => {
+                    const created = containerState.createState({ homeDir: tempHost, envLines: [], meta: { name } });
+                    containerState.writeEnv(tempHost, created.id, text);
+                    made[name] = created.id;
+                    return { name, id: created.id };
+                };
+                const list = [
+                    create('uses-ds', `ANTHROPIC_AUTH_TOKEN=${DS}\nKEEP=1\n`),
+                    create('uses-other', 'ANTHROPIC_AUTH_TOKEN=somebody-elses-key\n')
+                ];
+                return { networkManager: { ...fakeNetworkManager(), listManaged: async () => list } };
+            }, async ({ call, configPath, tempHost }) => {
+                fs.writeFileSync(configPath, RAW);
+                let res = await call('GET', '/api/model-services/claude-ds/containers');
+                expect(res.json.containers).toEqual(['uses-ds']);
+                expect(res.text).not.toContain(DS);
+
+                // 不勾选：只改配置，容器不动
+                await call('PUT', '/api/model-services/claude-ds', { key: 'ds-mid-key-5555' });
+                expect(containerState.readEnv(tempHost, made['uses-ds']).text).toContain(DS);
+
+                // 旧 Key 现在是 ds-mid-key-5555；勾选同步
+                res = await call('PUT', '/api/model-services/claude-ds', { key: 'ds-new-key-9999', syncContainers: true });
+                expect(res.json.updatedContainers).toEqual([]);
+                // 容器里还是最早的 DS（不等于 mid），所以不算在用，不会被误改
+                expect(containerState.readEnv(tempHost, made['uses-ds']).text).toBe(`ANTHROPIC_AUTH_TOKEN=${DS}\nKEEP=1\n`);
+
+                fs.writeFileSync(configPath, RAW);
+                res = await call('PUT', '/api/model-services/claude-ds', { key: 'ds-new-key-9999', syncContainers: true });
+                expect(res.json.updatedContainers).toEqual(['uses-ds']);
+                expect(containerState.readEnv(tempHost, made['uses-ds']).text).toBe('ANTHROPIC_AUTH_TOKEN=ds-new-key-9999\nKEEP=1\n');
+                expect(containerState.readEnv(tempHost, made['uses-other']).text).toBe('ANTHROPIC_AUTH_TOKEN=somebody-elses-key\n');
+                expect(res.text).not.toContain('ds-new-key-9999');
+            });
+        });
+
         test('非法请求被拒绝且不改配置：重名、没有预设、找不到、坏 JSON', async () => {
             await withSetupServer(() => ({}), async ({ call, configPath }) => {
                 fs.writeFileSync(configPath, RAW);
