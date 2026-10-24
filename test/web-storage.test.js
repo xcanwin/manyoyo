@@ -72,14 +72,101 @@ describe('web storage', () => {
         expect(byName['20261001-000005']).toMatchObject({ status: 'unused', deletable: true, sessions: [] });
     });
 
-    test('快捷对话目录也是工作目录根；名字不是时间戳的目录不当成自己的', async () => {
+    test('快捷对话目录：历史里记过的时间戳目录才算自己的，名字不是时间戳的不算', async () => {
         const { home, workRoot, historyDir } = setup();
         const quick = path.join(home, 'manyoyo_work');
         fs.mkdirSync(path.join(quick, '20261001-000007'), { recursive: true });
+        fs.mkdirSync(path.join(quick, '20261001-000008'));
         fs.mkdirSync(path.join(quick, 'my-notes'));
-        const listing = await storage.buildStorageListing({ workRoots: [workRoot, quick], historyDir, dockerExecAsync: fakeDocker({}) });
-        expect(listing.rows.map(row => path.basename(row.path))).toEqual(['20261001-000007']);
-        expect(listing.rows[0]).toMatchObject({ managed: true, deletable: true });
+        writeHistory(historyDir, 'gone', path.join(quick, '20261001-000007'));
+        const listing = await storage.buildStorageListing({ workRoots: [workRoot], extraWorkRoots: [quick], homeDir: home, historyDir, dockerExecAsync: fakeDocker({}) });
+        const byName = Object.fromEntries(listing.rows.map(row => [path.basename(row.path), row]));
+        expect(Object.keys(byName).sort()).toEqual(['20261001-000007', '20261001-000008']);
+        expect(byName['20261001-000007']).toMatchObject({ managed: true, deletable: true });
+        expect(byName['20261001-000008']).toMatchObject({ managed: false, deletable: false });
+    });
+
+    test('快捷对话目录配成 /、HOME、HOME 的上级或相对路径时忽略', async () => {
+        const { home, workRoot, historyDir } = setup();
+        fs.mkdirSync(path.join(home, '20261001-000009'));
+        writeHistory(historyDir, 'gone', path.join(home, '20261001-000009'));
+        const listing = await storage.buildStorageListing({
+            workRoots: [workRoot],
+            extraWorkRoots: [home, path.dirname(home), '/', 'relative/dir'],
+            homeDir: home,
+            historyDir,
+            dockerExecAsync: fakeDocker({})
+        });
+        expect(listing.rows.every(row => !row.managed)).toBe(true);
+    });
+
+    test('容器还在时以真实挂载为准：历史里的旧路径不算它在用', async () => {
+        const { workRoot, historyDir } = setup();
+        const stale = path.join(workRoot, '20261001-000010');
+        fs.mkdirSync(stale);
+        writeHistory(historyDir, 'same-name', stale);
+        const listing = await storage.buildStorageListing({
+            workRoots: [workRoot],
+            historyDir,
+            dockerExecAsync: fakeDocker({ 'same-name': { state: 'exited', mounts: [path.dirname(workRoot)] } })
+        });
+        expect(listing.rows[0]).toMatchObject({ status: 'unused', sessions: [], deletable: true });
+    });
+
+    test('容器查不到挂载时退回历史路径，宁可当成在用', async () => {
+        const { workRoot, historyDir } = setup();
+        const dir = path.join(workRoot, '20261001-000011');
+        fs.mkdirSync(dir);
+        writeHistory(historyDir, 'no-mounts', dir);
+        const listing = await storage.buildStorageListing({ workRoots: [workRoot], historyDir, dockerExecAsync: fakeDocker({ 'no-mounts': { state: 'exited', mounts: [] } }) });
+        expect(listing.rows[0]).toMatchObject({ status: 'in-use', deletable: false });
+    });
+
+    test('容器挂的正好是工作目录根：根下所有子目录都算在用', async () => {
+        const { workRoot, historyDir } = setup();
+        fs.mkdirSync(path.join(workRoot, '20261001-000012'));
+        const listing = await storage.buildStorageListing({
+            workRoots: [workRoot],
+            historyDir,
+            dockerExecAsync: fakeDocker({ 'run-r': { state: 'running', mounts: [workRoot] } })
+        });
+        expect(listing.rows[0]).toMatchObject({ status: 'in-use', deletable: false });
+    });
+
+    test('ps 有容器但 inspect 失败时整体报错', async () => {
+        const { workRoot, historyDir } = setup();
+        const docker = async args => {
+            if (args[0] === 'ps') return 'a\trunning';
+            throw new Error('No such object');
+        };
+        await expect(storage.buildStorageListing({ workRoots: [workRoot], historyDir, dockerExecAsync: docker })).rejects.toThrow('No such object');
+    });
+
+    test('已删除历史：容器 a 不会命中 a-1 的事件日志', async () => {
+        const { workRoot, historyDir } = setup();
+        writeHistory(historyDir, 'a', '');
+        fs.writeFileSync(path.join(historyDir, 'events', 'a-1.jsonl'), '{}\n');
+        const listing = await storage.buildStorageListing({ workRoots: [workRoot], historyDir, dockerExecAsync: fakeDocker({}) });
+        const removeFile = name => fs.rmSync(path.join(historyDir, `${name}.json`), { force: true });
+        await storage.removeDeletedHistory(historyDir, listing, 'a', removeFile);
+        expect(fs.readdirSync(path.join(historyDir, 'events'))).toEqual(['a-1.jsonl']);
+    });
+
+    test('查看目录内容：目录不存在返回 404，不退回字面路径', async () => {
+        const { workRoot } = setup();
+        const dir = path.join(workRoot, '20261001-000013');
+        fs.mkdirSync(dir);
+        expect(await storage.listDirectory(dir, 'nope')).toMatchObject({ ok: false, status: 404 });
+        expect(await storage.listDirectory(path.join(workRoot, 'missing'), '')).toMatchObject({ ok: false, status: 404 });
+    });
+
+    test('同一目录同时算体积只跑一次 du', async () => {
+        const { workRoot } = setup();
+        const dir = path.join(workRoot, 'dup');
+        fs.mkdirSync(dir);
+        fs.writeFileSync(path.join(dir, 'f'), 'x');
+        const [a, b] = await Promise.all([storage.directorySize(dir), storage.directorySize(dir)]);
+        expect(a).toBe(b);
     });
 
     test('同一目录被多个会话引用，只要有一个容器在就不可删', async () => {

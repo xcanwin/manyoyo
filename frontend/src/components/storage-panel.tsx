@@ -61,9 +61,9 @@ export function StoragePanel() {
     if (round === generation.current) setSizes((current) => ({ ...current, [path]: value }))
   }, [])
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (keepError = false) => {
     const round = ++generation.current
-    setError("")
+    if (!keepError) setError("")
     try {
       const data = (await apiGet("/api/storage")) as { rows?: StorageRow[]; deletedHistories?: DeletedHistory[] }
       if (round !== generation.current) return
@@ -106,6 +106,7 @@ export function StoragePanel() {
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除失败")
+      await load(true)
     }
   }
 
@@ -115,6 +116,8 @@ export function StoragePanel() {
       for (const item of targets) await apiDelete("/api/storage/histories", { name: item.name })
     } catch (err) {
       setError(err instanceof Error ? err.message : "清理失败")
+      await load(true)
+      return
     }
     await load()
   }
