@@ -83,7 +83,7 @@ export const testModelService = (name: string) =>
     `/api/model-services/${encodeURIComponent(name)}/test`
   ) as unknown as Promise<ConnectionResult>
 
-// 列表里一行的标题：Claude Code · 智谱 GLM
+// 列表里一行的标题：Claude Code CLI · 智谱 GLM
 export function serviceTitle(
   service: Pick<ModelService, "agentLabel" | "providerLabel">
 ): string {
@@ -97,7 +97,7 @@ export function validateServiceForm(
 ): string {
   if (form.mode === "subscription") {
     if (form.agent !== "claude")
-      return "Codex 的订阅登录在容器终端里完成，这里不用保存"
+      return "Codex CLI 的订阅登录在容器终端里完成，这里不用保存"
     return form.key.trim() ? "" : "请粘贴订阅令牌"
   }
   if (mode === "create" && !form.key.trim()) return "请填写 API Key"
@@ -113,7 +113,7 @@ export function validateServiceForm(
     !form.providerId &&
     !form.model.trim()
   )
-    return "Codex 接兼容服务必须填写模型名"
+    return "Codex CLI 接兼容服务必须填写模型名"
   return ""
 }
 

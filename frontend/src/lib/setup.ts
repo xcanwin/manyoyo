@@ -135,14 +135,14 @@ export function validateStep(step: 1 | 2 | 3, form: SetupForm, agent: SetupAgent
   if (step === 1) return agent ? "" : "请选择一个 Agent"
   if (step === 2) {
     if (form.mode === "subscription") {
-      if (agent?.id !== "claude") return "Codex 的订阅登录要进容器终端运行 codex login --device-auth，向导里请先选其它接入方式"
+      if (agent?.id !== "claude") return "Codex CLI 的订阅登录要进容器终端运行 codex login --device-auth，向导里请先选其它接入方式"
       return form.apiKey.trim() ? "" : "请粘贴订阅令牌"
     }
     if (!form.apiKey.trim()) return "请填写 API Key"
     if (form.mode === "compatible") {
       if (!form.baseUrl.trim()) return "请填写兼容服务的 Base URL"
       if (!isValidBaseUrl(form.baseUrl)) return "Base URL 必须以 http:// 或 https:// 开头"
-      if (agent?.id === "codex" && !form.model.trim()) return "Codex 接兼容服务必须填写模型名"
+      if (agent?.id === "codex" && !form.model.trim()) return "Codex CLI 接兼容服务必须填写模型名"
     }
     return ""
   }

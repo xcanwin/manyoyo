@@ -594,13 +594,15 @@ function ServiceDialog({
               </Field>
             ) : null}
 
-            {!subscriptionOnly && (!provider || editing) ? (
+            {!subscriptionOnly ? (
               <Field>
                 <FieldLabel htmlFor="ms-base-url">Base URL</FieldLabel>
                 <Input
                   id="ms-base-url"
                   value={form.baseUrl}
                   placeholder="https://…"
+                  // 选了服务商就只展示预设的地址（保存时服务端按预设写）；要改地址请选“自定义地址”
+                  readOnly={Boolean(provider) && !editing}
                   onChange={(event) => patch({ baseUrl: event.target.value })}
                 />
               </Field>
@@ -623,7 +625,7 @@ function ServiceDialog({
                   {subscriptionOnly && form.agent === "claude" ? (
                     <FieldDescription>
                       保存后会删掉同一项里的 API Key 和 Base URL，否则 Claude
-                      Code 会优先用 Key，订阅不生效。
+                      Code CLI 会优先用 Key，订阅不生效。
                     </FieldDescription>
                   ) : null}
                 </Field>
@@ -636,7 +638,7 @@ function ServiceDialog({
                       placeholder={
                         provider?.models[0] ||
                         (form.agent === "codex"
-                          ? "Codex 接兼容服务必须填写"
+                          ? "Codex CLI 接兼容服务必须填写"
                           : "可选")
                       }
                       onChange={(event) => patch({ model: event.target.value })}

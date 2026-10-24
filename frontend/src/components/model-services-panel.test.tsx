@@ -214,6 +214,19 @@ describe("ModelServicesPanel", () => {
     })
   })
 
+  test("选了服务商就把预设的 Base URL 显示出来（只读）", async () => {
+    await mount()
+    await click("添加模型服务")
+    await click("智谱 GLM")
+    const input = document.getElementById("ms-base-url") as HTMLInputElement
+    expect(input.value).toBe("https://z.test/anthropic")
+    expect(input.readOnly).toBe(true)
+    await click("自定义地址")
+    expect(
+      (document.getElementById("ms-base-url") as HTMLInputElement).readOnly
+    ).toBe(false)
+  })
+
   test("没填 Key 不发请求并提示", async () => {
     await mount()
     await click("添加模型服务")

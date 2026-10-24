@@ -409,7 +409,7 @@ export function SetupWizard({
                 {form.mode === "subscription" && agent.id !== "claude" ? (
                   <Alert>
                     <AlertDescription>
-                      Codex 的订阅登录要在容器里完成：先选其它接入方式建好会话，再在容器的终端里运行 codex login --device-auth，按提示用浏览器登录。登录只在那个容器里有效，换容器要重新登录。
+                      Codex CLI 的订阅登录要在容器里完成：先选其它接入方式建好会话，再在容器的终端里运行 codex login --device-auth，按提示用浏览器登录。登录只在那个容器里有效，换容器要重新登录。
                     </AlertDescription>
                   </Alert>
                 ) : (

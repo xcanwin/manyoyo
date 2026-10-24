@@ -85,7 +85,7 @@ describe('suggestReuse', () => {
     test('智谱和 DeepSeek 的 Key 也能给 Codex 用；自定义地址不建议', () => {
         const list = suggestReuse(config);
         expect(list.map(item => `${item.from}->${item.agent}:${item.providerId}`)).toEqual(['claude-glm->codex:zhipu', 'claude-ds->codex:deepseek']);
-        expect(list[0].label).toBe('智谱 GLM 的 Key 也能给 Codex 用');
+        expect(list[0].label).toBe('智谱 GLM 的 Key 也能给 Codex CLI 用');
     });
 
     test('已经有用同一个 Key 的 Codex 服务就不再建议', () => {
