@@ -441,9 +441,15 @@ function RunsCategoryFields({ liveParsed, onCommit }: { liveParsed: Record<strin
 export function SystemSettingsDialog({
   open,
   onOpenChange,
+  currentContainer,
+  openableContainers,
+  onOpenContainer,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  currentContainer?: string
+  openableContainers?: string[]
+  onOpenContainer?: (name: string) => void
 }) {
   const [path, setPath] = React.useState("")
   const [raw, setRaw] = React.useState("")
@@ -722,7 +728,7 @@ export function SystemSettingsDialog({
                     ) : category.id === "doctor" ? (
                       <DoctorPanel />
                     ) : category.id === "storage" ? (
-                      <StoragePanel />
+                      <StoragePanel currentContainer={currentContainer} openableContainers={openableContainers} onOpenContainer={onOpenContainer} />
                     ) : category.id === "orphans" ? (
                       <OrphanStatesPanel />
                     ) : category.id === "quick-chat" ? (

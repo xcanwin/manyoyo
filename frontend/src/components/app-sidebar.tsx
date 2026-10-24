@@ -271,6 +271,16 @@ export function AppSidebar({
     setNavContainer("")
   }
 
+  // 从系统设置里跳到某个容器：侧栏进入它的 AGENT 列表并选中其中一个
+  function openContainerFromSettings(containerName: string) {
+    const group = containers.find((item) => item.containerName === containerName)
+    if (!group) return
+    goToAgents(containerName)
+    const target = group.sessions.find((s) => s.synthetic !== true) ?? group.sessions[0]
+    if (target) onSelectSession(target)
+    setSettingsOpen(false)
+  }
+
   function goToAgents(containerName: string) {
     setNavLevel("agents")
     setNavContainer(containerName)
@@ -825,7 +835,13 @@ export function AppSidebar({
       </SidebarFooter>
       {confirmDialog}
 
-      <SystemSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SystemSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        currentContainer={activeContainerName}
+        openableContainers={containers.map((group) => group.containerName)}
+        onOpenContainer={openContainerFromSettings}
+      />
       <LogsDialog open={logsOpen} onOpenChange={setLogsOpen} />
 
       <SearchDialog

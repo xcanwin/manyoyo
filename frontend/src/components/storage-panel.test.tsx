@@ -16,9 +16,11 @@ const rows = [
 ]
 
 describe("StoragePanel", () => {
+  let opened: string[]
   let calls: string[]
   beforeEach(() => {
     calls = []
+    opened = []
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
@@ -34,7 +36,7 @@ describe("StoragePanel", () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
-    await act(async () => root.render(<StoragePanel />))
+    await act(async () => root.render(<StoragePanel currentContainer="live-1" openableContainers={["live-1", "gone-1"]} onOpenContainer={(name) => opened.push(name)} />))
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20))
     })
@@ -83,5 +85,26 @@ describe("StoragePanel", () => {
       await new Promise((resolve) => setTimeout(resolve, 20))
     })
     expect(calls.filter((call) => call.startsWith("DELETE /api/storage/dirs"))).toHaveLength(2)
+  })
+
+  test("当前容器加黑底标签，容器名右边有进入按钮，侧栏里没有的容器不给按钮", async () => {
+    const container = await mount()
+    const liveRow = container.querySelectorAll("[data-storage-row]")[1]
+    expect(liveRow.textContent).toContain("当前容器")
+    expect(container.querySelectorAll("[data-storage-row]")[0].textContent).not.toContain("当前容器")
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="进入 live-1"]')!.click())
+    expect(opened).toEqual(["live-1"])
+    expect(container.querySelector('button[aria-label="进入 not-in-sidebar"]')).toBeNull()
+    expect(container.querySelector("[data-storage-history]")!.querySelector('button[aria-label="进入 gone-1"]')).not.toBeNull()
+  })
+
+  test("没有关联容器的行，关联容器一格是空白；表头叫“关联容器”和“容器”", async () => {
+    const container = await mount()
+    const headers = Array.from(container.querySelectorAll("th")).map((th) => th.textContent)
+    expect(headers).toContain("关联容器")
+    expect(headers).toContain("容器")
+    expect(headers).not.toContain("会话")
+    const cells = container.querySelectorAll("[data-storage-row]")[2].querySelectorAll("td")
+    expect(cells[1].textContent).toBe("")
   })
 })

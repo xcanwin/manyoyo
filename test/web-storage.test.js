@@ -72,6 +72,15 @@ describe('web storage', () => {
         expect(byName['20261001-000005']).toMatchObject({ status: 'unused', deletable: true, sessions: [] });
     });
 
+    test('默认工作目录里任何名字的子目录都算自己的（点开头的除外）', async () => {
+        const { workRoot, historyDir } = setup();
+        fs.mkdirSync(path.join(workRoot, 'temp1234'));
+        fs.mkdirSync(path.join(workRoot, '.cache'));
+        const listing = await storage.buildStorageListing({ workRoots: [workRoot], historyDir, dockerExecAsync: fakeDocker({}) });
+        expect(listing.rows.map(row => path.basename(row.path))).toEqual(['temp1234']);
+        expect(listing.rows[0]).toMatchObject({ managed: true, deletable: true });
+    });
+
     test('快捷对话目录：历史里记过的时间戳目录才算自己的，名字不是时间戳的不算', async () => {
         const { home, workRoot, historyDir } = setup();
         const quick = path.join(home, 'manyoyo_work');
@@ -295,23 +304,20 @@ describe('web storage', () => {
             expect(fs.existsSync(workRoot)).toBe(true);
         });
 
-        test('非空（含隐藏文件）不删；不在工作目录根里的不删；名字不是时间戳的不删', async () => {
+        test('非空（含隐藏文件）不删；不在工作目录根里的不删；根本身不删', async () => {
             const { home, workRoot } = setup();
             const full = path.join(workRoot, '20261001-000041');
             fs.mkdirSync(full);
             fs.writeFileSync(path.join(full, '.env'), 'x');
             const outside = path.join(home, 'project');
             fs.mkdirSync(outside);
-            const named = path.join(workRoot, 'notes');
-            fs.mkdirSync(named);
             expect(await storage.removeEmptyWorkDir({ hostPath: full, ...base(workRoot) })).toBe(false);
             expect(await storage.removeEmptyWorkDir({ hostPath: outside, ...base(workRoot) })).toBe(false);
-            expect(await storage.removeEmptyWorkDir({ hostPath: named, ...base(workRoot) })).toBe(false);
             expect(await storage.removeEmptyWorkDir({ hostPath: workRoot, ...base(workRoot) })).toBe(false);
-            expect([full, outside, named, workRoot].every(item => fs.existsSync(item))).toBe(true);
+            expect([full, outside, workRoot].every(item => fs.existsSync(item))).toBe(true);
         });
 
-        test('快捷对话目录里的空目录也删；别的容器还挂着它就不删', async () => {
+        test('快捷对话目录里的空时间戳目录也删（名字不是时间戳的不删）；别的容器还挂着它就不删', async () => {
             const { home, workRoot } = setup();
             const quick = path.join(home, 'manyoyo_work');
             const dir = path.join(quick, '20261001-000042');
@@ -322,6 +328,16 @@ describe('web storage', () => {
             expect(await storage.removeEmptyWorkDir({ hostPath: busy, ...base(workRoot, { ...extra, dockerExecAsync: fakeDocker({ other: { state: 'running', mounts: [busy] } }) }) })).toBe(false);
             expect(await storage.removeEmptyWorkDir({ hostPath: dir, ...base(workRoot, extra) })).toBe(true);
             expect(fs.existsSync(busy)).toBe(true);
+            const notes = path.join(quick, 'notes');
+            fs.mkdirSync(notes);
+            expect(await storage.removeEmptyWorkDir({ hostPath: notes, ...base(workRoot, extra) })).toBe(false);
+        });
+
+        test('默认工作目录里名字不是时间戳的空目录也删', async () => {
+            const { workRoot } = setup();
+            const dir = path.join(workRoot, 'temp1234');
+            fs.mkdirSync(dir);
+            expect(await storage.removeEmptyWorkDir({ hostPath: dir, ...base(workRoot) })).toBe(true);
         });
 
         test('运行时不可用时不删', async () => {

@@ -1,7 +1,8 @@
 import * as React from "react"
-import { FolderOpenIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import { ArrowRightIcon, FolderOpenIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { StorageBrowserDialog } from "@/components/storage-browser-dialog"
@@ -38,7 +39,15 @@ function sizeText(size: SizeState): string {
 
 // 宿主机目录占用：工作目录在容器删除后仍保留，这里按目录列出（同路径多个容器、同名容器换路径都不会混）。
 // 只有 MANYOYO 自己建的工作目录、且没有容器在用，才能删除；你自己的项目目录只展示
-export function StoragePanel() {
+type StoragePanelProps = {
+  /** 当前页面所属的容器：在它出现的地方加“当前容器”标签 */
+  currentContainer?: string
+  /** 侧栏里有的容器（才能跳过去） */
+  openableContainers?: string[]
+  onOpenContainer?: (name: string) => void
+}
+
+export function StoragePanel({ currentContainer = "", openableContainers = [], onOpenContainer }: StoragePanelProps) {
   const [rows, setRows] = React.useState<StorageRow[] | null>(null)
   const [histories, setHistories] = React.useState<DeletedHistory[]>([])
   const [browsing, setBrowsing] = React.useState<string | null>(null)
@@ -151,6 +160,18 @@ export function StoragePanel() {
   const known = Object.values(sizes).reduce((sum, size) => sum + (size && size !== "loading" && size.bytes ? size.bytes : 0), 0)
   const emptyRows = rows.filter(isCleanableEmpty)
   const shown = filter === "empty" ? emptyRows : rows
+  const openable = new Set(openableContainers)
+  // 容器名后面：当前容器标签 + 进入该容器的按钮（侧栏里没有这个容器时不显示按钮）
+  const containerTags = (name: string) => (
+    <>
+      {name === currentContainer ? <Badge className="ml-2">当前容器</Badge> : null}
+      {onOpenContainer && openable.has(name) ? (
+        <Button variant="ghost" size="icon-xs" className="ml-1 align-middle" aria-label={`进入 ${name}`} title="进入该容器" onClick={() => onOpenContainer(name)}>
+          <ArrowRightIcon />
+        </Button>
+      ) : null}
+    </>
+  )
   const TH = "px-3 py-2 text-left text-xs font-normal text-muted-foreground whitespace-nowrap"
   const TD = "px-3 py-2 align-top"
 
@@ -191,27 +212,44 @@ export function StoragePanel() {
               <th className={TH}>关联容器</th>
               <th className={TH}>修改时间</th>
               <th className={`${TH} text-right`}>占用</th>
-              <th className={`${TH} text-right`}>操作</th>
             </tr>
           </thead>
           <tbody>
             {shown.length === 0 ? (
               <tr>
-                <td className={`${TD} text-muted-foreground`} colSpan={5}>
+                <td className={`${TD} text-muted-foreground`} colSpan={4}>
                   {error ? "" : filter === "empty" ? "没有符合条件的目录。" : "没有工作目录。"}
                 </td>
               </tr>
             ) : null}
             {shown.map((row) => (
               <tr key={row.path} className="border-b last:border-b-0 hover:bg-muted/40" data-storage-row>
-                <td className={`${TD} font-mono break-all`}>
-                  {row.path}
-                  {row.managed ? "" : <span className="ml-2 font-sans text-xs text-muted-foreground">非 MANYOYO 工作目录</span>}
+                <td className={TD}>
+                  <span className="font-mono break-all">{row.path}</span>
+                  {row.managed ? "" : <span className="ml-2 text-xs text-muted-foreground">非 MANYOYO 工作目录</span>}
+                  <span className="ml-2 whitespace-nowrap align-middle">
+                    <Button variant="ghost" size="icon-xs" aria-label={`查看 ${row.path}`} title="查看内容" onClick={() => setBrowsing(row.path)}>
+                      <FolderOpenIcon />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`删除 ${row.path}`}
+                      title={row.deletable ? "删除" : row.managed ? "还有容器在用" : "不是 MANYOYO 创建的目录，不能删除"}
+                      disabled={!row.deletable}
+                      onClick={() => void remove(row)}
+                    >
+                      <Trash2Icon />
+                    </Button>
+                  </span>
                 </td>
                 <td className={TD}>
                   {row.sessions.length
                     ? row.sessions.map((session) => (
-                        <div key={session.name}>{`${session.name}（${SESSION_STATE_LABEL[session.state]}）`}</div>
+                        <div key={session.name}>
+                          {`${session.name}（${SESSION_STATE_LABEL[session.state]}）`}
+                          {containerTags(session.name)}
+                        </div>
                       ))
                     : null}
                 </td>
@@ -226,21 +264,6 @@ export function StoragePanel() {
                   ) : (
                     sizeText(sizes[row.path])
                   )}
-                </td>
-                <td className={`${TD} text-right whitespace-nowrap`}>
-                  <Button variant="ghost" size="icon-sm" aria-label={`查看 ${row.path}`} title="查看内容" onClick={() => setBrowsing(row.path)}>
-                    <FolderOpenIcon />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`删除 ${row.path}`}
-                    title={row.deletable ? "删除" : row.managed ? "还有容器在用" : "不是 MANYOYO 创建的目录，不能删除"}
-                    disabled={!row.deletable}
-                    onClick={() => void remove(row)}
-                  >
-                    <Trash2Icon />
-                  </Button>
                 </td>
               </tr>
             ))}
@@ -266,7 +289,7 @@ export function StoragePanel() {
           <table className="w-full border-collapse text-sm">
             <thead className="border-b bg-muted/50">
               <tr>
-                <th className={TH}>会话</th>
+                <th className={TH}>容器</th>
                 <th className={TH}>最后更新</th>
                 <th className={`${TH} text-right`}>占用</th>
                 <th className={`${TH} text-right`}>操作</th>
@@ -282,7 +305,10 @@ export function StoragePanel() {
               ) : null}
               {histories.map((item) => (
                 <tr key={item.name} className="border-b last:border-b-0 hover:bg-muted/40" data-storage-history>
-                  <td className={`${TD} break-all`}>{item.name}</td>
+                  <td className={`${TD} break-all`}>
+                    {item.name}
+                    {containerTags(item.name)}
+                  </td>
                   <td className={`${TD} whitespace-nowrap text-muted-foreground`}>{formatDateTime(item.updatedAt)}</td>
                   <td className={`${TD} text-right whitespace-nowrap tabular-nums`}>{formatBytes(item.bytes)}</td>
                   <td className={`${TD} text-right`}>
