@@ -5098,6 +5098,8 @@ setTimeout(() => {
             JSON.stringify({
                 containerName,
                 messages: [],
+                // 容器不在时按历史里的创建参数重建，没有就报错（不再退回 serve 的启动目录）
+                runtimeSnapshot: { hostPath: path.dirname(webHistoryDir), containerPath: '/workspace' },
                 agentPromptCommand: 'IS_SANDBOX=1 claude --dangerously-skip-permissions -p {prompt}'
             }, null, 4),
             'utf-8'
