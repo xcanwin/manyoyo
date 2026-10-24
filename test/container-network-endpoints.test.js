@@ -39,25 +39,6 @@ describe('resolveEndpoints：运行时注入的宿主机代理', () => {
     });
 });
 
-describe('helper 容器用目标容器自己的镜像', () => {
-    test('读运行时网络信息时用目标容器的镜像，不用 serve 默认版本的镜像（那个镜像本地不一定有）', async () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cn-image-'));
-        const log = path.join(dir, 'args.log');
-        const fake = path.join(dir, 'fake-docker.sh');
-        fs.writeFileSync(fake, `#!/bin/sh\necho "$@" >> ${log}\nprintf '10.88.0.1 host.containers.internal\\nnameserver 10.88.0.1\\n'\n`, { mode: 0o755 });
-        try {
-            const manager = createNetworkManager({ command: fake, homeDir: dir, imageRef: () => 'default:2.3.0', warn: () => {} });
-            const self = { id: '0123456789abcdef', name: 'c', running: true, info: { Config: { Image: 'own:2.2.0', Env: [] } } };
-            await manager.resolveEndpoints(self, normalizePolicy(), [self]);
-            const logged = fs.readFileSync(log, 'utf8');
-            expect(logged).toContain('own:2.2.0');
-            expect(logged).not.toContain('default:2.3.0');
-        } finally {
-            fs.rmSync(dir, { recursive: true, force: true });
-        }
-    });
-});
-
 describe('容器间规则：派生行与相关容器', () => {
     const ID_A = 'aaaaaaaaaaaaaaaa';
     const ID_B = 'bbbbbbbbbbbbbbbb';

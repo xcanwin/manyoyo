@@ -110,6 +110,34 @@ describe('createSidecarManager（假运行时）', () => {
         APP_FILES_PRESENT(p.app);
     });
 
+    test('默认镜像本地没有：用触发它的容器的镜像创建；两个都没有就报错并写出两个镜像名；默认镜像可用时不碰备用镜像', async () => {
+        const missing = new Set(['img:1']);
+        const attempts = [];
+        const runWithMissing = args => {
+            if (args[0] === 'run') {
+                const image = args[args.indexOf('node') + 1];
+                attempts.push(image);
+                if (missing.has(image)) return Promise.reject(new Error(`Error: ${image}: image not known`));
+            }
+            return fakeRun(args);
+        };
+        const make2 = () => sidecar.createSidecarManager({ run: runWithMissing, command: 'podman', homeDir: home, imageRef: () => 'img:1', isMissingImageError: e => /image not known/.test(e.message), networkName: 'manyoyo', ensureNetwork: async () => {}, getUpstream: () => '' });
+        const info = await make2().ensure({ fallbackImage: 'own:2.1.0' });
+        expect(info.port).toBe(3128);
+        expect(attempts).toEqual(['img:1', 'own:2.1.0']);
+
+        containers.clear();
+        calls.length = 0;
+        missing.add('own:2.1.0');
+        await expect(make2().ensure({ fallbackImage: 'own:2.1.0' })).rejects.toThrow(/img:1.*own:2\.1\.0/);
+
+        containers.clear();
+        attempts.length = 0;
+        missing.clear();
+        await make2().ensure({ fallbackImage: 'own:2.1.0' });
+        expect(attempts).toEqual(['img:1']);
+    });
+
     test('已停止就 start；程序文件变了才重建；上游只写进 0600 文件（不重建、不进 env / 参数）', async () => {
         const mgr = make();
         await mgr.ensure();

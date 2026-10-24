@@ -81,13 +81,13 @@ maybe('container-network（真实容器）', () => {
         fs.rmSync(work, { recursive: true, force: true });
     });
 
-    async function create({ policy = {}, autostart = '' } = {}) {
+    async function create({ policy = {}, autostart = '', version = imageVersion } = {}) {
         const name = `cm-net-${crypto.randomBytes(3).toString('hex')}`;
         names.push(name);
         const network = normalizePolicy(policy);
         const st = state.createState({ homeDir: home, autostart, network, netRequired: !isUnrestricted(network), meta: { name } });
         const args = buildContainerRunArgs({
-            state: st, containerName: name, hostPath: work, containerPath: '/workspace', imageName: IMAGE_NAME, imageVersion,
+            state: st, containerName: name, hostPath: work, containerPath: '/workspace', imageName: IMAGE_NAME, imageVersion: version,
             defaultNetwork: NETWORK_NAME, defaultCommand: '/bin/bash',
             // 与 buildContainerIntegration 对 docker 的做法一致：让容器里有 host.docker.internal
             containerExtraArgs: path.basename(runtime.command) === 'docker' ? ['--add-host', 'host.docker.internal:host-gateway'] : []
@@ -194,7 +194,10 @@ maybe('container-network（真实容器）', () => {
     }, 120000);
 
     test('失败即关闭：重启后规则没下发时自启动不执行，下发后 2 秒内执行；helper 镜像坏了下发失败且不放行', async () => {
-        const { name, st } = await create({ autostart: 'echo run >> /run/manyoyo/ran.txt\n' });
+        // 容器用一个临时标签的镜像建（后面去掉这个标签，模拟“容器自己的镜像也不可用”）；去标签只用 rmi <名:标签>，不带 --force，镜像层还被别的标签引用，不会被删
+        const tmpVersion = `0.0.9-tmp${crypto.randomBytes(3).toString('hex')}`;
+        expect(rtSync(['tag', IMAGE, `${IMAGE_NAME}:${tmpVersion}`]).status).toBe(0);
+        const { name, st } = await create({ autostart: 'echo run >> /run/manyoyo/ran.txt\n', version: tmpVersion });
         const ran = () => (fs.existsSync(path.join(st.box, 'ran.txt')) ? fs.readFileSync(path.join(st.box, 'ran.txt'), 'utf-8').trim().split('\n').length : 0);
         await sleep(2000);
         expect(ran()).toBe(0); // 新建后没下发，init 在等门闩
@@ -206,6 +209,7 @@ maybe('container-network（真实容器）', () => {
         rtSync(['restart', '-t', '1', name]);
         await sleep(2500);
         expect(ran()).toBe(1); // 重启后规则丢失、门闩清空：不得再执行
+        expect(rtSync(['rmi', `${IMAGE_NAME}:${tmpVersion}`]).status).toBe(0);
         const broken = createNetworkManager({ command: runtime.command, env: runtime.env, homeDir: home, imageRef: () => `${IMAGE_NAME}:0.0.0-missing` });
         await expect(broken.apply(name)).rejects.toThrow(/网络规则下发失败/);
         await sleep(1500);
@@ -217,6 +221,24 @@ maybe('container-network（真实容器）', () => {
         await sleep(1500);
         expect(ran()).toBe(2);
         expect(state.readNetStatus(home, st.id).status).toBe('applied');
+    }, 120000);
+
+    // 回归：helper 曾改成用容器自己的镜像，2.1.x 及更早的镜像里没有 nft，用它们建的容器下发规则失败（失败即关闭 → 容器用不了）
+    test('用没有 nft 的旧镜像（2.1.0-common）建的容器，下发规则照常成功', async () => {
+        const OLD = `${IMAGE_NAME}:2.1.0-common`;
+        if (rtSync(['image', 'inspect', OLD]).status !== 0) {
+            console.warn(`[跳过] 本机没有 ${OLD}`);
+            return;
+        }
+        if (rtSync(['run', '--rm', '--entrypoint', 'sh', OLD, '-c', 'command -v nft']).stdout.trim()) {
+            console.warn(`[跳过] ${OLD} 里有 nft，复现不了这个回归`);
+            return;
+        }
+        const { name, st } = await create({ version: '2.1.0-common' });
+        const result = await manager.apply(name, { expectId: st.id });
+        expect(result.status).toBe('applied');
+        expect(state.readNetStatus(home, st.id).status).toBe('applied');
+        expect(rtSync(['inspect', '--format', '{{.Config.Image}}', name]).stdout.trim()).toBe(OLD);
     }, 120000);
 
     test('serve 订阅 start 事件：外部重启后 2 秒内自动补下发，自启动随之执行，规则仍然生效', async () => {
