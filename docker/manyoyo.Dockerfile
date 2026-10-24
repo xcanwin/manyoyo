@@ -2,7 +2,7 @@
 # Stage 1: 缓存准备阶段 - 智能检测缓存或下载
 # ==============================================================================
 # 镜像源参数化（默认使用阿里云，可按需覆盖），两个阶段共享同一默认值
-ARG APT_MIRROR=https://mirrors.aliyun.com
+ARG APT_MIRROR=https://mirrors.tencent.com
 ARG NODEJS_MIRROR=https://mirrors.tencent.com/nodejs-release/
 
 FROM ubuntu:24.04 AS cache-stage
