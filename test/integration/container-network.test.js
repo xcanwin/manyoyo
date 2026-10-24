@@ -270,7 +270,13 @@ maybe('container-network（真实容器）', () => {
         const proxyUrl = env.split('\n')[0].split('=')[1];
         expect(proxyUrl).toMatch(/^http:\/\/\d+\.\d+\.\d+\.\d+:3128$/); // 没有账号密码
         const proxyIp = proxyUrl.replace('http://', '').split(':')[0];
-        const viaProxy = async (url, extra = '') => (await execWithEnv(name, `curl -s -m 12 -o /dev/null -w '%{http_code}' ${extra} ${url}; true`)).stdout.trim();
+        // curl 连不上也会打印 000；一个字都没有说明 exec 本身出了问题（超时被杀、容器状态异常等），带上原因直接失败
+        const viaProxy = async (url, extra = '') => {
+            const result = await execWithEnv(name, `curl -s -m 12 -o /dev/null -w '%{http_code}' ${extra} ${url}; echo " curl-exit=$?"`);
+            const match = /^(\d{3}) curl-exit=(\d+)$/.exec(result.stdout.trim());
+            if (!match) throw new Error(`exec 没有拿到 curl 的结果: status=${result.status} stdout=${JSON.stringify(result.stdout)} stderr=${JSON.stringify(result.stderr)}`);
+            return match[1];
+        };
 
         // 宿主机上不再有过滤代理端口（8936 与 sidecar 的 3128 都不在宿主机监听）
         const ss = spawnSync('ss', ['-ltn'], { encoding: 'utf-8' });
