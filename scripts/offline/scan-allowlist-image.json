@@ -53,5 +53,15 @@
         "rule": "sensitive-filename",
         "pathPattern": "^[^!]*(?:![^!]*\\.tar|!/blobs/sha256/[0-9a-f]{64})?!/root/\\.npmrc$",
         "reason": "Dockerfile 的 `npm config set registry` / allow-scripts 生成（已核对内容只有 registry 与 allow-scripts，无凭据）；内容仍受 token 规则扫描，将来混入凭据会被抓到"
+    },
+    {
+        "rule": "token",
+        "pathPattern": "^[^!]*(?:![^!]*\\.tar|!/blobs/sha256/[0-9a-f]{64})?!/root/\\.claude/plugins/marketplaces/claude-plugins-official/plugins/security-guidance/tests/test_patterns_file_shape\\.py$",
+        "reason": "构建时 `claude plugin marketplace add` 克隆的官方插件市场里 security-guidance 插件的单元测试：夹具里的 `AKIAABCDEFGHIJKLMNOP` 是 AWS 文档里的示例密钥（字母顺序的假值），用来触发它的密钥检测规则，不是真实凭据。只放行这一个文件"
+    },
+    {
+        "rule": "private-key",
+        "pathPattern": "^[^!]*(?:![^!]*\\.tar|!/blobs/sha256/[0-9a-f]{64})?!/root/\\.claude/plugins/marketplaces/claude-plugins-official/plugins/security-guidance/tests/test_secret_shaped_paths\\.py$",
+        "reason": "同上插件的单元测试：夹具只写了一行 `-----BEGIN OPENSSH PRIVATE KEY-----` 的文件头（没有密钥内容），用来测“长得像密钥的路径”。只放行这一个文件"
     }
 ]
