@@ -31,48 +31,65 @@ function fakeDocker(containers, fail = false) {
 describe('web storage', () => {
     test('按宿主机目录一行：使用中 / 仅剩历史 / 无人使用', async () => {
         const { workRoot, historyDir } = setup();
-        const used = path.join(workRoot, 'a');
-        const gone = path.join(workRoot, 'b');
-        const orphan = path.join(workRoot, 'c');
+        const used = path.join(workRoot, '20261001-000001');
+        const gone = path.join(workRoot, '20261001-000002');
+        const orphan = path.join(workRoot, '20261001-000003');
         [used, gone, orphan].forEach(dir => fs.mkdirSync(dir));
         writeHistory(historyDir, 'live-1', used);
         writeHistory(historyDir, 'dead-1', gone);
         const listing = await storage.buildStorageListing({
-            workRoot,
+            workRoots: [workRoot],
             historyDir,
             dockerExecAsync: fakeDocker({ 'live-1': { state: 'running', mounts: [used] } })
         });
         const byPath = Object.fromEntries(listing.rows.map(row => [path.basename(row.path), row]));
-        expect(byPath.a.status).toBe('in-use');
-        expect(byPath.a.deletable).toBe(false);
-        expect(byPath.b.status).toBe('history-only');
-        expect(byPath.b.sessions).toEqual([{ name: 'dead-1', state: 'deleted' }]);
-        expect(byPath.b.deletable).toBe(true);
-        expect(byPath.c.status).toBe('unused');
+        expect(byPath['20261001-000001'].status).toBe('in-use');
+        expect(byPath['20261001-000001'].deletable).toBe(false);
+        expect(byPath['20261001-000002'].status).toBe('history-only');
+        expect(byPath['20261001-000002'].sessions).toEqual([{ name: 'dead-1', state: 'deleted' }]);
+        expect(byPath['20261001-000002'].deletable).toBe(true);
+        expect(byPath['20261001-000003'].status).toBe('unused');
         expect(listing.deletedHistories.map(item => item.name)).toEqual(['dead-1']);
     });
 
-    test('没有历史的容器靠挂载关系判定在用，挂载上级目录也算', async () => {
+    test('没有历史的容器靠挂载关系判定在用：挂了子目录算在用，挂了上级目录（如整个 /root）不算', async () => {
         const { workRoot, historyDir } = setup();
-        const dir = path.join(workRoot, 'cli');
-        fs.mkdirSync(dir);
+        const used = path.join(workRoot, '20261001-000004');
+        const free = path.join(workRoot, '20261001-000005');
+        fs.mkdirSync(path.join(used, 'inner'), { recursive: true });
+        fs.mkdirSync(free);
         const listing = await storage.buildStorageListing({
-            workRoot,
+            workRoots: [workRoot],
             historyDir,
-            dockerExecAsync: fakeDocker({ 'cli-box': { state: 'exited', mounts: [workRoot] } })
+            dockerExecAsync: fakeDocker({
+                'cli-box': { state: 'exited', mounts: [path.join(used, 'inner')] },
+                'whole-home': { state: 'running', mounts: [path.dirname(workRoot)] }
+            })
         });
-        expect(listing.rows[0].status).toBe('in-use');
-        expect(listing.rows[0].deletable).toBe(false);
+        const byName = Object.fromEntries(listing.rows.map(row => [path.basename(row.path), row]));
+        expect(byName['20261001-000004']).toMatchObject({ status: 'in-use', deletable: false });
+        expect(byName['20261001-000004'].sessions.map(item => item.name)).toEqual(['cli-box']);
+        expect(byName['20261001-000005']).toMatchObject({ status: 'unused', deletable: true, sessions: [] });
+    });
+
+    test('快捷对话目录也是工作目录根；名字不是时间戳的目录不当成自己的', async () => {
+        const { home, workRoot, historyDir } = setup();
+        const quick = path.join(home, 'manyoyo_work');
+        fs.mkdirSync(path.join(quick, '20261001-000007'), { recursive: true });
+        fs.mkdirSync(path.join(quick, 'my-notes'));
+        const listing = await storage.buildStorageListing({ workRoots: [workRoot, quick], historyDir, dockerExecAsync: fakeDocker({}) });
+        expect(listing.rows.map(row => path.basename(row.path))).toEqual(['20261001-000007']);
+        expect(listing.rows[0]).toMatchObject({ managed: true, deletable: true });
     });
 
     test('同一目录被多个会话引用，只要有一个容器在就不可删', async () => {
         const { workRoot, historyDir } = setup();
-        const dir = path.join(workRoot, 'shared');
+        const dir = path.join(workRoot, '20261001-000005');
         fs.mkdirSync(dir);
         writeHistory(historyDir, 'one', dir);
         writeHistory(historyDir, 'two', dir);
         const listing = await storage.buildStorageListing({
-            workRoot,
+            workRoots: [workRoot],
             historyDir,
             dockerExecAsync: fakeDocker({ two: { state: 'exited', mounts: [] } })
         });
@@ -86,7 +103,7 @@ describe('web storage', () => {
         const project = path.join(home, 'project');
         fs.mkdirSync(project);
         writeHistory(historyDir, 'gone', project);
-        const listing = await storage.buildStorageListing({ workRoot, historyDir, dockerExecAsync: fakeDocker({}) });
+        const listing = await storage.buildStorageListing({ workRoots: [workRoot], historyDir, dockerExecAsync: fakeDocker({}) });
         expect(listing.rows[0].managed).toBe(false);
         expect(listing.rows[0].deletable).toBe(false);
         const removed = await storage.removeManagedDirectory(listing, listing.rows[0].path);
@@ -96,15 +113,15 @@ describe('web storage', () => {
 
     test('运行时不可用时列表抛错，不会把所有目录当成没人用', async () => {
         const { workRoot, historyDir } = setup();
-        await expect(storage.buildStorageListing({ workRoot, historyDir, dockerExecAsync: fakeDocker({}, true) })).rejects.toThrow('daemon down');
+        await expect(storage.buildStorageListing({ workRoots: [workRoot], historyDir, dockerExecAsync: fakeDocker({}, true) })).rejects.toThrow('daemon down');
     });
 
     test('删除只作用于列表里的无人使用目录', async () => {
         const { workRoot, historyDir } = setup();
-        const dir = path.join(workRoot, 'x');
+        const dir = path.join(workRoot, '20261001-000006');
         fs.mkdirSync(dir);
         fs.writeFileSync(path.join(dir, 'f.txt'), 'hello');
-        const listing = await storage.buildStorageListing({ workRoot, historyDir, dockerExecAsync: fakeDocker({}) });
+        const listing = await storage.buildStorageListing({ workRoots: [workRoot], historyDir, dockerExecAsync: fakeDocker({}) });
         expect(await storage.removeManagedDirectory(listing, path.join(workRoot, '..'))).toMatchObject({ ok: false, status: 404 });
         expect(await storage.removeManagedDirectory(listing, listing.rows[0].path)).toEqual({ ok: true });
         expect(fs.existsSync(dir)).toBe(false);
@@ -118,7 +135,7 @@ describe('web storage', () => {
         fs.writeFileSync(path.join(historyDir, 'events', 'dead~agent-2.jsonl'), '{}\n');
         fs.writeFileSync(path.join(historyDir, 'events', 'dead-other.jsonl'), '{}\n');
         const listing = await storage.buildStorageListing({
-            workRoot,
+            workRoots: [workRoot],
             historyDir,
             dockerExecAsync: fakeDocker({ alive: { state: 'running', mounts: [] } })
         });

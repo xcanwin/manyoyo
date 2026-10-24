@@ -160,7 +160,8 @@ export function StoragePanel() {
             </div>
             <p className="truncate text-xs text-muted-foreground">
               {row.sessions.length
-                ? row.sessions.map((session) => `${session.name}（${SESSION_STATE_LABEL[session.state]}）`).join("、")
+                ? row.sessions.slice(0, 3).map((session) => `${session.name}（${SESSION_STATE_LABEL[session.state]}）`).join("、") +
+                  (row.sessions.length > 3 ? ` 等 ${row.sessions.length} 个` : "")
                 : "没有关联的会话"}
               {` · 修改于 ${formatDateTime(row.mtimeMs)}`}
               {row.managed ? "" : " · 非 MANYOYO 工作目录"}
