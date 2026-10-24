@@ -127,6 +127,21 @@ describe("ModelServicesPanel", () => {
     expect(post("/api/model-services/import")?.body).toEqual({ ids: ["codex"] })
   })
 
+  test("缺附加设置时提示并能一键修复（界面上没有变量名）", async () => {
+    const withMissing = { ...SERVICES, services: [{ ...SERVICES.services[0], missingExtraEnv: { ENABLE_TOOL_SEARCH: "false" } }] }
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET"
+      calls.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      return jsonResponse(method === "PUT" ? SERVICES : withMissing)
+    })
+    await mount()
+    expect(pageText()).toContain("关闭工具搜索")
+    expect(pageText()).not.toContain("ENABLE_TOOL_SEARCH")
+    await click("一键修复")
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ applyPresetExtras: true })
+    expect(pageText()).not.toContain("关闭工具搜索")
+  })
+
   test("删除要先确认，确认后才请求", async () => {
     await mount()
     await click("删除")

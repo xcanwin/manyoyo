@@ -14,6 +14,8 @@ export type ModelService = {
   keyTail: string
   model: string
   quickChatDefault: boolean
+  // 这家服务必需、但运行配置里还没有的附加变量（如智谱的 ENABLE_TOOL_SEARCH=false）
+  missingExtraEnv?: Record<string, string>
 }
 export type ReuseSuggestion = { from: string; agent: string; providerId: string; label: string }
 export type ModelServiceAgent = { id: string; label: string; providers: SetupProvider[] }

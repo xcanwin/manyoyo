@@ -29,6 +29,9 @@ import {
 } from "@/lib/model-services"
 import type { ConnectionResult } from "@/lib/setup"
 
+// 附加变量在界面上的说法（界面不出现变量名）
+const EXTRA_ENV_LABELS: Record<string, string> = { ENABLE_TOOL_SEARCH: "关闭工具搜索" }
+
 type Notice = { tone: "success" | "error"; text: string }
 
 // 系统设置里的“模型服务”：一套服务 = 一个运行配置。界面上不出现变量名；Key 只显示末 4 位，保存和测试都在服务端完成
@@ -73,6 +76,17 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
       setResults((prev) => ({ ...prev, [name]: noticeOf(result) }))
     } catch (err) {
       setResults((prev) => ({ ...prev, [name]: { tone: "error", text: err instanceof Error ? err.message : "测试失败" } }))
+    } finally {
+      setBusy("")
+    }
+  }
+
+  async function handleFix(name: string) {
+    setBusy(`fix:${name}`)
+    try {
+      applyChange(await updateModelService(name, { applyPresetExtras: true }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "修复失败")
     } finally {
       setBusy("")
     }
@@ -174,6 +188,14 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
                   </Button>
                 </div>
               </div>
+              {service.missingExtraEnv && Object.keys(service.missingExtraEnv).length > 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-amber-600">
+                  <span>这家服务需要附加设置（{Object.keys(service.missingExtraEnv).map((key) => EXTRA_ENV_LABELS[key] ?? "附加设置").join("、")}），缺了模型可能调不了工具。</span>
+                  <Button type="button" size="xs" variant="outline" disabled={busy !== ""} onClick={() => void handleFix(service.name)}>
+                    一键修复
+                  </Button>
+                </div>
+              ) : null}
               {result ? (
                 <p role="status" className={result.tone === "success" ? "text-xs text-emerald-600" : "text-xs text-destructive"}>
                   {result.text}

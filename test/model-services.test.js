@@ -61,6 +61,24 @@ describe('listModelServices', () => {
     });
 });
 
+describe('缺少服务商必需的附加变量', () => {
+    test('智谱的 Claude 运行配置没有 ENABLE_TOOL_SEARCH=false 时标出来，DeepSeek 不用；一键修复只补这一个变量', () => {
+        const byName = Object.fromEntries(listModelServices(config).map(item => [item.name, item]));
+        expect(byName['claude-glm'].missingExtraEnv).toEqual({ ENABLE_TOOL_SEARCH: 'false' });
+        expect(byName['claude-ds'].missingExtraEnv).toEqual({});
+        expect(byName.mine.missingExtraEnv).toEqual({});
+        const { ops } = buildServiceEdit(config, 'claude-glm', { applyPresetExtras: true });
+        expect(ops).toEqual([{ type: 'set', path: ['runs', 'claude-glm', 'env', 'ENABLE_TOOL_SEARCH'], value: 'false' }]);
+        const fixed = JSON5.parse(applyConfigOps(RAW, ops));
+        expect(fixed.runs['claude-glm'].env).toEqual({ ...config.runs['claude-glm'].env, ENABLE_TOOL_SEARCH: 'false' });
+        expect(listModelServices(fixed).find(item => item.name === 'claude-glm').missingExtraEnv).toEqual({});
+        // 值不对（用户写成 true）也要修
+        const wrong = JSON5.parse(RAW);
+        wrong.runs['claude-glm'].env.ENABLE_TOOL_SEARCH = 'true';
+        expect(listModelServices(wrong).find(item => item.name === 'claude-glm').missingExtraEnv).toEqual({ ENABLE_TOOL_SEARCH: 'false' });
+    });
+});
+
 describe('suggestReuse', () => {
     test('智谱和 DeepSeek 的 Key 也能给 Codex 用；自定义地址不建议', () => {
         const list = suggestReuse(config);
