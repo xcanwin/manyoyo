@@ -187,6 +187,33 @@ describe('Web Server 磁盘占用接口', () => {
     });
 });
 
+describe('磁盘占用：配置里写死的 hostPath', () => {
+    test('全局与 runs.<名> 的写死路径不可删，含模板的不算', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-cfgpath-'));
+        const port = await getFreePort();
+        const workRoot = path.join(tempHost, 'work');
+        const fixedA = path.join(workRoot, '20261001-000001');
+        const fixedB = path.join(workRoot, '20261001-000002');
+        const free = path.join(workRoot, '20261001-000003');
+        [fixedA, fixedB, free].forEach(dir => fs.mkdirSync(dir, { recursive: true }));
+        fs.writeFileSync(path.join(tempHost, 'manyoyo.json'), JSON.stringify({ hostPath: fixedA, runs: { x: { hostPath: fixedB }, y: { hostPath: `${workRoot}/{now}` } } }));
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, { dockerExecAsync: async () => '' }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const headers = { Cookie: await loginAndGetCookie(baseUrl), 'Content-Type': 'application/json' };
+            const listed = await request(`${baseUrl}/api/storage`, { headers });
+            const byName = Object.fromEntries(listed.json.rows.map(row => [path.basename(row.path), row]));
+            expect(byName['20261001-000001']).toMatchObject({ status: 'in-use', deletable: false });
+            expect(byName['20261001-000002']).toMatchObject({ status: 'in-use', deletable: false });
+            expect(byName['20261001-000003']).toMatchObject({ deletable: true });
+        } finally {
+            if (handle && handle.close) await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('容器被删后的重建不再退回 serve 启动目录', () => {
     async function recreate({ history, validateHostPath }) {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-recreate-'));
