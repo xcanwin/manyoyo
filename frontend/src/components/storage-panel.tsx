@@ -1,10 +1,11 @@
 import * as React from "react"
-import { RefreshCwIcon, Trash2Icon } from "lucide-react"
+import { FolderOpenIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import { StorageBrowserDialog } from "@/components/storage-browser-dialog"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { apiDelete, apiGet } from "@/lib/api"
 import { formatBytes, formatDateTime } from "@/lib/format"
@@ -19,6 +20,7 @@ type StorageRow = {
   mtimeMs: number
   deletable: boolean
 }
+type DeletedHistory = { name: string; bytes: number; updatedAt: string }
 type SizeState = { bytes?: number; timedOut?: boolean; error?: boolean } | "loading" | undefined
 
 const STATUS_LABEL: Record<RowStatus, string> = {
@@ -41,6 +43,8 @@ function sizeText(size: SizeState): string {
 // 只有 MANYOYO 自己建的工作目录、且没有容器在用，才能删除；你自己的项目目录只展示
 export function StoragePanel() {
   const [rows, setRows] = React.useState<StorageRow[] | null>(null)
+  const [histories, setHistories] = React.useState<DeletedHistory[]>([])
+  const [browsing, setBrowsing] = React.useState<string | null>(null)
   const [error, setError] = React.useState("")
   const [sizes, setSizes] = React.useState<Record<string, SizeState>>({})
   const { confirm, dialog } = useConfirmDialog()
@@ -61,10 +65,11 @@ export function StoragePanel() {
     const round = ++generation.current
     setError("")
     try {
-      const data = (await apiGet("/api/storage")) as { rows?: StorageRow[] }
+      const data = (await apiGet("/api/storage")) as { rows?: StorageRow[]; deletedHistories?: DeletedHistory[] }
       if (round !== generation.current) return
       const list = data.rows || []
       setRows(list)
+      setHistories(data.deletedHistories || [])
       setSizes({})
       // 工作目录自动算体积（两个一组，du 很慢时不把磁盘打满）；你自己的项目目录点了再算
       const queue = list.filter((row) => row.managed).map((row) => row.path)
@@ -104,6 +109,16 @@ export function StoragePanel() {
     }
   }
 
+  async function removeHistories(targets: DeletedHistory[], title: string, message: string) {
+    if (!(await confirm({ title, message, confirmLabel: "清理" }))) return
+    try {
+      for (const item of targets) await apiDelete("/api/storage/histories", { name: item.name })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "清理失败")
+    }
+    await load()
+  }
+
   if (rows === null) {
     return (
       <div className="flex justify-center py-6">
@@ -112,6 +127,7 @@ export function StoragePanel() {
     )
   }
 
+  const historyTotal = histories.reduce((sum, item) => sum + item.bytes, 0)
   const known = Object.values(sizes).reduce((sum, size) => sum + (size && size !== "loading" && size.bytes ? size.bytes : 0), 0)
 
   return (
@@ -159,6 +175,9 @@ export function StoragePanel() {
               sizeText(sizes[row.path])
             )}
           </div>
+          <Button variant="ghost" size="icon-sm" aria-label={`查看 ${row.path}`} title="查看内容" onClick={() => setBrowsing(row.path)}>
+            <FolderOpenIcon />
+          </Button>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -171,6 +190,40 @@ export function StoragePanel() {
           </Button>
         </div>
       ))}
+      <div className="flex flex-col gap-2 border-t pt-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold">已删除容器的对话历史</p>
+          {histories.length > 0 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void removeHistories(histories, "清理全部已删除容器的历史？", `共 ${histories.length} 份（${formatBytes(historyTotal)}），对话记录会被永久删除。`)}
+            >
+              清理全部
+            </Button>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground">容器删掉后，网页里的对话记录还在。确认不再需要的可以清理；容器还在的不会出现在这里。</p>
+        {histories.length === 0 ? <p className="text-sm text-muted-foreground">没有。</p> : null}
+        {histories.map((item) => (
+          <div key={item.name} className="flex items-center gap-2 rounded-lg border p-2 text-sm" data-storage-history>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{item.name}</p>
+              <p className="text-xs text-muted-foreground">{`最后更新 ${formatDateTime(item.updatedAt)}`}</p>
+            </div>
+            <span className="w-24 shrink-0 text-right tabular-nums">{formatBytes(item.bytes)}</span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`清理 ${item.name}`}
+              onClick={() => void removeHistories([item], "清理这份历史？", `${item.name}\n对话记录会被永久删除。`)}
+            >
+              <Trash2Icon />
+            </Button>
+          </div>
+        ))}
+      </div>
+      <StorageBrowserDialog root={browsing} onClose={() => setBrowsing(null)} />
       {dialog}
     </div>
   )

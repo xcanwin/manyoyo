@@ -6,6 +6,7 @@ import { StoragePanel } from "@/components/storage-panel"
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+const deletedHistories = [{ name: "gone-1", bytes: 2048, updatedAt: "2026-10-01T00:00:00Z" }]
 const rows = [
   { path: "/h/work/a", managed: true, status: "history-only", sessions: [{ name: "gone-1", state: "deleted" }], mtimeMs: 1, deletable: true },
   { path: "/h/work/b", managed: true, status: "in-use", sessions: [{ name: "live-1", state: "running" }], mtimeMs: 2, deletable: false },
@@ -20,7 +21,7 @@ describe("StoragePanel", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         calls.push(`${init?.method || "GET"} ${url}`)
-        const body = url.startsWith("/api/storage/size") ? { bytes: 3 * 1024 * 1024 } : url === "/api/storage" ? { rows } : { removed: true }
+        const body = url.startsWith("/api/storage/size") ? { bytes: 3 * 1024 * 1024 } : url === "/api/storage" ? { rows, deletedHistories } : url.startsWith("/api/storage/files") ? { entries: [{ name: "sub", type: "dir", size: null, mtimeMs: 1 }, { name: "a.txt", type: "file", size: 5, mtimeMs: 1 }], truncated: false } : { removed: true }
         return new Response(JSON.stringify(body), { status: 200 })
       })
     )
@@ -47,5 +48,17 @@ describe("StoragePanel", () => {
     expect(items[2].textContent).toContain("计算体积")
     const buttons = container.querySelectorAll<HTMLButtonElement>('button[aria-label^="删除"]')
     expect(Array.from(buttons).map((button) => button.disabled)).toEqual([false, true, true])
+  })
+
+  test("列出已删除容器的历史，并能查看目录内容", async () => {
+    const container = await mount()
+    expect(container.querySelectorAll("[data-storage-history]")).toHaveLength(1)
+    expect(container.querySelector("[data-storage-history]")!.textContent).toContain("2.0 KB")
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="查看 /h/work/a"]')!.click())
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+    expect(calls).toContain("GET /api/storage/files?path=%2Fh%2Fwork%2Fa&sub=")
+    expect(document.body.querySelectorAll("[data-storage-entry]")).toHaveLength(2)
   })
 })
