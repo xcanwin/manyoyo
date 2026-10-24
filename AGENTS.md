@@ -204,6 +204,8 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 - 开发容器若 PID 1 是 `tail -f /dev/null`，孤儿进程不会被回收，僵尸耗尽 cgroup 的 pids 上限后测试随机报“无法创建线程”/`spawn EAGAIN`；这时用 `docker run --rm -v "$PWD:$PWD" -w "$PWD" node:22-bookworm bash -lc '<命令>'` 在干净容器里验证，并让维护者重启容器。不要用 `pkill -f` / `pgrep -f` 匹配带自己命令行的模式，会杀掉自己的 shell。
 - **Node 内置 `fetch` 不读 `HTTP(S)_PROXY`**：访问外网（GitHub）的请求必须经 `lib/net-proxy.js`；serve 进程里还有访问本机 / 容器的请求，**禁止**调用 `http.setGlobalProxyFromEnv()` 或设全局 `NODE_USE_ENV_PROXY`。已安装的旧版本（≤8.3.3）升级仍走旧代码，用户可临时 `NODE_USE_ENV_PROXY=1 my update`。
 - 机器上同时装了 docker 和 podman（如 CI 的 ubuntu）时，集成测试和被测代码必须用同一套运行时选择（`selectContainerRuntime`，docker 优先），否则镜像导进 podman、脚本却去 docker 找。子 agent 的 worktree 若放在仓库内（`.claude/worktrees/`）要用完即合并删除；jest 已忽略 `.claude/`，但子 agent 写在 worktree 里的 `temp/` 反馈会随 worktree 一起丢，让它写主检出的绝对路径。
+- Claude Code 的 hook 跑在独立会话里，**没有控制终端**（`/dev/tty` 打不开），stdout 又会被 Claude 截走，所以想让终端响铃、改标题，只能让 hook 输出 `{"terminalSequence":"\u0007"}`（只允许 BEL 和 OSC 0/1/2/9/99/777，只在用户级 / 托管设置里生效）。dash 下 `: > /dev/tty` 失败会让整个 shell 以 2 退出，而 Stop hook 退出码 2 表示阻止停止，Claude 会反复重跑；镜像里的响铃 hook 用 `CLAUDE_CODE_ENTRYPOINT = cli` 判断交互模式，网页的 `-p` 模式（`sdk-cli`）直接退出。
+- podman 4.9 单参数 `podman untag <名:标签>` 会去掉该镜像的**所有**标签；只想去掉一个别名时用 `podman rmi <名:标签>`（不带 `--force`）。2.1.x 及更早的镜像里没有 `nft`，一次性 helper 不能只用目标容器自己的镜像。
 - 子 agent 批量精简文档后，必须抽查事实（命令、参数、默认值以代码为准），删掉其自述“未核实”的新增内容。
 - 推送、合并 main、触发 workflow、发 Release/npm 等对外动作，**即使已有 git/gh 凭据，也必须先得到用户明确授权**，授权只对当次指定的动作有效。获授权后若环境没配 git 凭据，可用 `git -c credential.helper='!gh auth git-credential' push origin <分支>`。发布后几分钟内 `npm view` 可能仍是旧版本，甚至在新旧版本间来回跳（CDN 节点同步有先后）：以 npm-publish 日志里的 `+ @xcanwin/manyoyo@<版本>` 为准，连续多次读到新版本才算可见（发布控制台就是这么判断的）。
 
