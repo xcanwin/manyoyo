@@ -15,6 +15,13 @@ const fingerprint = require('../../lib/plugin/fingerprint');
 const runtime = env.usableRuntime();
 const ready = Boolean(runtime) && env.imageAvailable(runtime);
 const maybe = ready ? describe : describe.skip;
+// UA 里 Chrome 的版本号以外必须各模式一致。headed / chrome 用的是宿主机上的 Chrome，default / vnc 用镜像里的 Chrome，
+// 两边版本号可以不同（代码不覆盖 UA，用的都是真实浏览器；以前只是碰巧一致），所以比较前去掉版本号并打印一行说明
+const stripChromeVersion = ua => String(ua).replace(/Chrome\/\d+(\.\d+)*/, 'Chrome/X');
+function expectSameUserAgent(actual, expected) {
+    if (actual !== expected) console.warn(`[指纹] Chrome 版本不同（正常：宿主机与镜像各用自己的 Chrome）: ${actual} / ${expected}`);
+    expect(stripChromeVersion(actual)).toBe(stripChromeVersion(expected));
+}
 const maybeHeaded = ready && env.hasDisplay() ? describe : describe.skip;
 
 jest.setTimeout(420000);
@@ -94,7 +101,7 @@ maybe('指纹一致性：allowlist 预设下浏览器走过滤代理，指纹不
             expectSelfConsistent(data);
             expect(data.report.screen.width).toBe(1920);
             if (collected.default) {
-                expect(data.report.userAgent).toBe(collected.default.report.userAgent);
+                expectSameUserAgent(data.report.userAgent, collected.default.report.userAgent);
                 expect(data.report.languages).toEqual(collected.default.report.languages);
                 expect(data.report.timezone).toBe(collected.default.report.timezone);
             }
@@ -194,7 +201,7 @@ maybeHeaded('指纹一致性：headed / chrome 与跨模式一致', () => {
         collected.headed = data;
         expectSelfConsistent(data);
         if (collected.default) {
-            expect(data.report.userAgent).toBe(collected.default.report.userAgent);
+            expectSameUserAgent(data.report.userAgent, collected.default.report.userAgent);
             expect(data.report.languages).toEqual(collected.default.report.languages);
             expect(data.report.timezone).toBe(collected.default.report.timezone);
             expect(data.report.platform).toBe(collected.default.report.platform);
@@ -249,7 +256,7 @@ maybe('指纹一致性：vnc 与 default 一致', () => {
             const data = { report: fixture.state.report, headers: fixture.state.headers };
             expectSelfConsistent(data, { checkClientHints: false });
             if (collected.default) {
-                expect(data.report.userAgent).toBe(collected.default.report.userAgent);
+                expectSameUserAgent(data.report.userAgent, collected.default.report.userAgent);
                 expect(data.report.languages).toEqual(collected.default.report.languages);
                 expect(data.report.timezone).toBe(collected.default.report.timezone);
                 expect(data.report.screen.width).toBe(collected.default.report.screen.width);
