@@ -5996,7 +5996,6 @@ describe('Web Server Setup API', () => {
             expect(parsed.runs.claude).toEqual({
                 containerName: 'my-claude-{now}',
                 yolo: 'c',
-                hostPath: path.join(tempHost, 'work'),
                 env: { ANTHROPIC_AUTH_TOKEN: token, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' }
             });
             expect(fs.statSync(path.join(tempHost, 'work')).isDirectory()).toBe(true);

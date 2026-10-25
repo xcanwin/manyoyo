@@ -106,6 +106,18 @@ describe('buildReuseService / buildNewService', () => {
         expect(buildReuseService(taken, 'claude-glm', 'codex').name).toBe('codex-zhipu-2');
     });
 
+    test('新增 / 复用都不把默认工作目录根写进运行配置（否则新建容器会把整个工作目录根挂进去，对话框里目录还是空白）', () => {
+        const root = '/home/u/.manyoyo/work';
+        expect(buildNewService(config, { agent: 'codex', providerId: 'zhipu', key: 'k-123456' }, { defaultHostPath: root }).profile.hostPath).toBeUndefined();
+        const withRoot = JSON5.parse(RAW);
+        withRoot.runs['claude-glm'].hostPath = root;
+        expect(buildReuseService(withRoot, 'claude-glm', 'codex', { defaultHostPath: root }).profile.hostPath).toBeUndefined();
+        // 用户给原来那套指定过自己的项目目录：复用时照抄
+        const withProject = JSON5.parse(RAW);
+        withProject.runs['claude-glm'].hostPath = '/projects/app';
+        expect(buildReuseService(withProject, 'claude-glm', 'codex', { defaultHostPath: root }).profile.hostPath).toBe('/projects/app');
+    });
+
     test('新增：Claude 智谱自动带 ENABLE_TOOL_SEARCH=false；DeepSeek 不带；自定义地址的 Codex 必须有模型', () => {
         expect(buildNewService(config, { agent: 'claude', providerId: 'zhipu', key: 'k-123456' }).profile.env)
             .toMatchObject({ ANTHROPIC_AUTH_TOKEN: 'k-123456', ENABLE_TOOL_SEARCH: 'false' });

@@ -111,6 +111,9 @@ describe("新建容器的默认目录", () => {
     const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((item) => item.textContent === "proj")!
     await act(async () => option.click())
     expect(input("create-host-path").value).toBe("")
+    // 留空不能是一片空白：提示用的是运行配置里的目录（容器内目录没写就跟宿主机目录一样）
+    expect(input("create-host-path").placeholder).toContain("~/proj")
+    expect(input("create-container-path").placeholder).toContain("~/proj")
     await submit()
     expect(calls.some((call) => call.url === "/api/fs/directories/mkdir")).toBe(false)
     const created = calls.find((call) => call.url === "/api/sessions" && call.method === "POST")!.body as { run: string; createOptions: Record<string, string> }

@@ -270,6 +270,11 @@ export function CreateContainerDialog({
     queueMicrotask(() => loadDefaults())
   }, [open, loadDefaults])
 
+  // 选了自带目录的运行配置时目录框留空（交给运行配置），提示里写出它用的是哪个目录，不能是一片空白
+  const runPreset = form.run ? runs[form.run] : undefined
+  const runHostPath = typeof runPreset?.hostPath === "string" ? runPreset.hostPath.trim() : ""
+  const runContainerPath = typeof runPreset?.containerPath === "string" && runPreset.containerPath.trim() ? runPreset.containerPath.trim() : runHostPath
+
   function setField<K extends keyof CreateContainerForm>(
     key: K,
     value: CreateContainerForm[K]
@@ -433,7 +438,7 @@ export function CreateContainerDialog({
                   <div className="flex gap-2">
                     <Input
                       id="create-host-path"
-                      placeholder="例如 /path/to/project"
+                      placeholder={runHostPath ? `留空就用运行配置里的目录：${runHostPath}` : "例如 /path/to/project"}
                       value={form.hostPath}
                       onChange={(event) =>
                         setField("hostPath", event.target.value)
@@ -452,7 +457,7 @@ export function CreateContainerDialog({
                   <KeyLabel htmlFor="create-container-path" k="containerPath" />
                   <Input
                     id="create-container-path"
-                    placeholder="例如 /workspace"
+                    placeholder={runContainerPath ? `留空就用运行配置里的目录：${runContainerPath}` : "例如 /workspace"}
                     value={form.containerPath}
                     onChange={(event) =>
                       setField("containerPath", event.target.value)

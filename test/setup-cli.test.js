@@ -54,12 +54,13 @@ describe('manyoyo setup (command line wizard)', () => {
 
         const config = readConfig();
         expect(config.runs.claude.env).toEqual(expect.objectContaining({ ANTHROPIC_AUTH_TOKEN: 'sk-ant-VERYSECRET', ANTHROPIC_MODEL: 'claude-x' }));
-        expect(config.runs.claude.hostPath).toBe(path.join(root, '.manyoyo', 'work'));
+        // 默认工作目录不写进运行配置：新建容器按 <工作目录>/<时间> 各建一个，不会把整个工作目录根挂进去
+        expect(config.runs.claude.hostPath).toBeUndefined();
         expect(config.serverPass).toBe('correct horse');
         expect(config.mirrors).toBeUndefined();
         expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
         expect(fs.statSync(path.dirname(configPath)).mode & 0o777).toBe(0o700);
-        expect(fs.statSync(config.runs.claude.hostPath).isDirectory()).toBe(true);
+        expect(fs.statSync(path.join(root, '.manyoyo', 'work')).isDirectory()).toBe(true);
         const everything = JSON.stringify([logs, prompter.asked, prompter.askedSecret]);
         expect(everything).not.toContain('VERYSECRET');
         expect(everything).not.toContain('correct horse');

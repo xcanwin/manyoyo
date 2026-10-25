@@ -59,12 +59,11 @@ describe('setup helpers', () => {
         expect(both.env.ANTHROPIC_AUTH_TOKEN).toBe('k3');
     });
 
-    test('builds a run profile with defaults', () => {
+    test('builds a run profile with defaults; no hostPath unless one is chosen (new containers then get <quickChatPath>/<now>)', () => {
         const profile = buildAgentRunProfile('claude', { ANTHROPIC_AUTH_TOKEN: ' sk-abc ', ANTHROPIC_MODEL: '' }, { defaultHostPath: '/w' });
         expect(profile).toEqual({
             containerName: 'my-claude-{now}',
             yolo: 'c',
-            hostPath: '/w',
             env: { ANTHROPIC_AUTH_TOKEN: 'sk-abc' }
         });
     });
@@ -87,8 +86,7 @@ describe('setup helpers', () => {
             containerName: 'mine',
             volumes: ['/a:/b'],
             env: { OPENAI_API_KEY: 'old', OPENAI_MODEL: 'm2' },
-            yolo: 'cx',
-            hostPath: '/w'
+            yolo: 'cx'
         });
     });
 
