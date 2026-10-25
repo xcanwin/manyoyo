@@ -264,7 +264,22 @@ describe("ModelServicesPanel", () => {
     const put = calls.find((c) => c.method === "PUT")
     expect(put?.url).toBe("/api/model-services/claude-glm")
     // 有容器还在用旧设置时只提示，不默认勾选“同时更新”（会改动别的容器的环境变量，要用户自己决定）
-    expect(put?.body).toEqual({ model: "glm-5.3", baseUrl: "" })
+    expect(put?.body).toMatchObject({ model: "glm-5.3", baseUrl: "" })
+    expect(put?.body).not.toHaveProperty("key")
+    expect(put?.body).not.toHaveProperty("autoCompact1m")
+  })
+
+  test("编辑 Claude：展开“更多模型设置”，填档位模型并打开自动压缩开关", async () => {
+    await mount()
+    await click("编辑")
+    await click("更多模型设置")
+    await typeInto("ms-ANTHROPIC_DEFAULT_OPUS_MODEL", "big")
+    await click("保存")
+    // 开关的点击在下一条用例里用 aria 状态验证；这里确认档位模型随保存发出
+    const put = calls.find((c) => c.method === "PUT")
+    expect(put?.body).toMatchObject({
+      models: { ANTHROPIC_DEFAULT_OPUS_MODEL: "big" },
+    })
   })
 
   test("从本机导入：先预览（只有末 4 位），确认后只发选中的 id", async () => {

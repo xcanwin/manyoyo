@@ -5,6 +5,7 @@ import {
   runLabelMap,
   buildCreateBody,
   buildEditBody,
+  EMPTY_CLAUDE_MODELS,
   EMPTY_SERVICE_FORM,
   serviceTitle,
   validateServiceForm,
@@ -78,15 +79,36 @@ describe("请求体", () => {
   test("编辑：Key 留空不发 key", () => {
     expect(
       buildEditBody(form({ baseUrl: "https://x.test", model: "m" }))
-    ).toEqual({ model: "m", baseUrl: "https://x.test" })
-    expect(buildEditBody(form({ key: "new", baseUrl: "" }))).toEqual({
+    ).toMatchObject({ model: "m", baseUrl: "https://x.test" })
+    expect(buildEditBody(form({ key: "new", baseUrl: "" }))).toMatchObject({
       model: "",
       key: "new",
       baseUrl: "",
     })
+    expect(buildEditBody(form({ agent: "codex" }))).toEqual({ model: "", baseUrl: "" })
     expect(buildEditBody(form({ key: "new" }), true)).toMatchObject({
       syncContainers: true,
     })
+  })
+  test("编辑 Claude：带上档位模型；自动压缩只在开关和原状态不同时才发", () => {
+    const models = { ...EMPTY_CLAUDE_MODELS, ANTHROPIC_DEFAULT_OPUS_MODEL: " big " }
+    expect(
+      buildEditBody(form({ models, autoCompactWindow: "", autoCompact1m: true }))
+    ).toMatchObject({
+      models: { ANTHROPIC_DEFAULT_OPUS_MODEL: "big" },
+      autoCompact1m: true,
+    })
+    expect(
+      buildEditBody(form({ models, autoCompactWindow: "1000000", autoCompact1m: true }))
+    ).not.toHaveProperty("autoCompact1m")
+    expect(
+      buildEditBody(form({ models, autoCompactWindow: "1000000", autoCompact1m: false }))
+    ).toMatchObject({ autoCompact1m: false })
+    expect(
+      buildEditBody(form({ models, autoCompactWindow: "500000", autoCompact1m: false }))
+    ).not.toHaveProperty("autoCompact1m")
+    // Codex 不发
+    expect(buildEditBody(form({ agent: "codex", models }))).not.toHaveProperty("models")
   })
 })
 

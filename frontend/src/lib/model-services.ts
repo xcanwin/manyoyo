@@ -16,6 +16,9 @@ export type ModelService = {
   quickChatDefault: boolean
   // 这家服务必需、但运行配置里还没有的附加变量（如智谱的 ENABLE_TOOL_SEARCH=false）
   missingExtraEnv?: Record<string, string>
+  // 仅 Claude Code：档位 / 子 Agent 模型变量与自动压缩窗口
+  models?: Record<string, string>
+  autoCompactWindow?: string
 }
 export type ReuseSuggestion = {
   from: string
@@ -46,7 +49,25 @@ export type ServiceForm = {
   key: string
   model: string
   name: string
+  // 仅 Claude Code 编辑：档位 / 子 Agent 模型，自动压缩窗口（原值）与开关
+  models: Record<string, string>
+  autoCompactWindow: string
+  autoCompact1m: boolean
 }
+
+export const CLAUDE_MODEL_FIELDS: { key: string; label: string }[] = [
+  { key: "ANTHROPIC_DEFAULT_OPUS_MODEL", label: "大模型（Opus）" },
+  { key: "ANTHROPIC_DEFAULT_SONNET_MODEL", label: "中模型（Sonnet）" },
+  { key: "ANTHROPIC_DEFAULT_HAIKU_MODEL", label: "小模型（Haiku）" },
+  { key: "ANTHROPIC_DEFAULT_FABLE_MODEL", label: "Fable 模型" },
+  { key: "CLAUDE_CODE_SUBAGENT_MODEL", label: "子 Agent 模型" },
+]
+
+export const EMPTY_CLAUDE_MODELS: Record<string, string> = Object.fromEntries(
+  CLAUDE_MODEL_FIELDS.map((item) => [item.key, ""])
+)
+
+export const AUTO_COMPACT_1M = "1000000"
 
 export const EMPTY_SERVICE_FORM: ServiceForm = {
   agent: "claude",
@@ -56,6 +77,9 @@ export const EMPTY_SERVICE_FORM: ServiceForm = {
   key: "",
   model: "",
   name: "",
+  models: EMPTY_CLAUDE_MODELS,
+  autoCompactWindow: "",
+  autoCompact1m: false,
 }
 
 export const fetchModelServices = () =>
@@ -141,6 +165,14 @@ export function buildEditBody(
   if (form.key.trim()) body.key = form.key.trim()
   if (form.mode === "subscription") body.subscription = true
   else body.baseUrl = form.baseUrl.trim()
+  if (form.agent === "claude") {
+    body.models = Object.fromEntries(
+      Object.entries(form.models).map(([key, value]) => [key, value.trim()])
+    )
+    if (form.autoCompact1m !== (form.autoCompactWindow === AUTO_COMPACT_1M)) {
+      body.autoCompact1m = form.autoCompact1m
+    }
+  }
   return body
 }
 

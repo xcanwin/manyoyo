@@ -6,6 +6,8 @@ import { PencilIcon, PlayIcon, Trash2Icon } from "lucide-react"
 import { DataTable, type DataColumn } from "@/components/data-table"
 import { CodeBlock } from "@/components/code-block"
 import { Hint } from "@/components/hint"
+import { SectionToggle } from "@/components/section-toggle"
+import { Switch } from "@/components/ui/switch"
 import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -57,6 +59,9 @@ import {
   testModelService,
   updateModelService,
   validateServiceForm,
+  AUTO_COMPACT_1M,
+  CLAUDE_MODEL_FIELDS,
+  EMPTY_CLAUDE_MODELS,
   type ImportPreview,
   type ModelService,
   type ModelServicesData,
@@ -199,6 +204,9 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
         baseUrl: service.baseUrl,
         model: service.model,
         name: service.name,
+        models: { ...EMPTY_CLAUDE_MODELS, ...(service.models ?? {}) },
+        autoCompactWindow: service.autoCompactWindow ?? "",
+        autoCompact1m: service.autoCompactWindow === AUTO_COMPACT_1M,
       },
     })
   }
@@ -723,6 +731,57 @@ function ServiceDialog({
                       onChange={(event) => patch({ model: event.target.value })}
                     />
                   </Field>
+                ) : null}
+                {editing && form.agent === "claude" && !subscriptionOnly ? (
+                  <SectionToggle title="更多模型设置">
+                    <FieldGroup>
+                      {CLAUDE_MODEL_FIELDS.map((item) => (
+                        <Field key={item.key}>
+                          <FieldLabel htmlFor={`ms-${item.key}`}>
+                            {item.label}
+                            <Hint className="font-mono">{item.key}</Hint>
+                          </FieldLabel>
+                          <Input
+                            id={`ms-${item.key}`}
+                            value={form.models[item.key] ?? ""}
+                            placeholder="可选"
+                            onChange={(event) =>
+                              patch({
+                                models: {
+                                  ...form.models,
+                                  [item.key]: event.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </Field>
+                      ))}
+                      <Field orientation="horizontal">
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                          <FieldLabel htmlFor="ms-auto-compact">
+                            上下文到 100 万才自动压缩
+                          </FieldLabel>
+                          <FieldDescription>
+                            模型支持 100 万上下文时再开。
+                            {form.autoCompactWindow &&
+                            form.autoCompactWindow !== AUTO_COMPACT_1M
+                              ? `当前设置为 ${form.autoCompactWindow}，打开会改成 100 万。`
+                              : ""}
+                          </FieldDescription>
+                        </div>
+                        <Switch
+                          id="ms-auto-compact"
+                          checked={form.autoCompact1m}
+                          onCheckedChange={(checked) =>
+                            patch({ autoCompact1m: checked })
+                          }
+                        />
+                      </Field>
+                      <FieldDescription>
+                        网页聊天里选了模型时，以选的为准。
+                      </FieldDescription>
+                    </FieldGroup>
+                  </SectionToggle>
                 ) : null}
                 {editing && using.length > 0 ? (
                   <Field orientation="horizontal">

@@ -162,6 +162,44 @@ describe('buildServiceEdit + applyConfigOps', () => {
         expect(parsed.runs['claude-ds'].env.ANTHROPIC_AUTH_TOKEN).toBe(DS_KEY);
     });
 
+    test('Claude 的档位 / 子 Agent 模型：只认白名单键，空值删除，别的变量不动', () => {
+        const edited = applyConfigOps(RAW, buildServiceEdit(config, 'claude-ds', {
+            models: { ANTHROPIC_DEFAULT_OPUS_MODEL: ' big ', CLAUDE_CODE_SUBAGENT_MODEL: 'small' }
+        }).ops);
+        const env = JSON5.parse(edited).runs['claude-ds'].env;
+        expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('big');
+        expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('small');
+        expect(env.ANTHROPIC_AUTH_TOKEN).toBe(DS_KEY);
+        expect(() => buildServiceEdit(config, 'claude-ds', { models: { ANTHROPIC_AUTH_TOKEN: 'x' } })).toThrow();
+        const cfg2 = JSON5.parse(edited);
+        const removed = JSON5.parse(applyConfigOps(edited, buildServiceEdit(cfg2, 'claude-ds', { models: { ANTHROPIC_DEFAULT_OPUS_MODEL: '' } }).ops));
+        expect(removed.runs['claude-ds'].env).not.toHaveProperty('ANTHROPIC_DEFAULT_OPUS_MODEL');
+        expect(removed.runs['claude-ds'].env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('small');
+    });
+
+    test('autoCompact1m：true 写 1000000，false 删除', () => {
+        const on = JSON5.parse(applyConfigOps(RAW, buildServiceEdit(config, 'claude-ds', { autoCompact1m: true }).ops));
+        expect(on.runs['claude-ds'].env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('1000000');
+        const off = JSON5.parse(applyConfigOps(JSON.stringify(on), buildServiceEdit(on, 'claude-ds', { autoCompact1m: false }).ops));
+        expect(off.runs['claude-ds'].env).not.toHaveProperty('CLAUDE_CODE_AUTO_COMPACT_WINDOW');
+        expect(buildServiceEdit(config, 'claude-ds', { autoCompact1m: false }).ops).toEqual([]);
+    });
+
+    test('Codex 服务不接受 models / autoCompact1m', () => {
+        const codexConfig = { runs: { 'codex-z': { yolo: 'cx', env: { OPENAI_API_KEY: 'k-1234567890', OPENAI_BASE_URL: 'https://open.bigmodel.cn/api/coding/paas/v4', OPENAI_MODEL: 'glm' } } } };
+        expect(buildServiceEdit(codexConfig, 'codex-z', { model: 'glm2' }).agent).toBe('codex');
+        expect(() => buildServiceEdit(codexConfig, 'codex-z', { models: { ANTHROPIC_DEFAULT_OPUS_MODEL: 'x' } })).toThrow('只支持 Claude');
+        expect(() => buildServiceEdit(codexConfig, 'codex-z', { autoCompact1m: true })).toThrow('只支持 Claude');
+    });
+
+    test('列表里 Claude 服务带 models 与 autoCompactWindow，Codex 没有', () => {
+        const withModels = JSON5.parse(applyConfigOps(RAW, buildServiceEdit(config, 'claude-ds', { models: { ANTHROPIC_DEFAULT_HAIKU_MODEL: 'h' }, autoCompact1m: true }).ops));
+        const ds = listModelServices(withModels).find(item => item.name === 'claude-ds');
+        expect(ds.models).toEqual({ ANTHROPIC_DEFAULT_OPUS_MODEL: '', ANTHROPIC_DEFAULT_SONNET_MODEL: '', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'h', ANTHROPIC_DEFAULT_FABLE_MODEL: '', CLAUDE_CODE_SUBAGENT_MODEL: '' });
+        expect(ds.autoCompactWindow).toBe('1000000');
+        expect(listModelServices({ runs: { 'codex-z': { yolo: 'cx', env: { OPENAI_API_KEY: 'k-1234567890' } } } })[0]).not.toHaveProperty('models');
+    });
+
     test('保存订阅令牌后，同一个运行配置里的 API Key 类变量和 Base URL 被删掉', () => {
         const { ops } = buildServiceEdit(config, 'claude-glm', { key: 'oauth-token-123456', subscription: true });
         const env = JSON5.parse(applyConfigOps(RAW, ops)).runs['claude-glm'].env;
