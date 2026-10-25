@@ -12,7 +12,8 @@ export function Hint({
   return (
     <span
       data-slot="hint"
-      className={cn("text-xs text-muted-foreground", mono && "font-mono", className)}
+      // font-normal：放在加粗的标签 / 标题里（FieldLabel、CardTitle）时也保持辅助档的 400
+      className={cn("text-xs font-normal text-muted-foreground", mono && "font-mono", className)}
       {...props}
     />
   )

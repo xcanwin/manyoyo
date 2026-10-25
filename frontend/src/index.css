@@ -131,8 +131,9 @@
   * {
     @apply border-border outline-ring/50;
     }
+  /* 正文默认 14px（STYLE.md 第 2 节）：没有单独指定字号的文字（侧栏、列表、空状态）都按正文档，不再落到浏览器默认的 16px */
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-sm text-foreground;
     }
   html {
     @apply font-sans;

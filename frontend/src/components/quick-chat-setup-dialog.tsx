@@ -101,7 +101,9 @@ export function QuickChatSetupDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    // 最多两层弹窗（STYLE.md 第 9 节）：设置里打开本弹窗已是第二层，选目录时先把本弹窗收起（表单状态保留在组件里），选完再回来
+    <>
+    <Dialog open={open && !pickerOpen} onOpenChange={onOpenChange}>
       <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>设置快捷对话</DialogTitle>
@@ -182,13 +184,13 @@ export function QuickChatSetupDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
-
-      <DirectoryPickerDialog
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        initialPath={path}
-        onSelect={(selected) => setPath(selected)}
-      />
     </Dialog>
+    <DirectoryPickerDialog
+      open={pickerOpen}
+      onOpenChange={setPickerOpen}
+      initialPath={path}
+      onSelect={(selected) => setPath(selected)}
+    />
+    </>
   )
 }
