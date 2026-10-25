@@ -128,6 +128,8 @@ describe("StoragePanel", () => {
     expect(historyRow.querySelector('button[aria-label="删除历史 gone-1"]')).not.toBeNull()
     // 容器名右边显示容器备注
     expect(historyRow.textContent).toContain("旧项目")
+    // 这里的容器都已删除：同样带“已删容器且存历史”标签
+    expect(historyRow.textContent).toContain("已删容器且存历史")
     expect(historyRow.querySelectorAll("td")[0].textContent).toContain("gone-1")
     const sizes = new Set(
       Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-label^="查看 "], button[aria-label^="删除 "], button[aria-label^="进入 "], button[aria-label^="删除历史 "]')).map((button) => button.className.match(/size-\d+/)?.[0] ?? button.className)

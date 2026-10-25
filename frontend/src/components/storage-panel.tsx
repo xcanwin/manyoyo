@@ -292,6 +292,7 @@ export function StoragePanel({
         <span className="flex flex-wrap items-center gap-2 break-all">
           <span>{item.name}</span>
           {item.remark ? <span>{item.remark}</span> : null}
+          <Badge variant="outline">{SESSION_STATE_LABEL.deleted}</Badge>
           {currentBadge(item.name)}
           {enterButton(item.name)}
         </span>
