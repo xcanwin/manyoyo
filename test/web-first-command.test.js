@@ -155,13 +155,15 @@ process.stdout.write('first ok');
         expect(calls[0].env).toContain('B=r');
         expect(calls[0].env).toContain('C=r');
         expect(calls[0].env).not.toContain('B=g');
-        expect(await systemMessages('my-first-a')).toEqual(expect.arrayContaining(['首次命令已执行']));
+        // 新会话还没对话：成功不写系统消息（否则聊天页不是空的，输入框不再居中）
+        expect(await systemMessages('my-first-a')).toEqual([]);
     });
 
-    test('没配 first 时不执行', async () => {
+    test('没配 first 时不执行；新会话建好后没有“容器已创建并启动”之类的系统消息', async () => {
         writeConfig({});
         await api('POST', '/api/sessions', { createOptions: createOptions('my-first-none') });
         expect(firstCalls()).toHaveLength(0);
+        expect(await systemMessages('my-first-none')).toEqual([]);
     });
 
     test('已有容器（不是新建）不执行 first', async () => {
