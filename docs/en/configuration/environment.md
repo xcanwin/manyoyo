@@ -60,6 +60,10 @@ EOF
 
 Use it with `manyoyo run --ef $HOME/.manyoyo/env/claude.env -x claude`, or put it in `runs.<name>.envFile` and run `manyoyo run -r <name>`. For OpenCode variables see the [agent reference](../reference/agents.md).
 
+## Completion bell
+
+Claude Code in the image rings the terminal bell when a task finishes in an interactive terminal. Set the environment variable `MANYOYO_CLAUDE_BELL` to adjust it: `0` silent, `1` one beep, `3` three beeps (the default, also used when unset or invalid). Put it in the global config, a run profile or the container's environment variables; it takes effect on the next command. It never rings in web chat.
+
 ## Which value wins
 
 Later sources override earlier ones, in this order:

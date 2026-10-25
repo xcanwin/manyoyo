@@ -25,7 +25,7 @@ export function ContextMeter({ usage }: { usage: ContextUsage | null | undefined
           <Button
             variant="ghost"
             size="sm"
-            className="shrink-0 font-mono"
+            className="touch-hit shrink-0 font-mono"
             title="上下文占用"
             aria-label={`上下文占用：${label}`}
           />

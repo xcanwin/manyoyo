@@ -7,6 +7,8 @@ description: Change a container's environment variables, network rules and autos
 
 Set environment variables, an autostart script and the network when you create a container; once it is running, change them any time under **More tabs → Set container** in the web workbench — **no restart or rebuild needed**. Risks and boundaries are in [Security Notes](./security.md).
 
+New containers trust their working directory in advance, so the first interactive `claude` or `codex` in the web terminal or `manyoyo run` no longer stops at the "Trust this folder" prompt (that prompt guards against a repository's hooks / MCP config running automatically; web chat never shows it, and you mounted the directory yourself). Old containers are not updated.
+
 ::: tip Old containers
 Containers created before this feature do not have it; the Set container tab says "created by an older version, recreate to use". Their behavior is unchanged and they are not migrated.
 :::

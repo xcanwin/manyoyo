@@ -81,9 +81,39 @@ Unauthenticated requests to any page path redirect to `/auth/login`; API and `/a
 
 Mode (💬 Agent chat / system command), model, send and stop are icon buttons inside the input box; hover to see what each does. In Agent chat:
 
-- Type `/` at the start to list the slash commands that work here (Claude Code only, available after the first turn).
+- Type `/` at the start to list the commands that work here, each with a one-line description. A new AGENT has them before its first message; commands handled by the web page itself work for every Agent, and Claude Code adds its own skills and built-in commands.
 - Type `@` to list files in the working directory; picking one inserts its relative path.
 - Use ↑↓ to choose, Enter or Tab to confirm, Esc to close.
+
+## Handy Chat Features
+
+All of these live around the input box and can also be triggered by typing `/command`. Web commands are handled as listed below; any other `/xxx` is sent to the Agent unchanged.
+
+| Command | For | What it does |
+|---|---|---|
+| `/model` | all | Open the model menu |
+| `/effort [level]` | Claude, Codex | Set reasoning effort; no argument opens the dropdown |
+| `/status` | all | Open Agent details |
+| `/diff` | all | Show changes in the working directory |
+| `/clear` | all | Create a new AGENT in this container |
+| `/copy` | all | Copy the last reply |
+| `/fork` | all | Fork a new AGENT from the latest point |
+| `/btw <question>` | Claude, Codex | Side question: ask with context without interrupting the main task |
+| `/recap` | Claude, Codex | One-line recap of where things stand |
+| `/review` | all | Ask the AI to review uncommitted changes |
+| `/plan` | Claude | Turn plan mode on or off |
+| `/skills`, `/mcp` | Claude, Codex | See the container's skills and MCP servers |
+
+- **Reasoning effort**: a dropdown next to the model menu, listing only the levels the current model supports; "Default" uses the container's environment variables and config. It is hidden when the current model has no effort option or its options are unknown (for example Codex with a custom model). After switching models the level falls back to default if the new model does not support it. A level chosen here wins over `CLAUDE_CODE_EFFORT_LEVEL` set in the container's environment.
+- **Context usage** (Claude Code only): a small readout next to the model menu such as "4.5k · 0%"; open it to see usage and how much of the last request's input came from cache. After 5 minutes idle it says "the next message may need to re-cache (costs more)"; the cache lifetime of third-party services is unknown, so it only says "may". Updated once at the end of each turn.
+- **Side question `/btw`**: the answer appears in a panel above the input box and is not saved to the conversation; the main task can keep running. Closing the panel cancels the question. One at a time per AGENT. Claude answers with the existing conversation as context and creates no session file.
+- **Fork**: click the fork icon under one of your prompts, or type `/fork` (from the latest point). A new AGENT is created in the same container with the conversation before that turn, and that prompt is put in the new AGENT's input box; the original AGENT is unchanged and files are not copied (both share one directory). Claude forks precisely; other Agents start a new session from the remaining chat history. You cannot fork while a task is running.
+- **Review changes**: the "Review changes" button in the Changes view toolbar, or `/review`. Claude uses its built-in `/code-review` if present, otherwise a fixed review prompt is sent; either way it is an ordinary turn. The button is disabled while a task runs or prompts are queued.
+- **Plan mode** (Claude Code only): the "Plan mode" button in the input box or `/plan`; this turn only makes a plan and changes no files, and it turns itself off after one send. A "Run the plan" button appears under the reply. In plan mode Claude cannot show you multiple-choice questions (that tool does not exist in web chat); when it needs more information it asks in plain text.
+- **Recap**: opening an AGENT that has been idle for 30 minutes shows a grey line "Recap: …" at the bottom of the chat, which you can close; `/recap` generates one on demand.
+- **Skills and MCP**: top bar ⋯ → container group → "Skills and MCP", a read-only list of Claude Code and Codex skills and MCP server status in the container (Claude's MCP check really connects, so it may take a few seconds). The container cannot see host skills: mount the project directory (the project's `.claude/skills` is picked up automatically) or copy them to `~/.claude/skills/` in the container.
+- **Automatic title**: after the first message, Claude Code and Codex use one cheap model call to write a short title; a remark or a `/rename` name wins. Tried once per AGENT, never retried on failure.
+- **Tab title**: a `◐` prefix shows while the current conversation has a task running.
 
 ## Adding Prompts While a Task Runs
 
@@ -99,9 +129,9 @@ Sub-agents and task lists show up in the "execution process": a sub-agent is col
 
 ## Sessions, Changes and Notifications
 
-- Session names: without a remark, the title the Agent generated (only Claude Code does this today) is used, otherwise the first message. Click the name in the top bar to rename; clear it to go back to the automatic name.
+- Session names: a remark wins, then a title the Agent set itself (`/rename`), then the automatic title generated after the first message (Claude Code, Codex), and finally the first message. Click the name in the top bar to rename; clear it to go back to the automatic name.
 - Pinning: pin an AGENT from its ⋯ menu; its container moves to the top too.
-- The top-bar ⋯ menu is grouped by owner: chat belongs to the AGENT; files, terminal, changes and container settings belong to the container. "Changes" lists the changes in the git repository of the working directory; click a file to see its diff.
+- The top-bar ⋯ menu is grouped by owner: chat belongs to the AGENT; files, terminal, changes, skills and MCP, and container settings belong to the container. "Changes" lists the changes in the git repository of the working directory; click a file to see its diff.
 - Images in replies: when the Agent writes a Markdown image with a path inside the container (e.g. `![screenshot](/root/shot.png)`) it is shown directly. Absolute paths in replies can be clicked to open them in the Files view.
 - Finished-task reminders: if a task ends while the page is in the background, the tab title gets a count such as `(1)`. Browser notifications can be turned on in "Settings → Page" (requires HTTPS or localhost).
 - When you come back after a while, or the network recovers, the top bar shows sync progress and then "Synced".

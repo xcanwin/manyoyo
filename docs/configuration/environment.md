@@ -60,6 +60,10 @@ EOF
 
 使用时 `manyoyo run --ef $HOME/.manyoyo/env/claude.env -x claude`，或写进 `runs.<name>.envFile` 后用 `manyoyo run -r <name>`。OpenCode 的变量见 [Agent 参考](../reference/agents.md)。
 
+## 完成提示音
+
+镜像里的 Claude Code 在交互终端里任务完成时会响铃。用环境变量 `MANYOYO_CLAUDE_BELL` 调整：`0` 不响、`1` 一声、`3` 三声（默认，没设置或写错也是三声）。写进全局 / 运行配置 / 容器的环境变量即可，下一条命令起生效；网页对话里不会响。
+
 ## 同名变量谁生效
 
 后加载的覆盖先加载的，顺序为：

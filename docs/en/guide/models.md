@@ -23,6 +23,10 @@ If you already have a Claude Code key, a dashed card below the list says "The Zh
 - Red "Model not found": check the model name.
 - Red "Connected, but the model did not run the command": this service or model cannot use tools; try another model.
 
+## Models and auto-compaction (Claude Code)
+
+When editing a Claude Code service, expand "More model settings" to set the Opus, Sonnet, Haiku and Fable tier models and the model used by sub-agents; blank means unset. You can also turn on "Compact only at 1M context" (only if the model supports a 1M context). A model picked in web chat takes precedence. These only change the run profile; existing containers do not follow.
+
 ## Providers
 
 | Provider | Claude Code CLI | Codex CLI | Notes |
