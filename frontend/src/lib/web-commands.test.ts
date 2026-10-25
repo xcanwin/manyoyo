@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { lastAgentReply, listWebCommands, matchWebCommand } from "@/lib/web-commands"
+import { buildReviewPrompt, lastAgentReply, listWebCommands, matchWebCommand, reviewBlockedReason } from "@/lib/web-commands"
 
 describe("matchWebCommand", () => {
   test("注册名精确匹配，后面可跟参数", () => {
@@ -39,7 +39,7 @@ describe("listWebCommands", () => {
   test("每个 Agent 都有基础命令，说明是中文一句话", () => {
     for (const program of ["claude", "codex", "gemini", "opencode", ""]) {
       const names = listWebCommands(program).map((item) => item.name)
-      expect(names).toEqual(expect.arrayContaining(["model", "status", "diff", "clear", "copy", "fork"]))
+      expect(names).toEqual(expect.arrayContaining(["model", "status", "diff", "clear", "copy", "fork", "review"]))
     }
     listWebCommands("claude").forEach((item) => expect(item.description).toMatch(/[一-龥]/))
   })
@@ -58,5 +58,19 @@ describe("lastAgentReply", () => {
       ])
     ).toBe("第二条")
     expect(lastAgentReply([])).toBe("")
+  })
+})
+
+describe("审查改动", () => {
+  test("claude 有 code-review 就用它，否则发固定提示词；codex 一律发提示词", () => {
+    expect(buildReviewPrompt("claude", ["context", "code-review"])).toBe("/code-review")
+    expect(buildReviewPrompt("claude", ["context"])).toMatch(/不要修改任何文件/)
+    expect(buildReviewPrompt("codex", ["code-review"])).toMatch(/git diff/)
+    expect(buildReviewPrompt("gemini", [])).toMatch(/未提交的改动/)
+  })
+  test("任务进行中或有排队的内容时不可用，并给出原因", () => {
+    expect(reviewBlockedReason(true, 0)).toMatch(/任务进行中/)
+    expect(reviewBlockedReason(false, 2)).toMatch(/排队/)
+    expect(reviewBlockedReason(false, 0)).toBe("")
   })
 })

@@ -18,6 +18,7 @@ export const WEB_COMMANDS: WebCommand[] = [
   { name: "copy", description: "复制最后一条回复" },
   { name: "fork", description: "从最新处分叉出一个新的 AGENT，带着现在的对话" },
   { name: "btw", description: "带着上下文问一句，不打断主任务", argumentHint: "<问题>", agents: ["claude", "codex"] },
+  { name: "review", description: "让 AI 审查工作目录里的未提交改动" },
   { name: "recap", description: "用一句话回顾刚才做到哪", agents: ["claude", "codex"] },
 ]
 
@@ -45,5 +46,21 @@ export function lastAgentReply(
       return message.content
     }
   }
+  return ""
+}
+
+const REVIEW_PROMPT =
+  "审查当前工作目录里未提交的改动（git diff 与未跟踪文件），按严重程度列出问题与位置，不要修改任何文件。"
+
+// 审查改动发给 Agent 的内容：claude 有自带的 code-review 就直接用，否则发固定的中文提示词。
+// 不用 codex exec review：它是独立线程，审查结果不进当前对话
+export function buildReviewPrompt(agentProgram: string, commandNames: string[]): string {
+  return agentProgram === "claude" && commandNames.includes("code-review") ? "/code-review" : REVIEW_PROMPT
+}
+
+// 审查按钮 / /review 不可用的原因；可用返回空串
+export function reviewBlockedReason(running: boolean, queueLength: number): string {
+  if (running) return "任务进行中，等它结束再审查"
+  if (queueLength > 0) return "还有排队的提示词，先处理完再审查"
   return ""
 }

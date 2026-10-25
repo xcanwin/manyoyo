@@ -117,7 +117,7 @@ import { toast } from "sonner"
 import { ModelMenu } from "@/components/model-menu"
 import { EffortMenu } from "@/components/effort-menu"
 import { ContextMeter } from "@/components/context-meter"
-import { lastAgentReply, matchWebCommand } from "@/lib/web-commands"
+import { buildReviewPrompt, lastAgentReply, matchWebCommand, reviewBlockedReason } from "@/lib/web-commands"
 import { RecapLine } from "@/components/recap-line"
 import { SideAnswer } from "@/components/side-answer"
 import { useSideQuestion } from "@/hooks/use-side-question"
@@ -1756,6 +1756,27 @@ export function WorkspacePanel({
     if (result.scope === "files") void requestSync(true, true)
   }
 
+  // 审查改动：回到聊天，以普通一轮发出（claude 有 code-review 就用它）
+  async function reviewChanges() {
+    if (!activeSession) return
+    const blocked = reviewBlockedReason(activeAgentRunning, (queueBySession[activeSession.name] ?? []).length)
+    if (blocked) {
+      toast.error(blocked)
+      return
+    }
+    let names: string[] = []
+    if (activeSession.agentProgram === "claude") {
+      try {
+        const data = await apiGet(`/api/sessions/${encodeURIComponent(activeSession.name)}/slash-commands`)
+        names = Array.isArray(data.commands) ? (data.commands as { name: string }[]).map((item) => item.name) : []
+      } catch {
+        names = []
+      }
+    }
+    await changeView("activity")
+    void handleSend(buildReviewPrompt(activeSession.agentProgram, names))
+  }
+
   // 分叉：同容器新建一个 AGENT，带着这条提示词之前的对话（不给 id 就是全部），提示词放进新 AGENT 的输入框；原 AGENT 不变
   async function forkSession(messageId?: string) {
     if (!activeSession) return
@@ -1781,6 +1802,8 @@ export function WorkspacePanel({
     if (!activeSession) return
     if (name === "model") {
       document.querySelector<HTMLButtonElement>('button[aria-label^="选择模型"]')?.click()
+    } else if (name === "review") {
+      await reviewChanges()
     } else if (name === "fork") {
       await forkSession()
     } else if (name === "btw") {
@@ -2390,7 +2413,14 @@ export function WorkspacePanel({
         ) : null}
         {view === "changes" ? (
           activeSession ? (
-            <ChangesPanel key={activeSession.name} session={activeSession} onOpenFile={openPathInFiles} rounds={rounds} />
+            <ChangesPanel
+              key={activeSession.name}
+              session={activeSession}
+              onOpenFile={openPathInFiles}
+              rounds={rounds}
+              onReview={activeSession.agentEnabled ? () => void reviewChanges() : undefined}
+              reviewBlockedReason={reviewBlockedReason(activeAgentRunning, (queueBySession[activeSession.name] ?? []).length)}
+            />
           ) : (
             <EmptyPane text="请先选择左侧的容器 / AGENT" />
           )

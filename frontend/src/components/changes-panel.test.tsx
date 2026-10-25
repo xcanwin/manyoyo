@@ -106,4 +106,22 @@ describe("改动视图", () => {
     await tick()
     expect(container.textContent).not.toContain("按轮")
   })
+
+  test("审查改动按钮：可用时点击触发；有任务或排队时禁用并写明原因；不传就没有按钮", async () => {
+    const onReview = vi.fn()
+    await act(async () => root.render(<ChangesPanel session={session} onOpenFile={() => {}} onReview={onReview} />))
+    await tick()
+    const button = rowButton("审查改动") as HTMLButtonElement
+    expect(button.disabled).toBe(false)
+    await act(async () => button.click())
+    expect(onReview).toHaveBeenCalledTimes(1)
+    await act(async () => root.render(<ChangesPanel session={session} onOpenFile={() => {}} onReview={onReview} reviewBlockedReason="任务进行中，等它结束再审查" />))
+    await tick()
+    const blocked = rowButton("审查改动") as HTMLButtonElement
+    expect(blocked.disabled).toBe(true)
+    expect(blocked.title).toBe("任务进行中，等它结束再审查")
+    await act(async () => root.render(<ChangesPanel session={session} onOpenFile={() => {}} />))
+    await tick()
+    expect(rowButton("审查改动")).toBeUndefined()
+  })
 })

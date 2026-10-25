@@ -37,9 +37,14 @@ export function ChangesPanel({
   session,
   onOpenFile,
   rounds = [],
+  onReview,
+  reviewBlockedReason = "",
 }: {
   session: SessionSummary
   onOpenFile: (path: string) => void
+  // 让 AI 审查改动：回到聊天发一轮；不传就没有这个按钮。reviewBlockedReason 非空时按钮禁用并显示原因
+  onReview?: () => void
+  reviewBlockedReason?: string
   // 有快照的轮次（从旧到新）；它们的数量变化说明又结束了一轮，打开着的话自动刷新
   rounds?: RoundOption[]
 }) {
@@ -142,9 +147,22 @@ export function ChangesPanel({
             </Hint>
           )}
         </div>
-        <Button variant="ghost" size="icon-sm" title="刷新" aria-label="刷新" onClick={load} disabled={loading}>
-          {loading ? <Spinner /> : <RefreshCwIcon />}
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {onReview ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onReview}
+              disabled={reviewBlockedReason !== ""}
+              title={reviewBlockedReason || "让 AI 审查这些改动"}
+            >
+              审查改动
+            </Button>
+          ) : null}
+          <Button variant="ghost" size="icon-sm" title="刷新" aria-label="刷新" onClick={load} disabled={loading}>
+            {loading ? <Spinner /> : <RefreshCwIcon />}
+          </Button>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
