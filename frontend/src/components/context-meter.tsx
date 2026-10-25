@@ -1,14 +1,12 @@
 import * as React from "react"
 
-import { Hint } from "@/components/hint"
+import { KeyValueList } from "@/components/key-value-list"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import {
-  cacheHitPercent,
   contextPercentText,
   contextReadout,
-  formatTokens,
-  idleHint,
+  usageRows,
   type ContextUsage,
 } from "@/lib/context-usage"
 
@@ -23,8 +21,6 @@ export function ContextMeter({
 }) {
   const [now, setNow] = React.useState(() => Date.now())
   if (!usage) return null
-  const hit = cacheHitPercent(usage)
-  const idle = idleHint(usage.updatedAt, now)
   const label = contextReadout(usage)
   return (
     <Popover onOpenChange={(open) => open && setNow(Date.now())}>
@@ -33,7 +29,7 @@ export function ContextMeter({
           <Button
             variant="ghost"
             size="sm"
-            className="touch-hit shrink-0 font-mono"
+            className="touch-hit shrink-0 font-mono leading-none"
             title={`上下文占用：${label}`}
             aria-label={`上下文占用：${label}`}
           />
@@ -42,14 +38,7 @@ export function ContextMeter({
         {compact ? contextPercentText(usage) : label}
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="w-72">
-        <div className="flex flex-col gap-2">
-          <span>
-            {compact ? `${label}，` : ""}上下文 {formatTokens(usage.usedTokens)}
-            {usage.window ? ` / ${formatTokens(usage.window)}` : ""}
-          </span>
-          {hit !== null ? <Hint>上一次请求里 {hit}% 的输入来自缓存</Hint> : null}
-          {idle ? <Hint>{idle}</Hint> : null}
-        </div>
+        <KeyValueList className="md:grid-cols-1" items={usageRows(usage, now).map((row) => ({ label: row.label, value: row.value, detail: row.note }))} />
       </PopoverContent>
     </Popover>
   )

@@ -4,7 +4,7 @@
 //   --status [--json]             各阶段状态
 //   --notes-draft                 输出 Release 说明草稿
 //   --run <阶段,阶段…> [--yes]    执行；含对外动作且没有 --yes 时只打印将执行的命令，退出码 2
-//   --remote [--version x.y.z] [--watch]   推送 main 并触发 GitHub Actions 流水线，之后可以关电脑（本身就是授权，不需要 --yes）
+//   --remote [--version x.y.z] [--watch]   推送 main 并触发 GitHub Actions 流水线，之后不需要本机在线（本身就是授权，不需要 --yes）
 //   --remote-status [runId]       流水线进度；结束后取回汇总，指出失败阶段的日志路径
 
 const fs = require('fs');
@@ -160,7 +160,7 @@ async function runRemote(engine, args, io, deps = {}) {
     }
     io.out(`\n发布 ${info.version}（提交 ${String(info.sha).slice(0, 7)}）已交给 GitHub Actions：${info.url || '(dry-run)'}`);
     if (!args.watch || engine.base.dryRun) {
-        io.out('可以关电脑了。查看进度和结果：npm run release -- --remote-status');
+        io.out('已交给 GitHub Actions，本机不需要保持在线。查看进度和结果：npm run release -- --remote-status');
         return EXIT.OK;
     }
     let last = '';

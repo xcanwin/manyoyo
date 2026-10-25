@@ -166,13 +166,15 @@ describe('Web Server 磁盘占用接口', () => {
         fs.mkdirSync(path.join(quickRoot, 'my-notes'));
         try {
             await withServer(async ({ baseUrl, tempHost, cookie }) => {
-                writeHistoryFile(path.join(tempHost, 'web-history'), 'gone', { applied: { hostPath: known } });
+                writeHistoryFile(path.join(tempHost, 'web-history'), 'gone', { remark: '我的备注', applied: { hostPath: known } });
                 fs.writeFileSync(path.join(tempHost, 'manyoyo.json'), JSON.stringify({ serve: { quickChat: { path: quickRoot + '/', run: 'x' } } }));
                 const headers = { Cookie: cookie, 'Content-Type': 'application/json' };
                 const listed = await request(`${baseUrl}/api/storage`, { headers });
                 expect(listed.response.status).toBe(200);
                 const byName = Object.fromEntries(listed.json.rows.map(row => [path.basename(row.path), row]));
                 expect(byName['20261001-000001']).toMatchObject({ managed: true, deletable: true });
+                // 关联容器除了名字还带容器备注
+                expect(byName['20261001-000001'].sessions).toEqual([{ name: 'gone', state: 'deleted', remark: '我的备注' }]);
                 expect(byName['20261001-000002']).toMatchObject({ managed: false, deletable: false });
                 const refused = await request(`${baseUrl}/api/storage/dirs`, { method: 'DELETE', headers, body: JSON.stringify({ path: byName['20261001-000002'].path }) });
                 expect(refused.response.status).toBe(409);

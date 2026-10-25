@@ -1,6 +1,6 @@
 'use strict';
 
-// 远端发布：把“推送 main + 触发 release-pipeline.yml”做成一个动作，之后全程在 GitHub Actions 里跑（可以关电脑）。
+// 远端发布：把“推送 main + 触发 release-pipeline.yml”做成一个动作，之后全程在 GitHub Actions 里跑（本机不需要保持在线）。
 // 命令行 `--remote` 与网页“一键发布”共用这里。外部世界（命令、等待、时间）全部来自注入的 ctx（见 actions.js）。
 
 const fs = require('fs');

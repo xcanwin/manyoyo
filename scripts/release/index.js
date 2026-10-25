@@ -5,7 +5,7 @@
 //   npm run release                              启动网页控制台（127.0.0.1:3900）并打开浏览器
 //   npm run release -- --status [--json]         只在终端打印各阶段状态
 //   npm run release -- --run <阶段,…> [--yes]    命令行执行阶段（对外动作需要 --yes）
-//   npm run release -- --remote                  推送 main 并交给 GitHub Actions 全自动发布（可以关机）
+//   npm run release -- --remote                  推送 main 并交给 GitHub Actions 全自动发布（本机不需要保持在线）
 //   npm run release -- --help                    完整用法
 
 const fs = require('fs');
@@ -50,7 +50,7 @@ function helpText() {
     return `manyoyo 发布控制台（维护者工具，不属于面向用户的 CLI）。人用网页，agent 用命令行，共用同一套引擎。
 
 三种发布方式（代码提交好之后，都不需要人停下来处理）:
-  (c) 全自动，交给 GitHub Actions，本地可以关机:  npm run release -- --remote
+  (c) 全自动，交给 GitHub Actions，本机不需要保持在线:  npm run release -- --remote
   (b) 网页“一键发布”: 点一次「开始」，做的事与 (c) 完全相同，页面上显示远端各阶段进度
   (a) 网页手动，一步一步执行（下面的阶段）
 

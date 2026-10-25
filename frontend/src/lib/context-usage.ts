@@ -49,12 +49,34 @@ export function cacheHitPercent(usage: ContextUsage): number | null {
   return Math.round((usage.cacheReadTokens / total) * 100)
 }
 
-// 空闲超过 5 分钟：缓存可能已经过期，下次发送要重新缓存
-export function idleHint(updatedAt: string | null, now: number): string {
+// 空闲超过 5 分钟：缓存可能已经过期，下次发送要重新缓存。返回“21 分钟”这样的时长，不够久返回空串
+export function idleSpan(updatedAt: string | null, now: number): string {
   if (!updatedAt) return ""
   const elapsed = now - Date.parse(updatedAt)
   if (!Number.isFinite(elapsed) || elapsed < IDLE_HINT_AFTER_MS) return ""
   const minutes = Math.floor(elapsed / 60000)
-  const span = minutes >= 60 ? `${Math.floor(minutes / 60)} 小时` : `${minutes} 分钟`
-  return `已空闲 ${span}，下次发送可能要重新缓存（更贵）`
+  return minutes >= 60 ? `${Math.floor(minutes / 60)} 小时` : `${minutes} 分钟`
+}
+
+// 第三方服务的缓存时长未知，所以只说“可能”
+export const IDLE_CACHE_NOTE = "下次发送可能要重新缓存（更贵）"
+
+// 浮层里的“名称：数据”行
+export type UsageRow = { label: string; value: string; note?: string }
+
+export function usageRows(usage: ContextUsage, now: number): UsageRow[] {
+  const percent = usagePercent(usage)
+  const rows: UsageRow[] = [
+    {
+      label: "已用上下文",
+      value: usage.window
+        ? `${formatTokens(usage.usedTokens)} / ${formatTokens(usage.window)}${percent === null ? "" : `（${percent > 0 && percent < 1 ? "<1%" : `${Math.round(percent)}%`}）`}`
+        : formatTokens(usage.usedTokens),
+    },
+  ]
+  const hit = cacheHitPercent(usage)
+  if (hit !== null) rows.push({ label: "缓存命中", value: `${hit}%`, note: "上一次请求的输入里来自缓存的比例" })
+  const idle = idleSpan(usage.updatedAt, now)
+  if (idle) rows.push({ label: "已空闲", value: idle, note: IDLE_CACHE_NOTE })
+  return rows
 }

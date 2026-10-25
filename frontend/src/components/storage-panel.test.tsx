@@ -9,7 +9,7 @@ import { StoragePanel } from "@/components/storage-panel"
 const deletedHistories = [{ name: "gone-1", bytes: 2048, updatedAt: "2026-10-01T00:00:00Z" }]
 const rows = [
   { path: "/h/work/a", managed: true, status: "history-only", sessions: [{ name: "gone-1", state: "deleted" }], mtimeMs: 1, deletable: true, empty: false },
-  { path: "/h/work/b", managed: true, status: "in-use", sessions: [{ name: "live-1", state: "running" }], mtimeMs: 2, deletable: false, empty: false },
+  { path: "/h/work/b", managed: true, status: "in-use", sessions: [{ name: "live-1", state: "running", remark: "前端联调" }], mtimeMs: 2, deletable: false, empty: false },
   { path: "/h/project", managed: false, status: "history-only", sessions: [], mtimeMs: 3, deletable: false, empty: false },
   { path: "/h/work/e1", managed: true, status: "unused", sessions: [], mtimeMs: 4, deletable: true, empty: true },
   { path: "/h/work/e2", managed: true, status: "unused", sessions: [], mtimeMs: 5, deletable: true, empty: true },
@@ -52,6 +52,10 @@ describe("StoragePanel", () => {
     expect(items[3].textContent).toContain("空目录")
     expect(items[3].textContent).not.toContain("4.0")
     expect(items[0].textContent).toContain("3.0 MB")
+    // 关联容器：名字之外还显示容器备注（有就显示）
+    const text = container.textContent ?? ""
+    expect(text).toContain("live-1（运行中）")
+    expect(text).toContain("前端联调")
     expect(items[2].textContent).toContain("计算体积")
     const buttons = container.querySelectorAll<HTMLButtonElement>('button[aria-label^="删除 /"]')
     expect(Array.from(buttons).map((button) => button.disabled)).toEqual([false, true, true, false, false])

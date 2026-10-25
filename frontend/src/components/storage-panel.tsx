@@ -25,7 +25,7 @@ type StorageRow = {
   path: string
   managed: boolean
   status: RowStatus
-  sessions: { name: string; state: SessionState }[]
+  sessions: { name: string; state: SessionState; remark?: string }[]
   mtimeMs: number
   deletable: boolean
 }
@@ -261,6 +261,7 @@ export function StoragePanel({
                 className="flex flex-wrap items-center gap-2"
               >
                 {`${session.name}（${SESSION_STATE_LABEL[session.state]}）`}
+                {session.remark ? <Hint>{session.remark}</Hint> : null}
                 {currentBadge(session.name)}
                 {enterButton(session.name)}
               </span>
