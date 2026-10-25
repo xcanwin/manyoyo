@@ -179,6 +179,7 @@ export function App() {
           filesEditorRef={filesEditorRef}
           confirmLeaveIfDirty={confirmLeaveIfDirty}
           creatingAgent={creatingAgentContainer !== null}
+          onSelectSession={setActiveSessionName}
         />
       </SidebarInset>
       {unsavedChangesDialog}

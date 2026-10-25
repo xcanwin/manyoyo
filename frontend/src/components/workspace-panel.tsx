@@ -1300,7 +1300,10 @@ export function WorkspacePanel({
   confirmLeaveIfDirty,
   creatingAgent,
   onRunFinished,
+  onSelectSession,
 }: {
+  // 切到另一个 AGENT（新建 / 分叉出来的）：不能只改地址栏的 #，会话列表还没更新时 hashchange 会把它当成不存在而忽略
+  onSelectSession?: (name: string) => void
   activeSession: SessionSummary | null
   onAfterSend: () => void | Promise<unknown>
   // 当前会话的任务从“执行中”变成结束：用于标签页角标与通知
@@ -1831,7 +1834,7 @@ export function WorkspacePanel({
       if (!newName) throw new Error("分叉失败")
       if (typeof data.prompt === "string" && data.prompt) saveDraft(newName, data.prompt)
       await onAfterSend()
-      window.location.hash = `#${encodeURIComponent(newName)}`
+      onSelectSession?.(newName)
       toast.success("已分叉出新的 AGENT，原来的不变")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "分叉失败")
@@ -1907,7 +1910,7 @@ export function WorkspacePanel({
         const data = await apiPost(`/api/sessions/${encodeURIComponent(activeSession.containerName)}/agents`, {})
         const newName = typeof data.name === "string" ? data.name : ""
         await onAfterSend()
-        if (newName) window.location.hash = `#${encodeURIComponent(newName)}`
+        if (newName) onSelectSession?.(newName)
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "新建 AGENT 失败")
       }
