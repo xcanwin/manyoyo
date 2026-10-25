@@ -114,7 +114,9 @@ describe("StoragePanel", () => {
     expect(cells[2].textContent).toBe("")
     const managedCells = container.querySelectorAll("[data-testid^='storage-row-']")[3].querySelectorAll("td")
     expect(managedCells[2].textContent).toBe("已删容器且删历史")
-    expect(container.querySelectorAll("[data-testid^='storage-row-']")[0].textContent).toContain("已删容器且存历史")
+    // 灰色底（secondary），和描边的“已删容器且保留历史”区分开
+    expect(managedCells[2].querySelector("[data-slot='badge']")!.className).toContain("bg-secondary")
+    expect(container.querySelectorAll("[data-testid^='storage-row-']")[0].textContent).toContain("已删容器且保留历史")
   })
 
   test("版式统一：两块都有小标题，列顺序是 名称 → 占用 → …，图标按钮同一个大小，删除全部历史在小字下面", async () => {
@@ -128,8 +130,8 @@ describe("StoragePanel", () => {
     expect(historyRow.querySelector('button[aria-label="删除历史 gone-1"]')).not.toBeNull()
     // 容器名右边显示容器备注
     expect(historyRow.textContent).toContain("旧项目")
-    // 这里的容器都已删除：同样带“已删容器且存历史”标签
-    expect(historyRow.textContent).toContain("已删容器且存历史")
+    // 这里的容器都已删除：同样带“已删容器且保留历史”标签
+    expect(historyRow.textContent).toContain("已删容器且保留历史")
     expect(historyRow.querySelectorAll("td")[0].textContent).toContain("gone-1")
     const sizes = new Set(
       Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-label^="查看 "], button[aria-label^="删除 "], button[aria-label^="进入 "], button[aria-label^="删除历史 "]')).map((button) => button.className.match(/size-\d+/)?.[0] ?? button.className)

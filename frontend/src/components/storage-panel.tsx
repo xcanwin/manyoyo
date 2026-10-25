@@ -38,7 +38,7 @@ type SizeState =
 const SESSION_STATE_LABEL: Record<SessionState, string> = {
   running: "运行中",
   stopped: "已停止",
-  deleted: "已删容器且存历史",
+  deleted: "已删容器且保留历史",
 }
 const SIZE_CONCURRENCY = 2
 type Filter = "all" | "empty"
@@ -273,7 +273,7 @@ export function StoragePanel({
           </span>
         ) : row.managed ? (
           // MANYOYO 自己建的工作目录，容器和历史都已经删了
-          <Badge variant="outline">已删容器且删历史</Badge>
+          <Badge variant="secondary">已删容器且删历史</Badge>
         ) : null,
     },
     {
