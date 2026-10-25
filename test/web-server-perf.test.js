@@ -50,6 +50,8 @@ function buildServerOptions(tempHost, port, overrides = {}) {
         authUser: 'webadmin',
         authPass: 'topsecret',
         authPassAuto: false,
+        // 这些用例按 exec 次数断言“只执行一次”，自动标题的轻量调用会混进来
+        autoTitle: false,
         dockerCmd: 'docker',
         networkManager: {
             ensureBridgeNetwork: async () => {},
