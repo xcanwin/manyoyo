@@ -10,6 +10,8 @@ import { EnvEditor } from "@/components/container-manage/env-editor"
 let container: HTMLDivElement
 let root: Root
 
+window.matchMedia = window.matchMedia || ((() => ({ matches: false, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia)
+
 beforeEach(() => {
   container = document.createElement("div")
   document.body.appendChild(container)
@@ -76,5 +78,26 @@ describe("EnvEditor", () => {
   test("非法行（容器里写入的）标红列出", async () => {
     await act(async () => root.render(<Harness initial={"A=1\n"} onText={() => {}} />))
     expect(container.textContent).toContain("第 3 行：1BAD=x")
+  })
+
+  test("登记过的变量名旁边显示中文名，没登记的不显示", async () => {
+    await act(async () => root.render(<Harness initial={"ANTHROPIC_BASE_URL=https://x\nMY_VAR=1\n"} onText={() => {}} />))
+    const rows = container.querySelectorAll('[data-slot="env-row"]')
+    expect(rows[0].textContent).toContain("Claude 服务地址")
+    expect(rows[1].textContent).not.toContain("Claude")
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="第 1 项名称"]')!.value).toBe("ANTHROPIC_BASE_URL")
+  })
+
+  test("手机上每项上下两行：变量名一行、值一行，不再并排挤压", async () => {
+    const old = window.innerWidth
+    Object.defineProperty(window, "innerWidth", { value: 390, configurable: true })
+    try {
+      await act(async () => root.render(<Harness initial={"ANTHROPIC_BASE_URL=https://x\n"} onText={() => {}} />))
+      const row = container.querySelector('[data-slot="env-row"]') as HTMLElement
+      expect(row.dataset.layout).toBe("stacked")
+      expect(container.textContent).not.toContain("变量名变量值")
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: old, configurable: true })
+    }
   })
 })

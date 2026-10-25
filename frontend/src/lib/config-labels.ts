@@ -28,13 +28,48 @@ const LABELS: Record<string, { title: string; desc?: string }> = {
   plugins: { title: "插件" },
 }
 
+// 常见环境变量名的中文名（运行配置页、设置容器页的环境变量表、模型服务页共用的唯一数据源）。
+// 没登记的变量名原样等宽显示。
+export const ENV_LABELS: Record<string, string> = {
+  ANTHROPIC_BASE_URL: "Claude 服务地址",
+  ANTHROPIC_AUTH_TOKEN: "Claude 访问令牌",
+  ANTHROPIC_API_KEY: "Claude Key",
+  CLAUDE_CODE_OAUTH_TOKEN: "Claude 订阅令牌",
+  ANTHROPIC_MODEL: "Claude 模型",
+  ANTHROPIC_DEFAULT_OPUS_MODEL: "Claude 大模型（Opus）",
+  ANTHROPIC_DEFAULT_SONNET_MODEL: "Claude 中模型（Sonnet）",
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: "Claude 小模型（Haiku）",
+  ANTHROPIC_SMALL_FAST_MODEL: "Claude 快速模型",
+  OPENAI_BASE_URL: "Codex 服务地址",
+  OPENAI_API_KEY: "Codex Key",
+  OPENAI_MODEL: "Codex 模型",
+  GEMINI_API_KEY: "Gemini Key",
+  GOOGLE_GEMINI_BASE_URL: "Gemini 服务地址",
+  GEMINI_MODEL: "Gemini 模型",
+  ENABLE_TOOL_SEARCH: "关闭工具搜索",
+  API_TIMEOUT_MS: "接口超时（毫秒）",
+  HTTP_PROXY: "HTTP 代理",
+  HTTPS_PROXY: "HTTPS 代理",
+  ALL_PROXY: "全部流量代理",
+  NO_PROXY: "不走代理的地址",
+}
+
+/** 变量名的中文名；没登记返回 undefined。代理变量大小写都认 */
+export function envLabel(key: string): string | undefined {
+  return ENV_LABELS[key] ?? ENV_LABELS[key.toUpperCase()]
+}
+
 export type ConfigLabel = { title: string; key: string; desc?: string; mono: boolean }
 
-// 环境变量名（env 下的键）和 run 名字是用户自己起的，原样显示，不翻译
+// env 下的变量名：登记过的显示“中文名 + 等宽键名”，没登记的原样等宽；run 名字是用户自己起的，原样显示
 export function configLabel(path: string[]): ConfigLabel {
   const key = path[path.length - 1] ?? ""
   const parent = path[path.length - 2]
-  if (parent === "env" || (path[0] === "runs" && path.length === 2)) {
+  if (parent === "env") {
+    const title = envLabel(key)
+    return title ? { title, key, mono: false } : { title: key, key, mono: true }
+  }
+  if (path[0] === "runs" && path.length === 2) {
     return { title: key, key, mono: true }
   }
   const hit = LABELS[key]

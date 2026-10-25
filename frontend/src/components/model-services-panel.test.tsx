@@ -347,6 +347,31 @@ describe("ModelServicesPanel", () => {
     expect(pageText()).not.toContain("关闭工具搜索")
   })
 
+  test("多条同类提示合并成一个 Alert，每行带自己的按钮", async () => {
+    const second = { ...SERVICES.services[0], name: "claude-glm2", missingExtraEnv: { ENABLE_TOOL_SEARCH: "false" } }
+    const crowded = {
+      ...SERVICES,
+      services: [{ ...SERVICES.services[0], missingExtraEnv: { ENABLE_TOOL_SEARCH: "false" } }, second],
+      suggestions: [
+        ...SERVICES.suggestions,
+        { from: "claude-glm", agent: "gemini", providerId: "zhipu", label: "智谱 GLM 的 Key 也能给 Gemini 用" },
+      ],
+    }
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: string, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? "GET", url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      return jsonResponse(crowded)
+    })
+    await mount()
+    const alerts = Array.from(document.body.querySelectorAll('[data-slot="alert"]'))
+    // 复用建议一个框、缺附加设置一个框，不是一条一个框
+    expect(alerts).toHaveLength(2)
+    const buttons = (alert: Element) => Array.from(alert.querySelectorAll("button")).map((b) => b.textContent?.trim())
+    expect(buttons(alerts[0])).toEqual(["一键添加", "一键添加"])
+    expect(buttons(alerts[1])).toEqual(["一键修复", "一键修复"])
+    expect(alerts[0].textContent).toContain("Gemini")
+    expect(alerts[1].textContent).toContain("claude-glm2")
+  })
+
   test("删除要先确认，确认后才请求", async () => {
     await mount()
     await click("删除")

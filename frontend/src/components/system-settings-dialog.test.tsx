@@ -100,6 +100,7 @@ class FakeServer {
       this.setQuickChat(body.run)
       return { status: 200, body: { saved: true } }
     }
+    if (url === "/api/model-services") return { status: 200, body: { services: [], suggestions: [], agents: [], providers: [] } }
     if (url === "/api/images") return { status: 200, body: { defaults: { imageName: "ghcr.io/xcanwin/manyoyo", imageVersion: "2.3.0-common" }, images: [] } }
     if (url === "/api/setup/status") return { status: 200, body: { mirrors: this.mirrors } }
     if (url === "/api/setup/agents") return { status: 200, body: { agents: [], mirrorPresets: { apt: [], npm: [{ label: "npmmirror", value: "https://registry.npmmirror.com/" }], pip: [] } } }
@@ -203,6 +204,8 @@ describe("系统设置：保存不覆盖别人的修改", () => {
     await click(byText("修改"))
     await click(q('[data-testid="quick-chat-save-ds"]'))
     expect(server.raw).toContain('run: "claude-ds"')
+    // 自保存分类没有底栏：切到表单分类再点底栏保存，验证版本号已经接过来
+    await openCategory("基础")
     await click(saveOuter())
     expect(document.body.textContent).toContain("已保存")
     expect(document.body.textContent).not.toContain("刚被其他地方修改过")
@@ -223,6 +226,7 @@ describe("系统设置：保存不覆盖别人的修改", () => {
     const saves = Array.from(document.body.querySelectorAll("button")).filter((b) => b.textContent?.trim() === "保存软件源")
     await click(saves[0]) // 软件源面板自己的保存
     expect(server.raw).toContain("registry.npmmirror.com")
+    await openCategory("基础") // 自保存分类没有底栏
     await click(saveOuter()) // 底部保存
     expect(document.body.textContent).toContain("已保存")
     expect(document.body.textContent).not.toContain("刚被其他地方修改过") // 子面板保存后版本号已经接过来，不该再走冲突
@@ -455,5 +459,74 @@ describe("系统设置左侧按作用范围分组", () => {
       "#MANYOYO 服务", "Web 服务", "插件",
       "#宿主机与维护", "环境检查", "容量预估", "磁盘占用", "容器状态",
     ])
+  })
+})
+
+// STYLE.md 第 8 节：内容自己会保存的分类不显示外层“保存 / 重新加载”底栏
+describe("系统设置：外层底栏只在需要时出现", () => {
+  const SELF_SAVING = ["页面", "模型服务", "快捷对话", "系统提示词", "软件源", "环境检查", "容量预估", "磁盘占用", "容器状态"]
+  const FORM = ["基础", "启动环境", "运行命令", "运行配置", "构建参数", "Web 服务", "插件"]
+  const reload = () => byText("重新加载")
+
+  test.each(SELF_SAVING)("自保存分类「%s」没有外层保存 / 重新加载", async (label) => {
+    install(BASE_RAW)
+    await openDialog()
+    await openCategory(label)
+    expect(saveOuter()).toBeUndefined()
+    expect(reload()).toBeUndefined()
+  })
+
+  test.each(FORM)("表单分类「%s」有外层保存 / 重新加载", async (label) => {
+    install(BASE_RAW)
+    await openDialog()
+    await openCategory(label)
+    expect(saveOuter()).toBeTruthy()
+    expect(reload()).toBeTruthy()
+  })
+
+  test("在表单里改了还没保存，切到自保存分类，保存按钮仍然在（修改不能悄悄悬着）", async () => {
+    install(BASE_RAW)
+    await openDialog()
+    await editHostPath("/work/b")
+    await openCategory("模型服务")
+    expect(saveOuter()).toBeTruthy()
+    await click(saveOuter())
+    expect(server.raw).toContain("/work/b")
+    // 保存完没有未保存的修改了，底栏收起
+    expect(saveOuter()).toBeUndefined()
+  })
+
+  test("“显示 JSON 设置”在页头，任何分类都能用；JSON 视图有底栏", async () => {
+    install(BASE_RAW)
+    await openDialog()
+    await openCategory("模型服务")
+    expect(saveOuter()).toBeUndefined()
+    const header = q('[data-slot="dialog-header"]')!
+    const toggle = Array.from(header.querySelectorAll("button")).find((b) => b.textContent?.includes("显示 JSON 设置"))
+    expect(toggle).toBeTruthy()
+    await click(toggle)
+    expect(q('[data-testid="json-editor"]')).toBeTruthy()
+    expect(saveOuter()).toBeTruthy()
+  })
+
+  test("手机上：页头 ⋯ 里有“显示 JSON 设置 / 重新加载”，底栏只剩一个整行的“保存”", async () => {
+    const old = window.innerWidth
+    Object.defineProperty(window, "innerWidth", { value: 390, configurable: true })
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }))
+    try {
+      install(BASE_RAW)
+      await openDialog()
+      const header = q('[data-slot="dialog-header"]')!
+      expect(Array.from(header.querySelectorAll("button")).some((b) => b.textContent?.includes("显示 JSON 设置"))).toBe(false)
+      await click(header.querySelector('button[aria-label="更多"]') as HTMLElement)
+      const item = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((el) => el.textContent?.includes("显示 JSON 设置")) as HTMLElement
+      expect(item).toBeTruthy()
+      expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).some((el) => el.textContent?.includes("重新加载"))).toBe(true)
+      await click(item)
+      const footerButtons = Array.from(q('[data-slot="dialog-footer"]')!.querySelectorAll("button"))
+      expect(footerButtons.map((b) => b.textContent?.trim())).toEqual(["保存"])
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: old, configurable: true })
+    }
   })
 })

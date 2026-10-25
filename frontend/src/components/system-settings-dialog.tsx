@@ -1,6 +1,8 @@
 import * as React from "react"
 import JSON5 from "json5"
 
+import { EllipsisIcon } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -17,6 +19,12 @@ import {
   notificationSupported,
   setNotifyEnabled,
 } from "@/lib/attention"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useTheme } from "@/components/theme-provider"
 import {
@@ -107,6 +115,19 @@ const GROUPS = [
   "MANYOYO 服务",
   "宿主机与维护",
 ]
+
+// 内容自己会保存（立即生效，或面板里有自己的保存按钮）、不走外层“保存 / 重新加载”的分类
+const SELF_SAVING_CATEGORIES = new Set([
+  "page",
+  "model-services",
+  "quick-chat",
+  "agent-instructions",
+  "mirrors",
+  "doctor",
+  "capacity",
+  "storage",
+  "orphans",
+])
 
 const CATEGORIES: ConfigCategory[] = [
   // 主题是前端本地记忆（theme-provider 存 localStorage），不落进 manyoyo.json，
@@ -622,6 +643,8 @@ export function SystemSettingsDialog({
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState("")
   const [success, setSuccess] = React.useState("")
+  // 表单或 JSON 里有还没保存的修改（切到自保存分类后底栏也要留着，修改不能悄悄悬着）
+  const [pending, setPending] = React.useState(false)
   // 配置文件的版本（磁盘原文的哈希）：保存时带上，别处改过文件就会收到冲突，而不是悄悄覆盖
   const etagRef = React.useRef("")
   // 自己改过的字段（表单模式）：冲突时在最新内容上重放；baseRawRef 是这些修改所基于的文本
@@ -648,6 +671,7 @@ export function SystemSettingsDialog({
         editsRef.current = []
         baseRawRef.current = nextRaw
         jsonDirtyRef.current = false
+        setPending(false)
         setJsonConflict(null)
         setPath(String(data.path || ""))
         setRaw(nextRaw)
@@ -673,6 +697,7 @@ export function SystemSettingsDialog({
     jsValue: unknown
   ) {
     editsRef.current = [...editsRef.current, { path: fieldPath, valueText }]
+    setPending(true)
     setRaw((prevRaw) => {
       const range = findValueRangeByPath(prevRaw, fieldPath)
       if (!range) {
@@ -750,6 +775,11 @@ export function SystemSettingsDialog({
     return parts.join("")
   }
 
+  function toggleViewMode() {
+    if (viewMode === "form") setViewMode("json")
+    else switchToFormView()
+  }
+
   async function handleSave(options: { forceEtag?: string } = {}) {
     setSaving(true)
     setError("")
@@ -772,6 +802,8 @@ export function SystemSettingsDialog({
           if (jsonEditSeqRef.current === sentJsonSeq)
             jsonDirtyRef.current = false
           setSuccess(rebased ? describeRebase(rebased) : "已保存")
+          if (editsRef.current.length === 0 && !jsonDirtyRef.current)
+            setPending(false)
           return
         } catch (err) {
           const { status, data } = apiErrorData(err)
@@ -827,14 +859,57 @@ export function SystemSettingsDialog({
     }
   }
 
+  // 自保存分类不显示外层底栏；有没保存的修改、或在 JSON 视图时仍然显示
+  const showFooter =
+    viewMode === "json" || pending || !SELF_SAVING_CATEGORIES.has(activeCategory)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="wide">
-        <DialogHeader>
-          <DialogTitle>系统设置</DialogTitle>
-          <DialogDescription>
-            {path || "~/.manyoyo/manyoyo.json"}
-          </DialogDescription>
+        <DialogHeader className="flex-row items-start justify-between gap-2 pr-8">
+          <div className="flex min-w-0 flex-col gap-2">
+            <DialogTitle>系统设置</DialogTitle>
+            <DialogDescription className="break-all">
+              {path || "~/.manyoyo/manyoyo.json"}
+            </DialogDescription>
+          </div>
+          {isMobile ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    title="更多"
+                    aria-label="更多"
+                    className="shrink-0"
+                  />
+                }
+              >
+                <EllipsisIcon />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem disabled={loading} onClick={toggleViewMode}>
+                  {viewMode === "form" ? "显示 JSON 设置" : "返回分类设置"}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={loading || saving} onClick={load}>
+                  重新加载
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={toggleViewMode}
+              disabled={loading}
+            >
+              {viewMode === "form" ? "显示 JSON 设置" : "返回分类设置"}
+            </Button>
+          )}
         </DialogHeader>
 
         {/* 不能 overflow-hidden：里面的滚动区用负外边距把滚动条推到弹窗外框，这一层一裁就把滚动条和卡片边框都切掉了 */}
@@ -861,6 +936,7 @@ export function SystemSettingsDialog({
                 onChange={(text) => {
                   jsonDirtyRef.current = true
                   jsonEditSeqRef.current += 1
+                  setPending(true)
                   setRaw(text)
                 }}
               />
@@ -1046,26 +1122,19 @@ export function SystemSettingsDialog({
           </Alert>
         ) : null}
 
-        <DialogFooter className="sm:justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={
-              viewMode === "form" ? () => setViewMode("json") : switchToFormView
-            }
-            disabled={loading}
-          >
-            {viewMode === "form" ? "显示 JSON 设置" : "返回分类设置"}
-          </Button>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={load}
-              disabled={loading || saving}
-            >
-              重新加载
-            </Button>
+        {showFooter ? (
+          <DialogFooter>
+            {/* 手机上底栏只留一个整行的主按钮，“重新加载”在页头的 ⋯ 里 */}
+            {!isMobile ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={load}
+                disabled={loading || saving}
+              >
+                重新加载
+              </Button>
+            ) : null}
             <Button
               type="button"
               onClick={() => void handleSave()}
@@ -1073,8 +1142,8 @@ export function SystemSettingsDialog({
             >
               {saving ? "保存中..." : "保存"}
             </Button>
-          </div>
-        </DialogFooter>
+          </DialogFooter>
+        ) : null}
       </DialogContent>
     </Dialog>
   )

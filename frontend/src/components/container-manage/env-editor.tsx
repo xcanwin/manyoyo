@@ -5,6 +5,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { envLabel } from "@/lib/config-labels"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { RowList } from "@/components/container-manage/row-list"
@@ -43,6 +45,7 @@ export function EnvEditor({
   /** 服务端读取这些文件的结果（路径、变量个数、被跳过的行） */
   fileStatus?: EnvFileStatus[]
 }) {
+  const mobile = useIsMobile()
   const [fileRows, setFileRows] = React.useState<FileRow[]>(() => (files ?? []).map((path) => ({ path })))
   const [view, setView] = React.useState<"table" | "text">("table")
   const [revealed, setRevealed] = React.useState<Set<number>>(new Set())
@@ -139,7 +142,7 @@ export function EnvEditor({
         />
       ) : (
         <div className="flex flex-col gap-2">
-          {entries.length ? (
+          {entries.length && !mobile ? (
             <div className="flex items-center gap-2">
               <ColumnHeader className="w-2/5 px-1">变量名</ColumnHeader>
               <ColumnHeader className="min-w-0 flex-1 px-1">变量值</ColumnHeader>
@@ -149,25 +152,33 @@ export function EnvEditor({
           {entries.map((entry, index) => {
             const sensitive = isSensitiveKey(entry.key)
             const hidden = sensitive && !revealed.has(index)
-            return (
-              <div key={index} className="flex items-center gap-2">
+            const title = envLabel(entry.key.trim())
+            const nameInput = (
+              <div className={cn("flex min-w-0 flex-col gap-1", mobile ? "w-full" : "w-2/5")}>
                 <Input
                   aria-label={`第 ${index + 1} 项名称`}
-                  className="w-2/5 font-mono"
+                  className="font-mono"
                   value={entry.key}
                   onChange={(event) => updateEntry(index, { key: event.target.value })}
                 />
-                <Input
-                  aria-label={`第 ${index + 1} 项的值`}
-                  className={cn("flex-1 font-mono", hidden && "[-webkit-text-security:disc]")}
-                  // 不用 type=password：浏览器会把它当登录表单，回车后弹“要保存密码吗”
-                  type="text"
-                  autoComplete="off"
-                  data-1p-ignore
-                  data-lpignore="true"
-                  value={entry.value}
-                  onChange={(event) => updateEntry(index, { value: event.target.value })}
-                />
+                {title ? <Hint className="px-1">{title}</Hint> : null}
+              </div>
+            )
+            const valueInput = (
+              <Input
+                aria-label={`第 ${index + 1} 项的值`}
+                className={cn("min-w-0 flex-1 font-mono", hidden && "[-webkit-text-security:disc]")}
+                // 不用 type=password：浏览器会把它当登录表单，回车后弹“要保存密码吗”
+                type="text"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={entry.value}
+                onChange={(event) => updateEntry(index, { value: event.target.value })}
+              />
+            )
+            const actions = (
+              <>
                 {sensitive ? (
                   <Button
                     type="button"
@@ -179,7 +190,7 @@ export function EnvEditor({
                   >
                     {hidden ? <EyeIcon /> : <EyeOffIcon />}
                   </Button>
-                ) : (
+                ) : mobile ? null : (
                   <span className="size-8 shrink-0" aria-hidden />
                 )}
                 <Button
@@ -191,6 +202,22 @@ export function EnvEditor({
                 >
                   <Trash2Icon />
                 </Button>
+              </>
+            )
+            // 手机上变量名占一行，值和操作按钮在下面一行（窄屏并排会把变量名截断）
+            return mobile ? (
+              <div key={index} data-slot="env-row" data-layout="stacked" className="flex flex-col gap-2">
+                {nameInput}
+                <div className="flex items-center gap-2">
+                  {valueInput}
+                  {actions}
+                </div>
+              </div>
+            ) : (
+              <div key={index} data-slot="env-row" data-layout="inline" className="flex items-start gap-2">
+                {nameInput}
+                {valueInput}
+                {actions}
               </div>
             )
           })}

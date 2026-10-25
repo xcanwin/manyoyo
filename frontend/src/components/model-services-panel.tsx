@@ -7,7 +7,7 @@ import { DataTable, type DataColumn } from "@/components/data-table"
 import { CodeBlock } from "@/components/code-block"
 import { Hint } from "@/components/hint"
 import { PageHeader } from "@/components/page-header"
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -62,12 +62,8 @@ import {
   type ModelServicesData,
   type ServiceForm,
 } from "@/lib/model-services"
+import { envLabel } from "@/lib/config-labels"
 import type { ConnectionResult } from "@/lib/setup"
-
-// 附加变量在界面上的说法（界面不出现变量名）
-const EXTRA_ENV_LABELS: Record<string, string> = {
-  ENABLE_TOOL_SEARCH: "关闭工具搜索",
-}
 
 
 // 服务商下拉里“自定义地址”这一项的取值
@@ -289,16 +285,20 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
         </Alert>
       ) : null}
 
-      {data && data.suggestions.length > 0
-        ? data.suggestions.map((item) => (
-            <Alert key={`${item.from}:${item.agent}`}>
-              <AlertDescription>
-                发现可以直接复用的 Key：{item.label}
-              </AlertDescription>
-              <AlertAction className="top-1/2 -translate-y-1/2">
+      {data && data.suggestions.length > 0 ? (
+        <Alert>
+          <AlertDescription className="flex flex-col gap-2">
+            发现可以直接复用的 Key：
+            {data.suggestions.map((item) => (
+              <div
+                key={`${item.from}:${item.agent}`}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="min-w-0">{item.label}</span>
                 <Button
                   type="button"
                   size="sm"
+                  className="shrink-0"
                   disabled={busy !== ""}
                   onClick={() => void handleReuse(item.from, item.agent)}
                 >
@@ -307,52 +307,65 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
                   ) : null}
                   一键添加
                 </Button>
-              </AlertAction>
-            </Alert>
-          ))
-        : null}
-
-      {fixable.map((service) => (
-        <Alert key={service.name} variant="warning">
-          <AlertDescription>
-            {serviceTitle(service)}（{service.name}）需要附加设置（
-            {Object.keys(service.missingExtraEnv ?? {})
-              .map((key) => EXTRA_ENV_LABELS[key] ?? "附加设置")
-              .join("、")}
-            ），缺了模型可能调不了工具。
+              </div>
+            ))}
           </AlertDescription>
-          <AlertAction className="top-1/2 -translate-y-1/2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={busy !== ""}
-              onClick={() => void handleFix(service.name)}
-            >
-              一键修复
-            </Button>
-          </AlertAction>
         </Alert>
-      ))}
+      ) : null}
 
-      {failed.map((service) => {
-        const result = results[service.name]
-        return (
-          <Alert key={service.name} variant="destructive" role="status">
-            <AlertDescription>
-              {serviceTitle(service)}（{service.name}）：{result.text}
-              {result.detail ? (
-                <details className="mt-2">
-                  <summary className="cursor-pointer">详情</summary>
-                  <CodeBlock className="mt-2 max-h-32">
-                    {result.detail}
-                  </CodeBlock>
-                </details>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        )
-      })}
+      {fixable.length > 0 ? (
+        <Alert variant="warning">
+          <AlertDescription className="flex flex-col gap-2">
+            这些服务需要附加设置，缺了模型可能调不了工具：
+            {fixable.map((service) => (
+              <div
+                key={service.name}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="min-w-0">
+                  {serviceTitle(service)}（{service.name}）：
+                  {Object.keys(service.missingExtraEnv ?? {})
+                    .map((key) => envLabel(key) ?? "附加设置")
+                    .join("、")}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={busy !== ""}
+                  onClick={() => void handleFix(service.name)}
+                >
+                  一键修复
+                </Button>
+              </div>
+            ))}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {failed.length > 0 ? (
+        <Alert variant="destructive" role="status">
+          <AlertDescription className="flex flex-col gap-2">
+            {failed.map((service) => {
+              const result = results[service.name]
+              return (
+                <div key={service.name}>
+                  {serviceTitle(service)}（{service.name}）：{result.text}
+                  {result.detail ? (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer">详情</summary>
+                      <CodeBlock className="mt-2 max-h-32">
+                        {result.detail}
+                      </CodeBlock>
+                    </details>
+                  ) : null}
+                </div>
+              )
+            })}
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <DataTable
         label="模型服务"

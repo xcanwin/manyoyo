@@ -140,3 +140,57 @@ describe("FieldLegend 字重", () => {
     expect(legend.className).toContain("data-[variant=label]:font-semibold")
   })
 })
+
+describe("嵌套弹窗：点遮罩 / 按 Esc 只关最上面一层", () => {
+  function Nested() {
+    const [outer, setOuter] = React.useState(true)
+    const [inner, setInner] = React.useState(true)
+    return (
+      <>
+        <span data-testid="state">{`${outer ? "outer" : ""}|${inner ? "inner" : ""}`}</span>
+        <Dialog open={outer} onOpenChange={setOuter}>
+          <DialogContent>
+            <DialogTitle>外层</DialogTitle>
+            <DialogDescription>外层说明</DialogDescription>
+            <Dialog open={inner} onOpenChange={setInner}>
+              <DialogContent size="sm">
+                <DialogTitle>内层</DialogTitle>
+                <DialogDescription>内层说明</DialogDescription>
+              </DialogContent>
+            </Dialog>
+          </DialogContent>
+        </Dialog>
+      </>
+    )
+  }
+  const state = () => document.querySelector('[data-testid="state"]')!.textContent
+  const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 30)) })
+  const press = (target: Element) => {
+    target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerType: "mouse" }))
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }))
+    target.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, button: 0, pointerType: "mouse" }))
+    target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0 }))
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
+  }
+
+  test("两层打开 → 点遮罩 → 只剩外层", async () => {
+    await render(<Nested />)
+    expect(state()).toBe("outer|inner")
+    const backdrops = document.querySelectorAll('[data-slot="dialog-overlay"]')
+    expect(backdrops.length).toBe(2)
+    await act(async () => press(backdrops[backdrops.length - 1]))
+    await flush()
+    expect(state()).toBe("outer|")
+  })
+
+  test("两层打开 → 按 Esc → 只剩外层；再按一次才关外层", async () => {
+    await render(<Nested />)
+    const esc = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    await act(async () => esc())
+    await flush()
+    expect(state()).toBe("outer|")
+    await act(async () => esc())
+    await flush()
+    expect(state()).toBe("|")
+  })
+})

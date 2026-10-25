@@ -149,7 +149,15 @@ export function AppSidebar({
   onCreatingAgentContainerChange: (containerName: string | null) => void
 }) {
   const { isMobile, setOpenMobile } = useSidebar()
-  const { confirm, dialog: confirmDialog } = useConfirmDialog()
+  const { confirm: confirmRaw, dialog: confirmDialog } = useConfirmDialog()
+  // 手机上侧栏本身是一层 Sheet：从里面打开弹窗前先收起侧栏，弹窗（挂在 Sheet 外面）后面还能再叠一层（STYLE.md 第 9 节）
+  function closeSidebar() {
+    if (isMobile) setOpenMobile(false)
+  }
+  const confirm: typeof confirmRaw = (...args) => {
+    closeSidebar()
+    return confirmRaw(...args)
+  }
   const [navLevel, setNavLevel] = React.useState<NavLevel>(() => loadPersistedNavState().navLevel)
   const [navContainer, setNavContainer] = React.useState(() => loadPersistedNavState().navContainer)
   const [searchOpen, setSearchOpen] = React.useState(false)
@@ -180,6 +188,7 @@ export function AppSidebar({
     title: string,
     message: string
   ): Promise<"keep-history" | "with-history" | null> {
+    closeSidebar()
     return new Promise((resolve) => {
       setRemoveDialog({ title, message, resolve })
     })
@@ -421,6 +430,7 @@ export function AppSidebar({
       if (quickChatPath && quickChatRun) {
         await runQuickChatWithConfig(quickChatPath, quickChatRun)
       } else {
+        closeSidebar()
         setQuickChatSetupOpen(true)
       }
     } catch (err) {
@@ -448,10 +458,12 @@ export function AppSidebar({
   }
 
   function editContainerRemark(containerName: string, current: string) {
+    closeSidebar()
     setRemarkDialog({ kind: "container", key: containerName, initial: current })
   }
 
   function openCloneDialog(mode: CloneMode, containerName: string) {
+    closeSidebar()
     setCloneDialog({ mode, containerName })
   }
 
@@ -530,6 +542,7 @@ export function AppSidebar({
   }
 
   function editAgentRemark(session: SessionSummary) {
+    closeSidebar()
     setRemarkDialog({ kind: "agent", key: session.name, initial: sessionDisplayTitle(session), remark: session.agentRemark })
   }
 
@@ -567,6 +580,7 @@ export function AppSidebar({
   }
 
   return (
+    <>
     <Sidebar {...props}>
       <SidebarHeader className="gap-3 px-3 pt-3">
         <div className="flex items-center justify-between gap-2">
@@ -579,7 +593,10 @@ export function AppSidebar({
           {quickChatBusy ? "创建中..." : "快捷对话"}
         </Button>
         <div className="flex gap-2">
-          <Button className="flex-1" size="lg" variant="outline" onClick={() => setCreateOpen(true)}>
+          <Button className="flex-1" size="lg" variant="outline" onClick={() => {
+            closeSidebar()
+            setCreateOpen(true)
+          }}>
             <PlusIcon data-icon="inline-start" />
             新建容器
           </Button>
@@ -603,7 +620,10 @@ export function AppSidebar({
         <Button
           variant="outline"
           className="w-full justify-start bg-background text-muted-foreground shadow-none"
-          onClick={() => setSearchOpen(true)}
+          onClick={() => {
+            closeSidebar()
+            setSearchOpen(true)
+          }}
         >
           <SearchIcon data-icon="inline-start" />
           搜索容器 / AGENT
@@ -802,7 +822,10 @@ export function AppSidebar({
           variant="outline"
           size="lg"
           className="flex-1"
-          onClick={() => setSettingsOpen(true)}
+          onClick={() => {
+            closeSidebar()
+            setSettingsOpen(true)
+          }}
         >
           <SettingsIcon data-icon="inline-start" />
           系统设置
@@ -811,7 +834,10 @@ export function AppSidebar({
           variant="outline"
           size="lg"
           className="flex-1"
-          onClick={() => setLogsOpen(true)}
+          onClick={() => {
+            closeSidebar()
+            setLogsOpen(true)
+          }}
         >
           <ScrollTextIcon data-icon="inline-start" />
           运行日志
@@ -820,6 +846,8 @@ export function AppSidebar({
           <LogOutIcon />
         </Button>
       </SidebarFooter>
+    </Sidebar>
+
       {confirmDialog}
 
       <SystemSettingsDialog
@@ -909,6 +937,6 @@ export function AppSidebar({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Sidebar>
+    </>
   )
 }
