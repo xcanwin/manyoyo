@@ -112,6 +112,8 @@ function buildServerOptions(tempHost, port, overrides = {}) {
         authUser: 'webadmin',
         authPass: 'topsecret',
         authPassAuto: false,
+        // 这些用例按“最后一次 exec 就是 Agent 那一轮”来断言，自动标题的轻量调用会混进来
+        autoTitle: false,
         dockerCmd: 'docker',
         networkManager: fakeNetworkManager(),
         hostPath: tempHost,
