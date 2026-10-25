@@ -2,6 +2,8 @@
 
 本项目网页界面的**唯一样式规范**。新增或改动任何界面前先读这一页；改完按第 15 节自查。规范没写到的冷门情况，按 shadcn 的默认做法处理；同一种写法第二次出现时补进本页。
 
+标 **〔待建〕** 的条目，基础组件还不支持；补齐之前按条目里的意思就近实现，补齐后删掉标记（只删标记，不改条目）。
+
 本项目用的是 base-ui 版的 shadcn（`components.json` 的 style 是 `base-nova`），通用规则见 shadcn skill（Skill 工具，名称 `shadcn`）。本页只写本项目的决定，以及和 shadcn 默认做法不同的地方。
 
 ---
@@ -16,11 +18,13 @@
 | 档 | 用途 | 大小 / 字重 / 颜色 | 用什么 |
 |---|---|---|---|
 | 标题 | 弹窗、侧板、整页的标题 | 16px / 500 | `DialogTitle`、`SheetTitle`；整页标题用 `PageHeader` |
-| 区块标题 | 卡片、设置分组、表单分节、折叠区的标题 | 14px / 600 | `CardTitle`（默认 14px/600）；分节标题用 `FieldLegend` |
+| 区块标题 | 卡片、设置分组、表单分节、折叠区的标题 | 14px / 600 | `CardTitle`（默认 14px/600）；表单分节用 `FieldLegend variant="label"`（`ui/field.tsx` 本地修改为 600〔待建〕）；折叠区用 `SectionToggle` |
 | 正文 | 正文、字段标签、按钮、输入框、下拉、表格单元、菜单项 | 14px；标签和按钮 500，其余 400 | 组件默认值（`Label`、`FieldLabel`、`Button`、`SelectItem` 都已是 14px） |
 | 副标题 | 弹窗 / 侧板标题下面那句说明、提示条的正文 | 14px / 400，灰色 | `DialogDescription`、`SheetDescription`、`AlertDescription` |
-| 辅助 | 字段说明、徽章、提示气泡、配置键、时间戳、计数、“（可选）” | 12px / 400，灰色 | `FieldDescription`、`CardDescription`、`Badge`、`Tooltip`、`Hint` |
+| 表头 | 表格、可编辑行的列名 | 12px / 600，前景色（不用灰色） | `DataTable`、`ColumnHeader` |
+| 辅助 | 字段说明、徽章、提示气泡、配置键、时间戳、计数、“（可选）” | 12px / 400，灰色 | `FieldDescription`、`CardDescription`、`Badge`、`Tooltip`、`Hint`（`Hint` 带 `font-normal`，放进加粗的标签里也保持 400） |
 
+- **没写字号的文字默认 14px**：`index.css` 的 `@layer base` 给 `body` 设了 `text-sm`。去掉调用处的 `text-sm` 之前确认它在 body 之下，不在 `<pre>` 等自带字号的元素里。
 - **手机上的输入框、下拉、文本域是 16px**（`text-base md:text-sm`，已写在 `ui/input|textarea|select`）：iOS 聚焦小于 16px 的输入框会自动放大整页。这是唯一允许“同一控件手机比桌面大”的地方，别的地方不要模仿。
 - **内容区不受上表限制**。它们是“被展示的内容”，不是界面文字，各自沿用登记的数值：
   - 聊天正文：markdown，14px
@@ -49,6 +53,7 @@
   - `gap-6`（24px）：页面上的大区块之间。
 
   一律用 `flex` / `grid` 加 `gap-*`，不用 `space-x-*` / `space-y-*`。
+  - 小于 8px 的 `gap-0.5` / `gap-1` / `gap-1.5` 只用在**一个复合元素内部**：标题和它的说明叠放、图标和文字、一组徽章。控件与控件之间、字段与字段之间不用。
 - **控件高度**统一为 32px：`Input`、`SelectTrigger`、`Button`（default）、`Toggle`、`TabsList` 默认都是 32px。
   - 紧凑场景（表格行内、工具栏）用 `sm`（28px）；`xs`（24px）只用于表格行内的图标小按钮。
   - **同一行里的控件高度必须相同**：输入框旁边的按钮用 default，不用 sm。
@@ -60,12 +65,13 @@
 - **标签**：
   - 只用 `FieldLabel`（或 `Label`），不用 `span`、`div` 自己写字号字重。
   - 标签在控件上方；只有开关（`Switch`）和复选框用水平布局：`Field orientation="horizontal"`，标签在左、开关在右。
+  - 用户自己填的数据（环境变量名、规则里的域名）不是“标签”，原样用等宽字显示即可；常见的变量名（`ANTHROPIC_BASE_URL` 等）在 `lib/config-labels.ts` 登记中文名〔待建〕后，按“中文名 + 等宽键名”显示。
   - **标签写中文**；需要露出配置键时，在标签右边加灰色 12px 等宽的键名（沿用 `create-container-dialog.tsx` 的 `KeyLabel`、`lib/config-labels.ts` 的中文名登记）。不要直接拿 `containerName` 这类英文键当标签。
   - 可选字段在标签后加 `（可选）`，用辅助档字号。必填不加星号：默认就是必填，或者说明里写清楚。
 - **占位符**只写示例值（`例如 https://api.deepseek.com`），不写操作说明。说明放 `FieldDescription`。
 - **校验**：`Field` 上加 `data-invalid`，控件上加 `aria-invalid`，错误文字用 `FieldError`（或灰色 `FieldDescription` 换成错误内容）。不用另外的红字 `div`。
 - **布局**：默认一列；桌面端只有成对的短字段（端口 + 协议、名称 + 版本）才并排两列；手机端一律单列。
-- **选项**：2～5 个选项用 `ToggleGroup`，更多用 `Select`，可搜索的用 `Command`。
+- **选项**：2～5 个短选项用 `ToggleGroup`，更多用 `Select`，可搜索的用 `Command`。**每个选项带一句说明**的单选（向导里的“选 Agent”“接入方式”）用选项卡片：`role="radio"` + `aria-checked` 的按钮组（沿用 `setup-wizard.tsx` 的写法），不用 ToggleGroup。
 - **模块顺序**按依赖关系排（先选 Agent 再填 Key）；和已有字段语义重叠时，先合并概念再做界面（别让两套 env 并存）。
 - **列表编辑**（一行一项的 env、规则等）一律用 `RowList`：表头 + 每行输入 + 删除 + 下方添加 + 页脚保存。不要发明“端口/协议塞进一个输入框”这类复合文本语法。
 - **保存按钮的位置**：
@@ -85,7 +91,7 @@
 - **结构**：顶部工具栏 → 内容区。
   - 工具栏：左边是区块标题档的标题，右边是 `sm` / `icon-sm` 按钮，底部一条分隔线，高度 40px。
   - 内容区：内边距桌面 `p-4`、手机 `p-3`；大区块之间 `gap-6`。
-- **表单类页面**：内容最大宽度 `max-w-2xl`，靠左对齐，不要拉满宽屏；表格、列表类页面占满宽度。
+- **页面内容宽度三档**（都靠左对齐）：只有字段的表单类页面 `max-w-2xl`；字段里夹着可编辑行或小表格的页面（设置容器）`max-w-5xl`；表格、列表类页面占满宽度。系统设置右侧内容区同样按这三档。
 - **只读的“名称：值”信息**（容器详情、Agent 详情）一律用 `KeyValueList`：桌面两列（标签用辅助档、值用正文），手机单列。
 - **卡片**：用完整结构 `CardHeader` / `CardTitle` / `CardDescription` / `CardAction` / `CardContent` / `CardFooter`，不要把所有内容都塞进 `CardContent`。卡片之间 `gap-4`。不要卡片套卡片。
 - **折叠区**：每块上方一条分割线，标题行悬停 `hover:bg-muted`，默认收起；展开态不另加背景或描边（沿用 `SectionToggle` / `denied-list.tsx` 的写法）。
@@ -111,7 +117,8 @@
 - `DialogContent` 只用 `size` 选档。调用处**禁止**再写 `max-w-*`、`w-[..]`、`h-[..vh]`。
 - **弹窗的结构**：`DialogHeader`（标题 + 副标题；宽窗口右侧可放工具按钮）→ 主体 → `DialogFooter`。主体太长时只让主体滚动，标题和底栏固定（`DialogBody`：`min-h-0 flex-1 overflow-y-auto`）。
 - `DialogContent` 是 `grid gap-4`：用 `<form>` 包住字段和底栏时，`<form>` 要写 `flex flex-col gap-4`，否则间距会消失。
-- **系统设置固定用 `wide`**，不随分类变宽变窄：左侧分类栏宽度固定；右侧的表单类分类限制 `max-w-2xl`，表格类分类占满。
+- **底栏只放和当前内容有关的操作**：内容自己会保存的（模型服务、磁盘占用、快捷对话等子面板，操作立即生效），不显示外层的“保存 / 重新加载”底栏〔待建〕；底栏按钮超过两个时，次要的收进 `⋯` 菜单或移到页头。手机上底栏最多一个整行的主按钮。
+- **系统设置固定用 `wide`**，不随分类变宽变窄：左侧分类栏宽度固定；右侧内容区按第 7 节的三档宽度。
 - **确认类一律用 `Dialog`，不用 `AlertDialog`**：所有弹窗都能点遮罩、点右上角 ✕ 关闭，等价于“取消”。参考 `hooks/use-confirm-dialog.tsx`。
 - **每个弹窗、侧板都必须有标题**。视觉上不需要时，用 `className="sr-only"` 的 `DialogTitle`。
 
@@ -119,6 +126,7 @@
 - `Dialog`、`Sheet`、`AlertDialog` 用**同一种遮罩**：`bg-black/40`，支持时加 `backdrop-blur-sm`（4px）；淡入淡出，`motion-reduce` 下不做动画（三个 `ui/*.tsx` 共用 `ui/overlay-class.ts`）。
 - **多层弹窗下层也要虚化**：base-ui 的嵌套弹窗默认不渲染遮罩（`DialogBackdrop` 的 `forceRender` 默认为 `false`），`ui/dialog.tsx` 已让嵌套弹窗也渲染遮罩，并让被盖住的父弹窗轻微缩小、变暗（`data-nested-dialog-open`），层级一眼可见。调用处什么都不用写。
 - **最多两层**。需要第三层时，改成在第二层里分步进行，或者用就地展开的区域。
+- **手机上的侧栏（`Sheet`）也算一层**：从手机侧栏里打开弹窗时，先收起侧栏再打开弹窗〔待建〕，这样后面最多还能再叠一层。
 - 点遮罩、按 Esc 只关最上面一层。
 - 模糊只用在遮罩上（弹窗开着时才存在）。常驻元素不用 `backdrop-filter`，也不用无限循环的动画。
 
@@ -141,6 +149,7 @@
 
 ## 11. 反馈与状态
 - **一次性结果**（已保存、已复制、已删除）：`toast`，一句话。
+- **同一处有多条同类提示**（例如几条“可以一键添加”）合并成一个 `Alert`，里面逐行列出，每行带自己的按钮；不要一条一个框堆起来〔待建〕。
 - **持续状态**（校验错误、断线、需要修复、风险提示）：就地放 `Alert`。默认中性；错误用 `destructive`；警告、成功用 `warning` / `success`。可操作的提示把按钮放进 `AlertAction`。
 - **原始报错**（request_id、堆栈、URL）不直接给用户看：先显示一句人话，原文收进可展开的“详情”（沿用模型服务测试失败的写法），用等宽辅助档。
 - **加载**：整块内容用 `Skeleton`，按钮里用 `Spinner`。超过 300ms 才显示，避免闪一下。
@@ -154,7 +163,7 @@
 - **侧板**（`Sheet`）全屏时，要用带 `data-[side=*]:` 前缀的写法压掉默认的宽度和边框，否则屏幕边缘会留一条竖线（参考 `html-preview-panel.tsx`）。
 - **系统设置**：左侧分类栏变成顶部的分类下拉，内容区占满。
 - **表格**变卡片（见第 10 节）；表单一律单列；工具栏放不下的按钮收进 `⋯` 菜单。
-- **可点区域至少 40px**：手机上的图标按钮用 `icon-lg` / `icon-xl`（参考 composer）。
+- **可点区域至少 40px**：手机上独立的图标按钮用 `icon-lg` / `icon-xl`（参考 composer）。嵌在文字行或表格行里、不方便放大的小按钮（`icon-xs` / `icon-sm`），视觉尺寸不变，用 `index.css` 的 `touch-hit` 工具类〔待建〕把点击区域扩到 40px（`relative` + `after:` 伪元素向外延伸），相邻两个按钮的点击区域不能重叠。
 - **贴底的栏**（composer、终端输入条、弹窗底栏、侧栏底部）：内边距写成 `pb-[max(<原值>,env(safe-area-inset-bottom))]`。
 - 输入框 16px（见第 2 节）。
 - 同一行里混排等宽小字和正文、或者混排 `⌘` 这类回退字体字符时，都加 `leading-none`，父级 `items-center`，否则看起来上下偏。
