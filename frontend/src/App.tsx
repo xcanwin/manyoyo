@@ -14,7 +14,7 @@ import type { FilesEditorState } from "@/components/files-panel"
 import { sessionDisplayTitle, type SessionSummary } from "@/lib/api"
 import { Toaster } from "@/components/ui/sonner"
 import { useAttention } from "@/hooks/use-attention"
-import { withAttentionBadge } from "@/lib/attention"
+import { withAttentionBadge, withRunningPrefix } from "@/lib/attention"
 import { fetchSetupStatus, skipSetup } from "@/lib/setup"
 import { buildSessionHash, parseSessionHash, pickMostRecentSession } from "@/lib/session-url"
 
@@ -132,7 +132,8 @@ export function App() {
   const { unseenCount, markFinished } = useAttention({ sessions, activeSessionName })
   React.useEffect(() => {
     if (document.querySelector('meta[name="manyoyo-serve-title"]')) return
-    document.title = withAttentionBadge(buildDocumentTitle(sessionDisplayTitle(activeSession)), unseenCount)
+    const base = withRunningPrefix(buildDocumentTitle(sessionDisplayTitle(activeSession)), activeSession?.agentRunning === true)
+    document.title = withAttentionBadge(base, unseenCount)
   }, [activeSession, unseenCount])
 
   async function handleSetupFinished(containerName: string) {

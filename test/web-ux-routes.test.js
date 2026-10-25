@@ -45,6 +45,12 @@ function writeFakes(tempHost) {
     fs.writeFileSync(path.join(binDir, 'claude'), `#!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+if (process.argv.includes('--no-session-persistence')) {
+  // 轻量调用（自动标题 / 回顾）：记一笔，回一个带引号的标题，不碰主运行的记录文件
+  fs.appendFileSync(${JSON.stringify(argvLog)} + '.light', JSON.stringify(process.argv.slice(2)) + '\\n');
+  process.stdout.write(JSON.stringify({ type: 'result', result: '“修复登录页面。”\\n多余的解释' }) + '\\n');
+  process.exit(0);
+}
 fs.writeFileSync(${JSON.stringify(argvLog)}, JSON.stringify(process.argv.slice(2)));
 fs.writeFileSync(${JSON.stringify(argvLog)} + '.effort', process.env.CLAUDE_CODE_EFFORT_LEVEL || '');
 const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', '-workspace');
@@ -309,6 +315,27 @@ describe('推理强度与上下文占用', () => {
             // 默认强度（空）= 不注入
             await request(`${baseUrl}/api/sessions/demo/agent/stream`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ prompt: 'again', clientMessageId: 'effort-0002' }) });
             expect(fs.readFileSync(`${argvLog}.effort`, 'utf8')).toBe('');
+        });
+    });
+});
+
+describe('自动标题', () => {
+    test('第一句话发出后生成一次，写进 autoTitle；第二轮不再生成；有备注的不生成', async () => {
+        await withServer(async ({ baseUrl, cookie, argvLog }) => {
+            const send = (prompt, id) => request(`${baseUrl}/api/sessions/demo/agent/stream`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ prompt, clientMessageId: id }) });
+            await send('帮我修一下登录页面', 'title-0001');
+            const summary = await waitFor(async () => {
+                const item = await summaryOf(baseUrl, cookie);
+                return item && item.autoTitle ? item : null;
+            });
+            expect(summary.autoTitle).toBe('修复登录页面');
+            await send('再来一句', 'title-0002');
+            await new Promise(resolve => setTimeout(resolve, 300));
+            const calls = fs.readFileSync(`${argvLog}.light`, 'utf8').trim().split('\n');
+            expect(calls).toHaveLength(1);
+            const argv = JSON.parse(calls[0]);
+            expect(argv).toEqual(expect.arrayContaining(['-p', '--no-session-persistence', '--tools', '', '--output-format', 'json']));
+            expect(argv[argv.length - 1]).toBe('帮我修一下登录页面');
         });
     });
 });

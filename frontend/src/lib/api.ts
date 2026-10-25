@@ -8,6 +8,8 @@ export type SessionSummary = {
   agentRemark: string
   // Agent 自己生成的标题（目前只有 claude）与首条 Agent 消息，都是来自容器的不可信文本，只按纯文本显示
   agentTitle?: string
+  // 第一句话发出后由轻量模型调用生成的标题（claude、codex）
+  autoTitle?: string
   firstPrompt?: string
   pinned?: boolean
   containerRemark: string
@@ -33,12 +35,12 @@ export type SessionSummary = {
   agentRunning?: boolean
 }
 
-// 会话显示名的唯一规则：用户备注 > Agent 生成的标题 > 首条消息 > “AGENT N”
+// 会话显示名的唯一规则：用户备注 > Agent 自己的标题（/rename 或交互式 ai-title）> 自动标题 > 首条消息 > “AGENT N”
 export function sessionDisplayTitle(
-  session: Pick<SessionSummary, "agentName" | "agentRemark" | "agentTitle" | "firstPrompt"> | null | undefined
+  session: Pick<SessionSummary, "agentName" | "agentRemark" | "agentTitle" | "firstPrompt"> & { autoTitle?: string } | null | undefined
 ): string {
   if (!session) return ""
-  for (const candidate of [session.agentRemark, session.agentTitle, session.firstPrompt]) {
+  for (const candidate of [session.agentRemark, session.agentTitle, session.autoTitle, session.firstPrompt]) {
     const text = String(candidate || "").trim()
     if (text) return text
   }

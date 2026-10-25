@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { findFinishedSessions, isNotifyEnabled, setNotifyEnabled, shouldMarkUnseen, withAttentionBadge } from "./attention"
+import { findFinishedSessions, isNotifyEnabled, setNotifyEnabled, shouldMarkUnseen, withAttentionBadge, withRunningPrefix } from "./attention"
 
 describe("任务结束提醒", () => {
   test("标题角标", () => {
@@ -24,5 +24,13 @@ describe("任务结束提醒", () => {
     expect(isNotifyEnabled(storage)).toBe(true)
     setNotifyEnabled(false, storage)
     expect(isNotifyEnabled(storage)).toBe(false)
+  })
+})
+
+describe("withRunningPrefix", () => {
+  test("执行中加 ◐ 前缀，与未读角标共存时角标在最前", () => {
+    expect(withRunningPrefix("A · MANYOYO Web", false)).toBe("A · MANYOYO Web")
+    expect(withRunningPrefix("A · MANYOYO Web", true)).toBe("◐ A · MANYOYO Web")
+    expect(withAttentionBadge(withRunningPrefix("A", true), 2)).toBe("(2) ◐ A")
   })
 })

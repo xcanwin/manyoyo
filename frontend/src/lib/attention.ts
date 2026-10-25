@@ -7,6 +7,11 @@ export function withAttentionBadge(title: string, count: number): string {
   return count > 0 ? `(${count}) ${title}` : title
 }
 
+// 当前会话有任务在跑时给标签页标题加前缀，切到别的标签页也能看出还在执行
+export function withRunningPrefix(title: string, running: boolean): string {
+  return running ? `◐ ${title}` : title
+}
+
 // 两次会话列表之间“从执行中变成不在执行”的会话
 export function findFinishedSessions(
   prevRunning: ReadonlySet<string>,

@@ -841,6 +841,13 @@ describe("任务清单", () => {
 
 describe("sessionDisplayTitle", () => {
   const base = { agentName: "AGENT 1", agentRemark: "", agentTitle: "", firstPrompt: "" }
+  test("自动标题排在 Agent 标题之后、首条消息之前", async () => {
+    const { sessionDisplayTitle } = await import("./api")
+    expect(sessionDisplayTitle({ ...base, autoTitle: "自动", firstPrompt: "首条" })).toBe("自动")
+    expect(sessionDisplayTitle({ ...base, agentTitle: "/rename 起的", autoTitle: "自动" })).toBe("/rename 起的")
+    expect(sessionDisplayTitle({ ...base, agentRemark: "备注", autoTitle: "自动" })).toBe("备注")
+    expect(sessionDisplayTitle({ ...base, autoTitle: "  ", firstPrompt: "首条" })).toBe("首条")
+  })
   test("备注 > Agent 标题 > 首条消息 > AGENT N", async () => {
     const { sessionDisplayTitle } = await import("./api")
     expect(sessionDisplayTitle({ ...base, agentRemark: "我的备注", agentTitle: "标题", firstPrompt: "首条" })).toBe("我的备注")
