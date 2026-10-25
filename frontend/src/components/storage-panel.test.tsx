@@ -6,7 +6,7 @@ import { StoragePanel } from "@/components/storage-panel"
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const deletedHistories = [{ name: "gone-1", bytes: 2048, updatedAt: "2026-10-01T00:00:00Z" }]
+const deletedHistories = [{ name: "gone-1", bytes: 2048, updatedAt: "2026-10-01T00:00:00Z", remark: "旧项目" }]
 const rows = [
   { path: "/h/work/a", managed: true, status: "history-only", sessions: [{ name: "gone-1", state: "deleted" }], mtimeMs: 1, deletable: true, empty: false },
   { path: "/h/work/b", managed: true, status: "in-use", sessions: [{ name: "live-1", state: "running", remark: "前端联调" }], mtimeMs: 2, deletable: false, empty: false },
@@ -74,9 +74,9 @@ describe("StoragePanel", () => {
     expect(document.body.querySelectorAll("[data-testid^='storage-entry-']")).toHaveLength(2)
   })
 
-  test("“无关联容器且为空”分类只列空目录，删除空目录按 emptyOnly 逐个删除", async () => {
+  test("“已删容器且删历史的空目录”分类只列空目录，删除空目录按 emptyOnly 逐个删除", async () => {
     const container = await mount()
-    const filterButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.startsWith("无关联容器且为空"))!
+    const filterButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.startsWith("已删容器且删历史的空目录"))!
     expect(filterButton.textContent).toContain("有2个")
     await act(async () => filterButton.click())
     expect(Array.from(container.querySelectorAll("[data-testid^='storage-row-']")).map((row) => row.textContent)).toEqual([
@@ -104,7 +104,7 @@ describe("StoragePanel", () => {
     expect(container.querySelector("[data-testid^='storage-history-']")!.querySelector('button[aria-label="进入 gone-1"]')).not.toBeNull()
   })
 
-  test("没有关联容器的行，关联容器一格是空白；表头叫“关联容器”和“容器”", async () => {
+  test("关联容器一格：容器已删但留着历史 / 容器和历史都删了（只对 MANYOYO 自己建的目录）/ 别人的目录留空；表头叫“关联容器”和“容器”", async () => {
     const container = await mount()
     const headers = Array.from(container.querySelectorAll("th")).map((th) => th.textContent)
     expect(headers).toContain("关联容器")
@@ -112,6 +112,9 @@ describe("StoragePanel", () => {
     expect(headers).not.toContain("会话")
     const cells = container.querySelectorAll("[data-testid^='storage-row-']")[2].querySelectorAll("td")
     expect(cells[2].textContent).toBe("")
+    const managedCells = container.querySelectorAll("[data-testid^='storage-row-']")[3].querySelectorAll("td")
+    expect(managedCells[2].textContent).toBe("已删容器且删历史")
+    expect(container.querySelectorAll("[data-testid^='storage-row-']")[0].textContent).toContain("已删容器且存历史")
   })
 
   test("版式统一：两块都有小标题，列顺序是 名称 → 占用 → …，图标按钮同一个大小，删除全部历史在小字下面", async () => {
@@ -123,6 +126,8 @@ describe("StoragePanel", () => {
     expect(Array.from(tables[1].querySelectorAll("th")).map((th) => th.textContent)).toEqual(["容器", "占用", "最后更新", ""])
     const historyRow = container.querySelector("[data-testid^='storage-history-']")!
     expect(historyRow.querySelector('button[aria-label="删除历史 gone-1"]')).not.toBeNull()
+    // 容器名右边显示容器备注
+    expect(historyRow.textContent).toContain("旧项目")
     expect(historyRow.querySelectorAll("td")[0].textContent).toContain("gone-1")
     const sizes = new Set(
       Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-label^="查看 "], button[aria-label^="删除 "], button[aria-label^="进入 "], button[aria-label^="删除历史 "]')).map((button) => button.className.match(/size-\d+/)?.[0] ?? button.className)

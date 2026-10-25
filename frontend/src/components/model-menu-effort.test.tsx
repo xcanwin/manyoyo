@@ -63,6 +63,11 @@ describe("推理强度在模型菜单最下面", () => {
     // 中文名在左，英文名贴着右边（样式和上面的档位别名一样）
     expect(items()).toEqual(expect.arrayContaining(["默认", "低low", "高high", "最高max"]))
   })
+  test("档位从高到低排：默认在最上，最高在它下面，最低在最后", async () => {
+    await render()
+    await openMenu()
+    expect(items().slice(-4)).toEqual(["默认", "最高max", "高high", "低low"])
+  })
   test("默认项在环境变量里设了强度时写明；当前强度不在选项里时选中默认", async () => {
     envDefault = "max"
     await render({ session: { ...session, effort: "ultra" } as SessionSummary })

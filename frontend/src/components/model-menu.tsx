@@ -221,7 +221,8 @@ export function ModelMenu({
                         <span className="ml-auto shrink-0 text-muted-foreground">环境变量：{effort.envDefault}</span>
                       ) : null}
                     </DropdownMenuRadioItem>
-                    {effort.levels.map((level) => (
+                    {/* 从高到低：最高在上面（服务端给的是从低到高） */}
+                    {[...effort.levels].reverse().map((level) => (
                       <DropdownMenuRadioItem closeOnClick key={level} value={level}>
                         {effortLabel(level)}
                         <span className="ml-auto shrink-0 text-muted-foreground">{level}</span>

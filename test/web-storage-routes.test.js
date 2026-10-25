@@ -175,6 +175,8 @@ describe('Web Server 磁盘占用接口', () => {
                 expect(byName['20261001-000001']).toMatchObject({ managed: true, deletable: true });
                 // 关联容器除了名字还带容器备注
                 expect(byName['20261001-000001'].sessions).toEqual([{ name: 'gone', state: 'deleted', remark: '我的备注' }]);
+                // 已删除容器的对话历史也带备注
+                expect(listed.json.deletedHistories.find(item => item.name === 'gone').remark).toBe('我的备注');
                 expect(byName['20261001-000002']).toMatchObject({ managed: false, deletable: false });
                 const refused = await request(`${baseUrl}/api/storage/dirs`, { method: 'DELETE', headers, body: JSON.stringify({ path: byName['20261001-000002'].path }) });
                 expect(refused.response.status).toBe(409);

@@ -29,7 +29,7 @@ type StorageRow = {
   mtimeMs: number
   deletable: boolean
 }
-type DeletedHistory = { name: string; bytes: number; updatedAt: string }
+type DeletedHistory = { name: string; bytes: number; updatedAt: string; remark?: string }
 type SizeState =
   | { bytes?: number; timedOut?: boolean; error?: boolean }
   | "loading"
@@ -38,7 +38,7 @@ type SizeState =
 const SESSION_STATE_LABEL: Record<SessionState, string> = {
   running: "运行中",
   stopped: "已停止",
-  deleted: "已删除",
+  deleted: "已删容器且存历史",
 }
 const SIZE_CONCURRENCY = 2
 type Filter = "all" | "empty"
@@ -155,7 +155,7 @@ export function StoragePanel({
   async function removeAllEmpty(targets: StorageRow[]) {
     const ok = await confirm({
       title: "删除空目录？",
-      message: `共 ${targets.length} 个没有关联容器的空目录会被删除（只删空目录，里面有任何文件的不会动）。`,
+      message: `共 ${targets.length} 个已删容器且删历史的空目录会被删除（只删空目录，里面有任何文件的不会动）。`,
       confirmLabel: "删除空目录",
     })
     if (!ok) return
@@ -271,6 +271,9 @@ export function StoragePanel({
               </span>
             ))}
           </span>
+        ) : row.managed ? (
+          // MANYOYO 自己建的工作目录，容器和历史都已经删了
+          <Badge variant="outline">已删容器且删历史</Badge>
         ) : null,
     },
     {
@@ -287,7 +290,8 @@ export function StoragePanel({
       primary: true,
       render: (item) => (
         <span className="flex flex-wrap items-center gap-2 break-all">
-          {item.name}
+          <span>{item.name}</span>
+          {item.remark ? <span>{item.remark}</span> : null}
           {currentBadge(item.name)}
           {enterButton(item.name)}
         </span>
@@ -345,9 +349,9 @@ export function StoragePanel({
           </ToggleGroupItem>
           <ToggleGroupItem
             value="empty"
-            aria-label={`无关联容器且为空有${emptyRows.length}个`}
+            aria-label={`已删容器且删历史的空目录有${emptyRows.length}个`}
           >
-            {`无关联容器且为空有${emptyRows.length}个`}
+            {`已删容器且删历史的空目录有${emptyRows.length}个`}
           </ToggleGroupItem>
         </ToggleGroup>
         {filter === "empty" && emptyRows.length > 0 ? (
