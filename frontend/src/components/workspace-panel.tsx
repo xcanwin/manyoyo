@@ -260,15 +260,9 @@ function CopyMessageButton({ text, markdown }: { text: string; markdown?: string
 
   if (markdown === undefined) {
     return (
-      <button
-        type="button"
-        onClick={() => copy(text)}
-        title="复制"
-        aria-label="复制"
-        className="touch-hit rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-      >
-        {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
-      </button>
+      <Button variant="ghost" size="icon-xs" className="touch-hit text-muted-foreground" onClick={() => copy(text)} title="复制" aria-label="复制">
+        {copied ? <CheckIcon /> : <CopyIcon />}
+      </Button>
     )
   }
 
@@ -276,15 +270,10 @@ function CopyMessageButton({ text, markdown }: { text: string; markdown?: string
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <button
-            type="button"
-            title="复制"
-            aria-label="复制"
-            className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          />
+          <Button variant="ghost" size="icon-xs" className="touch-hit text-muted-foreground" title="复制" aria-label="复制" />
         }
       >
-        {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
+        {copied ? <CheckIcon /> : <CopyIcon />}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-36">
         <DropdownMenuGroup>
@@ -693,7 +682,8 @@ function ActivityView({
                         </>
                       )}
                     </div>
-                    <Hint className={cn("flex items-center gap-1 px-1 max-md:gap-4", message.role === "user" && message.mode === "agent" && "min-h-6")}>
+                    {/* 固定 24px 高：复制 / 回退按钮（icon-xs）在回复结束后才出现，行高不能跟着跳 */}
+                    <Hint className="flex min-h-6 items-center gap-3 px-1 max-md:gap-4">
                       {formatTime(message.timestamp)}
                       {message.interrupted ? " · 已停止" : ""}
                       {bubble.copyable ? (
