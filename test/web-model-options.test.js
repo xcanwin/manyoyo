@@ -14,8 +14,8 @@ describe('buildEnvModelOptions', () => {
         });
         expect(result.defaultModel).toBe('glm-5.3-flash[1m]');
         expect(result.options).toEqual([
-            { value: 'opus', label: 'glm-5.3[1m]', description: 'opus' },
             { value: 'fable', label: 'glm-5.3[1m]', description: 'fable' },
+            { value: 'opus', label: 'glm-5.3[1m]', description: 'opus' },
             { value: 'sonnet', label: 'glm-5.3[1m]', description: 'sonnet' },
             { value: 'haiku', label: 'glm-5.3-flash[1m]', description: 'haiku' }
         ]);
