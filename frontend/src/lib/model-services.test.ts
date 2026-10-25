@@ -5,6 +5,7 @@ import {
   runLabelMap,
   buildCreateBody,
   buildEditBody,
+  CLAUDE_MODEL_FIELDS,
   EMPTY_CLAUDE_MODELS,
   EMPTY_SERVICE_FORM,
   serviceTitle,
@@ -90,25 +91,22 @@ describe("请求体", () => {
       syncContainers: true,
     })
   })
-  test("编辑 Claude：带上档位模型；自动压缩只在开关和原状态不同时才发", () => {
-    const models = { ...EMPTY_CLAUDE_MODELS, ANTHROPIC_DEFAULT_OPUS_MODEL: " big " }
+  test("Claude：带上档位模型和自动压缩大小（空串 = 不设置 / 删除）；Codex 不带", () => {
+    const models = { ...EMPTY_CLAUDE_MODELS, ANTHROPIC_DEFAULT_FABLE_MODEL: " top " }
     expect(
-      buildEditBody(form({ models, autoCompactWindow: "", autoCompact1m: true }))
+      buildEditBody(form({ models, autoCompactWindow: " 5000000 " }))
     ).toMatchObject({
-      models: { ANTHROPIC_DEFAULT_OPUS_MODEL: "big" },
-      autoCompact1m: true,
+      models: { ANTHROPIC_DEFAULT_FABLE_MODEL: "top", ANTHROPIC_DEFAULT_OPUS_MODEL: "" },
+      autoCompactWindow: "5000000",
     })
-    expect(
-      buildEditBody(form({ models, autoCompactWindow: "1000000", autoCompact1m: true }))
-    ).not.toHaveProperty("autoCompact1m")
-    expect(
-      buildEditBody(form({ models, autoCompactWindow: "1000000", autoCompact1m: false }))
-    ).toMatchObject({ autoCompact1m: false })
-    expect(
-      buildEditBody(form({ models, autoCompactWindow: "500000", autoCompact1m: false }))
-    ).not.toHaveProperty("autoCompact1m")
-    // Codex 不发
+    expect(buildEditBody(form({ models }))).toMatchObject({ autoCompactWindow: "" })
+    expect(buildCreateBody(form({ key: "k", providerId: "anthropic", models, autoCompactWindow: "1000000" }))).toMatchObject({
+      models: { ANTHROPIC_DEFAULT_FABLE_MODEL: "top" },
+      autoCompactWindow: "1000000",
+    })
     expect(buildEditBody(form({ agent: "codex", models }))).not.toHaveProperty("models")
+    expect(buildCreateBody(form({ agent: "codex", key: "k", providerId: "zhipu", models }))).not.toHaveProperty("models")
+    expect(CLAUDE_MODEL_FIELDS.map((item) => item.label.slice(0, 2))).toEqual(["顶级", "高级", "标准", "轻量", "子 "])
   })
 })
 

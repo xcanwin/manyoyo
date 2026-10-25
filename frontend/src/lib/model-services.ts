@@ -49,17 +49,17 @@ export type ServiceForm = {
   key: string
   model: string
   name: string
-  // 仅 Claude Code 编辑：档位 / 子 Agent 模型，自动压缩窗口（原值）与开关
+  // 仅 Claude Code：各档位 / 子 Agent 模型；自动压缩的上下文大小（留空 = 不设置）
   models: Record<string, string>
   autoCompactWindow: string
-  autoCompact1m: boolean
 }
 
 export const CLAUDE_MODEL_FIELDS: { key: string; label: string }[] = [
-  { key: "ANTHROPIC_DEFAULT_OPUS_MODEL", label: "大模型（Opus）" },
-  { key: "ANTHROPIC_DEFAULT_SONNET_MODEL", label: "中模型（Sonnet）" },
-  { key: "ANTHROPIC_DEFAULT_HAIKU_MODEL", label: "小模型（Haiku）" },
-  { key: "ANTHROPIC_DEFAULT_FABLE_MODEL", label: "Fable 模型" },
+  // 从强到弱
+  { key: "ANTHROPIC_DEFAULT_FABLE_MODEL", label: "顶级模型（Fable）" },
+  { key: "ANTHROPIC_DEFAULT_OPUS_MODEL", label: "高级模型（Opus）" },
+  { key: "ANTHROPIC_DEFAULT_SONNET_MODEL", label: "标准模型（Sonnet）" },
+  { key: "ANTHROPIC_DEFAULT_HAIKU_MODEL", label: "轻量模型（Haiku）" },
   { key: "CLAUDE_CODE_SUBAGENT_MODEL", label: "子 Agent 模型" },
 ]
 
@@ -67,7 +67,8 @@ export const EMPTY_CLAUDE_MODELS: Record<string, string> = Object.fromEntries(
   CLAUDE_MODEL_FIELDS.map((item) => [item.key, ""])
 )
 
-export const AUTO_COMPACT_1M = "1000000"
+// 自动压缩输入框的提示值（不会自动写入）
+export const AUTO_COMPACT_HINT = "1000000"
 
 export const EMPTY_SERVICE_FORM: ServiceForm = {
   agent: "claude",
@@ -79,7 +80,6 @@ export const EMPTY_SERVICE_FORM: ServiceForm = {
   name: "",
   models: EMPTY_CLAUDE_MODELS,
   autoCompactWindow: "",
-  autoCompact1m: false,
 }
 
 export const fetchModelServices = () =>
@@ -152,7 +152,20 @@ export function buildCreateBody(form: ServiceForm): Record<string, unknown> {
   if (form.mode === "subscription") body.subscription = true
   else if (form.providerId) body.providerId = form.providerId
   else body.baseUrl = form.baseUrl.trim()
+  // 新增时没填的不发（服务端本来也不写空值）
+  if (form.agent === "claude") {
+    const filled = Object.values(form.models).some((value) => value.trim())
+    if (filled || form.autoCompactWindow.trim()) addClaudeExtras(body, form)
+  }
   return body
+}
+
+// 档位模型与自动压缩：空值服务端不写（新增）/ 删除（编辑）
+function addClaudeExtras(body: Record<string, unknown>, form: ServiceForm) {
+  body.models = Object.fromEntries(
+    Object.entries(form.models).map(([key, value]) => [key, value.trim()])
+  )
+  body.autoCompactWindow = form.autoCompactWindow.trim()
 }
 
 // 编辑请求体：Key 留空表示不改
@@ -165,14 +178,7 @@ export function buildEditBody(
   if (form.key.trim()) body.key = form.key.trim()
   if (form.mode === "subscription") body.subscription = true
   else body.baseUrl = form.baseUrl.trim()
-  if (form.agent === "claude") {
-    body.models = Object.fromEntries(
-      Object.entries(form.models).map(([key, value]) => [key, value.trim()])
-    )
-    if (form.autoCompact1m !== (form.autoCompactWindow === AUTO_COMPACT_1M)) {
-      body.autoCompact1m = form.autoCompact1m
-    }
-  }
+  if (form.agent === "claude") addClaudeExtras(body, form)
   return body
 }
 

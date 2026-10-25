@@ -177,25 +177,38 @@ describe('buildServiceEdit + applyConfigOps', () => {
         expect(removed.runs['claude-ds'].env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('small');
     });
 
-    test('autoCompact1m：true 写 1000000，false 删除', () => {
-        const on = JSON5.parse(applyConfigOps(RAW, buildServiceEdit(config, 'claude-ds', { autoCompact1m: true }).ops));
+    test('autoCompactWindow：填数字就写，留空删除，不是纯数字报错；更大的窗口也行', () => {
+        const on = JSON5.parse(applyConfigOps(RAW, buildServiceEdit(config, 'claude-ds', { autoCompactWindow: ' 1000000 ' }).ops));
         expect(on.runs['claude-ds'].env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('1000000');
-        const off = JSON5.parse(applyConfigOps(JSON.stringify(on), buildServiceEdit(on, 'claude-ds', { autoCompact1m: false }).ops));
+        expect(buildServiceEdit(config, 'claude-ds', { autoCompactWindow: '5000000' }).ops[0].value).toBe('5000000');
+        for (const bad of ['1m', '-5', '12', '1e6', '5 000']) expect(() => buildServiceEdit(config, 'claude-ds', { autoCompactWindow: bad })).toThrow('纯数字');
+        const off = JSON5.parse(applyConfigOps(JSON.stringify(on), buildServiceEdit(on, 'claude-ds', { autoCompactWindow: '' }).ops));
         expect(off.runs['claude-ds'].env).not.toHaveProperty('CLAUDE_CODE_AUTO_COMPACT_WINDOW');
-        expect(buildServiceEdit(config, 'claude-ds', { autoCompact1m: false }).ops).toEqual([]);
+        expect(buildServiceEdit(config, 'claude-ds', { autoCompactWindow: '' }).ops).toEqual([]);
+    });
+
+    test('添加时也能带档位模型与自动压缩窗口（只 Claude）；空值不写；非法拒绝', () => {
+        const { profile } = buildNewService({ runs: {} }, { agent: 'claude', providerId: 'anthropic', key: 'sk-ant-xxxx1234', models: { ANTHROPIC_DEFAULT_FABLE_MODEL: ' f ', ANTHROPIC_DEFAULT_HAIKU_MODEL: '' }, autoCompactWindow: '1000000' });
+        expect(profile.env).toMatchObject({ ANTHROPIC_API_KEY: 'sk-ant-xxxx1234', ANTHROPIC_BASE_URL: 'https://api.anthropic.com', ANTHROPIC_DEFAULT_FABLE_MODEL: 'f', CLAUDE_CODE_AUTO_COMPACT_WINDOW: '1000000' });
+        expect(profile.env).not.toHaveProperty('ANTHROPIC_DEFAULT_HAIKU_MODEL');
+        const plain = buildNewService({ runs: {} }, { agent: 'claude', providerId: 'anthropic', key: 'k-1234567890', autoCompactWindow: '' });
+        expect(plain.profile.env).not.toHaveProperty('CLAUDE_CODE_AUTO_COMPACT_WINDOW');
+        expect(() => buildNewService({ runs: {} }, { agent: 'claude', providerId: 'anthropic', key: 'k', models: { ANTHROPIC_AUTH_TOKEN: 'x' } })).toThrow('不支持的模型变量');
+        expect(() => buildNewService({ runs: {} }, { agent: 'claude', providerId: 'anthropic', key: 'k', autoCompactWindow: 'abc' })).toThrow('纯数字');
     });
 
     test('Codex 服务不接受 models / autoCompact1m', () => {
         const codexConfig = { runs: { 'codex-z': { yolo: 'cx', env: { OPENAI_API_KEY: 'k-1234567890', OPENAI_BASE_URL: 'https://open.bigmodel.cn/api/coding/paas/v4', OPENAI_MODEL: 'glm' } } } };
         expect(buildServiceEdit(codexConfig, 'codex-z', { model: 'glm2' }).agent).toBe('codex');
         expect(() => buildServiceEdit(codexConfig, 'codex-z', { models: { ANTHROPIC_DEFAULT_OPUS_MODEL: 'x' } })).toThrow('只支持 Claude');
-        expect(() => buildServiceEdit(codexConfig, 'codex-z', { autoCompact1m: true })).toThrow('只支持 Claude');
+        expect(() => buildServiceEdit(codexConfig, 'codex-z', { autoCompactWindow: '1000000' })).toThrow('只支持 Claude');
     });
 
     test('列表里 Claude 服务带 models 与 autoCompactWindow，Codex 没有', () => {
-        const withModels = JSON5.parse(applyConfigOps(RAW, buildServiceEdit(config, 'claude-ds', { models: { ANTHROPIC_DEFAULT_HAIKU_MODEL: 'h' }, autoCompact1m: true }).ops));
+        const withModels = JSON5.parse(applyConfigOps(RAW, buildServiceEdit(config, 'claude-ds', { models: { ANTHROPIC_DEFAULT_HAIKU_MODEL: 'h' }, autoCompactWindow: '1000000' }).ops));
         const ds = listModelServices(withModels).find(item => item.name === 'claude-ds');
-        expect(ds.models).toEqual({ ANTHROPIC_DEFAULT_OPUS_MODEL: '', ANTHROPIC_DEFAULT_SONNET_MODEL: '', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'h', ANTHROPIC_DEFAULT_FABLE_MODEL: '', CLAUDE_CODE_SUBAGENT_MODEL: '' });
+        expect(Object.keys(ds.models)).toEqual(['ANTHROPIC_DEFAULT_FABLE_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL']);
+        expect(ds.models.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe('h');
         expect(ds.autoCompactWindow).toBe('1000000');
         expect(listModelServices({ runs: { 'codex-z': { yolo: 'cx', env: { OPENAI_API_KEY: 'k-1234567890' } } } })[0]).not.toHaveProperty('models');
     });

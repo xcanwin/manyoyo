@@ -25,12 +25,14 @@ description: 在网页里添加智谱、DeepSeek 等模型服务，同一个 Key
 
 ## 模型与自动压缩（Claude Code）
 
-编辑 Claude Code 的服务时，展开“更多模型设置”可以填大模型（Opus）、中模型（Sonnet）、小模型（Haiku）、Fable 和子 Agent 用的模型；留空表示不设置。也可以打开“上下文到 100 万才自动压缩”（模型支持 100 万上下文时再开）。网页聊天里选了模型时，以选的为准。这些只改运行配置，已有容器不会跟着变。
+添加或编辑 Claude Code 的服务时，展开“更多模型设置”可以填顶级模型（Fable）、高级模型（Opus）、标准模型（Sonnet）、轻量模型（Haiku）和子 Agent 用的模型；留空表示不设置。“上下文到多大才自动压缩”填一个数字（例如 1000000，留空表示不设置），模型支持更大的上下文时再填。网页聊天里选了模型时，以选的为准。这些只改运行配置，已有容器不会跟着变。
 
 ## 服务商
 
 | 服务商 | Claude Code CLI | Codex CLI | 说明 |
 |---|---|---|---|
+| Anthropic（官方） | ✓ | — | 用 Anthropic 的 API Key |
+| OpenAI（官方） | — | ✓ | 模型名要自己填；官方 Key 的用法没有实测过 |
 | 智谱 GLM | ✓ | ✓（`glm-5.3`） | 套餐 Key 与按量 Key 不通用，用错会报额度不足 |
 | DeepSeek | ✓ | ✓（`deepseek-flash`） | 在 DeepSeek 开放平台创建 Key |
 | Kimi | ✓ | ✓ | Codex 需要自己填模型名 |

@@ -83,3 +83,23 @@ describe('pullImageProcess', () => {
         await expect(pullImageProcess({ command: 'docker', imageRef: 'img:1', spawnFn })).rejects.toThrow(/ENOENT/);
     });
 });
+
+describe('describeImageProblem：给网页弹窗的结构化信息', () => {
+    const { describeImageProblem } = require('../lib/image-pull');
+    const REF = 'ghcr.io/xcanwin/manyoyo:2.3.1-common';
+    test('按运行时给出对应的拉取命令：系统 docker / 系统 podman / 自带的私有 podman', () => {
+        expect(describeImageProblem(REF, 'docker')).toMatchObject({ runtime: 'docker', runtimeLabel: '系统的 Docker', pullCommand: `docker pull ${REF}`, buildCommand: 'my build --iv 2.3.1-common' });
+        expect(describeImageProblem(REF, '/usr/bin/podman')).toMatchObject({ runtime: 'podman', pullCommand: `podman pull ${REF}` });
+        expect(describeImageProblem(REF, '/home/u/.manyoyo/runtime/podman/bin/podman')).toMatchObject({ runtime: 'private-podman', runtimeLabel: 'MANYOYO 自带的 Podman', pullCommand: `my podman pull ${REF}` });
+    });
+    test('镜像不存在 / 拉不到才带 imageProblem；未授权等不带；没有合规版本号时构建命令用占位', () => {
+        const missing = toFriendlyPullError(Object.assign(new Error('x'), { output: 'manifest unknown' }), REF, 'docker');
+        expect(missing.code).toBe('IMAGE_NOT_FOUND');
+        expect(missing.imageProblem).toMatchObject({ code: 'IMAGE_NOT_FOUND', pullCommand: `docker pull ${REF}` });
+        const network = toFriendlyPullError(Object.assign(new Error('x'), { output: 'dial tcp 1.2.3.4:443 i/o timeout' }), REF, 'podman');
+        expect(network.imageProblem.code).toBe('IMAGE_PULL_FAILED');
+        const denied = toFriendlyPullError(Object.assign(new Error('x'), { output: 'unauthorized: authentication required' }), REF, 'docker');
+        expect(denied.imageProblem).toBeUndefined();
+        expect(describeImageProblem('foo/bar:latest', 'docker').buildCommand).toBe('my build --iv <x.y.z-后缀>');
+    });
+});

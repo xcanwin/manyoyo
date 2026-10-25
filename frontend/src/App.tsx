@@ -4,6 +4,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { ResizeHandle } from "@/components/resize-handle"
 import { SetupWizard } from "@/components/setup-wizard"
 import { UpdateBanner } from "@/components/update-banner"
+import { ImageProblemDialog } from "@/components/image-problem-dialog"
 import { WorkspacePanel } from "@/components/workspace-panel"
 import { buildDocumentTitle } from "@/lib/chat-behavior"
 import { useResizableWidth } from "@/hooks/use-resizable-width"
@@ -186,6 +187,7 @@ export function App() {
       {/* 一次性的操作结果（成功 / 失败）统一用 toast；表单校验、断线这类持续状态仍然就地显示 */}
       <Toaster position="top-center" />
       <UpdateBanner />
+      <ImageProblemDialog />
     </SidebarProvider>
   )
 }

@@ -25,7 +25,7 @@ const SOURCE_LABELS: Record<string, string> = {
 const SKILL_COLUMNS: DataColumn<Skill>[] = [
   { key: "name", header: "名称", mono: true, primary: true, render: (s) => s.name },
   { key: "source", header: "来源", render: (s) => SOURCE_LABELS[s.source] ?? s.source },
-  { key: "description", header: "说明", render: (s) => s.description || "—" },
+  { key: "description", header: "说明", className: "min-w-64 whitespace-normal", render: (s) => s.description || "—" },
 ]
 
 const MCP_COLUMNS: DataColumn<Mcp>[] = [

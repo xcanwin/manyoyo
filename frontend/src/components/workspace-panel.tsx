@@ -121,6 +121,7 @@ import { EffortMenu } from "@/components/effort-menu"
 import { ContextMeter } from "@/components/context-meter"
 import { EXECUTE_PLAN_PROMPT, loadPlanMode, planExecuteTarget, savePlanMode } from "@/lib/plan-mode"
 import { buildReviewPrompt, lastAgentReply, matchWebCommand, reviewBlockedReason } from "@/lib/web-commands"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { RecapLine } from "@/components/recap-line"
 import { SideAnswer } from "@/components/side-answer"
 import { useSideQuestion } from "@/hooks/use-side-question"
@@ -1060,7 +1061,7 @@ export function Composer({
       {/* 输入框和按钮放在同一个圆角框里：按钮只显示图标，悬停看 title，读屏读 aria-label */}
       <div
         className={cn(
-          "relative rounded-xl border bg-background pt-1 shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
+          "relative rounded-xl border bg-background pt-1 shadow-md transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
           inputDisabled && "opacity-70"
         )}
       >
@@ -1474,6 +1475,7 @@ export function WorkspacePanel({
     sending || messages.some((message) => message.mode === "agent" && message.pending === true)
 
   const sideQuestion = useSideQuestion(activeSessionName)
+  const { confirm: confirmFork, dialog: forkDialog } = useConfirmDialog()
 
   // 计划模式开关：按会话记（localStorage），发送一次后自动关
   const [planBySession, setPlanBySession] = React.useState<Record<string, boolean>>({})
@@ -1824,6 +1826,14 @@ export function WorkspacePanel({
   // 分叉：同容器新建一个 AGENT，带着这条提示词之前的对话（不给 id 就是全部），提示词放进新 AGENT 的输入框；原 AGENT 不变
   async function forkSession(messageId?: string) {
     if (!activeSession) return
+    const ok = await confirmFork({
+      title: "分叉出一个新的 AGENT？",
+      message: messageId
+        ? "会在这个容器里新建一个 AGENT，带着这条提示词之前的对话，这条提示词放进它的输入框，你可以改完再发。原来的 AGENT 不变。两个 AGENT 共用同一个工作目录，文件不会复制，同时改文件会互相影响。"
+        : "会在这个容器里新建一个 AGENT，带着现在的全部对话，接着往下聊。原来的 AGENT 不变。两个 AGENT 共用同一个工作目录，文件不会复制，同时改文件会互相影响。",
+      confirmLabel: "分叉",
+    })
+    if (!ok) return
     if (!(await confirmLeaveIfDirty())) return
     try {
       const data = await apiPost(
@@ -2562,6 +2572,7 @@ export function WorkspacePanel({
 
       {view === "activity" && !emptyConversation ? composerNode : null}
 
+      {forkDialog}
       <RewindDialog
         open={rewindTarget !== null}
         sessionName={activeSession?.name ?? ""}

@@ -25,12 +25,14 @@ If you already have a Claude Code key, a dashed card below the list says "The Zh
 
 ## Models and auto-compaction (Claude Code)
 
-When editing a Claude Code service, expand "More model settings" to set the Opus, Sonnet, Haiku and Fable tier models and the model used by sub-agents; blank means unset. You can also turn on "Compact only at 1M context" (only if the model supports a 1M context). A model picked in web chat takes precedence. These only change the run profile; existing containers do not follow.
+When adding or editing a Claude Code service, expand "More model settings" to set the top (Fable), high (Opus), standard (Sonnet) and light (Haiku) tier models and the model used by sub-agents; blank means unset. "Context size to auto-compact at" takes a number (for example 1000000; blank means unset) — fill it in when the model supports a larger context. A model picked in web chat takes precedence. These only change the run profile; existing containers do not follow.
 
 ## Providers
 
 | Provider | Claude Code CLI | Codex CLI | Notes |
 |---|---|---|---|
+| Anthropic (official) | ✓ | — | Use an Anthropic API key |
+| OpenAI (official) | — | ✓ | Enter the model name yourself; the official-key flow is untested |
 | Zhipu GLM | ✓ | ✓ (`glm-5.3`) | Plan keys and pay-as-you-go keys are not interchangeable; the wrong one reports insufficient quota |
 | DeepSeek | ✓ | ✓ (`deepseek-flash`) | Create the key on the DeepSeek platform |
 | Kimi | ✓ | ✓ | For Codex, enter the model name yourself |

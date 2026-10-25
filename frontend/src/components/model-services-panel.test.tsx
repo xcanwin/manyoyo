@@ -266,7 +266,6 @@ describe("ModelServicesPanel", () => {
     // 有容器还在用旧设置时只提示，不默认勾选“同时更新”（会改动别的容器的环境变量，要用户自己决定）
     expect(put?.body).toMatchObject({ model: "glm-5.3", baseUrl: "" })
     expect(put?.body).not.toHaveProperty("key")
-    expect(put?.body).not.toHaveProperty("autoCompact1m")
   })
 
   test("编辑 Claude：展开“更多模型设置”，填档位模型并打开自动压缩开关", async () => {

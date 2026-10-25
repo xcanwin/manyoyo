@@ -602,6 +602,8 @@ export type ContainerGroup = {
   pinned?: boolean
 }
 
+export const IMAGE_PROBLEM_EVENT = "manyoyo:image-problem"
+
 async function request(url: string, options: RequestInit = {}) {
   const response = await fetch(url, {
     ...options,
@@ -623,6 +625,10 @@ async function request(url: string, options: RequestInit = {}) {
   }
   if (!response.ok) {
     const fallback = response.status === 413 ? "内容太大，被前面的代理拦住了（nginx 需调大 client_max_body_size）" : `请求失败 (${response.status})`
+    // 镜像不存在 / 拉不到：全站统一弹窗告诉用户怎么办（toast 太快就消失了），见 image-problem-dialog.tsx
+    if (data.imageProblem && typeof data.imageProblem === "object" && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(IMAGE_PROBLEM_EVENT, { detail: data.imageProblem }))
+    }
     const error = typeof data.error === "string" ? data.error : fallback
     const detail = typeof data.detail === "string" ? data.detail : ""
     throw Object.assign(new Error(detail ? `${error}: ${detail}` : error), { status: response.status, data })

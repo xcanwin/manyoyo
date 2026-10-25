@@ -32,12 +32,17 @@ export function DirectoryPickerDialog({
   const [error, setError] = React.useState("")
   const [newDirName, setNewDirName] = React.useState("")
 
-  const load = React.useCallback((path: string) => {
+  // fallbackToHome：初始目录不存在（比如新建容器预填的工作目录还没建）时，不报错，直接回到用户主目录
+  const load = React.useCallback((path: string, fallbackToHome = false) => {
     setLoading(true)
     setError("")
-    const params = new URLSearchParams()
-    if (path) params.set("path", path)
-    apiGet(`/api/fs/directories?${params.toString()}`)
+    const fetchDir = (target: string) => {
+      const params = new URLSearchParams()
+      if (target) params.set("path", target)
+      return apiGet(`/api/fs/directories?${params.toString()}`)
+    }
+    fetchDir(path)
+      .catch((err) => (fallbackToHome && path ? fetchDir("") : Promise.reject(err)))
       .then((data) => {
         setCurrentPath(String(data.currentPath || ""))
         setParentPath(
@@ -64,7 +69,7 @@ export function DirectoryPickerDialog({
 
   React.useEffect(() => {
     if (!open) return
-    queueMicrotask(() => load(initialPath))
+    queueMicrotask(() => load(initialPath, true))
   }, [open, initialPath, load])
 
   async function handleCreateDir() {
@@ -129,6 +134,9 @@ export function DirectoryPickerDialog({
           </div>
         </div>
 
+        <Hint className="shrink-0">
+          尽量新建一个空白目录并选择它，避免容器看到过多的宿主机文件。
+        </Hint>
         <div className="flex shrink-0 gap-2">
           <Input
             placeholder="新建目录名称"

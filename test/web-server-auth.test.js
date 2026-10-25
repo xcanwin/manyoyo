@@ -6309,6 +6309,10 @@ exit 1
                 const res = await call('POST', '/api/sessions', { createOptions: { hostPath: tempHost } });
                 expect(res.response.status).toBeGreaterThanOrEqual(400);
                 expect(JSON.stringify(res.json)).toContain('不存在');
+                // 网页用弹窗告诉用户怎么办：结构化信息里有拉取命令和构建命令
+                expect(res.json.imageProblem).toMatchObject({ code: 'IMAGE_NOT_FOUND', runtime: 'docker' });
+                expect(res.json.imageProblem.pullCommand).toMatch(/^docker pull .+:\d+\.\d+\.\d+-/);
+                expect(res.json.imageProblem.buildCommand).toMatch(/^my build --iv \d+\.\d+\.\d+-/);
                 expect(dockerCalls).not.toContain('run');
             });
         });

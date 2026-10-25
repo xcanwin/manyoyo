@@ -25,8 +25,9 @@ describe('服务商预设', () => {
     });
 
     test('Codex 只收确认支持 Responses 的五家（DeepSeek 文档没讲，但用真实 Key 实测对话和调工具都通）；Gemini / OpenCode 没有', () => {
-        expect(providersForAgent('codex').map(item => item.id)).toEqual(['deepseek', 'zhipu', 'kimi', 'volcengine', 'minimax']);
+        expect(providersForAgent('codex').map(item => item.id)).toEqual(['openai', 'deepseek', 'zhipu', 'kimi', 'volcengine', 'minimax']);
         expect(providersForAgent('codex').map(item => item.baseUrl)).toEqual([
+            'https://api.openai.com/v1',
             'https://api.deepseek.com',
             'https://open.bigmodel.cn/api/v1',
             'https://api.moonshot.cn/v1',
@@ -36,7 +37,8 @@ describe('服务商预设', () => {
         providersForAgent('codex').forEach(item => expect(item.keyEnv).toBe('OPENAI_API_KEY'));
         expect(providersForAgent('gemini')).toEqual([]);
         expect(providersForAgent('opencode')).toEqual([]);
-        expect(providersForAgent('claude').length).toBe(PROVIDER_PRESETS.length);
+        expect(providersForAgent('claude').length).toBe(PROVIDER_PRESETS.length - 1);
+        expect(providersForAgent('claude')[0]).toMatchObject({ id: 'anthropic', baseUrl: 'https://api.anthropic.com', keyEnv: 'ANTHROPIC_API_KEY' });
     });
 
     test('Codex 条目带自己的官方说明链接（有就用，没有退回通用的）', () => {
@@ -74,7 +76,7 @@ describe('服务商预设', () => {
     test('经 listSetupAgents 下发，且 ANTHROPIC_API_KEY 能通过向导的保存校验', () => {
         const claude = listSetupAgents().find(agent => agent.id === 'claude');
         expect(claude.providers.length).toBeGreaterThan(0);
-        expect(listSetupAgents().find(agent => agent.id === 'codex').providers.length).toBe(5);
+        expect(listSetupAgents().find(agent => agent.id === 'codex').providers.length).toBe(6);
         const profile = buildAgentRunProfile('claude', { ANTHROPIC_API_KEY: 'k-123456', ANTHROPIC_BASE_URL: 'https://api.kimi.ai/coding/' }, {});
         expect(profile.env.ANTHROPIC_API_KEY).toBe('k-123456');
     });

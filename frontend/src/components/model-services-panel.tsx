@@ -7,7 +7,6 @@ import { DataTable, type DataColumn } from "@/components/data-table"
 import { CodeBlock } from "@/components/code-block"
 import { Hint } from "@/components/hint"
 import { SectionToggle } from "@/components/section-toggle"
-import { Switch } from "@/components/ui/switch"
 import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -59,7 +58,7 @@ import {
   testModelService,
   updateModelService,
   validateServiceForm,
-  AUTO_COMPACT_1M,
+  AUTO_COMPACT_HINT,
   CLAUDE_MODEL_FIELDS,
   EMPTY_CLAUDE_MODELS,
   type ImportPreview,
@@ -206,7 +205,6 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
         name: service.name,
         models: { ...EMPTY_CLAUDE_MODELS, ...(service.models ?? {}) },
         autoCompactWindow: service.autoCompactWindow ?? "",
-        autoCompact1m: service.autoCompactWindow === AUTO_COMPACT_1M,
       },
     })
   }
@@ -732,7 +730,7 @@ function ServiceDialog({
                     />
                   </Field>
                 ) : null}
-                {editing && form.agent === "claude" && !subscriptionOnly ? (
+                {form.agent === "claude" && !subscriptionOnly ? (
                   <SectionToggle title="更多模型设置">
                     <FieldGroup>
                       {CLAUDE_MODEL_FIELDS.map((item) => (
@@ -756,26 +754,23 @@ function ServiceDialog({
                           />
                         </Field>
                       ))}
-                      <Field orientation="horizontal">
-                        <div className="flex min-w-0 flex-1 flex-col gap-1">
-                          <FieldLabel htmlFor="ms-auto-compact">
-                            上下文到 100 万才自动压缩
-                          </FieldLabel>
-                          <FieldDescription>
-                            模型支持 100 万上下文时再开。
-                            {form.autoCompactWindow &&
-                            form.autoCompactWindow !== AUTO_COMPACT_1M
-                              ? `当前设置为 ${form.autoCompactWindow}，打开会改成 100 万。`
-                              : ""}
-                          </FieldDescription>
-                        </div>
-                        <Switch
+                      <Field>
+                        <FieldLabel htmlFor="ms-auto-compact">
+                          上下文到多大才自动压缩
+                          <Hint>（可选）</Hint>
+                        </FieldLabel>
+                        <Input
                           id="ms-auto-compact"
-                          checked={form.autoCompact1m}
-                          onCheckedChange={(checked) =>
-                            patch({ autoCompact1m: checked })
+                          inputMode="numeric"
+                          value={form.autoCompactWindow}
+                          placeholder={AUTO_COMPACT_HINT}
+                          onChange={(event) =>
+                            patch({ autoCompactWindow: event.target.value })
                           }
                         />
+                        <FieldDescription>
+                          填字数（token）；留空表示不设置。模型支持更大的上下文时再填。
+                        </FieldDescription>
                       </Field>
                       <FieldDescription>
                         网页聊天里选了模型时，以选的为准。
