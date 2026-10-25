@@ -56,3 +56,16 @@ describe('分叉的收尾（finalizeWebAgentExecution）', () => {
         expect(read()).toMatchObject({ engineSessionId: ORIGINAL, forkPending: false, rewindToUuid: '' });
     });
 });
+
+describe('提前记下引擎会话 id（extractEarlyEngineSessionId）', () => {
+    const { extractEarlyEngineSessionId } = __testing;
+    test('claude 的 init、codex 的 thread.started 才算；别的事件、别的 Agent、非法 id 都不算', () => {
+        expect(extractEarlyEngineSessionId('claude', { type: 'system', subtype: 'init', session_id: ORIGINAL })).toBe(ORIGINAL);
+        expect(extractEarlyEngineSessionId('codex', { type: 'thread.started', thread_id: '01a173d2-aed8-76e2-90a3-56f7516b7abe' })).toBe('01a173d2-aed8-76e2-90a3-56f7516b7abe');
+        expect(extractEarlyEngineSessionId('claude', { type: 'result', session_id: ORIGINAL })).toBe('');
+        expect(extractEarlyEngineSessionId('codex', { type: 'system', subtype: 'init', session_id: ORIGINAL })).toBe('');
+        expect(extractEarlyEngineSessionId('gemini', { type: 'system', subtype: 'init', session_id: ORIGINAL })).toBe('');
+        expect(extractEarlyEngineSessionId('claude', { type: 'system', subtype: 'init', session_id: 'x; rm -rf /' })).toBe('');
+        expect(extractEarlyEngineSessionId('claude', null)).toBe('');
+    });
+});
