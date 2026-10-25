@@ -95,9 +95,9 @@ export function MirrorPanel({ onSaved }: { onSaved?: () => void } = {}) {
         </Alert>
       ) : null}
       <div>
-        <Button type="button" onClick={handleSave} disabled={saving}>
+        <Button type="button" variant="outline" onClick={handleSave} disabled={saving}>
           {saving ? <Spinner data-icon="inline-start" /> : null}
-          保存
+          保存软件源
         </Button>
       </div>
     </div>

@@ -458,7 +458,7 @@ function ConfigValueGroup({
     // 二级及以下：不再套框，小标题加说明，子字段整体左缩进并带一条竖线；
     // 标题和子字段之间不画分割线（子字段本来就属于它）
     return (
-      <FieldSet>
+      <FieldSet className="min-w-0">
         <div className="flex flex-col gap-1">
           <FieldLegend
             variant="label"

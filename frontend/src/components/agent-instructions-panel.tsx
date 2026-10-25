@@ -134,11 +134,12 @@ export function AgentInstructionsPanel({
       <div>
         <Button
           type="button"
+          variant="outline"
           onClick={() => void handleSave()}
           disabled={saving}
         >
           {saving ? <Spinner data-icon="inline-start" /> : null}
-          保存
+          保存系统提示词
         </Button>
       </div>
     </FieldGroup>

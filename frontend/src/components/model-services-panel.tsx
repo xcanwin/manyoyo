@@ -718,10 +718,14 @@ function ServiceDialog({
                       checked={sync}
                       onChange={(event) => setSync(event.target.checked)}
                     />
-                    <FieldLabel htmlFor="ms-sync">
-                      同时更新 {using.length} 个还在用旧设置的容器（
-                      {using.join("、")}），下一轮对话生效
-                    </FieldLabel>
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <FieldLabel htmlFor="ms-sync">
+                        同时更新 {using.length} 个还在用旧设置的容器
+                      </FieldLabel>
+                      <FieldDescription>
+                        下一轮对话生效：{using.join("、")}
+                      </FieldDescription>
+                    </div>
                   </Field>
                 ) : null}
                 {!editing ? (

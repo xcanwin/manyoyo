@@ -220,7 +220,7 @@ describe("系统设置：保存不覆盖别人的修改", () => {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(npm, "https://registry.npmmirror.com/")
       npm.dispatchEvent(new Event("change", { bubbles: true }))
     })
-    const saves = Array.from(document.body.querySelectorAll("button")).filter((b) => b.textContent?.trim() === "保存")
+    const saves = Array.from(document.body.querySelectorAll("button")).filter((b) => b.textContent?.trim() === "保存软件源")
     await click(saves[0]) // 软件源面板自己的保存
     expect(server.raw).toContain("registry.npmmirror.com")
     await click(saveOuter()) // 底部保存
