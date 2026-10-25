@@ -1001,7 +1001,7 @@ export function SystemSettingsDialog({
                       ) : null}
                       <TabsTrigger
                         value={category.id}
-                        className="text-foreground after:hidden hover:bg-muted/60 group-data-[variant=line]/tabs-list:hover:bg-muted/60 dark:text-foreground group-data-[variant=line]/tabs-list:data-active:bg-muted dark:group-data-[variant=line]/tabs-list:data-active:bg-muted"
+                        className="text-foreground after:hidden hover:bg-muted/70 group-data-[variant=line]/tabs-list:hover:bg-muted/70 dark:text-foreground group-data-[variant=line]/tabs-list:data-active:bg-muted dark:group-data-[variant=line]/tabs-list:data-active:bg-muted"
                       >
                         {category.label}
                       </TabsTrigger>

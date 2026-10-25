@@ -87,6 +87,16 @@ export const RULES = [
       ),
   },
   {
+    id: "hover-weak",
+    describe:
+      "悬停底色至少 /70（亮色主题下才有 0.03 以上的亮度差，STYLE.md 第 3 节）",
+    count: (source) =>
+      countMatches(
+        source,
+        /hover:bg-(?:muted|accent|secondary)\/(?:[0-6]\d|\d)(?!\d)/g
+      ),
+  },
+  {
     id: "space",
     describe: "用 flex / grid + gap-*，不用 space-x-* / space-y-*",
     count: (source) =>

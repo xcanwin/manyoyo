@@ -171,8 +171,10 @@ export function DataTable<T>({
             key={rowKey(row)}
             data-testid={rowTestId?.(row)}
             className={cn(
+              // 悬停底色至少 /70：亮色主题下才有 0.03 以上的亮度差（STYLE.md 第 3 节）；ui/table.tsx 里的 /50 太浅
+              "hover:bg-muted/70",
               onRowClick &&
-                "cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none"
+                "cursor-pointer focus-visible:bg-muted/70 focus-visible:outline-none"
             )}
             tabIndex={onRowClick ? 0 : undefined}
             onClick={onRowClick ? () => onRowClick(row) : undefined}

@@ -191,7 +191,7 @@ export function EnvEditor({
                     {hidden ? <EyeIcon /> : <EyeOffIcon />}
                   </Button>
                 ) : mobile ? null : (
-                  <span className="size-8 shrink-0" aria-hidden />
+                  <span className="size-7 shrink-0" aria-hidden />
                 )}
                 <Button
                   type="button"
@@ -217,7 +217,7 @@ export function EnvEditor({
               <div key={index} data-slot="env-row" data-layout="inline" className="flex items-start gap-2">
                 {nameInput}
                 {valueInput}
-                {actions}
+                <div className="flex h-8 shrink-0 items-center gap-2">{actions}</div>
               </div>
             )
           })}
