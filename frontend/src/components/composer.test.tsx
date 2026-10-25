@@ -155,17 +155,35 @@ describe("输入框补全", () => {
     const calls: string[] = []
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       calls.push(decodeURIComponent(String(url)))
-      if (String(url).includes("/slash-commands")) return new Response(JSON.stringify({ commands: ["compact", "my-skill"] }))
+      if (String(url).includes("/slash-commands")) return new Response(JSON.stringify({ commands: [{ name: "compact", description: "" }, { name: "my-skill", description: "我的技能" }] }))
       return new Response("{}")
     }))
     const onSend = vi.fn()
     await act(async () => root.render(<Stateful onSend={onSend} />))
     await type("/my")
     expect(container.querySelector('[role="listbox"]')?.textContent).toContain("/my-skill")
+    expect(container.querySelector('[role="listbox"]')?.textContent).toContain("我的技能")
     expect(container.querySelector('[role="listbox"]')?.textContent).not.toContain("compact")
     await key("Enter")
     expect(onSend).not.toHaveBeenCalled()
     expect(textarea().value).toBe("/my-skill ")
+  })
+
+  test("codex 也能用 /：只有网页命令；网页命令在命令目录回来之前就可选", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ commands: [] }))))
+    function CodexBox() {
+      const [draft, setDraft] = React.useState("")
+      return (
+        <Composer draft={draft} onDraftChange={setDraft} onSend={() => {}} onStop={() => {}} mode="agent" onModeChange={() => {}}
+          disabled={false} sending={false} session={{ ...session, name: "codex-demo", agentProgram: "codex" }} onOpenCliTemplate={() => {}} onModelChanged={() => {}} queueWhen="turn" onQueueWhenChange={() => {}} />
+      )
+    }
+    await act(async () => root.render(<CodexBox />))
+    await type("/mo")
+    const options = Array.from(container.querySelectorAll('[role="option"]')).map((el) => el.textContent)
+    expect(options).toHaveLength(1)
+    expect(options[0]).toContain("/model")
+    expect(options[0]).toContain("打开模型菜单")
   })
 
   test("打 @ 按目录和前缀列文件（带数量上限）；选目录继续往下补全，选文件插入相对路径", async () => {
@@ -189,12 +207,12 @@ describe("输入框补全", () => {
   })
 
   test("Esc 关掉弹层，这时 Enter 照常发送", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ commands: ["compact"] }))))
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ commands: [{ name: "compact", description: "" }] }))))
     const onSend = vi.fn()
     await act(async () => root.render(<Stateful onSend={onSend} />))
     await type("/co")
     const options = Array.from(container.querySelectorAll('[role="option"]')).map((el) => el.textContent)
-    expect(options[0]).toBe("/compact")
+    expect(options.some((text) => text?.startsWith("/compact"))).toBe(true)
     await key("Escape")
     expect(container.querySelector('[role="listbox"]')).toBeNull()
     await key("Enter")
@@ -203,7 +221,7 @@ describe("输入框补全", () => {
 })
 
 test("Esc 关掉补全后，继续输入会重新弹出", async () => {
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ commands: ["compact"] }))))
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ commands: [{ name: "compact", description: "" }] }))))
   function Box() {
     const [draft, setDraft] = React.useState("")
     return (

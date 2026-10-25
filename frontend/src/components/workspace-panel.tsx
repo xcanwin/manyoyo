@@ -112,7 +112,9 @@ import { ChangesPanel } from "@/components/changes-panel"
 import { useComposerSuggestions } from "@/components/composer-suggestions"
 import { HtmlPreviewPanel, type HtmlPreviewState } from "@/components/html-preview-panel"
 import { MarkdownContent } from "@/components/markdown-content"
+import { toast } from "sonner"
 import { ModelMenu } from "@/components/model-menu"
+import { lastAgentReply, matchWebCommand } from "@/lib/web-commands"
 import { TerminalView } from "@/components/terminal-view"
 import {
   DropdownMenu,
@@ -1702,9 +1704,51 @@ export function WorkspacePanel({
     if (result.scope === "files") void requestSync(true, true)
   }
 
+  // 网页自己处理的斜杠命令（lib/web-commands.ts）：不发给 Agent
+  async function runWebCommand(name: string) {
+    if (!activeSession) return
+    if (name === "model") {
+      document.querySelector<HTMLButtonElement>('button[aria-label^="选择模型"]')?.click()
+    } else if (name === "status") {
+      void changeView("detail")
+    } else if (name === "diff") {
+      void changeView("changes")
+    } else if (name === "copy") {
+      const reply = lastAgentReply(messages)
+      if (!reply) {
+        toast.error("还没有可复制的回复")
+        return
+      }
+      try {
+        await navigator.clipboard.writeText(reply)
+        toast.success("已复制最后一条回复")
+      } catch {
+        toast.error("复制失败，请手动选中复制")
+      }
+    } else if (name === "clear") {
+      if (!(await confirmLeaveIfDirty())) return
+      try {
+        const data = await apiPost(`/api/sessions/${encodeURIComponent(activeSession.containerName)}/agents`, {})
+        const newName = typeof data.name === "string" ? data.name : ""
+        await onAfterSend()
+        if (newName) window.location.hash = `#${encodeURIComponent(newName)}`
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "新建 AGENT 失败")
+      }
+    }
+  }
+
   // overrideText：不经输入框直接发送一条（“允许并重试”重发被中止的提示词，连图片一起），输入框里正在写的内容不动
   async function handleSend(overrideText?: string, overrideImages?: string[]) {
     const fromDraft = overrideText === undefined
+    if (fromDraft && mode === "agent" && activeSession && composerImages.images.length === 0) {
+      const hit = matchWebCommand(draft, activeSession.agentProgram)
+      if (hit) {
+        updateDraft("")
+        await runWebCommand(hit.command.name)
+        return
+      }
+    }
     const sendImages = fromDraft ? composerImages.paths : (overrideImages ?? [])
     // 只发图片没写字：给一句默认的话（服务端要求提示词非空）
     const text = (fromDraft ? draft : overrideText).trim() || (sendImages.length ? "请看附图。" : "")

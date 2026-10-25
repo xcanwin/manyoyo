@@ -5,16 +5,19 @@ import { FileIcon, FolderIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { apiGet, type SessionSummary } from "@/lib/api"
 import { applySuggestion, parseSuggestTrigger, type SuggestTrigger } from "@/lib/composer-suggest"
+import { listWebCommands } from "@/lib/web-commands"
 
 type Item = { key: string; label: string; detail?: string; kind: "command" | "directory" | "file"; insert: string }
 
 const MENTION_DEBOUNCE_MS = 150
 const MENTION_LIMIT = 50
 
-// 斜杠命令列表按会话缓存：同一会话里只请求一次（服务端从最近一次运行的 init 里记下，只列实测可用的）
-const slashCache = new Map<string, string[]>()
+type SlashEntry = { name: string; description: string; argumentHint?: string }
 
-// 输入框补全：开头打 “/” 列出可用的斜杠命令（目前只有 claude 有），打 “@” 列出工作目录里的文件。
+// Agent 自己的斜杠命令按会话缓存：同一会话里只请求一次（服务端按命令目录 / 最近一次运行的 init 给出，只列实测可用的）
+const slashCache = new Map<string, SlashEntry[]>()
+
+// 输入框补全：开头打 “/” 列出网页命令和 Agent 透传的命令（带说明），打 “@” 列出工作目录里的文件。
 // 弹层显示在输入框上方，焦点一直留在输入框里：↑↓ 选择、Enter / Tab 确认、Esc 关闭。输入法组词期间不触发
 export function useComposerSuggestions({
   session,
@@ -41,11 +44,11 @@ export function useComposerSuggestions({
     if (!enabled || composing || !session) return null
     const parsed = parseSuggestTrigger(draft, caret)
     if (!parsed || parsed.start === dismissedAt) return null
-    if (parsed.kind === "slash" && session.agentProgram !== "claude") return null
     return parsed
   }, [enabled, composing, session, draft, caret, dismissedAt])
 
   const sessionName = session?.name ?? ""
+  const agentProgram = session?.agentProgram ?? ""
   const containerPath = session?.containerPath || "/"
   const triggerKey = trigger ? (trigger.kind === "slash" ? `slash:${trigger.query}` : `mention:${trigger.dir}:${trigger.prefix}`) : ""
 
@@ -55,26 +58,40 @@ export function useComposerSuggestions({
     }
     let cancelled = false
     if (trigger.kind === "slash") {
-      const show = (commands: string[]) => {
+      // 网页命令立刻可用；Agent 自己的命令回来后补上（同名时网页命令优先）
+      const web: SlashEntry[] = listWebCommands(agentProgram)
+      const show = (agentCommands: SlashEntry[]) => {
         if (cancelled) return
+        const names = new Set(web.map((item) => item.name))
+        const commands = [...web, ...agentCommands.filter((item) => !names.has(item.name))]
         const query = trigger.query.toLowerCase()
         // 名字以输入开头的排前面，其次是包含输入的
         const lower = (name: string) => name.toLowerCase()
         const matched = [
-          ...commands.filter((name) => lower(name).startsWith(query)),
-          ...commands.filter((name) => !lower(name).startsWith(query) && lower(name).includes(query)),
+          ...commands.filter((item) => lower(item.name).startsWith(query)),
+          ...commands.filter((item) => !lower(item.name).startsWith(query) && lower(item.name).includes(query)),
         ].slice(0, 50)
-        setResult({ key: triggerKey, items: matched.map((name) => ({ key: name, label: `/${name}`, kind: "command", insert: `/${name} ` })) })
+        setResult({
+          key: triggerKey,
+          items: matched.map((item) => ({
+            key: item.name,
+            label: `/${item.name}`,
+            detail: item.description,
+            kind: "command",
+            insert: `/${item.name} `,
+          })),
+        })
         setActiveIndex(0)
       }
       const cached = slashCache.get(sessionName)
       if (cached) {
         queueMicrotask(() => show(cached))
       } else {
+        queueMicrotask(() => show([]))
         apiGet(`/api/sessions/${encodeURIComponent(sessionName)}/slash-commands`)
           .then((data) => {
-            const commands = Array.isArray(data.commands) ? (data.commands as string[]) : []
-            // 还没跑过（列表为空）时不缓存：跑过一次之后再打 / 就能拿到
+            const commands = Array.isArray(data.commands) ? (data.commands as SlashEntry[]) : []
+            // 取不到（列表为空）时不缓存，下次再打 / 重试
             if (commands.length) slashCache.set(sessionName, commands)
             show(commands)
           })
@@ -119,7 +136,7 @@ export function useComposerSuggestions({
     }
     // triggerKey 已经概括了 trigger 里会影响请求的部分
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerKey, sessionName, containerPath])
+  }, [triggerKey, sessionName, containerPath, agentProgram])
 
   const items = result.key === triggerKey ? result.items : []
   const open = Boolean(trigger) && items.length > 0

@@ -49,6 +49,15 @@ fs.writeFileSync(${JSON.stringify(argvLog)}, JSON.stringify(process.argv.slice(2
 const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', '-workspace');
 fs.mkdirSync(dir, { recursive: true });
 fs.appendFileSync(path.join(dir, '${SESSION_ID}.jsonl'), '{"type":"user","x":1}\\n{"type":"ai-title","aiTitle":"旧标题","sessionId":"${SESSION_ID}"}\\n{"type":"ai-title","aiTitle":"  修复登录\\\\u0007页面 <b>bug</b>  ","sessionId":"${SESSION_ID}"}\\n');
+if (process.argv.includes('--input-format')) {
+  // 协议探测（斜杠命令目录 / 模型目录）：直接回 initialize 的响应（假 docker 不转发 stdin），不跑模型
+  const fixture = JSON.parse(fs.readFileSync(${JSON.stringify(path.join(__dirname, 'fixtures', 'claude-initialize.json'))}, 'utf8'));
+  for (const id of ['manyoyo-command-catalog', 'manyoyo-model-catalog']) {
+    fixture.response.request_id = id;
+    process.stdout.write(JSON.stringify(fixture) + '\\n');
+  }
+  process.exit(0);
+}
 const out = [
   { type: 'system', subtype: 'init', session_id: '${SESSION_ID}', slash_commands: ['compact', 'color', 'my-skill', 'bad name!', 'doctor'], skills: ['my-skill', 'doctor'], terminal_slash_commands: ['doctor', 'color'] },
   { type: 'assistant', message: { content: [{ type: 'text', text: '好' }] } },
@@ -234,11 +243,32 @@ describe('环境说明、标题、首条消息、斜杠命令', () => {
 
             const commands = await request(`${baseUrl}/api/sessions/demo/slash-commands`, { headers: { Cookie: cookie } });
             // skill 列出；终端专用（doctor、color）不列；名字不合法的丢掉；内置命令只列实测可用的
-            expect(commands.json.commands).toContain('my-skill');
-            expect(commands.json.commands).not.toContain('doctor');
-            expect(commands.json.commands).not.toContain('color');
-            expect(commands.json.commands).not.toContain('bad name!');
+            const names = commands.json.commands.map(item => item.name);
+            expect(names).toContain('my-skill');
+            expect(names).not.toContain('doctor');
+            expect(names).not.toContain('color');
+            expect(names).not.toContain('bad name!');
+            // 每项都是 { name, description, argumentHint }（目录里没有的，说明为空）
+            expect(commands.json.commands.find(item => item.name === 'my-skill')).toEqual({ name: 'my-skill', description: '', argumentHint: '', source: '' });
         }, { agentInstructions: '全局说明' });
+    });
+});
+
+describe('斜杠命令候选：新 AGENT 没跑过一轮也有', () => {
+    test('用 initialize 目录：带说明、不含内部命令；结果按容器缓存', async () => {
+        await withServer(async ({ baseUrl, cookie }) => {
+            const unauth = await request(`${baseUrl}/api/sessions/demo/slash-commands`);
+            expect(unauth.response.status).toBe(401);
+            const commands = await request(`${baseUrl}/api/sessions/demo/slash-commands`, { headers: { Cookie: cookie } });
+            expect(commands.response.status).toBe(200);
+            expect(commands.json.agentProgram).toBe('claude');
+            const names = commands.json.commands.map(item => item.name);
+            expect(names).toEqual(expect.arrayContaining(['playwright-cli', 'code-review', 'context']));
+            ['__remote-workflow', 'workflow-launch-exec', 'heapdump', 'clear', 'compact'].forEach(name => expect(names).not.toContain(name));
+            const skill = commands.json.commands.find(item => item.name === 'playwright-cli');
+            expect(skill.description).toMatch(/Playwright/);
+            expect(skill.description).not.toMatch(/\(user\)/);
+        });
     });
 });
 

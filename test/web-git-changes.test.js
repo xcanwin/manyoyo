@@ -121,6 +121,38 @@ describe('会话标题的解析（lib/web/session-meta.js）', () => {
         const usable = sessionMeta.listUsableSlashCommands({ all: ['context', 'compact', 'my-skill', 'doctor', 'clear'], skills: ['my-skill', 'doctor'], terminal: ['doctor'] });
         expect(usable).toEqual(['context', 'my-skill']);
     });
+    test('命令目录：过滤内部命令、清洗不可信文本、拆出来源', () => {
+        const fixture = require('./fixtures/claude-initialize.json').response.response.commands;
+        const catalog = sessionMeta.normalizeCommandCatalog(fixture);
+        const names = catalog.map(item => item.name);
+        expect(names).not.toContain('__remote-workflow');
+        expect(names).not.toContain('workflow-launch-exec');
+        expect(names).not.toContain('heapdump');
+        const user = catalog.find(item => item.name === 'playwright-cli');
+        expect(user.source).toBe('user');
+        expect(user.description).not.toMatch(/\(user\)/);
+        const evil = sessionMeta.normalizeCommandCatalog([
+            { name: 'ok', description: '<script>x</script>\n;rm -rf / (project)', argumentHint: 'a\nb' },
+            { name: 'bad name!', description: 'x' },
+            { name: 'ok', description: 'dup' },
+            'str',
+            null
+        ]);
+        expect(evil).toHaveLength(1);
+        expect(evil[0]).toMatchObject({ name: 'ok', source: 'project', argumentHint: 'a b' });
+        expect(evil[0].description).not.toMatch(/[\n\r]/);
+        expect(sessionMeta.normalizeCommandCatalog('x')).toEqual([]);
+    });
+    test('候选带说明：没跑过一轮时看目录，跑过则以 init 记录为准', () => {
+        const catalog = sessionMeta.normalizeCommandCatalog(require('./fixtures/claude-initialize.json').response.response.commands);
+        const fresh = sessionMeta.listSlashCommandEntries(null, catalog).map(item => item.name);
+        expect(fresh).toEqual(expect.arrayContaining(['playwright-cli', 'code-review', 'loop', 'context', 'usage', 'recap', 'rename', 'mcp', 'list-agents']));
+        ['clear', 'compact', 'model', 'effort'].forEach(name => expect(fresh).not.toContain(name));
+        const ran = sessionMeta.listSlashCommandEntries({ all: ['context', 'compact', 'my-skill', '__x'], skills: ['my-skill', '__x'], terminal: [] }, catalog);
+        expect(ran.map(item => item.name)).toEqual(['context', 'my-skill']);
+        expect(ran[0].description).toMatch(/context/i);
+        expect(ran[1].description).toBe('');
+    });
     test('标题读取命令只接受 UUID 形式的会话 id', () => {
         expect(sessionMeta.buildClaudeTitleReadCommand('0d6c1f6a-1111-4a2b-9c3d-123456789abc')).toContain('custom-title');
         expect(sessionMeta.buildClaudeTitleReadCommand('x; rm -rf /')).toBe('');
