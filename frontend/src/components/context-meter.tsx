@@ -1,11 +1,11 @@
 import * as React from "react"
-import { GaugeIcon } from "lucide-react"
 
 import { Hint } from "@/components/hint"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import {
   cacheHitPercent,
+  contextPercentText,
   contextReadout,
   formatTokens,
   idleHint,
@@ -16,12 +16,10 @@ import {
 export function ContextMeter({
   usage,
   compact = false,
-  size = "icon-lg",
 }: {
   usage: ContextUsage | null | undefined
-  // 手机上一行放不下读数文字：只显示一个图标，读数在点开的浮层里
+  // 手机上只显示百分比（如 “58%”），完整读数在点开的浮层里
   compact?: boolean
-  size?: "icon-lg" | "icon-xl"
 }) {
   const [now, setNow] = React.useState(() => Date.now())
   if (!usage) return null
@@ -34,14 +32,14 @@ export function ContextMeter({
         render={
           <Button
             variant="ghost"
-            size={compact ? size : "sm"}
-            className={compact ? "shrink-0" : "touch-hit shrink-0 font-mono"}
+            size="sm"
+            className="touch-hit shrink-0 font-mono"
             title={`上下文占用：${label}`}
             aria-label={`上下文占用：${label}`}
           />
         }
       >
-        {compact ? <GaugeIcon /> : label}
+        {compact ? contextPercentText(usage) : label}
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="w-72">
         <div className="flex flex-col gap-2">

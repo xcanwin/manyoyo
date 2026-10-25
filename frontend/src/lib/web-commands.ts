@@ -11,7 +11,7 @@ export type WebCommand = {
 
 export const WEB_COMMANDS: WebCommand[] = [
   { name: "model", description: "打开模型菜单" },
-  { name: "effort", description: "设置推理强度，不带参数则打开下拉", argumentHint: "[级别]", agents: ["claude", "codex"] },
+  { name: "effort", description: "设置推理强度，不带参数则打开模型菜单", argumentHint: "[级别]", agents: ["claude", "codex"] },
   { name: "status", description: "打开 Agent 详情" },
   { name: "diff", description: "查看工作目录里的改动" },
   { name: "clear", description: "在这个容器里新建一个 AGENT" },

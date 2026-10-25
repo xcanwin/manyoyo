@@ -117,7 +117,6 @@ import { HtmlPreviewPanel, type HtmlPreviewState } from "@/components/html-previ
 import { MarkdownContent } from "@/components/markdown-content"
 import { toast } from "sonner"
 import { ModelMenu } from "@/components/model-menu"
-import { EffortMenu } from "@/components/effort-menu"
 import { ContextMeter } from "@/components/context-meter"
 import { EXECUTE_PLAN_PROMPT, loadPlanMode, planExecuteTarget, savePlanMode } from "@/lib/plan-mode"
 import { buildReviewPrompt, lastAgentReply, matchWebCommand, reviewBlockedReason } from "@/lib/web-commands"
@@ -1041,9 +1040,6 @@ export function Composer({
   const showSend = !sending || hasDraft || mode === "command"
   // 手机上按钮点击区域不小于 40px，桌面 36px
   const iconSize = isMobile ? "icon-xl" : "icon-lg"
-  // 手机上一行放不下：任务进行中右边要给 插入时机 / 停止 / 发送 留出位置（高频、要快点），
-  // 这时先收起计划模式、推理强度、上下文读数（它们只影响“下一轮”，进行中用不到）
-  const hideExtras = isMobile && sending
   const QueueWhenIcon = QUEUE_WHEN_ICONS[queueWhen]
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -1141,7 +1137,7 @@ export function Composer({
               <DropdownMenuTrigger
                 render={
                   <Button
-                    variant={mode === "command" ? "secondary" : "ghost"}
+                    variant={mode === "command" ? "toggled" : "ghost"}
                     size={iconSize}
                     disabled={disabled}
                     aria-label="切换模式"
@@ -1203,15 +1199,18 @@ export function Composer({
                 </Button>
               </>
             ) : null}
-            {onPlanModeChange && mode === "agent" && session?.agentProgram === "claude" && !hideExtras ? (
+            {onPlanModeChange && mode === "agent" && session?.agentProgram === "claude" ? (
               <Button
-                variant={planMode ? "secondary" : "ghost"}
+                variant={planMode ? "toggled" : "ghost"}
                 size={iconSize}
                 disabled={inputDisabled}
                 aria-label="计划模式"
                 aria-pressed={planMode}
                 title={planMode ? "计划模式已开：这一轮只出计划，不改文件（发送后自动关闭）" : "计划模式：先出计划，不改文件"}
-                onClick={() => onPlanModeChange(!planMode)}
+                onClick={() => {
+                  onPlanModeChange(!planMode)
+                  if (!planMode) toast("已切换到计划模式", { duration: 2000 })
+                }}
               >
                 <ClipboardListIcon />
               </Button>
@@ -1226,17 +1225,8 @@ export function Composer({
                 size={iconSize}
               />
             ) : null}
-            {mode === "agent" && !hideExtras ? (
-              <EffortMenu
-                session={session}
-                disabled={disabled || archived || !session}
-                onChanged={onModelChanged}
-                compact={isMobile}
-                size={iconSize}
-              />
-            ) : null}
-            {mode === "agent" && session?.agentProgram === "claude" && !hideExtras ? (
-              <ContextMeter usage={session.contextUsage} compact={isMobile} size={iconSize} />
+            {mode === "agent" && session?.agentProgram === "claude" ? (
+              <ContextMeter usage={session.contextUsage} compact={isMobile} />
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -1863,7 +1853,7 @@ export function WorkspacePanel({
       if (activeSession.agentProgram !== "claude") return
       const next = !planMode
       setPlanModeFor(activeSession.name, next)
-      toast.success(next ? "计划模式已开：下一轮只出计划，不改文件" : "计划模式已关")
+      if (next) toast("已切换到计划模式", { duration: 2000 })
     } else if (name === "review") {
       await reviewChanges()
     } else if (name === "fork") {
@@ -1887,9 +1877,8 @@ export function WorkspacePanel({
       }
     } else if (name === "effort") {
       if (!args) {
-        const button = document.querySelector<HTMLButtonElement>('button[aria-label^="选择推理强度"]')
-        if (button) button.click()
-        else toast.error("当前模型没有推理强度选项")
+        // 推理强度在模型菜单最下面
+        document.querySelector<HTMLButtonElement>('button[aria-label^="选择模型"]')?.click()
         return
       }
       try {

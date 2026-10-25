@@ -17,6 +17,8 @@ import { PromptDialog } from "@/components/prompt-dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { Hint } from "@/components/hint"
 import { apiGet, apiPost, type SessionSummary } from "@/lib/api"
+import { useEffortOptions } from "@/hooks/use-effort-options"
+import { effortLabel } from "@/lib/effort"
 
 type ModelOption = { value: string; label: string; description?: string }
 type EnvOptions = { defaultModel: string; options: ModelOption[] }
@@ -51,6 +53,8 @@ export function ModelMenu({
   const [customOpen, setCustomOpen] = React.useState(false)
   const sessionName = session?.name ?? null
   const current = session?.model || ""
+  // 推理强度收在模型菜单最下面：和模型一样不常切换
+  const effort = useEffortOptions(session)
 
   // 选项只读宿主机上的 env 文件，毫秒级：换会话时就取一次，按钮上能直接显示默认模型名
   React.useEffect(() => {
@@ -100,6 +104,16 @@ export function ModelMenu({
       onChanged()
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "切换模型失败")
+    }
+  }
+
+  async function selectEffort(value: string) {
+    if (!sessionName) return
+    try {
+      await apiPost(`/api/sessions/${encodeURIComponent(sessionName)}/effort`, { effort: value })
+      onChanged()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "设置推理强度失败")
     }
   }
 
@@ -195,6 +209,24 @@ export function ModelMenu({
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={() => setCustomOpen(true)}>自定义模型名称…</DropdownMenuItem>
             </DropdownMenuGroup>
+            {effort.levels.length > 0 ? (
+              <>
+                <DropdownMenuSeparator className="mx-1 bg-border/50" />
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>推理强度</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={effort.current} onValueChange={(value) => void selectEffort(String(value))}>
+                    <DropdownMenuRadioItem closeOnClick value="">
+                      {effort.envDefault ? `默认（环境变量：${effort.envDefault}）` : "默认"}
+                    </DropdownMenuRadioItem>
+                    {effort.levels.map((level) => (
+                      <DropdownMenuRadioItem closeOnClick key={level} value={level}>
+                        {effortLabel(level)}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuGroup>
+              </>
+            ) : null}
           </div>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 import type { SessionSummary } from "@/lib/api"
 import type { QueueWhen } from "@/lib/queue"
+import { toast } from "sonner"
 import { Composer } from "./workspace-panel"
+
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }))
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -119,25 +122,22 @@ describe("输入区：按钮都在输入框内，只显示图标，按状态切�
   })
 })
 
-describe("手机上一行放不下：任务进行中先收起次要按钮", () => {
-  test("任务进行中收起计划模式 / 推理强度 / 上下文读数，只留 模式、图片、模型 与右边的 插入时机 / 停止 / 发送", async () => {
+describe("底部按钮不随状态增减", () => {
+  const props = { onDraftChange: () => {}, onSend: () => {}, onStop: () => {}, mode: "agent" as const, onModeChange: () => {}, disabled: false, onOpenCliTemplate: () => {}, onModelChanged: () => {}, queueWhen: "turn" as const, onQueueWhenChange: () => {}, planMode: false, onPlanModeChange: () => {}, onAddImages: () => {} }
+  const withUsage = { ...session, contextUsage: { usedTokens: 580_000, window: 1_000_000, inputTokens: 1, cacheReadTokens: 1, cacheCreationTokens: 0, updatedAt: null } } as SessionSummary
+  test("手机：任务进行中和空闲时左边的按钮一样（计划模式、模型、百分比都在），上下文只显示百分比，没有单独的推理强度按钮", async () => {
     mobile = true
     Object.defineProperty(window, "innerWidth", { value: 390, configurable: true })
-    const props = { onDraftChange: () => {}, onSend: () => {}, onStop: () => {}, mode: "agent" as const, onModeChange: () => {}, disabled: false, onOpenCliTemplate: () => {}, onModelChanged: () => {}, queueWhen: "turn" as const, onQueueWhenChange: () => {}, planMode: false, onPlanModeChange: () => {}, onAddImages: () => {} }
-    const withUsage = { ...session, contextUsage: { usedTokens: 4500, window: 1_000_000, inputTokens: 1, cacheReadTokens: 1, cacheCreationTokens: 0, updatedAt: null } } as SessionSummary
-    await act(async () => root.render(<Composer {...props} draft="x" sending={false} session={withUsage} />))
-    expect(button("计划模式")).not.toBeNull()
-    expect(container.querySelector('button[aria-label^="上下文占用"]')).not.toBeNull()
-    await act(async () => root.render(<Composer {...props} draft="x" sending session={withUsage} />))
-    expect(button("计划模式")).toBeNull()
-    expect(container.querySelector('button[aria-label^="上下文占用"]')).toBeNull()
-    for (const label of ["插入时机", "停止", "发送", "切换模式", "添加图片"]) expect([label, button(label) !== null]).toEqual([label, true])
-    expect(container.querySelector('button[aria-label^="选择模型"]')).not.toBeNull()
-  })
-  test("桌面上进行中也都在", async () => {
-    const props = { onDraftChange: () => {}, onSend: () => {}, onStop: () => {}, mode: "agent" as const, onModeChange: () => {}, disabled: false, onOpenCliTemplate: () => {}, onModelChanged: () => {}, queueWhen: "turn" as const, onQueueWhenChange: () => {}, planMode: false, onPlanModeChange: () => {} }
-    await act(async () => root.render(<Composer {...props} draft="x" sending session={session} />))
-    expect(button("计划模式")).not.toBeNull()
+    for (const sending of [false, true]) {
+      await act(async () => root.render(<Composer {...props} draft="x" sending={sending} session={withUsage} />))
+      expect(button("计划模式")).not.toBeNull()
+      expect(button("切换模式")).not.toBeNull()
+      expect(button("添加图片")).not.toBeNull()
+      expect(container.querySelector('button[aria-label^="选择模型"]')).not.toBeNull()
+      expect(container.querySelector('button[aria-label^="上下文占用"]')?.textContent).toBe("58%")
+      expect(container.querySelector('button[aria-label^="选择推理强度"]')).toBeNull()
+    }
+    for (const label of ["插入时机", "停止", "发送"]) expect([label, button(label) !== null]).toEqual([label, true])
   })
 })
 
@@ -157,10 +157,17 @@ describe("计划模式按钮", () => {
     expect(button("计划模式")?.getAttribute("aria-pressed")).toBe("false")
     await act(async () => button("计划模式")!.click())
     expect(onChange).toHaveBeenCalledWith(true)
+    // 打开时提示一下，2 秒后消失
+    expect(toast).toHaveBeenCalledWith("已切换到计划模式", { duration: 2000 })
+    expect(button("计划模式")!.className).not.toContain("bg-foreground/15")
     await renderPlan("claude", true, onChange)
     expect(button("计划模式")?.getAttribute("aria-pressed")).toBe("true")
+    // 选中态用比 secondary 更深的底色
+    expect(button("计划模式")!.className).toContain("bg-foreground/15")
+    vi.mocked(toast).mockClear()
     await act(async () => button("计划模式")!.click())
     expect(onChange).toHaveBeenLastCalledWith(false)
+    expect(toast).not.toHaveBeenCalled()
     await renderPlan("codex", false, onChange)
     expect(button("计划模式")).toBeNull()
     await renderPlan("claude", false, undefined)

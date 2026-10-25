@@ -35,6 +35,13 @@ export function contextReadout(usage: ContextUsage): string {
   return `${formatTokens(usage.usedTokens)} · ${text}`
 }
 
+// 手机上的短读数：只有百分比（窗口未知时退回用量）
+export function contextPercentText(usage: ContextUsage): string {
+  const percent = usagePercent(usage)
+  if (percent === null) return formatTokens(usage.usedTokens)
+  return percent > 0 && percent < 1 ? "<1%" : `${Math.round(percent)}%`
+}
+
 // 上一次请求里有多少输入来自缓存（0～100）；没有输入时为 null
 export function cacheHitPercent(usage: ContextUsage): number | null {
   const total = usage.inputTokens + usage.cacheReadTokens + usage.cacheCreationTokens
