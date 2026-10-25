@@ -505,6 +505,22 @@ describe('分叉', () => {
     });
 });
 
+describe('计划模式', () => {
+    test('请求带 permissionMode: plan 时命令加 --permission-mode plan，用户消息记 planMode；别的取值忽略', async () => {
+        await withServer(async ({ baseUrl, cookie, argvLog }) => {
+            const send = (body) => request(`${baseUrl}/api/sessions/demo/agent/stream`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify(body) });
+            await send({ prompt: '给 app.py 加 mul', clientMessageId: 'plan-0001', permissionMode: 'plan' });
+            expect(JSON.parse(fs.readFileSync(argvLog, 'utf8'))).toEqual(expect.arrayContaining(['--permission-mode', 'plan']));
+            await send({ prompt: '再来', clientMessageId: 'plan-0002', permissionMode: 'bypassPermissions' });
+            expect(JSON.parse(fs.readFileSync(argvLog, 'utf8'))).not.toContain('--permission-mode');
+            const messages = (await request(`${baseUrl}/api/sessions/demo/messages`, { headers: { Cookie: cookie } })).json.messages;
+            const users = messages.filter(item => item.role === 'user');
+            expect(users[0].planMode).toBe(true);
+            expect(users[1].planMode).toBeUndefined();
+        });
+    });
+});
+
 describe('回顾', () => {
     test('空闲不到 30 分钟不生成；过了才生成并存起来；/recap 用 force 立即生成；执行中不生成；未登录 401', async () => {
         let skew = 0;

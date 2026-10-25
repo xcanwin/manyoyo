@@ -9,6 +9,7 @@ import {
   EllipsisIcon,
   Undo2Icon,
   GitBranchIcon,
+  ClipboardListIcon,
   ImagePlusIcon,
   ListEndIcon,
   MessageSquareIcon,
@@ -117,6 +118,7 @@ import { toast } from "sonner"
 import { ModelMenu } from "@/components/model-menu"
 import { EffortMenu } from "@/components/effort-menu"
 import { ContextMeter } from "@/components/context-meter"
+import { EXECUTE_PLAN_PROMPT, loadPlanMode, planExecuteTarget, savePlanMode } from "@/lib/plan-mode"
 import { buildReviewPrompt, lastAgentReply, matchWebCommand, reviewBlockedReason } from "@/lib/web-commands"
 import { RecapLine } from "@/components/recap-line"
 import { SideAnswer } from "@/components/side-answer"
@@ -327,7 +329,12 @@ function ActivityView({
   onOpenPath,
   onRewind,
   onFork,
+  executePlanFor = "",
+  onExecutePlan,
 }: {
+  // 计划模式发出的最后一轮：这条回复下面显示“按计划执行”
+  executePlanFor?: string
+  onExecutePlan?: () => void
   // 用户消息的操作：回退到这里 / 从这里分叉；不传就没有这个按钮
   onRewind?: (message: ChatMessage) => void
   onFork?: (message: ChatMessage) => void
@@ -739,6 +746,11 @@ function ActivityView({
                           <CopyMessageButton text={message.content} />
                         )
                       ) : null}
+                      {message.role === "assistant" && onExecutePlan && executePlanFor !== "" && String(message.id) === executePlanFor ? (
+                        <Button variant="outline" size="xs" onClick={onExecutePlan}>
+                          按计划执行
+                        </Button>
+                      ) : null}
                       {message.role === "user" && message.mode === "agent" && !message.pending && !running && onRewind && typeof message.id === "string" && !message.id.startsWith(LOCAL_USER_MESSAGE_ID_PREFIX) ? (
                         <Button variant="ghost" size="icon-xs" className="touch-hit" aria-label="回退到这里" title="回退到这里" onClick={() => onRewind(message)}>
                           <Undo2Icon />
@@ -981,7 +993,12 @@ export function Composer({
   images = [],
   onAddImages,
   onRemoveImage,
+  planMode = false,
+  onPlanModeChange,
 }: {
+  // 计划模式（仅 claude）：这一轮只出计划不改文件，发送一次后自动关闭；不传就没有这个按钮
+  planMode?: boolean
+  onPlanModeChange?: (on: boolean) => void
   // 待发送的图片（选中 / 粘贴 / 拖进来就上传）；不传就没有图片功能
   images?: ComposerImage[]
   onAddImages?: (files: File[]) => void
@@ -1179,6 +1196,19 @@ export function Composer({
                   <ImagePlusIcon />
                 </Button>
               </>
+            ) : null}
+            {onPlanModeChange && mode === "agent" && session?.agentProgram === "claude" ? (
+              <Button
+                variant={planMode ? "secondary" : "ghost"}
+                size={iconSize}
+                disabled={inputDisabled}
+                aria-label="计划模式"
+                aria-pressed={planMode}
+                title={planMode ? "计划模式已开：这一轮只出计划，不改文件（发送后自动关闭）" : "计划模式：先出计划，不改文件"}
+                onClick={() => onPlanModeChange(!planMode)}
+              >
+                <ClipboardListIcon />
+              </Button>
             ) : null}
             {/* 系统命令模式不涉及模型，直接隐藏 */}
             {mode === "agent" ? (
@@ -1439,6 +1469,15 @@ export function WorkspacePanel({
     sending || messages.some((message) => message.mode === "agent" && message.pending === true)
 
   const sideQuestion = useSideQuestion(activeSessionName)
+
+  // 计划模式开关：按会话记（localStorage），发送一次后自动关
+  const [planBySession, setPlanBySession] = React.useState<Record<string, boolean>>({})
+  const planMode = activeSessionName ? (planBySession[activeSessionName] ?? loadPlanMode(activeSessionName)) : false
+  function setPlanModeFor(name: string | null, on: boolean) {
+    if (!name) return
+    savePlanMode(name, on)
+    setPlanBySession((prev) => ({ ...prev, [name]: on }))
+  }
 
   // 回顾：打开隔了很久的 AGENT 时向服务端要一句话（每条最终回复只问一次）；/recap 强制重新生成
   const [recapState, setRecapState] = React.useState<{ name: string; recap: Recap } | null>(null)
@@ -1802,6 +1841,11 @@ export function WorkspacePanel({
     if (!activeSession) return
     if (name === "model") {
       document.querySelector<HTMLButtonElement>('button[aria-label^="选择模型"]')?.click()
+    } else if (name === "plan") {
+      if (activeSession.agentProgram !== "claude") return
+      const next = !planMode
+      setPlanModeFor(activeSession.name, next)
+      toast.success(next ? "计划模式已开：下一轮只出计划，不改文件" : "计划模式已关")
     } else if (name === "review") {
       await reviewChanges()
     } else if (name === "fork") {
@@ -1974,6 +2018,9 @@ export function WorkspacePanel({
       if (isStillActive()) void requestSync(true, true)
       return
     }
+    // 计划模式：只对从输入框发出的 claude 对话生效，发出后自动关闭
+    const usePlan = fromDraft && mode === "agent" && activeSession.agentProgram === "claude" && (planBySession[name] ?? loadPlanMode(name))
+    if (usePlan) setPlanModeFor(name, false)
     setSessionMessages(name, (prev) => [
       ...prev,
       {
@@ -1982,6 +2029,7 @@ export function WorkspacePanel({
         content: text,
         timestamp: new Date().toISOString(),
         mode,
+        ...(usePlan ? { planMode: true } : {}),
         clientMessageId: clientId,
         ...(sendImages.length ? { images: sendImages } : {}),
       },
@@ -2054,7 +2102,7 @@ export function WorkspacePanel({
       },
     ])
     try {
-      await apiStream(`/api/sessions/${encodeURIComponent(name)}/agent/stream`, { prompt: text, ...(sendImages.length ? { images: sendImages } : {}), clientMessageId: clientId }, (event) => {
+      await apiStream(`/api/sessions/${encodeURIComponent(name)}/agent/stream`, { prompt: text, ...(sendImages.length ? { images: sendImages } : {}), ...(usePlan ? { permissionMode: "plan" } : {}), clientMessageId: clientId }, (event) => {
         if (event.type === "meta") {
           metaReceived = true
           clearOutbox(name, clientId)
@@ -2256,6 +2304,8 @@ export function WorkspacePanel({
       images={composerImages.images}
       onAddImages={composerImages.addFiles}
       onRemoveImage={composerImages.remove}
+      planMode={planMode}
+      onPlanModeChange={(on) => setPlanModeFor(activeSessionName, on)}
     />
   )
 
@@ -2373,6 +2423,8 @@ export function WorkspacePanel({
               onOpenPath={openPathInFiles}
               onRewind={(message) => setRewindTarget(message)}
               onFork={(message) => void forkSession(String(message.id))}
+              executePlanFor={planExecuteTarget(messages, activeAgentRunning)}
+              onExecutePlan={() => void handleSend(EXECUTE_PLAN_PROMPT)}
               tail={
                 <QueuedPrompts
                   items={activeSession ? queueBySession[activeSession.name] ?? [] : []}

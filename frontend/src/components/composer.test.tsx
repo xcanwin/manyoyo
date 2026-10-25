@@ -119,6 +119,33 @@ describe("输入区：按钮都在输入框内，只显示图标，按状态切�
   })
 })
 
+describe("计划模式按钮", () => {
+  async function renderPlan(agentProgram: string, planMode: boolean, onPlanModeChange?: (on: boolean) => void) {
+    await act(async () =>
+      root.render(
+        <Composer draft="" onDraftChange={() => {}} onSend={() => {}} onStop={() => {}} mode="agent" onModeChange={() => {}}
+          disabled={false} sending={false} session={{ ...session, agentProgram }} onOpenCliTemplate={() => {}} onModelChanged={() => {}}
+          queueWhen="turn" onQueueWhenChange={() => {}} planMode={planMode} onPlanModeChange={onPlanModeChange} />
+      )
+    )
+  }
+  test("只有 claude 显示；选中态用 aria-pressed；点击切换", async () => {
+    const onChange = vi.fn()
+    await renderPlan("claude", false, onChange)
+    expect(button("计划模式")?.getAttribute("aria-pressed")).toBe("false")
+    await act(async () => button("计划模式")!.click())
+    expect(onChange).toHaveBeenCalledWith(true)
+    await renderPlan("claude", true, onChange)
+    expect(button("计划模式")?.getAttribute("aria-pressed")).toBe("true")
+    await act(async () => button("计划模式")!.click())
+    expect(onChange).toHaveBeenLastCalledWith(false)
+    await renderPlan("codex", false, onChange)
+    expect(button("计划模式")).toBeNull()
+    await renderPlan("claude", false, undefined)
+    expect(button("计划模式")).toBeNull()
+  })
+})
+
 describe("输入框补全", () => {
   function Stateful({ onSend, initial = "" }: { onSend: () => void; initial?: string }) {
     const [draft, setDraft] = React.useState(initial)

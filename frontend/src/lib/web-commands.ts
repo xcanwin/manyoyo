@@ -18,6 +18,7 @@ export const WEB_COMMANDS: WebCommand[] = [
   { name: "copy", description: "复制最后一条回复" },
   { name: "fork", description: "从最新处分叉出一个新的 AGENT，带着现在的对话" },
   { name: "btw", description: "带着上下文问一句，不打断主任务", argumentHint: "<问题>", agents: ["claude", "codex"] },
+  { name: "plan", description: "打开 / 关闭计划模式：下一轮只出计划，不改文件", agents: ["claude"] },
   { name: "review", description: "让 AI 审查工作目录里的未提交改动" },
   { name: "recap", description: "用一句话回顾刚才做到哪", agents: ["claude", "codex"] },
 ]

@@ -165,6 +165,8 @@ export type ChatMessage = {
   traceEvents?: TraceEvent[]
   // 列表里 trace 的长字段被服务端截断过；展开时按需请求 /messages/<id>/trace 取完整内容
   traceTruncated?: boolean
+  // 计划模式（只出计划不改文件）发出的提问
+  planMode?: boolean
   // 发送时前端生成的 id，服务端回显，用来确认“这条提示词已经发出去了”
   clientMessageId?: string
   // 只在前端：本轮执行过程的渲染 key（发送时生成）。占位 id 换成服务端 id、配上回复后都不变，
