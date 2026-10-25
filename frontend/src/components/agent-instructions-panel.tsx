@@ -1,5 +1,7 @@
 import * as React from "react"
 
+import { CodeBlock } from "@/components/code-block"
+
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -97,9 +99,9 @@ export function AgentInstructionsPanel({
           告诉 Agent 它的回复会显示在网页里、图片和文件怎么写才能显示。
         </FieldDescription>
         {/* 内容区：被展示的提示词原文，等宽辅助档 */}
-        <pre className="rounded-md border bg-muted/40 p-3 font-mono text-xs [overflow-wrap:anywhere] whitespace-pre-wrap text-muted-foreground">
+        <CodeBlock className="p-3 text-muted-foreground">
           {builtin}
-        </pre>
+        </CodeBlock>
       </Field>
       <Field>
         <div className="flex items-center justify-between gap-2">

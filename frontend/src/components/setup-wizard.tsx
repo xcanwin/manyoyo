@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 import {
@@ -48,7 +49,9 @@ import {
   type Mirrors,
 } from "@/lib/mirrors"
 
+import { CodeBlock } from "@/components/code-block"
 import { Hint } from "@/components/hint"
+import { KeyValueList } from "@/components/key-value-list"
 const STEP_TITLES = ["选择 Agent", "接入方式", "工作目录", "保存并开始"]
 const POLL_INTERVAL_MS = 2000
 
@@ -239,7 +242,7 @@ export function SetupWizard({
       <div className="flex w-full max-w-xl flex-col gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="font-mono text-2xl font-semibold tracking-tight">MANYOYO</h1>
-          <p className="text-sm text-muted-foreground">第一次使用，先接入一个 Agent</p>
+          <p className="text-muted-foreground">第一次使用，先接入一个 Agent</p>
         </div>
 
         <Card size="sm" data-testid="setup-readiness">
@@ -254,13 +257,13 @@ export function SetupWizard({
                 aria-valuemax={100}
               />
             </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               {readiness.items.map((item) => (
-                <span key={item.key} className="flex items-center gap-1">
+                <Hint key={item.key} className="flex items-center gap-1">
                   {item.state === "doing" ? <Spinner className="size-3" /> : null}
                   {item.state === "done" ? <CheckIcon className="size-3" /> : null}
                   {item.label}：{STATE_LABEL[item.state]}
-                </span>
+                </Hint>
               ))}
             </div>
             {!readiness.ready && readiness.blockedReason ? (
@@ -271,14 +274,13 @@ export function SetupWizard({
                 <div className="flex gap-2">
                   <Button
                     type="button"
-                    size="sm"
                     onClick={() => {
                       void retrySetupRuntime().then(() => fetchSetupStatus().then(setStatus)).catch(() => {})
                     }}
                   >
                     重试
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setShowDoctor((prev) => !prev)}>
+                  <Button type="button" variant="outline" onClick={() => setShowDoctor((prev) => !prev)}>
                     {showDoctor ? "收起环境检查" : "检查环境"}
                   </Button>
                 </div>
@@ -317,7 +319,7 @@ export function SetupWizard({
                       isAgentUnavailable(item) && "cursor-not-allowed opacity-50 hover:bg-transparent"
                     )}
                   >
-                    <span className="text-sm font-medium">{item.label}</span>
+                    <span>{item.label}</span>
                     <Hint>
                       {isAgentUnavailable(item) ? AGENT_UNAVAILABLE_HINT : (AGENT_BLURBS[item.id] ?? "")}
                     </Hint>
@@ -328,7 +330,7 @@ export function SetupWizard({
             ) : null}
 
             {step === 2 && agent ? (
-              <FieldGroup className="gap-4">
+              <FieldGroup>
                 <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="接入方式">
                   {MODES.map((mode) => (
                     <Button
@@ -357,33 +359,41 @@ export function SetupWizard({
                       onChange={(event) => setForm((prev) => ({ ...prev, baseUrl: event.target.value, keyEnv: "", providerId: "", extraEnv: undefined }))}
                     />
                     {(agent.providers ?? []).length > 0 ? (
-                      <div className="flex flex-wrap gap-2" role="group" aria-label="服务商">
-                        {(agent.providers ?? []).map((provider) => (
-                          <Button
-                            key={provider.id}
-                            type="button"
-                            size="xs"
-                            variant={form.providerId === provider.id ? "default" : "outline"}
-                            onClick={() => {
-                              setTestResult(null)
-                              setForm((prev) => ({
-                                ...prev,
-                                baseUrl: provider.baseUrl,
-                                keyEnv: provider.keyEnv,
-                                providerId: provider.id,
-                                extraEnv: provider.extraEnv,
-                                model: provider.defaultModel && !prev.model.trim() ? provider.defaultModel : prev.model,
-                              }))
-                            }}
-                          >
-                            {provider.label}
-                          </Button>
-                        ))}
-                      </div>
+                      <Select
+                        value={form.providerId || ""}
+                        onValueChange={(value) => {
+                          const provider = (agent.providers ?? []).find((item) => item.id === value)
+                          if (!provider) return
+                          setTestResult(null)
+                          setForm((prev) => ({
+                            ...prev,
+                            baseUrl: provider.baseUrl,
+                            keyEnv: provider.keyEnv,
+                            providerId: provider.id,
+                            extraEnv: provider.extraEnv,
+                            model: provider.defaultModel && !prev.model.trim() ? provider.defaultModel : prev.model,
+                          }))
+                        }}
+                      >
+                        <SelectTrigger className="w-full" aria-label="服务商">
+                          <SelectValue placeholder="选择服务商，自动填好地址">
+                            {(value: string | null) => (agent.providers ?? []).find((item) => item.id === value)?.label ?? "选择服务商，自动填好地址"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {(agent.providers ?? []).map((provider) => (
+                              <SelectItem key={provider.id} value={provider.id}>
+                                {provider.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
                     ) : null}
                     {selectedProvider ? (
                       <FieldDescription>
-                        <a href={selectedProvider.docUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                        <a href={selectedProvider.docUrl} target="_blank" rel="noopener noreferrer">
                           官方说明
                         </a>
                       </FieldDescription>
@@ -394,7 +404,7 @@ export function SetupWizard({
                           <Button
                             key={preset.value}
                             type="button"
-                            size="xs"
+                            size="sm"
                             variant="outline"
                             onClick={() => setForm((prev) => ({ ...prev, baseUrl: preset.value, keyEnv: "", providerId: "", extraEnv: undefined }))}
                           >
@@ -458,22 +468,18 @@ export function SetupWizard({
                       ) : null}
                       {testResult ? (
                         <Alert
-                          variant={connectionNotice(testResult).tone === "error" ? "destructive" : "default"}
+                          // 成功提示用绿色（success）：测试连接要等一会儿，用户需要一眼看出“通过了”
+                          variant={connectionNotice(testResult).tone === "error" ? "destructive" : "success"}
                           data-tone={connectionNotice(testResult).tone}
-                          // 成功提示用绿色：测试连接要等一会儿，用户需要一眼看出“通过了”
-                          className={cn(
-                            connectionNotice(testResult).tone === "success" &&
-                              "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 *:data-[slot=alert-description]:text-emerald-700 dark:text-emerald-400 dark:*:data-[slot=alert-description]:text-emerald-400"
-                          )}
                         >
                           <AlertDescription>
                             {connectionNotice(testResult).text}
                             {testResult.category !== "success" && testResult.detail ? (
                               <details className="mt-1">
-                                <summary className="cursor-pointer text-xs">详情</summary>
-                                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">
+                                <summary className="cursor-pointer">详情</summary>
+                                <CodeBlock className="mt-2 max-h-40">
                                   {testResult.detail}
-                                </pre>
+                                </CodeBlock>
                               </details>
                             ) : null}
                           </AlertDescription>
@@ -486,7 +492,7 @@ export function SetupWizard({
             ) : null}
 
             {step === 3 ? (
-              <FieldGroup className="gap-3">
+              <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="setup-host-path">工作目录</FieldLabel>
                   <div className="flex gap-2">
@@ -507,7 +513,6 @@ export function SetupWizard({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
                     className="self-start"
                     aria-expanded={mirrorsOpen}
                     onClick={() => setMirrorsOpen((open) => !open)}
@@ -535,23 +540,17 @@ export function SetupWizard({
             ) : null}
 
             {step === 4 && agent ? (
-              <div className="flex flex-col gap-3">
-                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-                  <dt className="text-muted-foreground">Agent</dt>
-                  <dd>{agent.label}</dd>
-                  <dt className="text-muted-foreground">接入方式</dt>
-                  <dd>{MODES.find((mode) => mode.id === form.mode)?.label}</dd>
-                  {form.mode === "compatible" ? (
-                    <>
-                      <dt className="text-muted-foreground">Base URL</dt>
-                      <dd className="break-all">{form.baseUrl}</dd>
-                    </>
-                  ) : null}
-                  <dt className="text-muted-foreground">工作目录</dt>
-                  <dd className="break-all">{hostPath}</dd>
-                </dl>
+              <div className="flex flex-col gap-4">
+                <KeyValueList
+                  items={[
+                    { label: "Agent", value: agent.label },
+                    { label: "接入方式", value: MODES.find((mode) => mode.id === form.mode)?.label },
+                    ...(form.mode === "compatible" ? [{ label: "Base URL", value: form.baseUrl }] : []),
+                    { label: "工作目录", value: hostPath },
+                  ]}
+                />
                 {needsPassword ? (
-                  <FieldGroup className="gap-3">
+                  <FieldGroup>
                     <Field>
                       <FieldLabel htmlFor="setup-password">登录密码</FieldLabel>
                       <Input

@@ -1,6 +1,7 @@
 import * as React from "react"
 import { XIcon } from "lucide-react"
 
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { DISMISS_KEY, describeUpdate, fetchUpdateInfo, shouldShowUpdate, type UpdateInfo } from "@/lib/update"
 
@@ -41,15 +42,13 @@ export function UpdateBanner() {
   }
 
   return (
-    <div
-      role="status"
-      data-testid="update-banner"
-      className="fixed right-3 bottom-3 z-50 flex max-w-sm items-start gap-2 rounded-lg border bg-card p-3 text-sm text-card-foreground shadow-lg"
-    >
-      <p className="flex-1">{describeUpdate(info)}</p>
-      <Button type="button" size="icon-xs" variant="ghost" aria-label="知道了" onClick={dismiss}>
-        <XIcon />
-      </Button>
-    </div>
+    <Alert role="status" data-testid="update-banner" className="fixed right-3 bottom-3 z-50 w-auto max-w-sm shadow-lg">
+      <AlertDescription>{describeUpdate(info)}</AlertDescription>
+      <AlertAction>
+        <Button type="button" size="icon-sm" variant="ghost" aria-label="知道了" title="知道了" onClick={dismiss}>
+          <XIcon />
+        </Button>
+      </AlertAction>
+    </Alert>
   )
 }

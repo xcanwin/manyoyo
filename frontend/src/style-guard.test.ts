@@ -103,27 +103,21 @@ type Allow = Record<string, Record<string, [number, string]>>
 
 // 文件 → 规则 → [允许次数, 理由]
 const ALLOW: Allow = {
-  "components/agent-instructions-panel.tsx": { "font": [1, "待修（现状）"] },
-  "components/app-sidebar.tsx": { "font": [15, "待修（现状）"], "raw-color": [2, "待修（现状）"] },
-  "components/changes-panel.tsx": { "font": [1, "待修（现状）"] },
-  "components/composer-images.tsx": { "font": [1, "待修（现状）"] },
-  "components/composer-suggestions.tsx": { "font": [3, "待修（现状）"] },
-  "components/container-manage/container-manage-panel.tsx": { "font": [1, "待修（现状）"] },
+  "components/app-sidebar.tsx": { "font": [2, "品牌名 “MANYOYO Web”，不属于界面字档位"] },
+  "components/changes-panel.tsx": { "font": [1, "内容区：diff 行"] },
+  "components/code-block.tsx": { "font": [1, "内容区：等宽预格式文本（原始报错 / 日志 / 提示词原文）"] },
   "components/data-table.tsx": { "font": [1, "手机卡片里的辅助档标签（Hint 之外的 span 内联）"] },
   "components/hint.tsx": { "font": [1, "定义“辅助档”本身（STYLE.md 第 2 节）"] },
-  "components/html-preview-panel.tsx": { "dialog-size": [1, "待修（现状）"] },
+  "components/html-preview-panel.tsx": { "dialog-size": [1, "侧板预览：Sheet 沿用现状的宽度与手机全屏写法（STYLE.md 第 8 节）"] },
   "components/key-value-list.tsx": { "font": [3, "定义“辅助档标签 + 正文值”本身"] },
-  "components/login-page.tsx": { "font": [5, "待修（现状）"], "raw-color": [2, "待修（现状）"] },
-  "components/model-menu.tsx": { "font": [1, "待修（现状）"] },
-  "components/model-services-panel.tsx": { "font": [2, "待修（现状）"] },
+  "components/login-page.tsx": { "font": [2, "整页：登录页标题可以更大（STYLE.md 第 14 节例外）"] },
   "components/page-header.tsx": { "font": [5, "定义“标题 / 区块标题 / 副标题”档本身"] },
-  "components/queued-prompts.tsx": { "font": [3, "待修（现状）"] },
-  "components/search-dialog.tsx": { "dialog-size": [1, "待修（现状）"], "font": [2, "待修（现状）"] },
+  "components/queued-prompts.tsx": { "font": [1, "排队中的提示词气泡，与聊天气泡同样式（内容区）"] },
+  "components/search-dialog.tsx": { "dialog-size": [1, "命令面板：shadcn Command 的标准结构（STYLE.md 第 14 节例外）"], "font": [2, "命令面板：shadcn Command 的标准结构（STYLE.md 第 14 节例外）"] },
   "components/section-toggle.tsx": { "font": [2, "定义折叠区标题（区块标题档）本身"] },
-  "components/setup-wizard.tsx": { "font": [8, "待修（现状）"], "raw-color": [6, "待修（现状）"] },
-  "components/trace-block.tsx": { "font": [18, "待修（现状）"] },
-  "components/update-banner.tsx": { "font": [1, "待修（现状）"] },
-  "components/workspace-panel.tsx": { "font": [4, "待修（现状）"] },
+  "components/setup-wizard.tsx": { "font": [1, "整页：向导标题可以更大（STYLE.md 第 14 节例外）"] },
+  "components/trace-block.tsx": { "font": [18, "内容区：执行过程（trace-block 的数值，STYLE.md 第 2 节登记）"] },
+  "components/workspace-panel.tsx": { "font": [4, "聊天气泡与代码块是内容区；顶栏标题是区块标题档（顶栏是自定义布局，不能用 PageHeader）"] },
 }
 
 describe("style guard", () => {

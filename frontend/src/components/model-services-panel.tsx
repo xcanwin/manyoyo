@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import { PencilIcon, PlayIcon, Trash2Icon } from "lucide-react"
 
 import { DataTable, type DataColumn } from "@/components/data-table"
+import { CodeBlock } from "@/components/code-block"
 import { Hint } from "@/components/hint"
 import { PageHeader } from "@/components/page-header"
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
@@ -343,9 +344,9 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
               {result.detail ? (
                 <details className="mt-2">
                   <summary className="cursor-pointer">详情</summary>
-                  <pre className="mt-2 max-h-32 overflow-auto font-mono text-xs break-all whitespace-pre-wrap">
+                  <CodeBlock className="mt-2 max-h-32">
                     {result.detail}
-                  </pre>
+                  </CodeBlock>
                 </details>
               ) : null}
             </AlertDescription>
@@ -837,7 +838,7 @@ function ImportDialog({
                   }
                 />
                 <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="font-medium">
+                  <span>
                     {item.agentLabel} · {item.providerLabel}
                   </span>
                   <Hint className="[overflow-wrap:anywhere]">

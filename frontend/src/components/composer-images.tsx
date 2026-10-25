@@ -2,6 +2,7 @@ import { ImageIcon, XIcon } from "lucide-react"
 
 import type { ComposerImage } from "@/hooks/use-composer-images"
 import { Spinner } from "@/components/ui/spinner"
+import { Hint } from "@/components/hint"
 
 // 输入框上方的待发送图片：缩略图 + 删除；上传中转圈，失败在缩略图上写原因
 export function ComposerImages({ images, onRemove }: { images: ComposerImage[]; onRemove: (id: string) => void }) {
@@ -11,9 +12,9 @@ export function ComposerImages({ images, onRemove }: { images: ComposerImage[]; 
       {images.map((image) => (
         <div key={image.id} className="relative size-16 overflow-hidden rounded-lg border bg-muted" title={image.error || undefined}>
           {image.status === "error" ? (
-            <div className="flex size-full flex-col items-center justify-center gap-0.5 p-1 text-center text-[10px] leading-tight text-destructive">
+            <div className="flex size-full flex-col items-center justify-center gap-0.5 p-1 text-center leading-tight text-destructive">
               <ImageIcon className="size-4" />
-              <span className="line-clamp-2">{image.error}</span>
+              <Hint className="line-clamp-2 text-destructive">{image.error}</Hint>
             </div>
           ) : (
             <img src={image.src} alt="待发送的图片" className="size-full object-cover" />

@@ -117,6 +117,16 @@ const button = (label: string) =>
 const radio = (label: string) =>
   Array.from(container.querySelectorAll('[role="radio"]')).find((b) => (b.textContent ?? "").includes(label)) as HTMLElement
 
+// 服务商是下拉：点开触发器，再点选项
+async function pickProvider(label: string) {
+  const trigger = container.querySelector('[aria-label="服务商"]') as HTMLElement
+  await act(async () => trigger.click())
+  await flush()
+  const option = Array.from(document.body.querySelectorAll('[role="option"]')).find((el) => el.textContent?.trim() === label) as HTMLElement
+  await act(async () => option.click())
+  await flush()
+}
+
 async function click(el: HTMLElement | undefined) {
   if (!el) throw new Error("element not found")
   await act(async () => {
@@ -227,7 +237,7 @@ describe("SetupWizard", () => {
     // 成功是绿色，失败走 destructive（红），二者不能混
     const alert = container.querySelector('[data-slot="alert"][data-tone]') as HTMLElement
     expect(alert.dataset.tone).toBe(category === "success" ? "success" : "error")
-    expect(alert.className.includes("emerald")).toBe(category === "success")
+    expect(alert.className.includes("text-success")).toBe(category === "success")
     expect(text()).not.toContain("sk-secret")
   })
 
@@ -284,7 +294,7 @@ describe("SetupWizard", () => {
     await click(button("下一步"))
     await click(radio("兼容服务"))
     expect((container.querySelector("#setup-base-url") as HTMLInputElement).placeholder).toContain("/anthropic")
-    await click(button("DeepSeek"))
+    await pickProvider("DeepSeek")
     expect((container.querySelector("#setup-base-url") as HTMLInputElement).value).toBe("https://api.deepseek.com/anthropic")
     expect((container.querySelector("#setup-model") as HTMLInputElement).value).toBe("deepseek-flash[1m]")
     expect(container.querySelector('a[href="https://docs.example/ds"]')?.textContent).toBe("官方说明")
@@ -303,7 +313,7 @@ describe("SetupWizard", () => {
     await click(radio("Claude Code"))
     await click(button("下一步"))
     await click(radio("兼容服务"))
-    await click(button("Kimi Code"))
+    await pickProvider("Kimi Code")
     await type("setup-api-key", "k-1")
     api.testConnection.mockResolvedValue({ category: "success", message: "", detail: "" })
     await click(button("测试连接"))

@@ -1,6 +1,7 @@
 import { PencilIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Hint } from "@/components/hint"
 import { QUEUE_WHEN_BADGES, type QueueItem } from "@/lib/queue"
 
 // 消息流底部的“排队中”提示词：气泡样式沿用用户气泡，加淡色角标和取消 / 编辑；
@@ -27,7 +28,7 @@ export function QueuedPrompts({
             {item.text}
           </div>
           {/* 编辑 = 撤回后把文字放回输入框；撤回 = 直接取消这一条 */}
-          <span className="flex items-center gap-0.5 px-1 text-xs text-muted-foreground">
+          <Hint className="flex items-center gap-0.5 px-1">
             <span className="mr-1">排队中 · {QUEUE_WHEN_BADGES[item.when]}</span>
             <Button variant="ghost" size="icon" aria-label="编辑" title="编辑（放回输入框）" onClick={() => onEdit(item)}>
               <PencilIcon />
@@ -35,13 +36,13 @@ export function QueuedPrompts({
             <Button variant="ghost" size="icon" aria-label="撤回" title="撤回" onClick={() => onCancel(item)}>
               <XIcon />
             </Button>
-          </span>
+          </Hint>
         </div>
       ))}
       {idle ? (
-        <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
-          <span>已停止，排队中的提示词还在，可以取消或继续</span>
-          <Button size="xs" variant="outline" onClick={onContinue}>
+        <div className="flex items-center justify-end gap-2">
+          <Hint>已停止，排队中的提示词还在，可以取消或继续</Hint>
+          <Button size="sm" variant="outline" onClick={onContinue}>
             继续发送
           </Button>
         </div>

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { PromptDialog } from "@/components/prompt-dialog"
 import { Spinner } from "@/components/ui/spinner"
+import { Hint } from "@/components/hint"
 import { apiGet, apiPost, type SessionSummary } from "@/lib/api"
 
 type ModelOption = { value: string; label: string; description?: string }
@@ -182,10 +183,10 @@ export function ModelMenu({
                     ))}
                   </DropdownMenuRadioGroup>
                   {catalogLoading ? (
-                    <div className="flex items-center gap-1.5 px-3 py-1 text-xs text-muted-foreground">
+                    <Hint className="flex items-center gap-2 px-3 py-1">
                       <Spinner className="size-3" />
                       正在加载 CLI 内置模型…
-                    </div>
+                    </Hint>
                   ) : null}
                 </DropdownMenuGroup>
               </>

@@ -28,6 +28,7 @@ import {
 } from "@/lib/container-manage"
 import { formatDateTime } from "@/lib/format"
 
+import { CodeBlock } from "@/components/code-block"
 import { Hint } from "@/components/hint"
 type AutostartState = { script: string; autostartOnServe: boolean }
 type SystemPromptState = { enabled: boolean; text: string }
@@ -486,9 +487,9 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
               </Alert>
             ) : null}
             {log !== null ? (
-              <pre className="max-h-60 overflow-auto rounded-lg border bg-muted/40 p-2 font-mono text-xs whitespace-pre-wrap break-all">
+              <CodeBlock className="max-h-60">
                 {log || "（日志为空）"}
-              </pre>
+              </CodeBlock>
             ) : null}
           </CardContent>
           <CardFooter className="flex flex-wrap gap-2">

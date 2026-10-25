@@ -11,7 +11,6 @@ import {
   SettingsIcon,
 } from "lucide-react"
 
-import { cn } from "@/lib/utils"
 import { formatDateTime, formatTimestampCompact } from "@/lib/format"
 import {
   apiGet,
@@ -31,6 +30,7 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Hint } from "@/components/hint"
 import { Spinner } from "@/components/ui/spinner"
 import { CloneNameDialog, type CloneMode } from "@/components/clone-name-dialog"
 import { CreateContainerDialog } from "@/components/create-container-dialog"
@@ -566,18 +566,8 @@ export function AppSidebar({
     }
   }
 
-  // 移动端侧边栏本身是个 Sheet（已经是一层浮层），从它里面再打开 Dialog 时
-  // base-ui 会复用这层已有的遮罩、不再单独虚化——手动给 Sheet 内容虚化+禁用交互，
-  // 跟 create-container-dialog.tsx 里嵌套打开目录选择器时的处理方式保持一致
-  const anyDialogOpen = Boolean(
-    searchOpen || quickChatSetupOpen || settingsOpen || logsOpen || createOpen || remarkDialog || cloneDialog || removeDialog
-  )
-
   return (
-    <Sidebar
-      {...props}
-      className={cn(isMobile && anyDialogOpen && "pointer-events-none opacity-40 blur-[2px]")}
-    >
+    <Sidebar {...props}>
       <SidebarHeader className="gap-3 px-3 pt-3">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-semibold tracking-tight">
@@ -617,13 +607,13 @@ export function AppSidebar({
         >
           <SearchIcon data-icon="inline-start" />
           搜索容器 / AGENT
-          <kbd className="ml-auto font-sans text-xs leading-none text-muted-foreground">⌘K</kbd>
+          <Hint className="ml-auto font-sans leading-none">⌘K</Hint>
         </Button>
         {navLevel === "agents" && activeGroup ? (
           // 容器名一行：高度与下面“全部容器”按钮一致
           <div className="flex h-8 items-center justify-between gap-2">
             <span
-              className="min-w-0 flex-1 truncate text-sm font-medium"
+              className="min-w-0 flex-1 truncate"
               title={activeGroup.containerRemark ? `${activeGroup.containerRemark}（${activeGroup.containerName}）` : activeGroup.containerName}
             >
               {activeGroup.containerRemark || activeGroup.containerName}
@@ -638,13 +628,13 @@ export function AppSidebar({
             </DropdownMenu>
           </div>
         ) : (
-          <div className="flex h-8 items-center justify-between text-xs text-muted-foreground">
-            <span>工作台</span>
-            <span>{loading ? "加载中..." : `${containers.length} 个容器 / ${agentCount} 个 AGENT`}</span>
+          <div className="flex h-8 items-center justify-between">
+            <Hint>工作台</Hint>
+            <Hint>{loading ? "加载中..." : `${containers.length} 个容器 / ${agentCount} 个 AGENT`}</Hint>
           </div>
         )}
         <Breadcrumb>
-          <BreadcrumbList className="flex-nowrap gap-1 text-sm">
+          <BreadcrumbList className="flex-nowrap gap-1">
             <BreadcrumbItem className="shrink-0">
               {navLevel === "containers" ? (
                 // 容器列表已在最顶层：灰色不可点的“容器列表”，圆点占位避免宽度跳动
@@ -659,7 +649,7 @@ export function AppSidebar({
                   variant="outline"
                   // Breadcrumb 自己套了一层 text-muted-foreground，Button 默认不强制文字颜色，
                   // 会被继承成灰色——这里显式改回前景色
-                  className="font-medium text-foreground"
+                  className="text-foreground"
                   onClick={goToContainers}
                 >
                   <ArrowLeftIcon data-icon="inline-start" />
@@ -670,7 +660,7 @@ export function AppSidebar({
           </BreadcrumbList>
         </Breadcrumb>
         {error ? (
-          <p className="text-xs text-destructive">{error}</p>
+          <Hint className="text-destructive">{error}</Hint>
         ) : null}
       </SidebarHeader>
 
@@ -693,7 +683,7 @@ export function AppSidebar({
                         className="h-auto flex-col items-start gap-1 py-2.5"
                       >
                         <span className="flex w-full items-center gap-1.5">
-                          <span className="truncate font-medium">
+                          <span className="truncate">
                             {group.containerRemark || group.containerName}
                           </span>
                           {group.pinned ? (
@@ -702,14 +692,10 @@ export function AppSidebar({
                           <Badge
                             variant={
                               group.status.toLowerCase().includes("up")
-                                ? "default"
+                                ? "success"
                                 : "outline"
                             }
-                            className={cn(
-                              "ml-auto shrink-0",
-                              group.status.toLowerCase().includes("up") &&
-                                "bg-emerald-600 text-white"
-                            )}
+                            className="ml-auto shrink-0"
                           >
                             {group.status === "history"
                               ? "仅历史"
@@ -718,9 +704,9 @@ export function AppSidebar({
                                 : "已停止"}
                           </Badge>
                         </span>
-                        <span className="w-full truncate text-xs text-muted-foreground">
+                        <Hint className="w-full truncate">
                           {group.hostPath}
-                        </span>
+                        </Hint>
                       </SidebarMenuButton>
                       <DropdownMenu>
                         <DropdownMenuTrigger
@@ -744,7 +730,7 @@ export function AppSidebar({
                         className="h-auto flex-col items-start gap-1 py-2.5"
                       >
                         <span className="flex w-full items-center gap-1.5">
-                          <span className="truncate font-medium">
+                          <span className="truncate">
                             {sessionDisplayTitle(session)}
                           </span>
                           {session.pinned ? (
@@ -756,7 +742,7 @@ export function AppSidebar({
                               role="status"
                               aria-label="执行中"
                               title="执行中"
-                              className="ml-auto size-2 shrink-0 rounded-full bg-emerald-500"
+                              className="ml-auto size-2 shrink-0 rounded-full bg-success"
                             />
                           ) : null}
                           {session.archived ? (
@@ -765,9 +751,9 @@ export function AppSidebar({
                             </Badge>
                           ) : null}
                         </span>
-                        <span className="w-full truncate text-xs text-muted-foreground">
+                        <Hint className="w-full truncate">
                           {formatUpdatedAt(session.updatedAt || "")}
-                        </span>
+                        </Hint>
                       </SidebarMenuButton>
                       <DropdownMenu>
                         <DropdownMenuTrigger
@@ -798,12 +784,12 @@ export function AppSidebar({
                     </SidebarMenuItem>
                   ))}
               {navLevel === "containers" && !loading && containers.length === 0 ? (
-                <div className="px-2 py-6 text-center text-xs text-muted-foreground">暂无 manyoyo 容器</div>
+                <Hint className="block px-2 py-6 text-center">暂无 manyoyo 容器</Hint>
               ) : null}
               {navLevel === "agents" && visibleAgentSessions.length === 0 ? (
-                <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+                <Hint className="block px-2 py-6 text-center">
                   该容器下暂无 AGENT
-                </div>
+                </Hint>
               ) : null}
             </SidebarMenu>
           </SidebarGroupContent>

@@ -84,25 +84,20 @@ export function LoginPage() {
             Agent Sandbox Console
           </span>
           <h1 className="font-mono text-4xl font-semibold tracking-tight text-foreground">MANYOYO</h1>
-          <p className="text-sm text-muted-foreground">AI Agent 容器安全沙箱 · 安全隔离运行</p>
+          <p className="text-muted-foreground">AI Agent 容器安全沙箱 · 安全隔离运行</p>
         </div>
 
         <Card className="w-full gap-0 py-0 shadow-lg">
           <div className="flex items-center gap-1.5 border-b px-4 py-2.5">
             <span className="size-2.5 rounded-full bg-destructive/70" />
-            <span className="size-2.5 rounded-full bg-amber-500/70" />
-            <span className="size-2.5 rounded-full bg-emerald-500/70" />
+            <span className="size-2.5 rounded-full bg-warning/70" />
+            <span className="size-2.5 rounded-full bg-success/70" />
           </div>
           <CardContent className="px-6 py-6">
             <form onSubmit={handleSubmit}>
               <FieldGroup>
                 <Field>
-                  <FieldLabel
-                    htmlFor="login-username"
-                    className="font-mono text-xs tracking-wide text-muted-foreground uppercase"
-                  >
-                    用户名
-                  </FieldLabel>
+                  <FieldLabel htmlFor="login-username">用户名</FieldLabel>
                   <Input
                     id="login-username"
                     autoFocus
@@ -122,12 +117,7 @@ export function LoginPage() {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel
-                    htmlFor="login-password"
-                    className="font-mono text-xs tracking-wide text-muted-foreground uppercase"
-                  >
-                    密码
-                  </FieldLabel>
+                  <FieldLabel htmlFor="login-password">密码</FieldLabel>
                   <Input
                     id="login-password"
                     type="password"

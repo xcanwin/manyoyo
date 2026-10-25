@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Hint } from "@/components/hint"
 import { FileIcon, FolderIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -196,13 +197,13 @@ export function useComposerSuggestions({
             }}
             onMouseEnter={() => setActiveIndex(index)}
             className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left",
               index === activeIndex && "bg-accent"
             )}
           >
             {Icon ? <Icon className="size-4 shrink-0 text-muted-foreground" /> : null}
-            <span className="min-w-0 truncate font-mono text-[13px]">{item.label}</span>
-            {item.detail ? <span className="ml-auto shrink-0 truncate text-xs text-muted-foreground">{item.detail}</span> : null}
+            <span className="min-w-0 truncate font-mono">{item.label}</span>
+            {item.detail ? <Hint className="ml-auto shrink-0 truncate">{item.detail}</Hint> : null}
           </button>
         )
       })}
