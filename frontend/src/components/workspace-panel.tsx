@@ -117,6 +117,8 @@ import { ModelMenu } from "@/components/model-menu"
 import { EffortMenu } from "@/components/effort-menu"
 import { ContextMeter } from "@/components/context-meter"
 import { lastAgentReply, matchWebCommand } from "@/lib/web-commands"
+import { RecapLine } from "@/components/recap-line"
+import { lastFinishedReply, recapRequestFor, visibleRecap, type Recap } from "@/lib/recap"
 import { TerminalView } from "@/components/terminal-view"
 import {
   DropdownMenu,
@@ -1426,6 +1428,30 @@ export function WorkspacePanel({
   const activeAgentRunning =
     sending || messages.some((message) => message.mode === "agent" && message.pending === true)
 
+  // 回顾：打开隔了很久的 AGENT 时向服务端要一句话（每条最终回复只问一次）；/recap 强制重新生成
+  const [recapState, setRecapState] = React.useState<{ name: string; recap: Recap } | null>(null)
+  const [recapDismissed, setRecapDismissed] = React.useState("")
+  const recapRequested = React.useRef(new Set<string>())
+  const recapCapable = activeSession?.agentProgram === "claude" || activeSession?.agentProgram === "codex"
+  const currentRecap: Recap | null =
+    (recapState && recapState.name === activeSessionName ? recapState.recap : null) ?? activeSession?.recap ?? null
+  const lastReplyId = String(lastFinishedReply(messages)?.id ?? "")
+  React.useEffect(() => {
+    if (!activeSessionName || !recapCapable) return
+    const replyId = recapRequestFor(messages, currentRecap, Date.now(), activeAgentRunning)
+    const key = `${activeSessionName}:${replyId}`
+    if (!replyId || recapRequested.current.has(key)) return
+    recapRequested.current.add(key)
+    apiPost(`/api/sessions/${encodeURIComponent(activeSessionName)}/agent/recap`, {})
+      .then((data) => {
+        const recap = data.recap as Recap | null
+        if (recap) setRecapState({ name: activeSessionName, recap })
+      })
+      .catch(() => undefined)
+    // 只在会话、最后一条回复、是否在运行变化时重新判断
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionName, lastReplyId, activeAgentRunning, recapCapable])
+
   // 同一个会话里 activeAgentRunning 从 true 变成 false 才算“结束”；切换会话不算
   const runWatchRef = React.useRef<{ name: string | null; running: boolean }>({ name: null, running: false })
   React.useEffect(() => {
@@ -1723,6 +1749,17 @@ export function WorkspacePanel({
     if (!activeSession) return
     if (name === "model") {
       document.querySelector<HTMLButtonElement>('button[aria-label^="选择模型"]')?.click()
+    } else if (name === "recap") {
+      try {
+        const data = await apiPost(`/api/sessions/${encodeURIComponent(activeSession.name)}/agent/recap`, { force: true })
+        const recap = data.recap as Recap | null
+        if (recap) {
+          setRecapState({ name: activeSession.name, recap })
+          setRecapDismissed("")
+        } else toast.error("现在没法回顾：需要一条已经完成的回复")
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "生成回顾失败")
+      }
     } else if (name === "effort") {
       if (!args) {
         const button = document.querySelector<HTMLButtonElement>('button[aria-label^="选择推理强度"]')
@@ -2373,6 +2410,13 @@ export function WorkspacePanel({
           onRetry={(prompt, images) => void handleSend(prompt, images)}
         />
       ) : null}
+
+      {view === "activity" && !emptyConversation && !activeAgentRunning
+        ? (() => {
+            const shown = visibleRecap(messages, currentRecap, recapDismissed)
+            return shown ? <RecapLine text={shown.text} onClose={() => setRecapDismissed(shown.forMessageId)} /> : null
+          })()
+        : null}
 
       {view === "activity" && !emptyConversation ? composerNode : null}
 

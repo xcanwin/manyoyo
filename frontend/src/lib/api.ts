@@ -10,6 +10,8 @@ export type SessionSummary = {
   agentTitle?: string
   // 第一句话发出后由轻量模型调用生成的标题（claude、codex）
   autoTitle?: string
+  // 隔了很久回来时生成的一句话回顾
+  recap?: { forMessageId: string; text: string; createdAt: string | null } | null
   firstPrompt?: string
   pinned?: boolean
   containerRemark: string

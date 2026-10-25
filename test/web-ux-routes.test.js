@@ -115,7 +115,7 @@ function git(cwd, ...args) {
     if (result.status !== 0) throw new Error(result.stderr);
 }
 
-async function withServer(fn, config = {}) {
+async function withServer(fn, config = {}, serverOptions = {}) {
     const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ux-routes-'));
     const repo = path.join(tempHost, 'repo');
     fs.mkdirSync(repo);
@@ -171,7 +171,8 @@ async function withServer(fn, config = {}) {
             removeContainer: () => {},
             webHistoryDir: dir,
             webConfigPath: path.join(tempHost, 'manyoyo.json'),
-            colors: { GREEN: '', CYAN: '', YELLOW: '', NC: '' }
+            colors: { GREEN: '', CYAN: '', YELLOW: '', NC: '' },
+            ...serverOptions
         });
         const baseUrl = `http://127.0.0.1:${handle.port || port}`;
         const login = await request(`${baseUrl}/auth/login`, {
@@ -337,6 +338,36 @@ describe('自动标题', () => {
             expect(argv).toEqual(expect.arrayContaining(['-p', '--no-session-persistence', '--tools', '', '--output-format', 'json']));
             expect(argv[argv.length - 1]).toBe('帮我修一下登录页面');
         });
+    });
+});
+
+describe('回顾', () => {
+    test('空闲不到 30 分钟不生成；过了才生成并存起来；/recap 用 force 立即生成；执行中不生成；未登录 401', async () => {
+        let skew = 0;
+        await withServer(async ({ baseUrl, cookie, argvLog }) => {
+            const url = `${baseUrl}/api/sessions/demo/agent/recap`;
+            expect((await request(url, { method: 'POST', body: '{}' })).response.status).toBe(401);
+            await request(`${baseUrl}/api/sessions/demo/agent/stream`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ prompt: '帮我修一下登录页面', clientMessageId: 'recap-0001' }) });
+            await waitFor(async () => (await summaryOf(baseUrl, cookie) || {}).autoTitle);
+            const lightCalls = () => fs.readFileSync(`${argvLog}.light`, 'utf8').trim().split('\n').length;
+            const before = lightCalls();
+            const early = await request(url, { method: 'POST', headers: { Cookie: cookie }, body: '{}' });
+            expect(early.json.recap).toBeNull();
+            expect(lightCalls()).toBe(before);
+
+            skew = 31 * 60 * 1000;
+            const late = await request(url, { method: 'POST', headers: { Cookie: cookie }, body: '{}' });
+            expect(late.json.recap).toMatchObject({ text: '修复登录页面' });
+            expect(lightCalls()).toBe(before + 1);
+            expect((await summaryOf(baseUrl, cookie)).recap.text).toBe('修复登录页面');
+            // 已经生成过：不再重复调用
+            await request(url, { method: 'POST', headers: { Cookie: cookie }, body: '{}' });
+            expect(lightCalls()).toBe(before + 1);
+            // force 重新生成
+            skew = 0;
+            await request(url, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ force: true }) });
+            expect(lightCalls()).toBe(before + 2);
+        }, {}, { nowMs: () => Date.now() + skew });
     });
 });
 
