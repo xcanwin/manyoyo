@@ -48,6 +48,11 @@ const fs = require('fs');
 const path = require('path');
 // 探测 --forward-subagent-text 用的 claude --help：不产生任何记录
 if (process.argv.includes('--help')) process.exit(0);
+// claude mcp list：两行（一个连得上、一个连不上）
+if (process.argv[2] === 'mcp' && process.argv[3] === 'list') {
+  process.stdout.write('Checking MCP server health…\\n\\ndemo: npx demo-mcp - ✓ Connected\\nweb: https://x.test/mcp (HTTP) - ✘ Failed to connect — ECONNRESET\\n');
+  process.exit(0);
+}
 if (process.argv.includes('--no-session-persistence') && String(process.argv[process.argv.length - 1]).startsWith('SIDE:')) {
   // 侧问：记一笔，问题以 SIDE: 开头时回答；含 SLOW 的慢一点（给并发 / 取消用例）
   fs.appendFileSync(${JSON.stringify(argvLog)} + '.side', JSON.stringify(process.argv.slice(2)) + '\\n');
@@ -517,6 +522,25 @@ describe('计划模式', () => {
             const users = messages.filter(item => item.role === 'user');
             expect(users[0].planMode).toBe(true);
             expect(users[1].planMode).toBeUndefined();
+        });
+    });
+});
+
+describe('技能与 MCP 面板', () => {
+    test('列出容器里 claude 的 skill（来源、说明）和 mcp 状态；未登录 401', async () => {
+        await withServer(async ({ baseUrl, cookie }) => {
+            const url = `${baseUrl}/api/sessions/demo/extensions`;
+            expect((await request(url)).response.status).toBe(401);
+            const res = await request(url, { headers: { Cookie: cookie } });
+            expect(res.response.status).toBe(200);
+            const claude = res.json.agents.find(item => item.program === 'claude');
+            expect(claude.label).toBe('Claude Code');
+            expect(claude.skills.find(item => item.name === 'playwright-cli')).toMatchObject({ source: 'user' });
+            expect(claude.skills.map(item => item.name)).not.toContain('context');
+            expect(claude.mcp).toEqual([
+                expect.objectContaining({ name: 'demo', tone: 'success' }),
+                expect.objectContaining({ name: 'web', tone: 'error' })
+            ]);
         });
     });
 });

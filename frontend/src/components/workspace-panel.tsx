@@ -111,6 +111,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FilesPanel, type FilesEditorState } from "@/components/files-panel"
 import { configLabel } from "@/lib/config-labels"
 import { ChangesPanel } from "@/components/changes-panel"
+import { ExtensionsPanel } from "@/components/extensions-panel"
 import { useComposerSuggestions } from "@/components/composer-suggestions"
 import { HtmlPreviewPanel, type HtmlPreviewState } from "@/components/html-preview-panel"
 import { MarkdownContent } from "@/components/markdown-content"
@@ -144,13 +145,14 @@ import { Hint } from "@/components/hint"
 import { KeyValueList } from "@/components/key-value-list"
 import { PageHeader } from "@/components/page-header"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
-type View = "activity" | "files" | "terminal" | "changes" | "container" | "config" | "detail"
+type View = "activity" | "files" | "terminal" | "changes" | "extensions" | "container" | "config" | "detail"
 
 const VIEW_LABELS: Record<View, string> = {
   activity: "聊天",
   files: "文件",
   terminal: "终端",
   changes: "改动",
+  extensions: "技能与 MCP",
   container: "设置容器",
   config: "容器详情",
   detail: "Agent详情",
@@ -158,7 +160,7 @@ const VIEW_LABELS: Record<View, string> = {
 
 // ⋯ 里按归属分两组：聊天属于 AGENT，文件、终端等属于它所在的容器
 const AGENT_VIEWS: View[] = ["activity", "detail"]
-const CONTAINER_VIEWS: View[] = ["files", "terminal", "changes", "container", "config"]
+const CONTAINER_VIEWS: View[] = ["files", "terminal", "changes", "extensions", "container", "config"]
 
 // visibilitychange 与 focus 几乎同时触发，窗口内只同步一次
 const RESTORE_NOTICE_TEXT = "上次没发出去的内容已放回输入框"
@@ -1881,6 +1883,8 @@ export function WorkspacePanel({
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "设置推理强度失败")
       }
+    } else if (name === "skills" || name === "mcp") {
+      void changeView("extensions")
     } else if (name === "status") {
       void changeView("detail")
     } else if (name === "diff") {
@@ -2476,6 +2480,9 @@ export function WorkspacePanel({
           ) : (
             <EmptyPane text="请先选择左侧的容器 / AGENT" />
           )
+        ) : null}
+        {view === "extensions" ? (
+          activeSession ? <ExtensionsPanel key={activeSession.name} session={activeSession} /> : <EmptyPane text="请先选择左侧的容器 / AGENT" />
         ) : null}
         {view === "detail" ? <DetailView detail={sessionDetail} /> : null}
         {view === "config" ? <ConfigView detail={sessionDetail} /> : null}
