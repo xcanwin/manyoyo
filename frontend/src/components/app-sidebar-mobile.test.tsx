@@ -43,7 +43,10 @@ const session = {
   agentProgram: "claude", resumeSupported: true, model: "", hostPath: "", containerPath: "",
 } as SessionSummary
 
-async function mount() {
+type Group = { containerName: string; containerRemark: string; status: string; image: string; hostPath: string; updatedAt: string; sessions: SessionSummary[] }
+const defaultGroups: Group[] = [{ containerName: "c1", containerRemark: "", status: "Up 1 hour", image: "", hostPath: "", updatedAt: "", sessions: [session] }]
+
+async function mount(groups: Group[] = defaultGroups, activeSessionName: string | null = null) {
   await act(async () =>
     root.render(
       <ThemeProvider>
@@ -51,10 +54,10 @@ async function mount() {
         <SidebarProvider>
           <Opener />
           <AppSidebar
-            containers={[{ containerName: "c1", containerRemark: "", status: "Up 1 hour", image: "", hostPath: "", updatedAt: "", sessions: [session] }]}
+            containers={groups}
             loading={false}
             error=""
-            activeSessionName={null}
+            activeSessionName={activeSessionName}
             onSelectSession={() => {}}
             onRefresh={async () => []}
             confirmLeaveIfDirty={async () => true}
@@ -90,5 +93,23 @@ describe("手机侧栏打开弹窗", () => {
     await clickButton(label)
     expect(sidebarOpen()).toBe(false)
     expect(dialogTitles()).toContain(title)
+  })
+})
+
+describe("回到容器列表", () => {
+  test("点「全部容器」：当前容器滚进视野", async () => {
+    const groups: Group[] = Array.from({ length: 20 }, (_, i) => ({
+      ...defaultGroups[0],
+      containerName: `c${i}`,
+      sessions: [{ ...session, name: `c${i}`, containerName: `c${i}` }],
+    }))
+    const scrolled: string[] = []
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.getAttribute("data-container-name") ?? "")
+    }
+    await mount(groups, "c15")
+    scrolled.length = 0
+    await clickButton("全部容器")
+    expect(scrolled).toEqual(["c15"])
   })
 })

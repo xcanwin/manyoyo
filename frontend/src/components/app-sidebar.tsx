@@ -275,6 +275,17 @@ export function AppSidebar({
     }
   }
 
+  // 回到容器列表时把当前容器滚进视野，免得每次手动去找；只在进入列表（或列表刚加载出来）时滚一次
+  const contentRef = React.useRef<HTMLDivElement>(null)
+  const hasContainers = containers.length > 0
+  React.useEffect(() => {
+    if (navLevel !== "containers" || !activeContainerName || !hasContainers) return
+    const item = contentRef.current?.querySelector(
+      `[data-container-name="${CSS.escape(activeContainerName)}"]`
+    )
+    item?.scrollIntoView({ block: "nearest" })
+  }, [navLevel, activeContainerName, hasContainers])
+
   function goToContainers() {
     setNavLevel("containers")
     setNavContainer("")
@@ -685,13 +696,13 @@ export function AppSidebar({
         ) : null}
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent ref={contentRef}>
         <SidebarGroup className="pt-0">
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
               {navLevel === "containers"
                 ? containers.map((group) => (
-                    <SidebarMenuItem key={group.containerName}>
+                    <SidebarMenuItem key={group.containerName} data-container-name={group.containerName}>
                       <SidebarMenuButton
                         size="lg"
                         isActive={group.containerName === activeContainerName}

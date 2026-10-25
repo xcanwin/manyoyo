@@ -123,7 +123,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
@@ -1022,11 +1021,11 @@ export function Composer({
   // 底部内边距按安全区取大值：加到主屏幕全屏运行时，iOS 的 home 指示条会压在
   // 输入框上；桌面端 env() 取值为 0，等价于原来的 p-3
   return (
-    <div className={centered ? "px-3" : "border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"}>
+    <div className={centered ? "px-3" : "p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"}>
       {/* 输入框和按钮放在同一个圆角框里：按钮只显示图标，悬停看 title，读屏读 aria-label */}
       <div
         className={cn(
-          "relative rounded-xl border bg-background pt-1 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
+          "relative rounded-xl border bg-background pt-1 shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
           inputDisabled && "opacity-70"
         )}
       >
@@ -2091,9 +2090,8 @@ export function WorkspacePanel({
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
       {/* 顶栏从左到右：侧栏按钮、会话标题、⋯（按 AGENT / 容器分组的各个视图） */}
-      <header className="relative flex h-12 shrink-0 items-center gap-2 border-b px-3">
+      <header className="relative flex h-12 shrink-0 items-center gap-2 px-3">
         <SidebarTrigger />
-        <Separator orientation="vertical" className="h-4! self-center" />
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium">
           {activeSession ? (
             <span className="min-w-0 truncate px-1 py-0.5">{sessionDisplayTitle(activeSession)}</span>

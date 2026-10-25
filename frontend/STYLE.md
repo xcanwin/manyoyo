@@ -44,6 +44,7 @@
   - 中性信息 = secondary / muted
 
   现有的 `emerald`、`amber`、`red` 原色都要换成这些 token。
+- **灰色文字表示不可点**：按钮、链接这类能点的东西文字一律用前景色（`outline` 按钮已自带 `text-foreground`，放进 `AlertDescription` 这类灰字里也不变灰），不要靠悬停才变黑。
 - 悬停、选中态必须肉眼可辨：悬停前后、选中与背景的亮度差（oklab L）**至少 0.03**，亮色、暗色主题都要达到。`--muted` / `--secondary` / `--accent` 固定在 `oklch(0.93)`；用 `bg-muted` 做悬停底色时透明度**不低于 70**（`hover:bg-muted/70`，亮色下 `/60` 只有 0.027、`/50` 只有 0.024，不够），守卫的 `hover-weak` 规则会拦。改这几个变量后，必须在两种主题下实测。
 
 ## 4. 间距、尺寸与圆角
