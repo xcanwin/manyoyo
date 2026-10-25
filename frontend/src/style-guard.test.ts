@@ -106,6 +106,7 @@ const ALLOW: Allow = {
   "components/app-sidebar.tsx": { "font": [2, "品牌名 “MANYOYO Web”，不属于界面字档位"] },
   "components/changes-panel.tsx": { "font": [1, "内容区：diff 行"] },
   "components/code-block.tsx": { "font": [1, "内容区：等宽预格式文本（原始报错 / 日志 / 提示词原文）"] },
+  "components/column-header.tsx": { "font": [2, "定义可编辑行表头（12px 黑色加粗）本身"] },
   "components/data-table.tsx": { "font": [1, "手机卡片里的辅助档标签（Hint 之外的 span 内联）"] },
   "components/hint.tsx": { "font": [1, "定义“辅助档”本身（STYLE.md 第 2 节）"] },
   "components/html-preview-panel.tsx": { "dialog-size": [1, "侧板预览：Sheet 沿用现状的宽度与手机全屏写法（STYLE.md 第 8 节）"] },

@@ -18,6 +18,7 @@ import {
   serializeEnv,
 } from "@/lib/container-manage"
 
+import { ColumnHeader } from "@/components/column-header"
 import { Hint } from "@/components/hint"
 // 环境变量编辑：默认是表格（名字含 KEY / TOKEN / SECRET… 的值遮罩，点眼睛显示），也可切到原始文本。
 // 唯一数据源是 text（与容器里 /run/manyoyo/env 同一格式），表格每次编辑都回写成文本。
@@ -140,9 +141,9 @@ export function EnvEditor({
         <div className="flex flex-col gap-2">
           {entries.length ? (
             <div className="flex items-center gap-2">
-              <Hint className="w-2/5 px-1 text-foreground">变量名</Hint>
-              <Hint className="min-w-0 flex-1 px-1 text-foreground">变量值</Hint>
-              <Hint className="w-[4.5rem] shrink-0 text-center text-foreground">操作</Hint>
+              <ColumnHeader className="w-2/5 px-1">变量名</ColumnHeader>
+              <ColumnHeader className="min-w-0 flex-1 px-1">变量值</ColumnHeader>
+              <ColumnHeader className="w-[4.5rem] shrink-0 text-center">操作</ColumnHeader>
             </div>
           ) : null}
           {entries.map((entry, index) => {

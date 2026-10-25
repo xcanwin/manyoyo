@@ -1,6 +1,7 @@
 import * as React from "react"
 import { ArrowDownIcon, ArrowUpIcon, LockIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
+import { ColumnHeader } from "@/components/column-header"
 import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -250,11 +251,11 @@ export function RuleTable({
     <div className="flex flex-col gap-1.5">
       {!mobile ? (
         <div className={cn(DESKTOP_GRID, "px-0.5")}>
-          <Hint className="text-foreground">动作</Hint>
-          <Hint className="text-foreground">{third[0]}</Hint>
-          <Hint className="text-foreground">{third[1]}</Hint>
-          <Hint className="text-foreground">协议</Hint>
-          <Hint className="text-center text-foreground">操作</Hint>
+          <ColumnHeader>动作</ColumnHeader>
+          <ColumnHeader>{third[0]}</ColumnHeader>
+          <ColumnHeader>{third[1]}</ColumnHeader>
+          <ColumnHeader>协议</ColumnHeader>
+          <ColumnHeader className="text-center">操作</ColumnHeader>
         </div>
       ) : null}
       {top.map((rule) => (

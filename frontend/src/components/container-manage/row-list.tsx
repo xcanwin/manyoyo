@@ -1,6 +1,6 @@
 import { PlusIcon, Trash2Icon } from "lucide-react"
 
-import { Hint } from "@/components/hint"
+import { ColumnHeader } from "@/components/column-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -47,11 +47,11 @@ export function RowList<T extends Record<string, string>>({
       {rows.length ? (
         <div className="flex items-center gap-2">
           {columns.map((column) => (
-            <Hint key={column.key} className={cn("min-w-0 px-1 text-foreground", column.className ?? "flex-1")}>
+            <ColumnHeader key={column.key} className={cn("min-w-0 px-1", column.className ?? "flex-1")}>
               {column.label}
-            </Hint>
+            </ColumnHeader>
           ))}
-          <Hint className={cn("shrink-0 text-center text-foreground", renderAction ? "w-24" : "w-8")}>操作</Hint>
+          <ColumnHeader className={cn("shrink-0 text-center", renderAction ? "w-24" : "w-8")}>操作</ColumnHeader>
         </div>
       ) : null}
       {rows.map((row, index) => (
