@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { apiGet, apiPost, type SessionSummary } from "@/lib/api"
 import { effortLabel } from "@/lib/effort"
+import { loadEffortCache, saveEffortCache } from "@/lib/effort-cache"
 
 // 推理强度下拉（模型菜单旁边）。选项来自服务端（Agent 自己的模型目录），当前模型不支持或不知道时整个按钮不显示。
 export function EffortMenu({
@@ -45,11 +46,12 @@ export function EffortMenu({
     apiGet(`/api/sessions/${encodeURIComponent(sessionName)}/effort`)
       .then((data) => {
         if (cancelled) return
-        setOptions({
-          key,
+        const next = {
           levels: Array.isArray(data.levels) ? (data.levels as string[]) : [],
           envDefault: typeof data.envDefault === "string" ? data.envDefault : "",
-        })
+        }
+        saveEffortCache(key, next)
+        setOptions({ key, ...next })
       })
       .catch(() => {
         if (!cancelled) setOptions({ key, levels: [], envDefault: "" })
@@ -59,11 +61,13 @@ export function EffortMenu({
     }
   }, [key, sessionName, session?.agentProgram])
 
-  const levels = options.key === key ? options.levels : []
+  // 服务端的结果回来之前先用上次的缓存，按钮不用等一秒才出现
+  const known = options.key === key ? options : loadEffortCache(key)
+  const levels = known ? known.levels : []
   if (!sessionName || levels.length === 0) return null
 
   const shown = levels.includes(current) ? current : ""
-  const defaultText = options.envDefault ? `默认（环境变量：${options.envDefault}）` : "默认"
+  const defaultText = known?.envDefault ? `默认（环境变量：${known.envDefault}）` : "默认"
   const shownText = shown ? effortLabel(shown) : defaultText
 
   async function select(value: string) {

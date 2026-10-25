@@ -15,6 +15,7 @@ let levels: string[]
 let envDefault: string
 
 beforeEach(() => {
+  window.localStorage.clear()
   levels = ["low", "high", "max"]
   envDefault = ""
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }))
@@ -54,6 +55,21 @@ describe("EffortMenu", () => {
     await render({ session: { ...session, effort: "ultra" } as SessionSummary })
     expect(trigger()?.getAttribute("aria-label")).toContain("当前：默认")
   })
+  test("有缓存时按钮立刻出现，不等服务端（服务端结果回来后再对账）", async () => {
+    window.localStorage.setItem("manyoyo:effort-levels", JSON.stringify({ "demo\u0000": { levels: ["low", "high"], envDefault: "" } }))
+    let release: () => void = () => {}
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { release = () => resolve(new Response(JSON.stringify({ levels: [], envDefault: "" }))) })))
+    await act(async () => root.render(<EffortMenu session={session} disabled={false} onChanged={() => {}} />))
+    expect(trigger()).not.toBeNull()
+    await act(async () => { release() })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+    expect(trigger()).toBeNull()
+  })
+  test("第一次没有缓存：服务端回来后显示，并记进缓存", async () => {
+    await render()
+    expect(trigger()).not.toBeNull()
+    expect(JSON.parse(window.localStorage.getItem("manyoyo:effort-levels") ?? "{}")["demo\u0000"].levels).toEqual(["low", "high", "max"])
+  })
   test("codex / claude 以外的 Agent 不请求", async () => {
     await render({ session: { ...session, agentProgram: "gemini" } as SessionSummary })
     expect(trigger()).toBeNull()
@@ -62,6 +78,17 @@ describe("EffortMenu", () => {
 })
 
 describe("ContextMeter", () => {
+  test("手机上只显示图标（读数在浮层里），按钮是 40px 档", async () => {
+    await act(async () =>
+      root.render(
+        <ContextMeter compact size="icon-xl" usage={{ usedTokens: 4500, window: 1_000_000, inputTokens: 46, cacheReadTokens: 4416, cacheCreationTokens: 0, updatedAt: null }} />
+      )
+    )
+    expect(container.textContent).toBe("")
+    const button = container.querySelector("button")!
+    expect(button.getAttribute("aria-label")).toContain("4.5k · <1%")
+    expect(button.className).toContain("size-10")
+  })
   test("没数据不显示；有数据显示读数", async () => {
     await act(async () => root.render(<ContextMeter usage={null} />))
     expect(container.textContent).toBe("")

@@ -119,6 +119,28 @@ describe("输入区：按钮都在输入框内，只显示图标，按状态切�
   })
 })
 
+describe("手机上一行放不下：任务进行中先收起次要按钮", () => {
+  test("任务进行中收起计划模式 / 推理强度 / 上下文读数，只留 模式、图片、模型 与右边的 插入时机 / 停止 / 发送", async () => {
+    mobile = true
+    Object.defineProperty(window, "innerWidth", { value: 390, configurable: true })
+    const props = { onDraftChange: () => {}, onSend: () => {}, onStop: () => {}, mode: "agent" as const, onModeChange: () => {}, disabled: false, onOpenCliTemplate: () => {}, onModelChanged: () => {}, queueWhen: "turn" as const, onQueueWhenChange: () => {}, planMode: false, onPlanModeChange: () => {}, onAddImages: () => {} }
+    const withUsage = { ...session, contextUsage: { usedTokens: 4500, window: 1_000_000, inputTokens: 1, cacheReadTokens: 1, cacheCreationTokens: 0, updatedAt: null } } as SessionSummary
+    await act(async () => root.render(<Composer {...props} draft="x" sending={false} session={withUsage} />))
+    expect(button("计划模式")).not.toBeNull()
+    expect(container.querySelector('button[aria-label^="上下文占用"]')).not.toBeNull()
+    await act(async () => root.render(<Composer {...props} draft="x" sending session={withUsage} />))
+    expect(button("计划模式")).toBeNull()
+    expect(container.querySelector('button[aria-label^="上下文占用"]')).toBeNull()
+    for (const label of ["插入时机", "停止", "发送", "切换模式", "添加图片"]) expect([label, button(label) !== null]).toEqual([label, true])
+    expect(container.querySelector('button[aria-label^="选择模型"]')).not.toBeNull()
+  })
+  test("桌面上进行中也都在", async () => {
+    const props = { onDraftChange: () => {}, onSend: () => {}, onStop: () => {}, mode: "agent" as const, onModeChange: () => {}, disabled: false, onOpenCliTemplate: () => {}, onModelChanged: () => {}, queueWhen: "turn" as const, onQueueWhenChange: () => {}, planMode: false, onPlanModeChange: () => {} }
+    await act(async () => root.render(<Composer {...props} draft="x" sending session={session} />))
+    expect(button("计划模式")).not.toBeNull()
+  })
+})
+
 describe("计划模式按钮", () => {
   async function renderPlan(agentProgram: string, planMode: boolean, onPlanModeChange?: (on: boolean) => void) {
     await act(async () =>
