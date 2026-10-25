@@ -39,7 +39,7 @@ function DialogOverlay({
 }
 
 // 本地新增：弹窗只用 size 选档（STYLE.md 第 8 节），调用处不写宽高。
-// sm / md 手机上居中并留边；lg / wide 手机（<768px）全屏，标题栏和底栏固定。
+// sm / md 手机上居中并留边；lg / xl / wide 手机（<768px）全屏，标题栏和底栏固定。
 const dialogContentVariants = cva(
   "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 motion-reduce:animate-none motion-reduce:duration-0 data-nested-dialog-open:scale-[0.97] data-nested-dialog-open:brightness-75 data-nested-dialog-open:transition-[scale,filter]",
   {
@@ -48,6 +48,7 @@ const dialogContentVariants = cva(
         sm: "sm:max-w-sm",
         md: "sm:max-w-md",
         lg: "flex max-h-dvh flex-col max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:ring-0 md:max-h-[85dvh] md:max-w-xl",
+        xl: "flex max-h-dvh flex-col max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:ring-0 md:max-h-[85dvh] md:max-w-3xl",
         wide: "flex max-h-dvh flex-col max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:ring-0 md:h-[85dvh] md:max-w-[min(96vw,80rem)]",
       },
     },

@@ -389,7 +389,7 @@ export function CreateContainerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>新建容器会话</DialogTitle>
         </DialogHeader>

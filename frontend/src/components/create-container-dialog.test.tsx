@@ -122,3 +122,10 @@ describe("新建容器的默认目录", () => {
     expect(suggested).toMatch(/manyoyo_work\/\d{8}-\d{6}$/)
   })
 })
+
+describe("新建容器弹窗尺寸", () => {
+  test("用 xl 档（字段里有长路径和长选项名）", async () => {
+    await open()
+    expect(document.querySelector('[data-slot="dialog-content"]')?.getAttribute("data-size")).toBe("xl")
+  })
+})
