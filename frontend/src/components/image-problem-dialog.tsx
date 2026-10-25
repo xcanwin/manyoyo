@@ -64,7 +64,7 @@ export function ImageProblemDialog() {
   const notFound = shown?.code === "IMAGE_NOT_FOUND"
   return (
     <Dialog open={problem !== null} onOpenChange={(open) => (open ? null : setProblem(null))}>
-      <DialogContent size="md">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>{notFound ? "本机没有这个镜像" : "镜像拉取失败"}</DialogTitle>
           <DialogDescription>
