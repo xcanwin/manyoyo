@@ -46,6 +46,7 @@ function writeFakes(tempHost) {
 const fs = require('fs');
 const path = require('path');
 fs.writeFileSync(${JSON.stringify(argvLog)}, JSON.stringify(process.argv.slice(2)));
+fs.writeFileSync(${JSON.stringify(argvLog)} + '.effort', process.env.CLAUDE_CODE_EFFORT_LEVEL || '');
 const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', '-workspace');
 fs.mkdirSync(dir, { recursive: true });
 fs.appendFileSync(path.join(dir, '${SESSION_ID}.jsonl'), '{"type":"user","x":1}\\n{"type":"ai-title","aiTitle":"旧标题","sessionId":"${SESSION_ID}"}\\n{"type":"ai-title","aiTitle":"  修复登录\\\\u0007页面 <b>bug</b>  ","sessionId":"${SESSION_ID}"}\\n');
@@ -60,8 +61,10 @@ if (process.argv.includes('--input-format')) {
 }
 const out = [
   { type: 'system', subtype: 'init', session_id: '${SESSION_ID}', slash_commands: ['compact', 'color', 'my-skill', 'bad name!', 'doctor'], skills: ['my-skill', 'doctor'], terminal_slash_commands: ['doctor', 'color'] },
+  { type: 'stream_event', event: { type: 'message_start', message: { usage: { input_tokens: 0, output_tokens: 0 } } } },
+  { type: 'stream_event', event: { type: 'message_delta', usage: { input_tokens: 1200, cache_read_input_tokens: 800, cache_creation_input_tokens: 0, output_tokens: 50 } } },
   { type: 'assistant', message: { content: [{ type: 'text', text: '好' }] } },
-  { type: 'result', subtype: 'success', result: '好', session_id: '${SESSION_ID}' }
+  { type: 'result', subtype: 'success', result: '好', session_id: '${SESSION_ID}', modelUsage: { m: { contextWindow: 200000 } } }
 ];
 process.stdout.write(out.map(item => JSON.stringify(item)).join('\\n') + '\\n');
 `);
@@ -268,6 +271,44 @@ describe('斜杠命令候选：新 AGENT 没跑过一轮也有', () => {
             const skill = commands.json.commands.find(item => item.name === 'playwright-cli');
             expect(skill.description).toMatch(/Playwright/);
             expect(skill.description).not.toMatch(/\(user\)/);
+        });
+    });
+});
+
+describe('推理强度与上下文占用', () => {
+    test('选项来自模型目录；设置后下一轮用环境变量前缀注入；非法 / 不支持的强度被拒；轮结束写上下文占用', async () => {
+        await withServer(async ({ baseUrl, cookie, argvLog }) => {
+            const url = `${baseUrl}/api/sessions/demo/effort`;
+            expect((await request(url)).response.status).toBe(401);
+            expect((await request(url, { method: 'POST', body: '{}' })).response.status).toBe(401);
+            const options = await request(url, { headers: { Cookie: cookie } });
+            expect(options.json).toMatchObject({ levels: ['low', 'medium', 'high', 'xhigh', 'max'], effort: '' });
+            for (const bad of ['LOW', 'low; id', 'x']) {
+                const res = await request(url, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ effort: bad }) });
+                expect([bad, res.response.status]).toEqual([bad, 400]);
+            }
+            const unsupported = await request(url, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ effort: 'ultra' }) });
+            expect(unsupported.response.status).toBe(400);
+            const ok = await request(url, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ effort: 'low' }) });
+            expect(ok.json.effort).toBe('low');
+            expect((await summaryOf(baseUrl, cookie)).effort).toBe('low');
+
+            await request(`${baseUrl}/api/sessions/demo/agent/stream`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ prompt: 'hi', clientMessageId: 'effort-0001' }) });
+            expect(fs.readFileSync(`${argvLog}.effort`, 'utf8')).toBe('low');
+            const summary = await waitFor(async () => {
+                const item = await summaryOf(baseUrl, cookie);
+                return item && item.contextUsage ? item : null;
+            });
+            expect(summary.contextUsage).toMatchObject({ usedTokens: 2050, window: 200000, inputTokens: 1200, cacheReadTokens: 800 });
+
+            // 换成目录里没有的模型：当前强度回到默认
+            const switched = await request(`${baseUrl}/api/sessions/demo/model`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ model: 'custom-x' }) });
+            expect(switched.json.effort).toBe('');
+            expect((await summaryOf(baseUrl, cookie)).effort).toBe('');
+
+            // 默认强度（空）= 不注入
+            await request(`${baseUrl}/api/sessions/demo/agent/stream`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ prompt: 'again', clientMessageId: 'effort-0002' }) });
+            expect(fs.readFileSync(`${argvLog}.effort`, 'utf8')).toBe('');
         });
     });
 });

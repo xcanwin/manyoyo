@@ -1,3 +1,5 @@
+import type { ContextUsage } from "@/lib/context-usage"
+
 export type SessionSummary = {
   name: string
   containerName: string
@@ -18,6 +20,9 @@ export type SessionSummary = {
   agentProgram: string
   resumeSupported: boolean
   model: string
+  // 推理强度（''=默认）与最近一轮结束时的上下文占用（仅 claude）
+  effort?: string
+  contextUsage?: ContextUsage | null
   hostPath: string
   containerPath: string
   synthetic?: boolean

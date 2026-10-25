@@ -114,6 +114,8 @@ import { HtmlPreviewPanel, type HtmlPreviewState } from "@/components/html-previ
 import { MarkdownContent } from "@/components/markdown-content"
 import { toast } from "sonner"
 import { ModelMenu } from "@/components/model-menu"
+import { EffortMenu } from "@/components/effort-menu"
+import { ContextMeter } from "@/components/context-meter"
 import { lastAgentReply, matchWebCommand } from "@/lib/web-commands"
 import { TerminalView } from "@/components/terminal-view"
 import {
@@ -1176,6 +1178,18 @@ export function Composer({
                 size={iconSize}
               />
             ) : null}
+            {mode === "agent" ? (
+              <EffortMenu
+                session={session}
+                disabled={disabled || archived || !session}
+                onChanged={onModelChanged}
+                compact={isMobile}
+                size={iconSize}
+              />
+            ) : null}
+            {mode === "agent" && session?.agentProgram === "claude" ? (
+              <ContextMeter usage={session.contextUsage} />
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {showQueueWhen ? (
@@ -1705,10 +1719,24 @@ export function WorkspacePanel({
   }
 
   // 网页自己处理的斜杠命令（lib/web-commands.ts）：不发给 Agent
-  async function runWebCommand(name: string) {
+  async function runWebCommand(name: string, args: string) {
     if (!activeSession) return
     if (name === "model") {
       document.querySelector<HTMLButtonElement>('button[aria-label^="选择模型"]')?.click()
+    } else if (name === "effort") {
+      if (!args) {
+        const button = document.querySelector<HTMLButtonElement>('button[aria-label^="选择推理强度"]')
+        if (button) button.click()
+        else toast.error("当前模型没有推理强度选项")
+        return
+      }
+      try {
+        await apiPost(`/api/sessions/${encodeURIComponent(activeSession.name)}/effort`, { effort: args === "default" || args === "默认" ? "" : args })
+        await onAfterSend()
+        toast.success("已设置推理强度")
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "设置推理强度失败")
+      }
     } else if (name === "status") {
       void changeView("detail")
     } else if (name === "diff") {
@@ -1745,7 +1773,7 @@ export function WorkspacePanel({
       const hit = matchWebCommand(draft, activeSession.agentProgram)
       if (hit) {
         updateDraft("")
-        await runWebCommand(hit.command.name)
+        await runWebCommand(hit.command.name, hit.args)
         return
       }
     }

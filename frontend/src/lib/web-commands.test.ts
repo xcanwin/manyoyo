@@ -18,6 +18,11 @@ describe("matchWebCommand", () => {
   test("大小写敏感：/Model 不拦截", () => {
     expect(matchWebCommand("/Model", "claude")).toBeNull()
   })
+  test("/effort 只适用于 claude、codex，参数是级别", () => {
+    expect(matchWebCommand("/effort high", "claude")).toMatchObject({ command: { name: "effort" }, args: "high" })
+    expect(matchWebCommand("/effort", "codex")).toMatchObject({ command: { name: "effort" }, args: "" })
+    expect(matchWebCommand("/effort high", "gemini")).toBeNull()
+  })
   test("换行后的参数也算参数", () => {
     expect(matchWebCommand("/copy\nmore", "claude")).toMatchObject({ command: { name: "copy" }, args: "more" })
   })
