@@ -35,6 +35,43 @@ run_autostart() {
     log "自启动脚本退出，退出码 $?"
 }
 
+# trust_workdir:预先信任容器的工作目录,交互式 claude / codex 首次启动不再停在“信任此文件夹”。
+# 任何失败都静默,不影响 init。目录只经环境变量传给 node,不拼进脚本文本。
+# BEGIN trust_workdir
+trust_workdir() {
+    local dir
+    dir=$(pwd -P 2>/dev/null) || return 0
+    [ -n "$dir" ] || return 0
+    if [ -f "$HOME/.claude.json" ] && command -v node >/dev/null 2>&1; then
+        TRUST_DIR="$dir" node -e '
+const fs = require("fs");
+const file = process.env.HOME + "/.claude.json";
+const dir = process.env.TRUST_DIR;
+let data;
+try { data = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { process.exit(0); }
+if (!data || typeof data !== "object" || Array.isArray(data)) process.exit(0);
+if (!data.projects || typeof data.projects !== "object") data.projects = {};
+const project = data.projects[dir] && typeof data.projects[dir] === "object" ? data.projects[dir] : {};
+if (project.hasTrustDialogAccepted === true) process.exit(0);
+project.hasTrustDialogAccepted = true;
+data.projects[dir] = project;
+const tmp = file + ".manyoyo-tmp";
+fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: fs.statSync(file).mode & 0o777 });
+fs.renameSync(tmp, file);
+' >/dev/null 2>&1
+    fi
+    if [ -f "$HOME/.codex/config.toml" ]; then
+        case "$dir" in
+            *[\"\\]*|*[[:cntrl:]]*) return 0 ;;
+        esac
+        grep -qxF "[projects.\"$dir\"]" "$HOME/.codex/config.toml" 2>/dev/null \
+            || printf '\n[projects."%s"]\ntrust_level = "trusted"\n' "$dir" >> "$HOME/.codex/config.toml" 2>/dev/null
+    fi
+    return 0
+}
+# END trust_workdir
+(trust_workdir) >/dev/null 2>&1 &
+
 setsid bash -c "$(declare -f log load_env run_autostart); BOX=$BOX SYS=$SYS GATE=$GATE LOG=$LOG; run_autostart" >/dev/null 2>&1 &
 
 while :; do sleep 3600 & wait $!; done

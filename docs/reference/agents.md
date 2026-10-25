@@ -39,7 +39,7 @@ manyoyo run -n my-session -- -c     # 回到已有容器，并给智能体传恢
 }
 ```
 
-`manyoyo init all` 可一次生成这些条目。官方 common 镜像带 Claude Code 和 Codex；Gemini 和 OpenCode 需要自己构建 full 镜像：`manyoyo build --iv 2.3.0-full --iba TOOL=full`。
+`manyoyo init all` 可一次生成这些条目。官方 common 镜像带 Claude Code 和 Codex；Gemini 和 OpenCode 需要自己构建 full 镜像：`manyoyo build --iv 2.3.1-full --iba TOOL=full`。
 
 ## Claude Code
 

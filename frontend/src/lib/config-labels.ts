@@ -36,6 +36,7 @@ export const ENV_LABELS: Record<string, string> = {
   ANTHROPIC_API_KEY: "Claude Key",
   CLAUDE_CODE_OAUTH_TOKEN: "Claude 订阅令牌",
   ANTHROPIC_MODEL: "Claude 模型",
+  MANYOYO_CLAUDE_BELL: "完成提示音（0 不响 / 1 一声 / 3 三声）",
   ANTHROPIC_DEFAULT_OPUS_MODEL: "Claude 大模型（Opus）",
   ANTHROPIC_DEFAULT_SONNET_MODEL: "Claude 中模型（Sonnet）",
   ANTHROPIC_DEFAULT_HAIKU_MODEL: "Claude 小模型（Haiku）",

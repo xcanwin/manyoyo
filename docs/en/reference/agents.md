@@ -39,7 +39,7 @@ Add one entry per agent under `runs.<name>` in `~/.manyoyo/manyoyo.json`, then j
 }
 ```
 
-`manyoyo init all` generates these entries in one go. The official common image includes Claude Code and Codex; Gemini and OpenCode need a full image you build yourself: `manyoyo build --iv 2.3.0-full --iba TOOL=full`.
+`manyoyo init all` generates these entries in one go. The official common image includes Claude Code and Codex; Gemini and OpenCode need a full image you build yourself: `manyoyo build --iv 2.3.1-full --iba TOOL=full`.
 
 ## Claude Code
 

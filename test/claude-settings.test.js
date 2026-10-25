@@ -23,8 +23,8 @@ describe('docker/res/claude/settings.json 的 Stop hook', () => {
         hooks.forEach(hook => expect(hook.type).toBe('command'));
     });
 
-    function run(command, entrypoint) {
-        return spawnSync('sh', ['-c', command], { encoding: 'utf8', env: { PATH: process.env.PATH, ...(entrypoint ? { CLAUDE_CODE_ENTRYPOINT: entrypoint } : {}) } });
+    function run(command, entrypoint, bell) {
+        return spawnSync('sh', ['-c', command], { encoding: 'utf8', env: { PATH: process.env.PATH, ...(entrypoint ? { CLAUDE_CODE_ENTRYPOINT: entrypoint } : {}), ...(bell === undefined ? {} : { MANYOYO_CLAUDE_BELL: bell }) } });
     }
 
     test('交互终端（cli）：输出只含 BEL 的 terminalSequence，退出码 0', () => {
@@ -50,5 +50,21 @@ describe('docker/res/claude/settings.json 的 Stop hook', () => {
     test('三个 hook 错开约 0.3 秒，响三声', () => {
         const delays = hooks.map(hook => Number((hook.command.match(/sleep ([0-9.]+)/) || [])[1]));
         expect(delays).toEqual([0, 0.3, 0.6]);
+    });
+
+    test('MANYOYO_CLAUDE_BELL：0 不响、1 一声、3 三声，未设置或非法值按 3；退出码一律 0', () => {
+        const expected = { 0: 0, 1: 1, 3: 3, abc: 3, 2: 3, '': 3, undefined: 3 };
+        for (const [bell, count] of Object.entries(expected)) {
+            const value = bell === 'undefined' ? undefined : bell;
+            const results = hooks.map(hook => run(hook.command, 'cli', value));
+            results.forEach(result => expect(result.status).toBe(0));
+            expect(results.filter(result => result.stdout !== '').length).toBe(count);
+        }
+    });
+
+    test('MANYOYO_CLAUDE_BELL 在网页（sdk-cli）下也不输出', () => {
+        for (const bell of ['0', '1', '3']) {
+            hooks.forEach(hook => expect(run(hook.command, 'sdk-cli', bell).stdout).toBe(''));
+        }
     });
 });
