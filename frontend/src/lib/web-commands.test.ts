@@ -23,6 +23,13 @@ describe("matchWebCommand", () => {
     expect(matchWebCommand("/effort", "codex")).toMatchObject({ command: { name: "effort" }, args: "" })
     expect(matchWebCommand("/effort high", "gemini")).toBeNull()
   })
+  test("/btw 带问题（保留多行），/btwx 不拦截", () => {
+    expect(matchWebCommand("/btw 秘密词是什么", "claude")).toMatchObject({ command: { name: "btw" }, args: "秘密词是什么" })
+    expect(matchWebCommand("/btw 第一行\n第二行", "codex")?.args).toBe("第一行\n第二行")
+    expect(matchWebCommand("/btw", "claude")?.args).toBe("")
+    expect(matchWebCommand("/btw x", "gemini")).toBeNull()
+    expect(matchWebCommand("/btwx 问", "claude")).toBeNull()
+  })
   test("换行后的参数也算参数", () => {
     expect(matchWebCommand("/copy\nmore", "claude")).toMatchObject({ command: { name: "copy" }, args: "more" })
   })

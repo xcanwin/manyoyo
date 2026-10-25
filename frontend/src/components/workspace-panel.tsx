@@ -118,6 +118,8 @@ import { EffortMenu } from "@/components/effort-menu"
 import { ContextMeter } from "@/components/context-meter"
 import { lastAgentReply, matchWebCommand } from "@/lib/web-commands"
 import { RecapLine } from "@/components/recap-line"
+import { SideAnswer } from "@/components/side-answer"
+import { useSideQuestion } from "@/hooks/use-side-question"
 import { lastFinishedReply, recapRequestFor, visibleRecap, type Recap } from "@/lib/recap"
 import { TerminalView } from "@/components/terminal-view"
 import {
@@ -1428,6 +1430,8 @@ export function WorkspacePanel({
   const activeAgentRunning =
     sending || messages.some((message) => message.mode === "agent" && message.pending === true)
 
+  const sideQuestion = useSideQuestion(activeSessionName)
+
   // 回顾：打开隔了很久的 AGENT 时向服务端要一句话（每条最终回复只问一次）；/recap 强制重新生成
   const [recapState, setRecapState] = React.useState<{ name: string; recap: Recap } | null>(null)
   const [recapDismissed, setRecapDismissed] = React.useState("")
@@ -1749,6 +1753,12 @@ export function WorkspacePanel({
     if (!activeSession) return
     if (name === "model") {
       document.querySelector<HTMLButtonElement>('button[aria-label^="选择模型"]')?.click()
+    } else if (name === "btw") {
+      if (!args) {
+        toast.error("用法：/btw 你的问题")
+        return
+      }
+      void sideQuestion.ask(activeSession.name, args)
     } else if (name === "recap") {
       try {
         const data = await apiPost(`/api/sessions/${encodeURIComponent(activeSession.name)}/agent/recap`, { force: true })
@@ -2417,6 +2427,15 @@ export function WorkspacePanel({
             return shown ? <RecapLine text={shown.text} onClose={() => setRecapDismissed(shown.forMessageId)} /> : null
           })()
         : null}
+
+      {view === "activity" && sideQuestion.state ? (
+        <SideAnswer
+          state={sideQuestion.state}
+          onClose={sideQuestion.close}
+          sessionName={sideQuestion.state.sessionName}
+          baseDir={activeSession?.containerPath || "/"}
+        />
+      ) : null}
 
       {view === "activity" && !emptyConversation ? composerNode : null}
 

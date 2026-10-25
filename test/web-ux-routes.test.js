@@ -45,6 +45,16 @@ function writeFakes(tempHost) {
     fs.writeFileSync(path.join(binDir, 'claude'), `#!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+if (process.argv.includes('--fork-session') || (process.argv.includes('--no-session-persistence') && process.argv.some(item => item.startsWith('SIDE:')))) {
+  // 侧问：记一笔，问题以 SIDE: 开头时回答；含 SLOW 的慢一点（给并发 / 取消用例）
+  fs.appendFileSync(${JSON.stringify(argvLog)} + '.side', JSON.stringify(process.argv.slice(2)) + '\\n');
+  const question = process.argv[process.argv.length - 1];
+  setTimeout(() => {
+    process.stdout.write(JSON.stringify({ type: 'result', result: '侧问答案：' + question }) + '\\n');
+    process.exit(0);
+  }, question.includes('SLOW') ? 1200 : 0);
+  return;
+}
 if (process.argv.includes('--no-session-persistence')) {
   // 轻量调用（自动标题 / 回顾）：记一笔，回一个带引号的标题，不碰主运行的记录文件
   fs.appendFileSync(${JSON.stringify(argvLog)} + '.light', JSON.stringify(process.argv.slice(2)) + '\\n');
@@ -337,6 +347,61 @@ describe('自动标题', () => {
             const argv = JSON.parse(calls[0]);
             expect(argv).toEqual(expect.arrayContaining(['-p', '--no-session-persistence', '--tools', '', '--output-format', 'json']));
             expect(argv[argv.length - 1]).toBe('帮我修一下登录页面');
+        });
+    });
+});
+
+describe('侧问', () => {
+    test('带上下文问一句：不进对话记录、不占运行锁；没有引擎会话时是无上下文提问；同一 AGENT 同时一个；参数校验', async () => {
+        await withServer(async ({ baseUrl, cookie, argvLog }) => {
+            const url = `${baseUrl}/api/sessions/demo/agent/side`;
+            const ask = (question, extra = {}) => request(url, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ question, ...extra }) });
+            expect((await request(url, { method: 'POST', body: '{}' })).response.status).toBe(401);
+            expect((await ask('')).response.status).toBe(400);
+            expect((await ask('字'.repeat(4001))).response.status).toBe(400);
+            expect((await request(url, { method: 'POST', headers: { Cookie: cookie }, body: '{"question":5}' })).response.status).toBe(400);
+
+            // 还没有引擎会话：不带 -r / --fork-session
+            const first = await ask('SIDE:1 你好');
+            expect(first.response.status).toBe(200);
+            expect(first.json.answer).toBe('侧问答案：SIDE:1 你好');
+            const noContext = JSON.parse(fs.readFileSync(`${argvLog}.side`, 'utf8').trim().split('\n')[0]);
+            expect(noContext).not.toContain('-r');
+            expect(noContext).not.toContain('--fork-session');
+
+            // 跑一轮拿到引擎会话 id，再问：分叉且不落盘
+            await request(`${baseUrl}/api/sessions/demo/agent/stream`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ prompt: 'hi', clientMessageId: 'side-0001' }) });
+            const before = (await request(`${baseUrl}/api/sessions/demo/messages`, { headers: { Cookie: cookie } })).json.messages.length;
+            const second = await ask('SIDE:2 上文是什么');
+            expect(second.json.answer).toContain('SIDE:2');
+            const lines = fs.readFileSync(`${argvLog}.side`, 'utf8').trim().split('\n');
+            const withContext = JSON.parse(lines[lines.length - 1]);
+            expect(withContext).toEqual(expect.arrayContaining(['-r', SESSION_ID, '--fork-session', '--no-session-persistence']));
+            const after = (await request(`${baseUrl}/api/sessions/demo/messages`, { headers: { Cookie: cookie } })).json.messages.length;
+            expect(after).toBe(before);
+
+            // 同一 AGENT 同时一个
+            const slow = ask('SIDE:3 SLOW');
+            await new Promise(resolve => setTimeout(resolve, 150));
+            expect((await ask('SIDE:4')).response.status).toBe(409);
+            expect((await slow).json.answer).toContain('SLOW');
+            expect((await ask('SIDE:5')).response.status).toBe(200);
+        });
+    });
+
+    test('客户端中途断开后，同一 AGENT 可以再问', async () => {
+        await withServer(async ({ baseUrl, cookie }) => {
+            const url = `${baseUrl}/api/sessions/demo/agent/side`;
+            const controller = new AbortController();
+            const pending = fetch(url, { method: 'POST', signal: controller.signal, headers: { Cookie: cookie, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({ question: 'SIDE:slow SLOW' }) }).catch(() => null);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            controller.abort();
+            await pending;
+            const next = await waitFor(async () => {
+                const res = await request(url, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ question: 'SIDE:after' }) });
+                return res.response.status === 200 ? res : null;
+            }, 6000);
+            expect(next.json.answer).toContain('SIDE:after');
         });
     });
 });
