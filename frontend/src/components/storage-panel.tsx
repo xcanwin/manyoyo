@@ -260,8 +260,12 @@ export function StoragePanel({
                 key={session.name}
                 className="flex flex-wrap items-center gap-2"
               >
-                {`${session.name}（${SESSION_STATE_LABEL[session.state]}）`}
-                {session.remark ? <Hint>{session.remark}</Hint> : null}
+                <span>{session.name}</span>
+                {session.remark ? <span>{session.remark}</span> : null}
+                {/* 状态标签与容器列表一致：运行中 = 绿色，已停止 / 已删除 = 描边 */}
+                <Badge variant={session.state === "running" ? "success" : "outline"}>
+                  {SESSION_STATE_LABEL[session.state]}
+                </Badge>
                 {currentBadge(session.name)}
                 {enterButton(session.name)}
               </span>

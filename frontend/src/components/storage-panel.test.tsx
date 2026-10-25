@@ -54,7 +54,8 @@ describe("StoragePanel", () => {
     expect(items[0].textContent).toContain("3.0 MB")
     // 关联容器：名字之外还显示容器备注（有就显示）
     const text = container.textContent ?? ""
-    expect(text).toContain("live-1（运行中）")
+    expect(text).toContain("live-1")
+    expect(text).toContain("运行中")
     expect(text).toContain("前端联调")
     expect(items[2].textContent).toContain("计算体积")
     const buttons = container.querySelectorAll<HTMLButtonElement>('button[aria-label^="删除 /"]')

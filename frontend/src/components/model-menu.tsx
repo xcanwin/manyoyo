@@ -216,12 +216,15 @@ export function ModelMenu({
                   <DropdownMenuLabel>推理强度</DropdownMenuLabel>
                   <DropdownMenuRadioGroup value={effort.current} onValueChange={(value) => void selectEffort(String(value))}>
                     <DropdownMenuRadioItem closeOnClick value="">
-                      {effort.envDefault ? `默认（环境变量：${effort.envDefault}）` : "默认"}
+                      默认
+                      {effort.envDefault ? (
+                        <span className="ml-auto shrink-0 text-muted-foreground">环境变量：{effort.envDefault}</span>
+                      ) : null}
                     </DropdownMenuRadioItem>
                     {effort.levels.map((level) => (
                       <DropdownMenuRadioItem closeOnClick key={level} value={level}>
                         {effortLabel(level)}
-                        <span className="ml-auto shrink-0 text-muted-foreground">{level.toUpperCase()}</span>
+                        <span className="ml-auto shrink-0 text-muted-foreground">{level}</span>
                       </DropdownMenuRadioItem>
                     ))}
                   </DropdownMenuRadioGroup>

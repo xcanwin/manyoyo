@@ -61,20 +61,20 @@ describe("推理强度在模型菜单最下面", () => {
     const text = document.body.textContent ?? ""
     expect(text).toContain("推理强度")
     // 中文名在左，英文名贴着右边（样式和上面的档位别名一样）
-    expect(items()).toEqual(expect.arrayContaining(["默认", "低LOW", "高HIGH", "最高MAX"]))
+    expect(items()).toEqual(expect.arrayContaining(["默认", "低low", "高high", "最高max"]))
   })
   test("默认项在环境变量里设了强度时写明；当前强度不在选项里时选中默认", async () => {
     envDefault = "max"
     await render({ session: { ...session, effort: "ultra" } as SessionSummary })
     await openMenu()
-    expect(items()).toContain("默认（环境变量：max）")
+    expect(items()).toContain("默认环境变量：max")
     const checked = Array.from(document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')).map((el) => el.textContent)
-    expect(checked.some((text) => text?.startsWith("默认（环境变量"))).toBe(true)
+    expect(checked.some((text) => text?.startsWith("默认环境变量"))).toBe(true)
   })
   test("点一档就 POST /effort", async () => {
     await render()
     await openMenu()
-    const low = Array.from(document.querySelectorAll('[role="menuitemradio"]')).find((el) => el.textContent === "低LOW") as HTMLElement
+    const low = Array.from(document.querySelectorAll('[role="menuitemradio"]')).find((el) => el.textContent === "低low") as HTMLElement
     await act(async () => low.click())
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
     expect(posts).toEqual([{ url: "/api/sessions/demo/effort", body: { effort: "low" } }])
@@ -90,7 +90,7 @@ describe("推理强度在模型菜单最下面", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})))
     await act(async () => root.render(<ModelMenu session={session} disabled={false} onChanged={() => {}} />))
     await openMenu()
-    expect(items()).toContain("低LOW")
+    expect(items()).toContain("低low")
   })
   test("codex / claude 以外的 Agent 不请求也没有这一组", async () => {
     await render({ session: { ...session, agentProgram: "gemini" } as SessionSummary })
