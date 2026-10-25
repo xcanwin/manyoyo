@@ -141,7 +141,7 @@ export function EnvEditor({
           onChange={(event) => onChange(event.target.value)}
         />
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className={cn("flex flex-col", mobile ? "gap-4" : "gap-2")}>
           {entries.length && !mobile ? (
             <div className="flex items-center gap-2">
               <ColumnHeader className="w-2/5 px-1">变量名</ColumnHeader>

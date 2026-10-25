@@ -1,4 +1,4 @@
-import { act } from "react"
+import { act, useEffect } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
@@ -12,7 +12,7 @@ import type { SessionSummary } from "@/lib/api"
 
 let container: HTMLDivElement
 let root: Root
-let openSidebar: () => void = () => {}
+const control: { open: () => void } = { open: () => {} }
 
 beforeEach(() => {
   Object.defineProperty(window, "innerWidth", { value: 390, configurable: true })
@@ -31,7 +31,9 @@ afterEach(async () => {
 
 function Opener() {
   const { setOpenMobile } = useSidebar()
-  openSidebar = () => setOpenMobile(true)
+  useEffect(() => {
+    control.open = () => setOpenMobile(true)
+  }, [setOpenMobile])
   return null
 }
 
@@ -64,7 +66,7 @@ async function mount() {
       </ThemeProvider>
     )
   )
-  await act(async () => openSidebar())
+  await act(async () => control.open())
 }
 
 const sidebarOpen = () => document.querySelector('[data-slot="sidebar"][data-mobile="true"]') !== null

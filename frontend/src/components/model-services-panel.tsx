@@ -298,6 +298,7 @@ export function ModelServicesPanel({ onSaved }: { onSaved?: () => void } = {}) {
                 <Button
                   type="button"
                   size="sm"
+                  variant="outline"
                   className="shrink-0"
                   disabled={busy !== ""}
                   onClick={() => void handleReuse(item.from, item.agent)}

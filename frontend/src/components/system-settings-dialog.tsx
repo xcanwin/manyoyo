@@ -880,7 +880,7 @@ export function SystemSettingsDialog({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-sm"
+                    size="icon-lg"
                     title="更多"
                     aria-label="更多"
                     className="shrink-0"
