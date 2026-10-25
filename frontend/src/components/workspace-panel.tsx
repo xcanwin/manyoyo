@@ -8,6 +8,7 @@ import {
   CopyIcon,
   EllipsisIcon,
   Undo2Icon,
+  GitBranchIcon,
   ImagePlusIcon,
   ListEndIcon,
   MessageSquareIcon,
@@ -325,9 +326,11 @@ function ActivityView({
   tail,
   onOpenPath,
   onRewind,
+  onFork,
 }: {
-  // 用户消息的操作：回退到这里；不传就没有这个按钮
+  // 用户消息的操作：回退到这里 / 从这里分叉；不传就没有这个按钮
   onRewind?: (message: ChatMessage) => void
+  onFork?: (message: ChatMessage) => void
   session: SessionSummary | null
   messages: ChatMessage[]
   mode: "agent" | "command"
@@ -739,6 +742,11 @@ function ActivityView({
                       {message.role === "user" && message.mode === "agent" && !message.pending && !running && onRewind && typeof message.id === "string" && !message.id.startsWith(LOCAL_USER_MESSAGE_ID_PREFIX) ? (
                         <Button variant="ghost" size="icon-xs" className="touch-hit" aria-label="回退到这里" title="回退到这里" onClick={() => onRewind(message)}>
                           <Undo2Icon />
+                        </Button>
+                      ) : null}
+                      {message.role === "user" && message.mode === "agent" && !message.pending && !running && onFork && typeof message.id === "string" && !message.id.startsWith(LOCAL_USER_MESSAGE_ID_PREFIX) ? (
+                        <Button variant="ghost" size="icon-xs" className="touch-hit" aria-label="从这里分叉" title="从这里分叉：新建一个 AGENT，带着这之前的对话" onClick={() => onFork(message)}>
+                          <GitBranchIcon />
                         </Button>
                       ) : null}
                     </Hint>
@@ -1748,11 +1756,33 @@ export function WorkspacePanel({
     if (result.scope === "files") void requestSync(true, true)
   }
 
+  // 分叉：同容器新建一个 AGENT，带着这条提示词之前的对话（不给 id 就是全部），提示词放进新 AGENT 的输入框；原 AGENT 不变
+  async function forkSession(messageId?: string) {
+    if (!activeSession) return
+    if (!(await confirmLeaveIfDirty())) return
+    try {
+      const data = await apiPost(
+        `/api/sessions/${encodeURIComponent(activeSession.name)}/agent/fork`,
+        messageId ? { messageId } : {}
+      )
+      const newName = typeof data.name === "string" ? data.name : ""
+      if (!newName) throw new Error("分叉失败")
+      if (typeof data.prompt === "string" && data.prompt) saveDraft(newName, data.prompt)
+      await onAfterSend()
+      window.location.hash = `#${encodeURIComponent(newName)}`
+      toast.success("已分叉出新的 AGENT，原来的不变")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "分叉失败")
+    }
+  }
+
   // 网页自己处理的斜杠命令（lib/web-commands.ts）：不发给 Agent
   async function runWebCommand(name: string, args: string) {
     if (!activeSession) return
     if (name === "model") {
       document.querySelector<HTMLButtonElement>('button[aria-label^="选择模型"]')?.click()
+    } else if (name === "fork") {
+      await forkSession()
     } else if (name === "btw") {
       if (!args) {
         toast.error("用法：/btw 你的问题")
@@ -2319,6 +2349,7 @@ export function WorkspacePanel({
               followSignal={sendTick}
               onOpenPath={openPathInFiles}
               onRewind={(message) => setRewindTarget(message)}
+              onFork={(message) => void forkSession(String(message.id))}
               tail={
                 <QueuedPrompts
                   items={activeSession ? queueBySession[activeSession.name] ?? [] : []}

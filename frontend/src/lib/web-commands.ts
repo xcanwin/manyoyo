@@ -16,6 +16,7 @@ export const WEB_COMMANDS: WebCommand[] = [
   { name: "diff", description: "查看工作目录里的改动" },
   { name: "clear", description: "在这个容器里新建一个 AGENT" },
   { name: "copy", description: "复制最后一条回复" },
+  { name: "fork", description: "从最新处分叉出一个新的 AGENT，带着现在的对话" },
   { name: "btw", description: "带着上下文问一句，不打断主任务", argumentHint: "<问题>", agents: ["claude", "codex"] },
   { name: "recap", description: "用一句话回顾刚才做到哪", agents: ["claude", "codex"] },
 ]

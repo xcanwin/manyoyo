@@ -13,6 +13,7 @@ const { BUILTIN_AGENT_INSTRUCTIONS } = require('../lib/agent-instructions');
 // 假 claude 输出 stream-json，并像真 claude 一样把 ai-title 写进 $CLAUDE_CONFIG_DIR/projects/*/<sid>.jsonl
 
 const SESSION_ID = '0d6c1f6a-1111-4a2b-9c3d-123456789abc';
+const FORK_SESSION_ID = 'f0f0f0f0-2222-4a2b-9c3d-123456789abc';
 
 function getFreePort() {
     return new Promise((resolve, reject) => {
@@ -45,7 +46,9 @@ function writeFakes(tempHost) {
     fs.writeFileSync(path.join(binDir, 'claude'), `#!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
-if (process.argv.includes('--fork-session') || (process.argv.includes('--no-session-persistence') && process.argv.some(item => item.startsWith('SIDE:')))) {
+// 探测 --forward-subagent-text 用的 claude --help：不产生任何记录
+if (process.argv.includes('--help')) process.exit(0);
+if (process.argv.includes('--no-session-persistence') && String(process.argv[process.argv.length - 1]).startsWith('SIDE:')) {
   // 侧问：记一笔，问题以 SIDE: 开头时回答；含 SLOW 的慢一点（给并发 / 取消用例）
   fs.appendFileSync(${JSON.stringify(argvLog)} + '.side', JSON.stringify(process.argv.slice(2)) + '\\n');
   const question = process.argv[process.argv.length - 1];
@@ -61,11 +64,6 @@ if (process.argv.includes('--no-session-persistence')) {
   process.stdout.write(JSON.stringify({ type: 'result', result: '“修复登录页面。”\\n多余的解释' }) + '\\n');
   process.exit(0);
 }
-fs.writeFileSync(${JSON.stringify(argvLog)}, JSON.stringify(process.argv.slice(2)));
-fs.writeFileSync(${JSON.stringify(argvLog)} + '.effort', process.env.CLAUDE_CODE_EFFORT_LEVEL || '');
-const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', '-workspace');
-fs.mkdirSync(dir, { recursive: true });
-fs.appendFileSync(path.join(dir, '${SESSION_ID}.jsonl'), '{"type":"user","x":1}\\n{"type":"ai-title","aiTitle":"旧标题","sessionId":"${SESSION_ID}"}\\n{"type":"ai-title","aiTitle":"  修复登录\\\\u0007页面 <b>bug</b>  ","sessionId":"${SESSION_ID}"}\\n');
 if (process.argv.includes('--input-format')) {
   // 协议探测（斜杠命令目录 / 模型目录）：直接回 initialize 的响应（假 docker 不转发 stdin），不跑模型
   const fixture = JSON.parse(fs.readFileSync(${JSON.stringify(path.join(__dirname, 'fixtures', 'claude-initialize.json'))}, 'utf8'));
@@ -75,14 +73,33 @@ if (process.argv.includes('--input-format')) {
   }
   process.exit(0);
 }
+fs.writeFileSync(${JSON.stringify(argvLog)}, JSON.stringify(process.argv.slice(2)));
+fs.writeFileSync(${JSON.stringify(argvLog)} + '.effort', process.env.CLAUDE_CODE_EFFORT_LEVEL || '');
+const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', '-workspace');
+fs.mkdirSync(dir, { recursive: true });
+// 像真 claude 一样写带 uuid 的 user / assistant 记录，回退 / 分叉靠它们找“这一轮之前”的位置
+const crypto = require('crypto');
+const prompt = String(process.argv[process.argv.length - 1]);
+const lastFile = path.join(dir, '.last-uuid');
+const parent = fs.existsSync(lastFile) ? fs.readFileSync(lastFile, 'utf8') : null;
+const userUuid = crypto.randomUUID();
+const assistantUuid = crypto.randomUUID();
+fs.appendFileSync(path.join(dir, '${SESSION_ID}.jsonl'),
+  JSON.stringify({ type: 'user', uuid: userUuid, parentUuid: parent, timestamp: new Date().toISOString(), message: { content: prompt } }) + '\\n' +
+  JSON.stringify({ type: 'assistant', uuid: assistantUuid, parentUuid: userUuid, timestamp: new Date().toISOString(), message: { content: [{ type: 'text', text: '好' }] } }) + '\\n');
+fs.writeFileSync(lastFile, assistantUuid);
+const forked = process.argv.includes('--fork-session');
+const sessionId = forked ? '${FORK_SESSION_ID}' : '${SESSION_ID}';
+fs.appendFileSync(path.join(dir, '${SESSION_ID}.jsonl'), '{"type":"user","x":1}\\n{"type":"ai-title","aiTitle":"旧标题","sessionId":"${SESSION_ID}"}\\n{"type":"ai-title","aiTitle":"  修复登录\\\\u0007页面 <b>bug</b>  ","sessionId":"${SESSION_ID}"}\\n');
 const out = [
-  { type: 'system', subtype: 'init', session_id: '${SESSION_ID}', slash_commands: ['compact', 'color', 'my-skill', 'bad name!', 'doctor'], skills: ['my-skill', 'doctor'], terminal_slash_commands: ['doctor', 'color'] },
+  { type: 'system', subtype: 'init', session_id: sessionId, slash_commands: ['compact', 'color', 'my-skill', 'bad name!', 'doctor'], skills: ['my-skill', 'doctor'], terminal_slash_commands: ['doctor', 'color'] },
   { type: 'stream_event', event: { type: 'message_start', message: { usage: { input_tokens: 0, output_tokens: 0 } } } },
   { type: 'stream_event', event: { type: 'message_delta', usage: { input_tokens: 1200, cache_read_input_tokens: 800, cache_creation_input_tokens: 0, output_tokens: 50 } } },
   { type: 'assistant', message: { content: [{ type: 'text', text: '好' }] } },
-  { type: 'result', subtype: 'success', result: '好', session_id: '${SESSION_ID}', modelUsage: { m: { contextWindow: 200000 } } }
+  { type: 'result', subtype: 'success', result: '好', session_id: sessionId, modelUsage: { m: { contextWindow: 200000 } } }
 ];
-process.stdout.write(out.map(item => JSON.stringify(item)).join('\\n') + '\\n');
+const finish = () => process.stdout.write(out.map(item => JSON.stringify(item)).join('\\n') + '\\n');
+if (prompt.includes('SLOWRUN')) setTimeout(finish, 1500); else finish();
 `);
     fs.chmodSync(path.join(binDir, 'claude'), 0o755);
     const docker = path.join(tempHost, 'fake-docker.js');
@@ -106,6 +123,15 @@ if (args[0] === 'exec' && index >= 0 && require('fs').existsSync(dropFile) && ar
     process.exit(result.status === null ? 1 : result.status);
   });
   return;
+}
+// 分叉 / 回退读会话记录用的是 bash -c 加脚本（不走登录 shell）：只放行这一种，别的（快照等）仍然什么都不做
+const plainIndex = args.indexOf('bash');
+if (args[0] === 'exec' && index < 0 && plainIndex >= 0 && String(args[plainIndex + 2]).includes('parentUuid')) {
+  const result = spawnSync('bash', ['-c', args[plainIndex + 2]], {
+    stdio: ['ignore', 'inherit', 'inherit'],
+    env: { ...process.env, PATH: ${JSON.stringify(binDir)} + ':' + process.env.PATH, CLAUDE_CONFIG_DIR: ${JSON.stringify(claudeDir)} }
+  });
+  process.exit(result.status === null ? 1 : result.status);
 }
 if (args[0] === 'exec' && index >= 0) {
   const result = spawnSync('bash', ['-c', args[index + 2]], {
@@ -402,6 +428,79 @@ describe('侧问', () => {
                 return res.response.status === 200 ? res : null;
             }, 6000);
             expect(next.json.answer).toContain('SIDE:after');
+        });
+    });
+});
+
+describe('分叉', () => {
+    test('从某一轮另开一条线：同容器新建 AGENT，带之前的对话，下一轮用 --fork-session 且原 AGENT 不变', async () => {
+        await withServer(async ({ baseUrl, cookie, argvLog, tempHost }) => {
+            const api = (url, options = {}) => request(`${baseUrl}${url}`, { headers: { Cookie: cookie }, ...options });
+            const post = (url, body) => api(url, { method: 'POST', body: JSON.stringify(body) });
+            const stored = () => JSON.parse(fs.readFileSync(path.join(tempHost, 'web-history', 'demo.json'), 'utf8')).agents;
+            expect((await request(`${baseUrl}/api/sessions/demo/agent/fork`, { method: 'POST', body: '{}' })).response.status).toBe(401);
+            const send = (name, prompt, id) => post(`/api/sessions/${encodeURIComponent(name)}/agent/stream`, { prompt, clientMessageId: id });
+            await send('demo', '第一轮', 'fork-0001');
+            await send('demo', '第二轮', 'fork-0002');
+            const original = (await api('/api/sessions/demo/messages')).json;
+            const userMessages = original.messages.filter(item => item.role === 'user');
+            expect(userMessages.map(item => item.content)).toEqual(['第一轮', '第二轮']);
+
+            // 非法 / 不存在的消息
+            expect((await post('/api/sessions/demo/agent/fork', { messageId: 'nope' })).response.status).toBe(404);
+            const assistant = original.messages.find(item => item.role === 'assistant');
+            expect((await post('/api/sessions/demo/agent/fork', { messageId: assistant.id })).response.status).toBe(404);
+
+            // 从第二轮分叉：新 AGENT 带第一轮的对话，提示词放回给前端
+            const forked = await post('/api/sessions/demo/agent/fork', { messageId: userMessages[1].id });
+            expect(forked.response.status).toBe(200);
+            expect(forked.json).toMatchObject({ prompt: '第二轮', agentId: 'agent-2', name: 'demo~agent-2' });
+            const forkMessages = (await api(`/api/sessions/${encodeURIComponent(forked.json.name)}/messages`)).json.messages;
+            expect(forkMessages.filter(item => item.role === 'user').map(item => item.content)).toEqual(['第一轮']);
+            expect(forkMessages.every(item => !item.clientMessageId && !item.pending)).toBe(true);
+
+            // 下一轮：命令带 -r 原会话 --resume-session-at <第一轮回复> --fork-session；跑完拿到新会话 id
+            const records = fs.readFileSync(path.join(path.dirname(argvLog), 'claude-config', 'projects', '-workspace', `${SESSION_ID}.jsonl`), 'utf8')
+                .split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(item => item.uuid);
+            const firstAssistant = records.find(item => item.type === 'assistant');
+            await send(forked.json.name, '分叉后的新问题', 'fork-0003');
+            const argv = JSON.parse(fs.readFileSync(argvLog, 'utf8'));
+            expect(argv).toEqual(expect.arrayContaining(['-r', SESSION_ID, '--resume-session-at', firstAssistant.uuid, '--fork-session']));
+            const sessions = (await api('/api/sessions')).json.sessions;
+            const forkSummary = sessions.find(item => item.name === 'demo~agent-2');
+            expect(forkSummary).toBeDefined();
+
+            // 原 AGENT 不变：消息、会话 id 不动
+            const after = (await api('/api/sessions/demo/messages')).json;
+            expect(after.messages.map(item => item.id)).toEqual(original.messages.map(item => item.id));
+            expect(after.epoch).toBe(original.epoch);
+            expect(stored().default.engineSessionId).toBe(SESSION_ID);
+            expect(stored()['agent-2']).toMatchObject({ engineSessionId: FORK_SESSION_ID, forkPending: false, rewindToUuid: '' });
+            expect(stored()['agent-2'].autoTitle).toMatch(/（分叉）$/);
+
+            // 再发一轮不再带 --fork-session
+            await send(forked.json.name, '再来一轮', 'fork-0004');
+            const next = JSON.parse(fs.readFileSync(argvLog, 'utf8'));
+            expect(next).not.toContain('--fork-session');
+            expect(next).toEqual(expect.arrayContaining(['-r', FORK_SESSION_ID]));
+        });
+    });
+
+    test('从最新处分叉（不给 messageId）：带全部对话；任务进行中 409', async () => {
+        await withServer(async ({ baseUrl, cookie }) => {
+            const api = (url, options = {}) => request(`${baseUrl}${url}`, { headers: { Cookie: cookie }, ...options });
+            const post = (url, body) => api(url, { method: 'POST', body: JSON.stringify(body) });
+            await post('/api/sessions/demo/agent/stream', { prompt: '第一轮', clientMessageId: 'fork-1001' });
+            const latest = await post('/api/sessions/demo/agent/fork', {});
+            expect(latest.response.status).toBe(200);
+            expect(latest.json.prompt).toBe('');
+            const messages = (await api(`/api/sessions/${encodeURIComponent(latest.json.name)}/messages`)).json.messages;
+            expect(messages.filter(item => item.role === 'user' && item.mode === 'agent')).toHaveLength(1);
+
+            const running = post('/api/sessions/demo/agent/stream', { prompt: 'SLOWRUN', clientMessageId: 'fork-1002' });
+            await new Promise(resolve => setTimeout(resolve, 300));
+            expect((await post('/api/sessions/demo/agent/fork', {})).response.status).toBe(409);
+            await running;
         });
     });
 });

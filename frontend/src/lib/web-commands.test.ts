@@ -39,7 +39,7 @@ describe("listWebCommands", () => {
   test("每个 Agent 都有基础命令，说明是中文一句话", () => {
     for (const program of ["claude", "codex", "gemini", "opencode", ""]) {
       const names = listWebCommands(program).map((item) => item.name)
-      expect(names).toEqual(expect.arrayContaining(["model", "status", "diff", "clear", "copy"]))
+      expect(names).toEqual(expect.arrayContaining(["model", "status", "diff", "clear", "copy", "fork"]))
     }
     listWebCommands("claude").forEach((item) => expect(item.description).toMatch(/[一-龥]/))
   })
