@@ -6,7 +6,7 @@ describe("matchWebCommand", () => {
   test("注册名精确匹配，后面可跟参数", () => {
     expect(matchWebCommand("/model", "claude")).toMatchObject({ command: { name: "model" }, args: "" })
     expect(matchWebCommand("  /diff  ", "codex")).toMatchObject({ command: { name: "diff" }, args: "" })
-    expect(matchWebCommand("/status extra words", "claude")).toMatchObject({ command: { name: "status" }, args: "extra words" })
+    expect(matchWebCommand("/effort high", "claude")).toMatchObject({ command: { name: "effort" }, args: "high" })
   })
   test("名字只是前缀、不在注册表里、不是以 / 开头：不拦截", () => {
     expect(matchWebCommand("/modelx", "claude")).toBeNull()
@@ -30,8 +30,12 @@ describe("matchWebCommand", () => {
     expect(matchWebCommand("/btw x", "gemini")).toBeNull()
     expect(matchWebCommand("/btwx 问", "claude")).toBeNull()
   })
-  test("换行后的参数也算参数", () => {
-    expect(matchWebCommand("/copy\nmore", "claude")).toMatchObject({ command: { name: "copy" }, args: "more" })
+  test("不带参数的命令后面跟了内容：是在对 Agent 说话，不拦截（不吞用户的话）", () => {
+    expect(matchWebCommand("/review 重点看 src/a.ts", "claude")).toBeNull()
+    expect(matchWebCommand("/status extra words", "claude")).toBeNull()
+    expect(matchWebCommand("/copy\nmore", "claude")).toBeNull()
+    expect(matchWebCommand("/plan 先想想", "claude")).toBeNull()
+    expect(matchWebCommand("/review", "claude")).toMatchObject({ command: { name: "review" }, args: "" })
   })
 })
 

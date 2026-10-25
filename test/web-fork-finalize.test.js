@@ -45,6 +45,11 @@ describe('分叉的收尾（finalizeWebAgentExecution）', () => {
         expect(read()).toMatchObject({ engineSessionId: ORIGINAL, forkPending: true, rewindToUuid: AT });
     });
 
+    test('init 之后命令才失败（输出里有新 id 但退出码非 0）：不算分叉完成，保留，下一轮重新从原会话分叉', () => {
+        run(claudeOutput(FORKED), 1, ORIGINAL);
+        expect(read()).toMatchObject({ forkPending: true, rewindToUuid: AT });
+    });
+
     test('输出里的 id 还是原会话（没有真的分叉）：同样保留', () => {
         run(claudeOutput(ORIGINAL), 0, ORIGINAL);
         expect(read()).toMatchObject({ engineSessionId: ORIGINAL, forkPending: true, rewindToUuid: AT });

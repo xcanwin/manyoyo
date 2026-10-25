@@ -83,6 +83,28 @@ describe('init.sh 的 trust_workdir', () => {
         expect(fs.readFileSync(codexFile(), 'utf8')).toBe('');
     });
 
+    test('codex 配置里已经有这个目录的表（单引号、行尾注释等不同写法）：不再追加，避免重复的表', () => {
+        for (const header of ['[projects."DIR"]', "[projects.'DIR']", '[projects."DIR"]   # 我自己加的']) {
+            const original = `model = "a"\n${header.replace('DIR', real())}\ntrust_level = "untrusted"\n`;
+            fs.writeFileSync(codexFile(), original);
+            runTrust(home, work);
+            expect(fs.readFileSync(codexFile(), 'utf8')).toBe(original);
+        }
+    });
+
+    test('~/.claude.json 所在目录不可写（rename 不了）：回退成原地写，信任仍然生效', () => {
+        fs.writeFileSync(claudeFile(), '{}');
+        fs.chmodSync(home, 0o555);
+        try {
+            if (typeof process.getuid === 'function' && process.getuid() === 0) return; // root 不受目录权限限制，这个用例没意义
+            const result = runTrust(home, work);
+            expect(result.stdout).toContain('rc=0');
+            expect(JSON.parse(fs.readFileSync(claudeFile(), 'utf8')).projects[real()].hasTrustDialogAccepted).toBe(true);
+        } finally {
+            fs.chmodSync(home, 0o755);
+        }
+    });
+
     test('没有 node 时不报错，codex 仍写入', () => {
         fs.writeFileSync(claudeFile(), '{}');
         fs.writeFileSync(codexFile(), '');

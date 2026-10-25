@@ -1,5 +1,5 @@
 // 网页自己处理的斜杠命令（不交给 Agent）。发送时输入框内容以 /<注册名> 开头（后面是空白或结尾）、
-// 且适用于当前 Agent 才拦截，否则照旧当提示词发出。候选列表里同名时网页命令优先。
+// 适用于当前 Agent、而且（命令不带参数时）后面没有别的内容才拦截，否则照旧当提示词发出。候选列表里同名时网页命令优先。
 
 export type WebCommand = {
   name: string
@@ -36,7 +36,11 @@ export function matchWebCommand(
   const matched = /^\/([A-Za-z0-9:_.-]+)(?:\s+([\s\S]*))?$/.exec(text.trim())
   if (!matched) return null
   const command = listWebCommands(agentProgram).find((item) => item.name === matched[1])
-  return command ? { command, args: (matched[2] ?? "").trim() } : null
+  if (!command) return null
+  const args = (matched[2] ?? "").trim()
+  // 不带参数的命令后面跟了内容（“/review 重点看 src/a.ts”、同名的用户技能）就是在对 Agent 说话：原样发出去，不能吞掉
+  if (args && !command.argumentHint) return null
+  return { command, args }
 }
 
 // 最后一条已完成的 Agent 回复（给 /copy 用）

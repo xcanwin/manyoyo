@@ -55,16 +55,24 @@ const project = data.projects[dir] && typeof data.projects[dir] === "object" ? d
 if (project.hasTrustDialogAccepted === true) process.exit(0);
 project.hasTrustDialogAccepted = true;
 data.projects[dir] = project;
+const text = JSON.stringify(data, null, 2);
 const tmp = file + ".manyoyo-tmp";
-fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: fs.statSync(file).mode & 0o777 });
-fs.renameSync(tmp, file);
+try {
+    fs.writeFileSync(tmp, text, { mode: fs.statSync(file).mode & 0o777 });
+    fs.renameSync(tmp, file);
+} catch (e) {
+    // 目录不可写或文件是单独挂进来的（rename 会失败）：直接原地写
+    try { fs.unlinkSync(tmp); } catch (e2) {}
+    fs.writeFileSync(file, text);
+}
 ' >/dev/null 2>&1
     fi
     if [ -f "$HOME/.codex/config.toml" ]; then
         case "$dir" in
             *[\"\\]*|*[[:cntrl:]]*) return 0 ;;
         esac
-        grep -qxF "[projects.\"$dir\"]" "$HOME/.codex/config.toml" 2>/dev/null \
+        # 已经有这个目录的 [projects.…] 表（写法可能不同：单引号、行尾注释）就不再追加，重复的表会让 codex 解析配置失败
+        grep -F "$dir" "$HOME/.codex/config.toml" 2>/dev/null | grep -q '^[[:space:]]*\[projects\.' \
             || printf '\n[projects."%s"]\ntrust_level = "trusted"\n' "$dir" >> "$HOME/.codex/config.toml" 2>/dev/null
     fi
     return 0

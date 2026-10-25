@@ -70,6 +70,9 @@ if (process.argv.includes('--no-session-persistence')) {
   process.exit(0);
 }
 if (process.argv.includes('--input-format')) {
+  fs.appendFileSync(${JSON.stringify(argvLog)} + '.probe', 'probe\\n');
+  // 模拟容器里取不到目录（claude 不在 / 探测失败）
+  if (fs.existsSync(${JSON.stringify(path.join(tempHost, 'no-catalog'))})) process.exit(1);
   // 协议探测（斜杠命令目录 / 模型目录）：直接回 initialize 的响应（假 docker 不转发 stdin），不跑模型
   const fixture = JSON.parse(fs.readFileSync(${JSON.stringify(path.join(__dirname, 'fixtures', 'claude-initialize.json'))}, 'utf8'));
   for (const id of ['manyoyo-command-catalog', 'manyoyo-model-catalog']) {
@@ -522,6 +525,74 @@ describe('分叉', () => {
             expect((await post('/api/sessions/demo/agent/fork', {})).response.status).toBe(409);
             await running;
         });
+    });
+});
+
+describe('审查发现的问题（回归）', () => {
+    test('刚分叉、第一轮还没发的 AGENT 不能侧问（会看到分叉点之后的内容）', async () => {
+        await withServer(async ({ baseUrl, cookie }) => {
+            const post = (url, body) => request(`${baseUrl}${url}`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify(body) });
+            await post('/api/sessions/demo/agent/stream', { prompt: '第一轮', clientMessageId: 'rev-0001' });
+            const forked = await post('/api/sessions/demo/agent/fork', {});
+            const side = await post(`/api/sessions/${encodeURIComponent(forked.json.name)}/agent/side`, { question: 'SIDE:x' });
+            expect(side.response.status).toBe(409);
+            expect(side.json.error).toMatch(/先正常发一条消息/);
+            // 原 AGENT 不受影响
+            expect((await post('/api/sessions/demo/agent/side', { question: 'SIDE:y' })).response.status).toBe(200);
+        });
+    });
+
+    test('从最新处分叉也固定分叉点：原 AGENT 之后又聊了几轮，新 AGENT 仍然从分叉那一刻继续', async () => {
+        await withServer(async ({ baseUrl, cookie, argvLog, tempHost }) => {
+            const post = (url, body) => request(`${baseUrl}${url}`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify(body) });
+            await post('/api/sessions/demo/agent/stream', { prompt: '第一轮', clientMessageId: 'rev-1001' });
+            const forked = await post('/api/sessions/demo/agent/fork', {});
+            const records = fs.readFileSync(path.join(path.dirname(argvLog), 'claude-config', 'projects', '-workspace', `${SESSION_ID}.jsonl`), 'utf8')
+                .split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(item => item.uuid && item.type === 'assistant');
+            const stored = JSON.parse(fs.readFileSync(path.join(tempHost, 'web-history', 'demo.json'), 'utf8')).agents;
+            expect(stored['agent-2'].rewindToUuid).toBe(records[records.length - 1].uuid);
+            // 原 AGENT 继续聊，新 AGENT 的命令仍然带着分叉那一刻的位置
+            await post('/api/sessions/demo/agent/stream', { prompt: '第二轮', clientMessageId: 'rev-1002' });
+            await post(`/api/sessions/${encodeURIComponent(forked.json.name)}/agent/stream`, { prompt: '分叉后', clientMessageId: 'rev-1003' });
+            const argv = JSON.parse(fs.readFileSync(argvLog, 'utf8'));
+            expect(argv).toEqual(expect.arrayContaining(['--resume-session-at', records[records.length - 1].uuid, '--fork-session']));
+        });
+    });
+
+    test('容器里取不到模型目录时：设置强度提示稍后再试（不是“不支持”），设回默认照常，换模型不会悄悄清掉已选强度', async () => {
+        {
+            await withServer(async ({ baseUrl, cookie, tempHost }) => {
+                fs.writeFileSync(path.join(tempHost, 'no-catalog'), '');
+                const post = (url, body) => request(`${baseUrl}${url}`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify(body) });
+                const unknown = await post('/api/sessions/demo/effort', { effort: 'low' });
+                expect(unknown.response.status).toBe(409);
+                expect(unknown.json.error).toMatch(/稍后再试/);
+                expect((await post('/api/sessions/demo/effort', { effort: '' })).response.status).toBe(200);
+                // 已经选好的强度：换模型时目录取不到，保持原样
+                const file = path.join(tempHost, 'web-history', 'demo.json');
+                const history = JSON.parse(fs.readFileSync(file, 'utf8'));
+                history.agents = { default: { ...(history.agents && history.agents.default), agentId: 'default', effort: 'low' } };
+                fs.writeFileSync(file, JSON.stringify(history));
+                const switched = await post('/api/sessions/demo/model', { model: 'other-model' });
+                expect(switched.json.effort).toBe('low');
+            });
+        }
+    });
+
+    test('取不到命令目录时负缓存一小会儿：连续输入 / 不会每次都进容器', async () => {
+        {
+            await withServer(async ({ baseUrl, cookie, argvLog, tempHost }) => {
+                fs.writeFileSync(path.join(tempHost, 'no-catalog'), '');
+                const get = () => request(`${baseUrl}/api/sessions/demo/slash-commands`, { headers: { Cookie: cookie } });
+                for (let i = 0; i < 4; i += 1) {
+                    const res = await get();
+                    expect(res.response.status).toBe(200);
+                    expect(res.json.commands).toEqual([]);
+                }
+                const probes = fs.readFileSync(`${argvLog}.probe`, 'utf8').trim().split('\n');
+                expect(probes).toHaveLength(1);
+            });
+        }
     });
 });
 
