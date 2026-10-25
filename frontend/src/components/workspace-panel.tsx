@@ -2,9 +2,10 @@ import * as React from "react"
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  BetweenHorizontalStartIcon,
+  BotIcon,
   CheckIcon,
   CopyIcon,
-  CornerDownRightIcon,
   EllipsisIcon,
   Undo2Icon,
   ImagePlusIcon,
@@ -49,7 +50,7 @@ import { useSessionSync } from "@/hooks/use-session-sync"
 import { useSyncLoop } from "@/hooks/use-sync-loop"
 import { useResumeIndicator } from "@/hooks/use-resume-indicator"
 import { formatDateTime } from "@/lib/format"
-import { anchoredScrollTop, computeScrollAnchor, computeScrollRestore, isFollowPaused, isOwnScroll, isScrollInput, getBubbleState, nextHasNewBelow, shouldLoadEarlier, type ScrollAnchor } from "@/lib/chat-behavior"
+import { anchoredScrollTop, computeReplyJump, computeScrollAnchor, computeScrollRestore, isFollowPaused, isOwnScroll, isScrollInput, getBubbleState, nextHasNewBelow, shouldLoadEarlier, type ScrollAnchor } from "@/lib/chat-behavior"
 import {
   clearOutbox,
   createClientMessageId,
@@ -348,6 +349,9 @@ function ActivityView({
   const earlierRequestedRef = React.useRef(false)
   // 视野不在底部时内容又变长了：显示“↓ 有新输出”，点一下贴底（见 nextHasNewBelow）
   const [hasNewBelow, setHasNewBelow] = React.useState(false)
+  // “回复开头”浮钮（见 computeReplyJump）：滚动时按 rAF 合并计算一次
+  const [replyJump, setReplyJump] = React.useState<{ key: string; direction: "up" | "down" } | null>(null)
+  const replyJumpFrameRef = React.useRef(0)
   // 只有任务在跑时内容变长才算“新输出”；用户点开执行过程等操作引起的变长不提示
   const runningRef = React.useRef(false)
   const running = displayMessages.some((message) => message.pending)
@@ -415,9 +419,53 @@ function ActivityView({
     }
   }
 
+  function updateReplyJump() {
+    replyJumpFrameRef.current = 0
+    const el = scrollRef.current
+    if (!el) return
+    const box = el.getBoundingClientRect()
+    const turns = Array.from(el.querySelectorAll<HTMLElement>("[data-turn]")).flatMap((node) => {
+      const reply = node.querySelector<HTMLElement>("[data-reply]")
+      if (!reply) return []
+      const rect = node.getBoundingClientRect()
+      const replyRect = reply.getBoundingClientRect()
+      return [{
+        key: node.dataset.turn || "",
+        top: rect.top,
+        bottom: rect.bottom,
+        replyTop: replyRect.top,
+        replyHeight: replyRect.height,
+        hasTrace: node.querySelector("[data-trace-block]") !== null,
+      }]
+    })
+    const next = computeReplyJump({ view: { top: box.top, bottom: box.bottom }, turns })
+    setReplyJump((prev) => (prev?.key === next?.key && prev?.direction === next?.direction ? prev : next))
+  }
+
+  // 跳到这一轮回复的第一行：与执行过程的“对齐到顶部”同一种处理——不再跟随，第一行停在聊天区顶部
+  function jumpToReply(key: string) {
+    const el = scrollRef.current
+    if (!el) return
+    const node = Array.from(el.querySelectorAll<HTMLElement>("[data-turn]")).find((item) => item.dataset.turn === key)
+    const reply = node?.querySelector<HTMLElement>("[data-reply]")
+    if (!reply) return
+    anchorRef.current = "none"
+    pinnedTraceRef.current = null
+    el.scrollTop += reply.getBoundingClientRect().top - el.getBoundingClientRect().top - 8
+    ownScrollTopRef.current = el.scrollTop
+    setReplyJump(null)
+  }
+
+  // 内容变了（回复结束、切换会话、加载更早的消息）也要重新算，否则浮钮停在旧状态
+  React.useEffect(() => {
+    if (!replyJumpFrameRef.current) replyJumpFrameRef.current = requestAnimationFrame(updateReplyJump)
+  }, [displayMessages, session?.name])
+  React.useEffect(() => () => cancelAnimationFrame(replyJumpFrameRef.current), [])
+
   function handleScroll() {
     const el = scrollRef.current
     if (!el) return
+    if (!replyJumpFrameRef.current) replyJumpFrameRef.current = requestAnimationFrame(updateReplyJump)
     if (!isOwnScroll(el.scrollTop, ownScrollTopRef.current)) {
       ownScrollTopRef.current = null
       measureAnchor(el)
@@ -580,6 +628,7 @@ function ActivityView({
             return (
               <React.Fragment key={messageRenderKey(message)}>
               <div
+                data-turn={message.role === "assistant" && message.mode === "agent" && !message.pending && !message.hideBubble ? messageRenderKey(message) : undefined}
                 className={cn(
                   "flex flex-col gap-1 transition-opacity",
                   message.role === "user" ? "items-end" : "items-start",
@@ -672,6 +721,18 @@ function ActivityView({
           {tail}
         </div>
       </div>
+      {replyJump ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-background shadow-md"
+          aria-label="跳到回复开头"
+          onClick={() => jumpToReply(replyJump.key)}
+        >
+          {replyJump.direction === "up" ? <ArrowUpIcon data-icon="inline-start" /> : <ArrowDownIcon data-icon="inline-start" />}
+          回复开头
+        </Button>
+      ) : null}
       {hasNewBelow ? (
         <Button
           variant="outline"
@@ -849,7 +910,8 @@ const STARTER_PROMPTS = ["介绍一下这个项目", "运行测试并修复失�
 // 插入时机按钮的图标随当前选择变化：不点开也能看出追加的内容会怎么发
 const QUEUE_WHEN_ICONS: Record<QueueWhen, typeof ZapIcon> = {
   now: ZapIcon,
-  step: CornerDownRightIcon,
+  // “插到中间”：两段之间插进一条（原来的拐角箭头像撤回 / 回复，不敢点）
+  step: BetweenHorizontalStartIcon,
   turn: ListEndIcon,
 }
 
@@ -1038,7 +1100,8 @@ export function Composer({
                 <DropdownMenuSeparator className="mx-1 bg-border/50" />
                 <DropdownMenuGroup>
                   <DropdownMenuItem disabled={!session || archived} onClick={() => onOpenCliTemplate()}>
-                    CLI · {session?.agentProgram || "未设置"}
+                    <BotIcon />
+                    {session?.agentProgram || "未设置"}
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>

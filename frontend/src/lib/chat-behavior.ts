@@ -109,3 +109,25 @@ export function nextHasNewBelow(
   if (m.scrollHeight > m.prevHeight + 1) return true
   return prev
 }
+
+// “回复开头”浮钮：执行过程很长、回复也很长时，往上一甩很容易越过回复第一行、滑进执行过程里还没察觉。
+// 取视野中线所在的那一轮（整轮 = 执行过程 + 回复），回复第一行不在视野里就给一个跳回去的按钮：
+// 第一行在视野上方（正在回复里读）→ up；在视野下方（滑过头、停在执行过程里）→ down。
+// 只对有执行过程、或者回复比视野还高的轮次显示，短回复不打扰。
+const REPLY_JUMP_MARGIN = 8
+export function computeReplyJump(params: {
+  view: { top: number; bottom: number }
+  turns: Array<{ key: string; top: number; bottom: number; replyTop: number; replyHeight: number; hasTrace: boolean }>
+}): { key: string; direction: "up" | "down" } | null {
+  const { view, turns } = params
+  const height = view.bottom - view.top
+  const mid = view.top + height / 2
+  const visible = turns.filter((t) => t.top < view.bottom && t.bottom > view.top)
+  const current = visible.find((t) => t.top <= mid && t.bottom >= mid) ?? visible[0]
+  if (!current) return null
+  if (!current.hasTrace && current.replyHeight <= height) return null
+  if (current.replyTop < view.top - REPLY_JUMP_MARGIN) return { key: current.key, direction: "up" }
+  // 第一行要真的露出来一截才算看见：贴着视野底边的那几十像素不算
+  if (current.replyTop > view.bottom - 48) return { key: current.key, direction: "down" }
+  return null
+}

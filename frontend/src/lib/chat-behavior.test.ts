@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { buildDocumentTitle, computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier, computeScrollAnchor, anchoredScrollTop, isOwnScroll, isScrollInput, isFollowPaused } from "./chat-behavior"
+import { buildDocumentTitle, computeReplyJump, computeScrollRestore, getBubbleState, isNearBottom, shouldLoadEarlier, computeScrollAnchor, anchoredScrollTop, isOwnScroll, isScrollInput, isFollowPaused } from "./chat-behavior"
 
 describe("isNearBottom", () => {
   test("返回 true：滚动条已经在底部（distance = 0）", () => {
@@ -146,5 +146,43 @@ describe("新输出浮钮", () => {
     expect(nextHasNewBelow(false, { ...far, prevHeight: 2100, scrollHeight: 2100 })).toBe(false)
     expect(nextHasNewBelow(true, { scrollTop: 1580, clientHeight: 500, prevHeight: 2100, scrollHeight: 2100 })).toBe(false)
     expect(nextHasNewBelow(false, { scrollTop: 1600, clientHeight: 500, prevHeight: 2000, scrollHeight: 2100 })).toBe(false)
+  })
+})
+
+describe("computeReplyJump（“回复开头”浮钮）", () => {
+  // 视野 0~600；每一轮：整轮（执行过程 + 回复）的范围、回复的顶部和高度、有没有执行过程
+  const view = { top: 0, bottom: 600 }
+  const turn = (over: Partial<{ key: string; top: number; bottom: number; replyTop: number; replyHeight: number; hasTrace: boolean }>) => ({
+    key: "t1", top: -2000, bottom: 900, replyTop: -400, replyHeight: 1300, hasTrace: true, ...over,
+  })
+
+  test("在回复里读到一半、回复开头在视野上方：向上", () => {
+    expect(computeReplyJump({ view, turns: [turn({})] })).toEqual({ key: "t1", direction: "up" })
+  })
+
+  test("用力上滑越过了回复开头、视野停在执行过程里：向下", () => {
+    expect(computeReplyJump({ view, turns: [turn({ top: -800, bottom: 2200, replyTop: 900, replyHeight: 1300 })] })).toEqual({ key: "t1", direction: "down" })
+  })
+
+  test("回复开头就在视野里：不显示", () => {
+    expect(computeReplyJump({ view, turns: [turn({ top: -800, bottom: 1500, replyTop: 200, replyHeight: 1300 })] })).toBeNull()
+  })
+
+  test("短回复、没有执行过程：不打扰", () => {
+    expect(computeReplyJump({ view, turns: [turn({ hasTrace: false, replyHeight: 300, top: -500, bottom: 100, replyTop: -200 })] })).toBeNull()
+  })
+
+  test("没有执行过程但回复比视野还高：照样提示", () => {
+    expect(computeReplyJump({ view, turns: [turn({ hasTrace: false, top: -400, bottom: 900, replyTop: -400, replyHeight: 1300 })] })).toEqual({ key: "t1", direction: "up" })
+  })
+
+  test("多轮同时在视野里：按视野中线所在的那一轮", () => {
+    const a = turn({ key: "a", top: -3000, bottom: 100, replyTop: -1200, replyHeight: 1300 })
+    const b = turn({ key: "b", top: 120, bottom: 2400, replyTop: 1200, replyHeight: 1200 })
+    expect(computeReplyJump({ view, turns: [a, b] })).toEqual({ key: "b", direction: "down" })
+  })
+
+  test("整轮都不在视野里：不显示", () => {
+    expect(computeReplyJump({ view, turns: [turn({ top: 700, bottom: 3000, replyTop: 1700 })] })).toBeNull()
   })
 })

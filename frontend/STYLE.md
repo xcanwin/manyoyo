@@ -59,6 +59,7 @@
   - **同一行里的控件高度必须相同**：输入框旁边的按钮用 default，不用 sm。
 - **宽度**：表单里的 `Input`、`Textarea`、`SelectTrigger` 一律 `w-full`，跟随字段宽度。`SelectTrigger` 默认是 `w-fit`，在表单里必须写 `w-full`。工具栏里的下拉可以 `w-fit`。
 - 圆角、阴影、边框用组件自带的；同宽同高写 `size-*`；截断写 `truncate`。
+- **滚动区**：内容和滚动区左右边缘各留 16px，滚动条贴着外框，不贴着内容。弹窗里用 `DialogBody`；自己写的滚动区照它的写法：负外边距抵掉父级内边距，再用同样的内边距补回来（`-mx-4 px-4`）。原因：画在盒子外面的描边（`ring`、`outline`、阴影）贴着滚动区边缘时会被 `overflow` 切掉一边，滚动条也会贴着内容。放在页面里的块状组件（卡片等）描边一律用 `border`，不用 `ring`（`ui/card.tsx` 已改）；`ring` 只留给浮层和焦点态。
 
 ## 5. 表单（页面和弹窗通用）
 - **结构**：`FieldGroup` > `Field` > `FieldLabel` + 控件 + `FieldDescription`（说明在控件下面）。不要用裸 `div` + `Label` 拼。分节用 `FieldSet` + `FieldLegend`。

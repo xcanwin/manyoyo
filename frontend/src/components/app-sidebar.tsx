@@ -628,9 +628,10 @@ export function AppSidebar({
             </DropdownMenu>
           </div>
         ) : (
-          <div className="flex h-8 items-center justify-between">
-            <Hint>工作台</Hint>
-            <Hint>{loading ? "加载中..." : `${containers.length} 个容器 / ${agentCount} 个 AGENT`}</Hint>
+          // 与进入容器后的容器名一行同一种字（正文档），计数用灰色
+          <div className="flex h-8 items-center justify-between gap-2">
+            <span className="shrink-0">工作台</span>
+            <span className="min-w-0 truncate text-muted-foreground">{loading ? "加载中..." : `${containers.length} 个容器 / ${agentCount} 个 AGENT`}</span>
           </div>
         )}
         <Breadcrumb>

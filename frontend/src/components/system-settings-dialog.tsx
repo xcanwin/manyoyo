@@ -837,7 +837,8 @@ export function SystemSettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-hidden">
+        {/* 不能 overflow-hidden：里面的滚动区用负外边距把滚动条推到弹窗外框，这一层一裁就把滚动条和卡片边框都切掉了 */}
+        <div className="min-h-0 flex-1">
           {loading ? (
             <div
               className="flex flex-col gap-2"
@@ -932,7 +933,9 @@ export function SystemSettingsDialog({
                   ))}
                 </TabsList>
               )}
-              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-1 pr-1 md:pl-4">
+              {/* 与 DialogBody 同一写法：负外边距把滚动条推到弹窗外框，内容两侧各留 16px——
+                  否则卡片画在盒子外面的描边（ring）会被滚动区切掉，滚动条也贴着内容 */}
+              <div className="-mr-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-1 pr-4 max-md:-ml-4 max-md:pl-4 md:pl-4">
                 {CATEGORIES.map((category) => (
                   <TabsContent
                     key={category.id}
