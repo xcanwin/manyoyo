@@ -141,7 +141,7 @@ export function DataTable<T>({
             ) : null}
             {actions ? (
               <CardFooter
-                className="flex-wrap justify-end gap-2"
+                className="flex-wrap justify-end gap-3 [&_[data-slot=button]]:touch-hit"
                 onClick={(e) => e.stopPropagation()}
               >
                 {actions(row)}

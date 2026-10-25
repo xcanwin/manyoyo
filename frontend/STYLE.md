@@ -18,7 +18,7 @@
 | 档 | 用途 | 大小 / 字重 / 颜色 | 用什么 |
 |---|---|---|---|
 | 标题 | 弹窗、侧板、整页的标题 | 16px / 500 | `DialogTitle`、`SheetTitle`；整页标题用 `PageHeader` |
-| 区块标题 | 卡片、设置分组、表单分节、折叠区的标题 | 14px / 600 | `CardTitle`（默认 14px/600）；表单分节用 `FieldLegend variant="label"`（`ui/field.tsx` 本地修改为 600〔待建〕）；折叠区用 `SectionToggle` |
+| 区块标题 | 卡片、设置分组、表单分节、折叠区的标题 | 14px / 600 | `CardTitle`（默认 14px/600）；表单分节用 `FieldLegend variant="label"`（`ui/field.tsx` 本地修改为 600）；折叠区用 `SectionToggle` |
 | 正文 | 正文、字段标签、按钮、输入框、下拉、表格单元、菜单项 | 14px；标签和按钮 500，其余 400 | 组件默认值（`Label`、`FieldLabel`、`Button`、`SelectItem` 都已是 14px） |
 | 副标题 | 弹窗 / 侧板标题下面那句说明、提示条的正文 | 14px / 400，灰色 | `DialogDescription`、`SheetDescription`、`AlertDescription` |
 | 表头 | 表格、可编辑行的列名 | 12px / 600，前景色（不用灰色） | `DataTable`、`ColumnHeader` |
@@ -164,7 +164,7 @@
 - **侧板**（`Sheet`）全屏时，要用带 `data-[side=*]:` 前缀的写法压掉默认的宽度和边框，否则屏幕边缘会留一条竖线（参考 `html-preview-panel.tsx`）。
 - **系统设置**：左侧分类栏变成顶部的分类下拉，内容区占满。
 - **表格**变卡片（见第 10 节）；表单一律单列；工具栏放不下的按钮收进 `⋯` 菜单。
-- **可点区域至少 40px**：手机上独立的图标按钮用 `icon-lg` / `icon-xl`（参考 composer）。嵌在文字行或表格行里、不方便放大的小按钮（`icon-xs` / `icon-sm`），视觉尺寸不变，用 `index.css` 的 `touch-hit` 工具类〔待建〕把点击区域扩到 40px（`relative` + `after:` 伪元素向外延伸），相邻两个按钮的点击区域不能重叠。
+- **可点区域至少 40px**：手机上独立的图标按钮用 `icon-lg` / `icon-xl`（参考 composer）。嵌在文字行或表格行里、不方便放大的小按钮（`icon-xs` / `icon-sm`），视觉尺寸不变，用 `index.css` 的 `touch-hit` 工具类把点击区域扩到 40px（`relative` + `after:` 伪元素向外延伸），相邻两个按钮的点击区域不能重叠。
 - **贴底的栏**（composer、终端输入条、弹窗底栏、侧栏底部）：内边距写成 `pb-[max(<原值>,env(safe-area-inset-bottom))]`。
 - 输入框 16px（见第 2 节）。
 - 同一行里混排等宽小字和正文、或者混排 `⌘` 这类回退字体字符时，都加 `leading-none`，父级 `items-center`，否则看起来上下偏。

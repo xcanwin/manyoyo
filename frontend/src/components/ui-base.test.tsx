@@ -126,3 +126,17 @@ describe("基础组件", () => {
     expect(el.className).toContain("border-b")
   })
 })
+
+describe("FieldLegend 字重", () => {
+  test("label 档是 14px / 600", async () => {
+    const { FieldLegend, FieldSet } = await import("@/components/ui/field")
+    await render(
+      <FieldSet>
+        <FieldLegend variant="label">分节</FieldLegend>
+      </FieldSet>
+    )
+    const legend = document.querySelector('[data-slot="field-legend"]') as HTMLElement
+    expect(legend.className).toContain("data-[variant=label]:text-sm")
+    expect(legend.className).toContain("data-[variant=label]:font-semibold")
+  })
+})

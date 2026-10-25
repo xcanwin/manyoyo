@@ -176,17 +176,17 @@ function UserRow({
     </Select>
   )
   const ops = (
-    <div className="flex justify-center">
-      <Button type="button" variant="ghost" size="icon-sm" aria-label={`上移${label}第 ${n} 行`} title="上移" disabled={index === 0} onClick={() => onMove(-1)}>
+    <div className="flex justify-center max-md:gap-3">
+      <Button type="button" variant="ghost" size="icon-sm" className="touch-hit" aria-label={`上移${label}第 ${n} 行`} title="上移" disabled={index === 0} onClick={() => onMove(-1)}>
         <ArrowUpIcon />
       </Button>
-      <Button type="button" variant="ghost" size="icon-sm" aria-label={`下移${label}第 ${n} 行`} title="下移" disabled={index === count - 1} onClick={() => onMove(1)}>
+      <Button type="button" variant="ghost" size="icon-sm" className="touch-hit" aria-label={`下移${label}第 ${n} 行`} title="下移" disabled={index === count - 1} onClick={() => onMove(1)}>
         <ArrowDownIcon />
       </Button>
-      <Button type="button" variant="ghost" size="icon-sm" aria-label={`${off ? "恢复" : "暂停"}${label}第 ${n} 行`} title={off ? "恢复" : "暂停"} onClick={onToggle}>
+      <Button type="button" variant="ghost" size="icon-sm" className="touch-hit" aria-label={`${off ? "恢复" : "暂停"}${label}第 ${n} 行`} title={off ? "恢复" : "暂停"} onClick={onToggle}>
         {off ? <PlayIcon /> : <PauseIcon />}
       </Button>
-      <Button type="button" variant="ghost" size="icon-sm" aria-label={`删除${label}第 ${n} 行`} title="删除" onClick={onRemove}>
+      <Button type="button" variant="ghost" size="icon-sm" className="touch-hit" aria-label={`删除${label}第 ${n} 行`} title="删除" onClick={onRemove}>
         <Trash2Icon />
       </Button>
     </div>

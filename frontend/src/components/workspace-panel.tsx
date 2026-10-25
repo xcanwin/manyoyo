@@ -265,7 +265,7 @@ function CopyMessageButton({ text, markdown }: { text: string; markdown?: string
         onClick={() => copy(text)}
         title="复制"
         aria-label="复制"
-        className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="touch-hit rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
       >
         {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
       </button>
@@ -693,7 +693,7 @@ function ActivityView({
                         </>
                       )}
                     </div>
-                    <Hint className={cn("flex items-center gap-1 px-1", message.role === "user" && message.mode === "agent" && "min-h-6")}>
+                    <Hint className={cn("flex items-center gap-1 px-1 max-md:gap-4", message.role === "user" && message.mode === "agent" && "min-h-6")}>
                       {formatTime(message.timestamp)}
                       {message.interrupted ? " · 已停止" : ""}
                       {bubble.copyable ? (
@@ -707,7 +707,7 @@ function ActivityView({
                         )
                       ) : null}
                       {message.role === "user" && message.mode === "agent" && !message.pending && !running && onRewind && typeof message.id === "string" && !message.id.startsWith(LOCAL_USER_MESSAGE_ID_PREFIX) ? (
-                        <Button variant="ghost" size="icon-xs" aria-label="回退到这里" title="回退到这里" onClick={() => onRewind(message)}>
+                        <Button variant="ghost" size="icon-xs" className="touch-hit" aria-label="回退到这里" title="回退到这里" onClick={() => onRewind(message)}>
                           <Undo2Icon />
                         </Button>
                       ) : null}

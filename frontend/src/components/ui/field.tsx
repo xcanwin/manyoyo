@@ -28,7 +28,8 @@ function FieldLegend({
       data-slot="field-legend"
       data-variant={variant}
       className={cn(
-        "mb-1.5 font-medium data-[variant=label]:text-sm data-[variant=legend]:text-base",
+        // 本地修改：label 档字重 600（区块标题档，STYLE.md 第 2 节）
+        "mb-1.5 font-medium data-[variant=label]:text-sm data-[variant=label]:font-semibold data-[variant=legend]:text-base",
         className
       )}
       {...props}

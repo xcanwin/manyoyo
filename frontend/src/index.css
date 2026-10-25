@@ -191,6 +191,18 @@
     display: none;
   }
 }
+/* 手机上嵌在文字行 / 表格行里的小图标按钮（icon-xs / icon-sm）：视觉尺寸不变，
+   用伪元素把点击区域向外扩到约 40px。相邻按钮之间留 gap-3（12px），两边各 7px（含 1px 透明边框）刚好不重叠。 */
+@utility touch-hit {
+  @media (max-width: 767px) {
+    position: relative;
+    &::after {
+      content: "";
+      position: absolute;
+      inset: -9px -7px;
+    }
+  }
+}
 /* iOS Safari 聚焦字号小于 16px 的输入框会自动放大页面。其它平台输入框与下拉等统一 14px，
    只有 iOS 保留 16px 防止放大（-webkit-touch-callout 仅 iOS Safari 支持）。 */
 @supports (-webkit-touch-callout: none) {

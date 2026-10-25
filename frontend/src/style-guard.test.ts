@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+
+import { RULES } from "../scripts/guard-rules.mjs"
 // 用 Vite 的 ?raw 把源码当文本读进来（不依赖 node 类型）
 const SOURCES = {
   ...import.meta.glob("./components/**/*.tsx", {
@@ -18,107 +20,29 @@ const FILES = Object.keys(SOURCES)
   .sort()
 const rel = (key: string) => key.replace(/^\.\//, "")
 
-// 取出 <Tag ...> 的开标签文本（要数花括号，className 里的箭头函数 / 模板串可能带 >）
-function openingTags(source: string, tag: string): string[] {
-  const out: string[] = []
-  const re = new RegExp(`<${tag}(?=[\\s>/])`, "g")
-  let match: RegExpExecArray | null
-  while ((match = re.exec(source))) {
-    let depth = 0
-    let i = match.index
-    for (; i < source.length; i += 1) {
-      const ch = source[i]
-      if (ch === "{") depth += 1
-      else if (ch === "}") depth -= 1
-      else if (ch === ">" && depth === 0) break
-    }
-    out.push(source.slice(match.index, i + 1))
-  }
-  return out
-}
-
-type Rule = {
-  id: string
-  describe: string
-  count: (source: string, file: string) => number
-}
-
-const countMatches = (source: string, re: RegExp) =>
-  (source.match(re) ?? []).length
-
-const RULES: Rule[] = [
-  {
-    id: "dialog-size",
-    describe:
-      "DialogContent / SheetContent 只用 size 选档，不写 max-w-* / w-[..] / h-[..] / max-h-[..]",
-    count: (source) =>
-      ["DialogContent", "SheetContent"]
-        .flatMap((tag) => openingTags(source, tag))
-        .reduce(
-          (n, tag) =>
-            n +
-            countMatches(
-              tag,
-              /(?<![\w-])(?:[\w:-]*:)?(?:max-w-|w-\[|h-\[|max-h-\[)/g
-            ),
-          0
-        ),
-  },
-  {
-    id: "raw-table",
-    describe: "只读数据列表用 DataTable，不手写 <table>",
-    count: (source, file) =>
-      file.endsWith("components/data-table.tsx")
-        ? 0
-        : countMatches(source, /<table[\s>]/g),
-  },
-  {
-    id: "raw-color",
-    describe: "只用语义 token，不写原色",
-    count: (source) =>
-      countMatches(
-        source,
-        /(?<![\w-])(?:[\w:-]*:)?(?:text|bg|border|ring)-(?:red|green|emerald|amber|yellow|blue|orange|sky|lime|rose)-\d/g
-      ),
-  },
-  {
-    id: "font",
-    describe:
-      "界面字号字重走组件默认值，调用处不写 text-xs / text-sm / text-base / text-[..] / font-medium / font-semibold",
-    count: (source) =>
-      countMatches(
-        source,
-        /(?<![\w-])(?:[\w:-]*:)?(?:text-xs|text-sm|text-base|font-medium|font-semibold)(?![\w-])/g
-      ) + countMatches(source, /(?<![\w-])(?:[\w:-]*:)?text-\[\d/g),
-  },
-  {
-    id: "space",
-    describe: "用 flex / grid + gap-*，不用 space-x-* / space-y-*",
-    count: (source) =>
-      countMatches(source, /(?<![\w-])(?:[\w:-]*:)?space-[xy]-/g),
-  },
-]
-
 type Allow = Record<string, Record<string, [number, string]>>
 
 // 文件 → 规则 → [允许次数, 理由]
 const ALLOW: Allow = {
   "components/app-sidebar.tsx": { "font": [2, "品牌名 “MANYOYO Web”，不属于界面字档位"] },
-  "components/changes-panel.tsx": { "font": [1, "内容区：diff 行"] },
+  "components/changes-panel.tsx": { "font": [1, "内容区：diff 行"], "leading": [1, "内容区：diff 行高"] },
   "components/code-block.tsx": { "font": [1, "内容区：等宽预格式文本（原始报错 / 日志 / 提示词原文）"] },
   "components/column-header.tsx": { "font": [2, "定义可编辑行表头（12px 黑色加粗）本身"] },
+  "components/composer-images.tsx": { "leading": [1, "图片失败占位的小字，行高紧凑；待改成组件档位"] },
   "components/data-table.tsx": { "font": [1, "手机卡片里的辅助档标签（Hint 之外的 span 内联）"] },
+  "components/files-panel.tsx": { "dark-color": [1, "路径条模仿 Input 的暗色底；待换成 Input 组件"] },
   "components/hint.tsx": { "font": [1, "定义“辅助档”本身（STYLE.md 第 2 节）"] },
   "components/html-preview-panel.tsx": { "dialog-size": [1, "侧板预览：Sheet 沿用现状的宽度与手机全屏写法（STYLE.md 第 8 节）"] },
   "components/key-value-list.tsx": { "font": [3, "定义“辅助档标签 + 正文值”本身"] },
   "components/login-page.tsx": { "font": [2, "整页：登录页标题可以更大（STYLE.md 第 14 节例外）"] },
   "components/page-header.tsx": { "font": [5, "定义“标题 / 区块标题 / 副标题”档本身"] },
-  "components/queued-prompts.tsx": { "font": [1, "排队中的提示词气泡，与聊天气泡同样式（内容区）"] },
+  "components/queued-prompts.tsx": { "font": [1, "排队中的提示词气泡，与聊天气泡同样式（内容区）"], "leading": [1, "内容区：与聊天气泡同行高"] },
   "components/search-dialog.tsx": { "dialog-size": [1, "命令面板：shadcn Command 的标准结构（STYLE.md 第 14 节例外）"], "font": [2, "命令面板：shadcn Command 的标准结构（STYLE.md 第 14 节例外）"] },
   "components/section-toggle.tsx": { "font": [2, "定义折叠区标题（区块标题档）本身"] },
   "components/setup-wizard.tsx": { "font": [1, "整页：向导标题可以更大（STYLE.md 第 14 节例外）"] },
-  "components/trace-block.tsx": { "font": [18, "内容区：执行过程（trace-block 的数值，STYLE.md 第 2 节登记）"] },
-  "components/workspace-panel.tsx": { "font": [4, "聊天气泡与代码块是内容区；顶栏标题是区块标题档（顶栏是自定义布局，不能用 PageHeader）"] },
+  "components/system-settings-dialog.tsx": { "dark-color": [1, "覆盖 Tabs 在暗色下的文字色；待改成组件 variant"] },
+  "components/trace-block.tsx": { "font": [18, "内容区：执行过程（trace-block 的数值，STYLE.md 第 2 节登记）"], "leading": [3, "内容区：执行过程（NARRATION_TEXT 与代码块行高）"] },
+  "components/workspace-panel.tsx": { "dark-color": [1, "覆盖 Textarea 的暗色底（输入框嵌在 Composer 圆角框里）；待改成组件 variant"], "font": [4, "聊天气泡与代码块是内容区；顶栏标题是区块标题档（顶栏是自定义布局，不能用 PageHeader）"], "leading": [2, "内容区：聊天气泡行高"] },
 }
 
 describe("style guard", () => {
