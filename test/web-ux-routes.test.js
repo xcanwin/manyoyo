@@ -103,7 +103,9 @@ const out = [
   { type: 'assistant', message: { content: [{ type: 'text', text: '好' }] } },
   { type: 'result', subtype: 'success', result: '好', session_id: sessionId, modelUsage: { m: { contextWindow: 200000 } } }
 ];
-const finish = () => process.stdout.write(out.map(item => JSON.stringify(item)).join('\\n') + '\\n');
+// init 事件立刻输出（真 claude 也是开头就给会话 id），其余的慢运行时延后
+process.stdout.write(JSON.stringify(out[0]) + '\\n');
+const finish = () => process.stdout.write(out.slice(1).map(item => JSON.stringify(item)).join('\\n') + '\\n');
 if (prompt.includes('SLOWRUN')) setTimeout(finish, 1500); else finish();
 `);
     fs.chmodSync(path.join(binDir, 'claude'), 0o755);
@@ -417,6 +419,19 @@ describe('侧问', () => {
             expect((await ask('SIDE:4')).response.status).toBe(409);
             expect((await slow).json.answer).toContain('SLOW');
             expect((await ask('SIDE:5')).response.status).toBe(200);
+        });
+    });
+
+    test('第一轮还没结束就能带上下文侧问：会话 id 在 init 事件到达时就记下', async () => {
+        await withServer(async ({ baseUrl, cookie, argvLog }) => {
+            const api = (url, body) => request(`${baseUrl}${url}`, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify(body) });
+            const running = api('/api/sessions/demo/agent/stream', { prompt: 'SLOWRUN 第一轮', clientMessageId: 'early-0001' });
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const answer = await api('/api/sessions/demo/agent/side', { question: 'SIDE:mid 刚才在做什么' });
+            expect(answer.json.answer).toContain('SIDE:mid');
+            const lines = fs.readFileSync(`${argvLog}.side`, 'utf8').trim().split('\n');
+            expect(JSON.parse(lines[lines.length - 1])).toEqual(expect.arrayContaining(['-r', SESSION_ID, '--fork-session']));
+            await running;
         });
     });
 
