@@ -19,7 +19,7 @@
 | 区块标题 | 卡片、设置分组、表单分节、折叠区的标题 | 14px / 600 | `CardTitle`（默认 14px/600）；分节标题用 `FieldLegend` |
 | 正文 | 正文、字段标签、按钮、输入框、下拉、表格单元、菜单项 | 14px；标签和按钮 500，其余 400 | 组件默认值（`Label`、`FieldLabel`、`Button`、`SelectItem` 都已是 14px） |
 | 副标题 | 弹窗 / 侧板标题下面那句说明、提示条的正文 | 14px / 400，灰色 | `DialogDescription`、`SheetDescription`、`AlertDescription` |
-| 辅助 | 字段说明、表头、徽章、提示气泡、配置键、时间戳、计数、“（可选）” | 12px / 400，灰色 | `FieldDescription`、`CardDescription`、`Badge`、`Tooltip`、`Hint` |
+| 辅助 | 字段说明、徽章、提示气泡、配置键、时间戳、计数、“（可选）” | 12px / 400，灰色 | `FieldDescription`、`CardDescription`、`Badge`、`Tooltip`、`Hint` |
 
 - **手机上的输入框、下拉、文本域是 16px**（`text-base md:text-sm`，已写在 `ui/input|textarea|select`）：iOS 聚焦小于 16px 的输入框会自动放大整页。这是唯一允许“同一控件手机比桌面大”的地方，别的地方不要模仿。
 - **内容区不受上表限制**。它们是“被展示的内容”，不是界面文字，各自沿用登记的数值：
@@ -124,7 +124,7 @@
 
 ## 10. 表格与列表
 - **只读的数据列表**一律用 `DataTable`（`components/data-table.tsx`，基于 shadcn `Table`）：
-  - 表头：辅助档，`bg-muted/50`，在滚动区里吸顶。
+  - 表头：12px，**黑色文字**（前景色，不用灰色），不透明灰底（`bg-muted`），在滚动区里吸顶。可编辑行（`RowList`、规则表、环境变量表）的表头同样 12px 黑色。
   - 行：正文，单行约 40px，悬停 `bg-muted/50`；可点的行整行可点，并且能用键盘聚焦。
   - 对齐：文字和数字**一律左对齐**，操作列靠右、固定宽度。
   - 长内容：路径、地址、配置名用 `font-mono` + `truncate`，完整内容放 `title`。

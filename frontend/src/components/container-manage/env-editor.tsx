@@ -140,9 +140,9 @@ export function EnvEditor({
         <div className="flex flex-col gap-2">
           {entries.length ? (
             <div className="flex items-center gap-2">
-              <Hint className="w-2/5 px-1">变量名</Hint>
-              <Hint className="min-w-0 flex-1 px-1">变量值</Hint>
-              <Hint className="w-[4.5rem] shrink-0 text-center">操作</Hint>
+              <Hint className="w-2/5 px-1 text-foreground">变量名</Hint>
+              <Hint className="min-w-0 flex-1 px-1 text-foreground">变量值</Hint>
+              <Hint className="w-[4.5rem] shrink-0 text-center text-foreground">操作</Hint>
             </div>
           ) : null}
           {entries.map((entry, index) => {

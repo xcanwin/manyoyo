@@ -67,8 +67,8 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        // 本地修改：表头用辅助档（12px 灰色）、吸顶（STYLE.md 第 10 节）
-        "sticky top-0 z-10 h-9 bg-muted px-2 text-left align-middle text-xs font-normal whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0",
+        // 本地修改：表头 12px 黑色文字、吸顶（STYLE.md 第 10 节）
+        "sticky top-0 z-10 h-9 bg-muted px-2 text-left align-middle text-xs font-normal whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

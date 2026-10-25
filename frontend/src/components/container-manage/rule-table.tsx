@@ -250,11 +250,11 @@ export function RuleTable({
     <div className="flex flex-col gap-1.5">
       {!mobile ? (
         <div className={cn(DESKTOP_GRID, "px-0.5")}>
-          <Hint>动作</Hint>
-          <Hint>{third[0]}</Hint>
-          <Hint>{third[1]}</Hint>
-          <Hint>协议</Hint>
-          <Hint className="text-center">操作</Hint>
+          <Hint className="text-foreground">动作</Hint>
+          <Hint className="text-foreground">{third[0]}</Hint>
+          <Hint className="text-foreground">{third[1]}</Hint>
+          <Hint className="text-foreground">协议</Hint>
+          <Hint className="text-center text-foreground">操作</Hint>
         </div>
       ) : null}
       {top.map((rule) => (

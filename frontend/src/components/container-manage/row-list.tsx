@@ -47,11 +47,11 @@ export function RowList<T extends Record<string, string>>({
       {rows.length ? (
         <div className="flex items-center gap-2">
           {columns.map((column) => (
-            <Hint key={column.key} className={cn("min-w-0 px-1", column.className ?? "flex-1")}>
+            <Hint key={column.key} className={cn("min-w-0 px-1 text-foreground", column.className ?? "flex-1")}>
               {column.label}
             </Hint>
           ))}
-          <Hint className={cn("shrink-0 text-center", renderAction ? "w-24" : "w-8")}>操作</Hint>
+          <Hint className={cn("shrink-0 text-center text-foreground", renderAction ? "w-24" : "w-8")}>操作</Hint>
         </div>
       ) : null}
       {rows.map((row, index) => (
