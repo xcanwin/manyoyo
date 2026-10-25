@@ -221,6 +221,7 @@ export function ModelMenu({
                     {effort.levels.map((level) => (
                       <DropdownMenuRadioItem closeOnClick key={level} value={level}>
                         {effortLabel(level)}
+                        <span className="ml-auto shrink-0 text-muted-foreground">{level.toUpperCase()}</span>
                       </DropdownMenuRadioItem>
                     ))}
                   </DropdownMenuRadioGroup>

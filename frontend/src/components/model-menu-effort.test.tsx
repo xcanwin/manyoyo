@@ -60,7 +60,8 @@ describe("推理强度在模型菜单最下面", () => {
     await openMenu()
     const text = document.body.textContent ?? ""
     expect(text).toContain("推理强度")
-    expect(items()).toEqual(expect.arrayContaining(["默认", "低", "高", "最高"]))
+    // 中文名在左，英文名贴着右边（样式和上面的档位别名一样）
+    expect(items()).toEqual(expect.arrayContaining(["默认", "低LOW", "高HIGH", "最高MAX"]))
   })
   test("默认项在环境变量里设了强度时写明；当前强度不在选项里时选中默认", async () => {
     envDefault = "max"
@@ -73,7 +74,7 @@ describe("推理强度在模型菜单最下面", () => {
   test("点一档就 POST /effort", async () => {
     await render()
     await openMenu()
-    const low = Array.from(document.querySelectorAll('[role="menuitemradio"]')).find((el) => el.textContent === "低") as HTMLElement
+    const low = Array.from(document.querySelectorAll('[role="menuitemradio"]')).find((el) => el.textContent === "低LOW") as HTMLElement
     await act(async () => low.click())
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
     expect(posts).toEqual([{ url: "/api/sessions/demo/effort", body: { effort: "low" } }])
@@ -89,7 +90,7 @@ describe("推理强度在模型菜单最下面", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})))
     await act(async () => root.render(<ModelMenu session={session} disabled={false} onChanged={() => {}} />))
     await openMenu()
-    expect(items()).toContain("低")
+    expect(items()).toContain("低LOW")
   })
   test("codex / claude 以外的 Agent 不请求也没有这一组", async () => {
     await render({ session: { ...session, agentProgram: "gemini" } as SessionSummary })
