@@ -35,9 +35,13 @@ describe("镜像问题弹窗", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "镜像不存在", imageProblem: problem }), { status: 409 })))
     await act(async () => root.render(<ImageProblemDialog />))
     expect(document.body.textContent).not.toContain("本机没有这个镜像")
+    let message = ""
     await act(async () => {
-      await apiPost("/api/sessions", {}).catch(() => undefined)
+      await apiPost("/api/sessions", {}).catch((err) => { message = err.message })
     })
+    // 原来那条长提示不再出现（调用方显示的错误文字只剩一句指向弹窗）
+    expect(message).toBe("镜像不可用，处理办法见弹窗。")
+    expect(message).not.toContain("imageVersion")
     const text = document.body.textContent ?? ""
     expect(text).toContain("本机没有这个镜像")
     expect(text).toContain("MANYOYO 自带的 Podman")
@@ -45,7 +49,14 @@ describe("镜像问题弹窗", () => {
     expect(text).toContain("my build --iv 2.3.1-common")
     expect(text).toContain("系统设置 → 基础")
     const close = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "知道了")!
+    // 关闭过程中标题不能闪成“镜像拉取失败”
+    const seen: string[] = []
+    const observer = new MutationObserver(() => seen.push(document.body.textContent ?? ""))
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
     await act(async () => close.click())
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)) })
+    observer.disconnect()
+    expect(seen.some((t) => t.includes("镜像拉取失败"))).toBe(false)
     expect(document.body.textContent).not.toContain("本机没有这个镜像")
   })
 

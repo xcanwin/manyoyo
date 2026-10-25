@@ -629,7 +629,8 @@ async function request(url: string, options: RequestInit = {}) {
     if (data.imageProblem && typeof data.imageProblem === "object" && typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(IMAGE_PROBLEM_EVENT, { detail: data.imageProblem }))
     }
-    const error = typeof data.error === "string" ? data.error : fallback
+    const imageProblem = Boolean(data.imageProblem)
+    const error = imageProblem ? "镜像不可用，处理办法见弹窗。" : typeof data.error === "string" ? data.error : fallback
     const detail = typeof data.detail === "string" ? data.detail : ""
     throw Object.assign(new Error(detail ? `${error}: ${detail}` : error), { status: response.status, data })
   }

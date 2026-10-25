@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Hint } from "@/components/hint"
 import { IMAGE_PROBLEM_EVENT } from "@/lib/api"
 
 export type ImageProblem = {
@@ -50,6 +49,10 @@ function CommandLine({ command }: { command: string }) {
 // 镜像不存在 / 拉不到：用弹窗说清楚怎么办（比 toast 重要，不能一闪而过）。由 api.ts 在收到 imageProblem 时派发事件触发
 export function ImageProblemDialog() {
   const [problem, setProblem] = React.useState<ImageProblem | null>(null)
+  // 关闭动画期间 problem 已经是 null：内容要保持最后一次的样子，否则标题会闪成另一个
+  const [lastProblem, setLastProblem] = React.useState<ImageProblem | null>(null)
+  if (problem && problem !== lastProblem) setLastProblem(problem)
+  const shown = problem ?? lastProblem
   React.useEffect(() => {
     function onProblem(event: Event) {
       const detail = (event as CustomEvent).detail
@@ -58,7 +61,7 @@ export function ImageProblemDialog() {
     window.addEventListener(IMAGE_PROBLEM_EVENT, onProblem)
     return () => window.removeEventListener(IMAGE_PROBLEM_EVENT, onProblem)
   }, [])
-  const notFound = problem?.code === "IMAGE_NOT_FOUND"
+  const notFound = shown?.code === "IMAGE_NOT_FOUND"
   return (
     <Dialog open={problem !== null} onOpenChange={(open) => (open ? null : setProblem(null))}>
       <DialogContent size="md">
@@ -71,23 +74,21 @@ export function ImageProblemDialog() {
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
-          {problem ? (
+          {shown ? (
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <Hint>镜像</Hint>
-                <CommandLine command={problem.imageRef} />
+                <span>镜像</span>
+                <CommandLine command={shown.imageRef} />
               </div>
               <div className="flex flex-col gap-2">
-                <span>方法一：在终端里下载（当前用的是{problem.runtimeLabel}）</span>
-                <CommandLine command={problem.pullCommand} />
+                <span>方法一：在终端里下载（当前用的是{shown.runtimeLabel}）</span>
+                <CommandLine command={shown.pullCommand} />
               </div>
               <div className="flex flex-col gap-2">
                 <span>方法二：本地构建</span>
-                <CommandLine command={problem.buildCommand} />
+                <CommandLine command={shown.buildCommand} />
               </div>
-              <Hint>
-                装好之后，也可以在「系统设置 → 基础」里把镜像版本改成本机已有的版本。
-              </Hint>
+              <span>装好之后，也可以在「系统设置 → 基础」里把镜像版本改成本机已有的版本。</span>
             </div>
           ) : null}
         </DialogBody>
