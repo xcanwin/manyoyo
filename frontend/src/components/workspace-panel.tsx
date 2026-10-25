@@ -50,6 +50,7 @@ import { useSessionSync } from "@/hooks/use-session-sync"
 import { useSyncLoop } from "@/hooks/use-sync-loop"
 import { useResumeIndicator } from "@/hooks/use-resume-indicator"
 import { formatDateTime } from "@/lib/format"
+import { useFadingPill } from "@/hooks/use-fading-pill"
 import { anchoredScrollTop, computeReplyJump, computeScrollAnchor, computeScrollRestore, isFollowPaused, isOwnScroll, isScrollInput, getBubbleState, nextHasNewBelow, shouldLoadEarlier, type ScrollAnchor } from "@/lib/chat-behavior"
 import {
   clearOutbox,
@@ -245,6 +246,26 @@ function formatTime(value: string): string {
 // markdown 为 undefined 时（用户输入 / 命令输出等非 markdown 消息）只提供一种
 // 复制方式；assistant 的 markdown 回复额外提供"复制文本"/"复制 Markdown"两个
 // 选项，前者是渲染后的纯文本，后者是原始 markdown
+// 鼠标在按钮上移动、获得焦点、手指按下时保持全显：准备点的那一瞬间不会淡掉。
+// 用 pointermove 而不是 pointerenter：按钮总出现在同一个位置，点完后鼠标还停在那里，
+// 下次按钮在静止的鼠标下面出现时浏览器会补发 pointerenter，用它就会一直不消失
+function holdHandlers(hold: (on: boolean) => void) {
+  return {
+    onPointerMove: (event: React.PointerEvent) => {
+      if (event.pointerType === "mouse") hold(true)
+    },
+    onPointerDown: () => hold(true),
+    // 手指松开就算放开；鼠标松开时指针还停在按钮上，仍算悬停，等离开再放开
+    onPointerUp: (event: React.PointerEvent) => {
+      if (event.pointerType !== "mouse") hold(false)
+    },
+    onPointerCancel: () => hold(false),
+    onPointerLeave: () => hold(false),
+    onFocus: () => hold(true),
+    onBlur: () => hold(false),
+  }
+}
+
 function CopyMessageButton({ text, markdown }: { text: string; markdown?: string }) {
   const [copied, setCopied] = React.useState(false)
 
@@ -341,6 +362,15 @@ function ActivityView({
   // “回复开头”浮钮（见 computeReplyJump）：滚动时按 rAF 合并计算一次
   const [replyJump, setReplyJump] = React.useState<{ key: string; direction: "up" | "down" } | null>(null)
   const replyJumpFrameRef = React.useRef(0)
+  // 两个浮钮出现后 3 秒内逐渐淡出（见 useFadingPill）；用户再滚动时重新出现
+  const newOutputPill = useFadingPill(hasNewBelow)
+  const replyJumpPill = useFadingPill(replyJump !== null)
+  const replyJumpId = replyJump ? `${replyJump.key}:${replyJump.direction}` : ""
+  const pokeReplyJump = replyJumpPill.poke
+  // 跳转的目标或方向变了（例如从“在回复里往上读”变成“滑过头停在执行过程里”）：重新全显
+  React.useEffect(() => {
+    if (replyJumpId) pokeReplyJump()
+  }, [replyJumpId, pokeReplyJump])
   // 只有任务在跑时内容变长才算“新输出”；用户点开执行过程等操作引起的变长不提示
   const runningRef = React.useRef(false)
   const running = displayMessages.some((message) => message.pending)
@@ -458,6 +488,9 @@ function ActivityView({
     if (!isOwnScroll(el.scrollTop, ownScrollTopRef.current)) {
       ownScrollTopRef.current = null
       measureAnchor(el)
+      // 用户自己在滚动：条件还成立的浮钮重新显示（自己补滚动引起的滚动事件不算）
+      newOutputPill.poke()
+      replyJumpPill.poke()
     }
     setHasNewBelow((prev) =>
       nextHasNewBelow(prev, { prevHeight: el.scrollHeight, scrollHeight: el.scrollHeight, scrollTop: el.scrollTop, clientHeight: el.clientHeight })
@@ -711,28 +744,38 @@ function ActivityView({
           {tail}
         </div>
       </div>
-      {replyJump ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-background shadow-md"
-          aria-label="跳到回复开头"
-          onClick={() => jumpToReply(replyJump.key)}
-        >
-          {replyJump.direction === "up" ? <ArrowUpIcon data-icon="inline-start" /> : <ArrowDownIcon data-icon="inline-start" />}
-          回复开头
-        </Button>
-      ) : null}
-      {hasNewBelow ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-background shadow-md"
-          onClick={jumpToBottom}
-        >
-          <ArrowDownIcon data-icon="inline-start" />
-          有新输出
-        </Button>
+      {/* 右下角、离底部约五分之一处：不挡顶部和底部那几行（读得最多的位置）。“回复开头”在上，“有新输出”在下 */}
+      {replyJump || hasNewBelow ? (
+        <div className="pointer-events-none absolute right-3 bottom-[max(5rem,20%)] z-20 flex flex-col items-end gap-2">
+          {replyJump && replyJumpPill.visible ? (
+            <Button
+              // 换 key 让淡出动画从头开始（再次出现、松开后）
+              key={`reply-${replyJumpPill.cycle}`}
+              variant="outline"
+              size="sm"
+              className={cn("pointer-events-auto rounded-full bg-background shadow-md", replyJumpPill.fading && "pill-fade")}
+              aria-label="跳到回复开头"
+              {...holdHandlers(replyJumpPill.hold)}
+              onClick={() => jumpToReply(replyJump.key)}
+            >
+              {replyJump.direction === "up" ? <ArrowUpIcon data-icon="inline-start" /> : <ArrowDownIcon data-icon="inline-start" />}
+              回复开头
+            </Button>
+          ) : null}
+          {hasNewBelow && newOutputPill.visible ? (
+            <Button
+              key={`new-${newOutputPill.cycle}`}
+              variant="outline"
+              size="sm"
+              className={cn("pointer-events-auto rounded-full bg-background shadow-md", newOutputPill.fading && "pill-fade")}
+              {...holdHandlers(newOutputPill.hold)}
+              onClick={jumpToBottom}
+            >
+              <ArrowDownIcon data-icon="inline-start" />
+              有新输出
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   )
