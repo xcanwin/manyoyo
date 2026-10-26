@@ -15,7 +15,7 @@ export function useFadingPill(active: boolean) {
   const holdingRef = React.useRef(false)
   const activeRef = React.useRef(active)
 
-  const restart = React.useCallback(() => {
+  const restart = React.useCallback((bump = true) => {
     window.clearTimeout(timerRef.current)
     if (!activeRef.current) {
       // 按钮被点掉后立刻隐藏，收不到“松开 / 离开”：在这里清掉按住状态，否则下次出现永远不淡出
@@ -26,7 +26,8 @@ export function useFadingPill(active: boolean) {
     }
     setVisible(true)
     setHolding(holdingRef.current)
-    setCycle((n) => n + 1)
+    // 松开手指（hold(false)）不换 key：换了 key 按钮节点被替换，手机上 pointerup 之后的 click 就落空，要点两次
+    if (bump) setCycle((n) => n + 1)
     if (holdingRef.current) return
     timerRef.current = window.setTimeout(() => setVisible(false), FADE_MS)
   }, [])
@@ -48,7 +49,7 @@ export function useFadingPill(active: boolean) {
       if (holdingRef.current === on) return
       holdingRef.current = on
       if (!on) {
-        restart()
+        restart(false)
         return
       }
       // 按住：只停掉计时、取消淡出，不换 cycle——换 key 会在按下和松开之间把按钮换掉，点击就不触发了

@@ -86,6 +86,15 @@ describe("浮钮 3 秒内逐渐消失", () => {
     expect(probe.api.cycle).toBe(before)
   })
 
+  test("手指松开（hold(false)）不换 cycle：手机上 pointerup 后按钮被换掉，click 落空要点两次", async () => {
+    await render(true)
+    await act(async () => probe.api.hold(true))
+    const before = probe.api.cycle
+    await act(async () => probe.api.hold(false))
+    expect(probe.api.cycle).toBe(before)
+    expect(probe.api.fading).toBe(true)
+  })
+
   test("按住时点了一下、按钮随即隐藏（收不到“松开 / 离开”）：下次出现照常淡出消失", async () => {
     await render(true)
     await act(async () => probe.api.hold(true))
