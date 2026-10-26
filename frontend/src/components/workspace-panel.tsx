@@ -2413,15 +2413,15 @@ export function WorkspacePanel({
           ) : emptyConversation ? (
             // 空会话：输入区放在中间，下面给几个常用任务（点一下只是填进输入框，不直接发送）；
             // 发出第一条后回到正常布局，输入区在底部
-            // 输入框自己在上下正中：标题贴着它的上沿向上排，示例任务贴着它的下沿向下排
+            // 输入框在偏上的位置（上下空白约 2:3，视觉上比正中更舒服）：标题贴着它的上沿向上排，示例任务贴着它的下沿向下排
             <div className="flex h-full flex-col items-center overflow-y-auto px-3 py-6">
-              <div className="flex min-h-24 flex-1 flex-col items-center justify-end gap-2 pb-5 text-center">
+              <div className="flex min-h-24 flex-[2] flex-col items-center justify-end gap-2 pb-5 text-center">
                 {/* 空会话的欢迎标题：只此一处放大（STYLE.md 第 14 节例外） */}
                 <h2 className="text-3xl font-bold tracking-tight">想让 AGENT 做什么？</h2>
                 <p className="text-muted-foreground">用一句话说清楚，AGENT 会在这个目录里动手。</p>
               </div>
-              <div className="w-full max-w-2xl shrink-0">{composerNode}</div>
-              <div className="flex min-h-24 max-w-2xl flex-1 flex-wrap content-start justify-center gap-2 px-3 pt-5">
+              <div className="w-full max-w-4xl shrink-0">{composerNode}</div>
+              <div className="flex min-h-24 max-w-4xl flex-[3] flex-wrap content-start justify-center gap-2 px-3 pt-5">
                 {STARTER_PROMPTS.map((text) => (
                   <Button key={text} variant="outline" size={isMobile ? "lg" : "sm"} onClick={() => updateDraft(text)}>
                     {text}
