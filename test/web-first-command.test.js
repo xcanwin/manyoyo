@@ -200,4 +200,55 @@ process.stdout.write('first ok');
         expect(firstCalls()).toHaveLength(2);
         expect(firstCalls()[1].command).toEqual(['/bin/bash', '-c', 'echo clone-me']);
     });
+
+    test('只带 run 和三个路径字段创建：first 执行一次（快捷对话的请求形状）', async () => {
+        writeConfig({ runs: { quick: { first: { shell: 'echo quick-first' } } } });
+        const res = await api('POST', '/api/sessions', { run: 'quick', createOptions: { hostPath: tempHost, containerPath: tempHost, containerName: 'my-easy-1' } });
+        expect(res.status).toBe(200);
+        expect(firstCalls().filter(c => c.command.join(' ').includes('echo quick-first'))).toHaveLength(1);
+    });
+
+    test('runs.<名>.plugins.playwright 覆盖全局并生效；不进快照', async () => {
+        writeConfig({
+            plugins: { playwright: { locale: 'en-US', timezoneId: 'America/New_York' } },
+            runs: { pw: { plugins: { playwright: { locale: 'ja-JP', timezoneId: 'Asia/Tokyo' } } } }
+        });
+        const res = await api('POST', '/api/sessions', { run: 'pw', createOptions: createOptions('my-pw-a') });
+        expect(res.status).toBe(200);
+        const dir = path.join(tempHost, '.manyoyo', 'plugin', 'playwright', 'current');
+        const written = fs.readdirSync(dir).map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
+        expect(written).toContain('Asia/Tokyo');
+        expect(written).not.toContain('America/New_York');
+        const history = fs.readFileSync(path.join(tempHost, 'web-history', 'my-pw-a.json'), 'utf8');
+        expect(history).not.toContain('Asia/Tokyo');
+    });
+
+    test('容器被删后按快照重建：同样用快照里记的运行配置的 plugins.playwright', async () => {
+        writeConfig({
+            plugins: { playwright: { locale: 'en-US', timezoneId: 'America/New_York' } },
+            runs: { pw: { plugins: { playwright: { locale: 'ja-JP', timezoneId: 'Asia/Tokyo' } } } }
+        });
+        await api('POST', '/api/sessions', { run: 'pw', createOptions: createOptions('my-pw-b') });
+        const dir = path.join(tempHost, '.manyoyo', 'plugin', 'playwright', 'current');
+        fs.rmSync(dir, { recursive: true, force: true });
+        await api('GET', '/api/sessions/my-pw-b/fs/list?path=/');
+        const written = fs.readdirSync(dir).map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
+        expect(written).toContain('Asia/Tokyo');
+    });
+
+    test('运行配置不存在：创建返回 400，不悄悄用全局默认配置', async () => {
+        writeConfig({});
+        const res = await api('POST', '/api/sessions', { run: 'nope', createOptions: createOptions('my-nope') });
+        expect(res.status).toBe(400);
+        expect(res.json.error).toContain('未找到运行配置: runs.nope');
+    });
+
+    test('保存快捷对话设置时 run 不存在返回 400，存在则保存', async () => {
+        writeConfig({ runs: { ok: {} } });
+        const bad = await api('PUT', '/api/system/quick-chat-config', { path: path.join(tempHost, 'work'), run: 'nope' });
+        expect(bad.status).toBe(400);
+        expect(bad.json.error).toContain('未找到运行配置');
+        const good = await api('PUT', '/api/system/quick-chat-config', { path: path.join(tempHost, 'work'), run: 'ok' });
+        expect(good.status).toBe(200);
+    });
 });
