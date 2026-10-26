@@ -144,7 +144,6 @@ import { ContainerManagePanel } from "@/components/container-manage/container-ma
 
 import { Hint } from "@/components/hint"
 import { KeyValueList } from "@/components/key-value-list"
-import { PageHeader } from "@/components/page-header"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 type View = "activity" | "files" | "terminal" | "changes" | "extensions" | "container" | "config" | "detail"
 
@@ -968,7 +967,8 @@ function DetailView({ detail }: { detail: SessionDetail | null }) {
 }
 
 // 空会话里的常用任务：点一下填进输入框，用户可以改完再发
-const STARTER_PROMPTS = ["介绍一下这个项目", "运行测试并修复失败的用例", "检查最近的改动有没有问题"]
+// 快捷对话新建的目录是空的，所以给“从零开始做点东西”的任务，不依赖已有项目
+const STARTER_PROMPTS = ["做一个贪吃蛇小游戏网页", "写一个待办清单小工具", "写个脚本整理这个文件夹", "教我用这个目录做点有意思的东西"]
 
 // 插入时机按钮的图标随当前选择变化：不点开也能看出追加的内容会怎么发
 const QUEUE_WHEN_ICONS: Record<QueueWhen, typeof ZapIcon> = {
@@ -2413,8 +2413,12 @@ export function WorkspacePanel({
           ) : emptyConversation ? (
             // 空会话：输入区放在中间，下面给几个常用任务（点一下只是填进输入框，不直接发送）；
             // 发出第一条后回到正常布局，输入区在底部
-            <div className="flex h-full flex-col items-center justify-center gap-3 overflow-y-auto px-1 py-6">
-              <PageHeader title="想让 AGENT 做什么？" />
+            <div className="flex h-full flex-col items-center justify-center gap-5 overflow-y-auto px-3 py-8">
+              <div className="flex flex-col items-center gap-2 text-center">
+                {/* 空会话的欢迎标题：只此一处放大（STYLE.md 第 14 节例外） */}
+                <h2 className="text-3xl font-bold tracking-tight">想让 AGENT 做什么？</h2>
+                <p className="text-muted-foreground">用一句话说清楚，AGENT 会在这个目录里动手。</p>
+              </div>
               <div className="w-full max-w-2xl">{composerNode}</div>
               <div className="flex max-w-2xl flex-wrap justify-center gap-2 px-3">
                 {STARTER_PROMPTS.map((text) => (
