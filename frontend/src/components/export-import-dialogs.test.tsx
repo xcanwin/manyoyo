@@ -139,12 +139,16 @@ describe("导入弹窗", () => {
     expect(text()).toContain("自启动脚本")
     expect(checkboxOf("sock 模式").checked).toBe(false)
 
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(document.getElementById("imp-remark-0"), "改后的备注")
+      document.getElementById("imp-remark-0")!.dispatchEvent(new Event("input", { bubbles: true }))
+    })
     await tick(checkboxOf("自启动脚本"))
     await press("开始导入")
     const post = calls.find((c) => c.method === "POST" && c.url === "/api/imports")
     expect(post?.body).toEqual({
       serverFile: "manyoyo-export-20261027-000000.tar.zst",
-      plan: { containers: { 0: { name: "box1-2", hostPath: "/new/box1-2", imageMode: "same", confirm: { volumes: [], ports: false, autostart: true, envFiles: [], networkOpen: false } } } },
+      plan: { containers: { 0: { name: "box1-2", remark: "改后的备注", hostPath: "/new/box1-2", imageMode: "same", confirm: { volumes: [], ports: false, autostart: true, envFiles: [], networkOpen: false } } } },
     })
   })
 })

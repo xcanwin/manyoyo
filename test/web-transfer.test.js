@@ -204,11 +204,11 @@ describe('网页导出 / 导入接口', () => {
 
         // 名字被占用 → 拒绝
         expect((await api('POST', '/api/imports', { serverFile: file, plan: { containers: { 0: { name: 'src1', hostPath: '' } } } })).status).toBe(409);
-        const imported = await api('POST', '/api/imports', { serverFile: file, plan: { containers: { 0: { name: 'dst1', hostPath: path.join(home, 'newwork'), imageMode: 'same', confirm: {} } } } });
+        const imported = await api('POST', '/api/imports', { serverFile: file, plan: { containers: { 0: { name: 'dst1', remark: '导入后的新备注', hostPath: path.join(home, 'newwork'), imageMode: 'same', confirm: {} } } } });
         expect(imported.status).toBe(200);
         expect(imported.json.containers).toEqual(['dst1']);
         const hist = JSON.parse(fs.readFileSync(path.join(home, 'web-history', 'dst1.json'), 'utf8'));
-        expect(hist.remark).toBe('源');
+        expect(hist.remark).toBe('导入后的新备注');
         expect(hist.pinned).toBe(true);
         // 没带“Agent 会话记录”以外的？轻量档带了会话记录，所以续接标记保留
         expect(hist.agents.default.engineSessionId).toBe('sess-1');

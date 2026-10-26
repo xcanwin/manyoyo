@@ -73,6 +73,7 @@ export type ImportConfirm = {
 
 export type ImportPlanEntry = {
   name: string
+  remark: string
   hostPath: string
   imageMode: "same" | "default"
   confirm: ImportConfirm

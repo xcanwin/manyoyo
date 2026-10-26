@@ -35,7 +35,7 @@ import {
 
 type Source = { kind: "local"; file: File } | { kind: "server"; name: string }
 
-type Edit = { name: string; hostPath: string; imageMode: "same" | "default"; checked: Set<string> }
+type Edit = { name: string; remark: string; hostPath: string; imageMode: "same" | "default"; checked: Set<string> }
 
 // 导入：选文件 → 只读开头看清单 → 改名 / 选目录 / 确认风险 → 开始。边上传边解包，失败自动撤销
 export function ImportDialog({
@@ -102,6 +102,7 @@ export function ImportDialog({
       for (const container of data.containers) {
         nextEdits[container.idx] = {
           name: container.suggestedName,
+          remark: container.remark,
           hostPath: container.suggestedHostPath,
           imageMode: "same",
           checked: new Set(),
@@ -136,6 +137,7 @@ export function ImportDialog({
       const edit = edits[container.idx]
       entries[container.idx] = {
         name: edit.name.trim(),
+        remark: edit.remark.trim(),
         hostPath: container.work === null ? "" : edit.hostPath.trim(),
         imageMode: edit.imageMode,
         confirm: confirmFromChecked(container, edit.checked),
@@ -197,6 +199,15 @@ export function ImportDialog({
                 onChange={(event) => patchEdit(container.idx, { name: event.target.value })}
               />
               {container.nameTaken && edit.name === container.suggestedName ? <FieldDescription>本机已有同名容器，已自动换了名字。</FieldDescription> : null}
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`imp-remark-${container.idx}`}>导入后的容器备注<Hint>（可选）</Hint></FieldLabel>
+              <Input
+                id={`imp-remark-${container.idx}`}
+                value={edit.remark}
+                disabled={running}
+                onChange={(event) => patchEdit(container.idx, { remark: event.target.value })}
+              />
             </Field>
             {container.work !== null ? (
               <Field>

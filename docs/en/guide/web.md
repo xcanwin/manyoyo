@@ -164,7 +164,7 @@ Move a container together with its conversations to another machine (or onto a n
 
 **Import**: "Export / Import → Import container…", choose a local file or one in `~/.manyoyo/exports/` (for large files `scp` them into that directory first to avoid reverse-proxy upload limits). Only the start of the file is read first to show a manifest; then confirm each container:
 
-- The container name after import (duplicates are renamed automatically) and the local work directory (by default a sub-directory named after the new container inside the quick-chat directory; it must not exist yet or be empty). The host directory can be anything, but the **path inside the container stays the same** (the dialog shows it) so the Agent can keep its context.
+- The container name after import (duplicates are renamed automatically), the container remark after import (defaults to the original, editable or empty) and the local work directory (by default a sub-directory named after the new container inside the quick-chat directory; it must not exist yet or be empty). The host directory can be anything, but the **path inside the container stays the same** (the dialog shows it) so the Agent can keep its context.
 - Image: "same as before" or "use this machine's default version".
 - High-risk settings in the archive (sock / dind mode, extra mounts, port mappings, autostart script, env files, custom network rules) are off by default, and any image that is not a manyoyo image is replaced by this machine's default image and only apply if ticked; the `first` command is never run on import.
 - When the import finishes the new container shows up in the sidebar (it is not opened automatically).
