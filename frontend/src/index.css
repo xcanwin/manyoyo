@@ -465,7 +465,7 @@
   }
 }
 
-/* 聊天区浮钮（“有新输出”“回复开头”）出现后 3 秒内逐渐淡出（use-fading-pill 的 FADE_MS 与这里的时长一致）；
+/* 聊天区浮钮（“有新输出”“定位开头”）出现后 3 秒内逐渐淡出（use-fading-pill 的 FADE_MS 与这里的时长一致）；
    ease-in：开头一段几乎不变，读得清、来得及点，后面加速淡掉。减少动效时不做动画，到时直接移除 */
 @keyframes manyoyo-pill-fade {
   from { opacity: 1; }

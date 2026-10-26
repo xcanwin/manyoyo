@@ -783,12 +783,12 @@ function ActivityView({
               variant="outline"
               size="sm"
               className={cn("pointer-events-auto rounded-full bg-background shadow-md", replyJumpPill.fading && "pill-fade")}
-              aria-label="跳到回复开头"
+              aria-label="定位开头"
               {...holdHandlers(replyJumpPill.hold)}
               onClick={() => jumpToReply(replyJump.key)}
             >
               {replyJump.direction === "up" ? <ArrowUpIcon data-icon="inline-start" /> : <ArrowDownIcon data-icon="inline-start" />}
-              回复开头
+              定位开头
             </Button>
           ) : null}
           {hasNewBelow && newOutputPill.visible ? (
