@@ -130,7 +130,8 @@ Sub-agents and task lists show up in the "execution process": a sub-agent is col
 ## Sessions, Changes and Notifications
 
 - Session names: a remark wins, then a title the Agent set itself (`/rename`), then the automatic title generated after the first message (Claude Code, Codex), and finally the first message. Click the name in the top bar to rename; clear it to go back to the automatic name.
-- Pinning: pin an AGENT from its ⋯ menu; its container moves to the top too.
+- Pinning: containers and AGENTs can both be pinned from their ⋯ menus. A pinned container goes to the top of the container list; pinning an AGENT only moves it to the top inside its container.
+- Sorting: the ⇅ button in the sidebar sorts by name, creation time or modification time (default). On the container list it sorts containers; inside a container it sorts AGENTs; pinned items always stay first. The choice is remembered in the browser.
 - The top-bar ⋯ menu is grouped by owner: chat belongs to the AGENT; files, terminal, changes, skills and MCP, and container settings belong to the container. "Changes" lists the changes in the git repository of the working directory; click a file to see its diff.
 - Images in replies: when the Agent writes a Markdown image with a path inside the container (e.g. `![screenshot](/root/shot.png)`) it is shown directly. Absolute paths in replies can be clicked to open them in the Files view.
 - Finished-task reminders: if a task ends while the page is in the background, the tab title gets a count such as `(1)`. Browser notifications can be turned on in "Settings → Page" (requires HTTPS or localhost).
@@ -141,6 +142,34 @@ New container: the default container name is `my-easy-{now}`, and the host and c
 Disk usage: removing a container does not remove its work directory on the host. "Settings → Maintenance → Disk usage" lists usage per directory, and work directories whose containers are gone or unused can be cleaned up there; your own project directories, directories pinned by a fixed `hostPath` in the config, and directories containing other mounted disks are never deleted. Each directory can be opened to see its files, and the page also lets you clean up conversation history left by deleted containers. The "empty directories whose container and history are both deleted" filter clears all empty directories in one click; when you delete a container from the sidebar with "delete together with history", its work directory is removed too if it sits inside the MANYOYO work directory and is empty.
 
 When the web UI runs an Agent it adds a system prompt (replies are shown in a web page, how to write images). In "Settings → Agent → System prompt" you can turn off the default system prompt or add your own supplementary one (config field `agentInstructions`); they only set the initial content for containers created afterwards. You can edit it when creating a container, and later in the container's settings; existing containers are not affected by system settings.
+
+## Export and Import
+
+Move a container together with its conversations to another machine (or onto a newer image version on the same machine). Use the "Export / Import" button at the top of the sidebar, or "Export…" in a container's ⋯ menu.
+
+**Export**: pick containers and a tier, then start.
+
+| Tier | Contents |
+|---|---|
+| Light | Web chat history, Agent session records, container settings (env vars, autostart script, system prompt, network rules). Small; you can keep chatting after importing |
+| Standard (recommended) | Light + chat images, Agent skills / MCP / settings / memory, and the host work directory |
+| Full | Standard + software installed in the container and global packages, per-turn rewind snapshots. System-layer changes are only restored when the target has the same image version |
+| Custom | Tick contents by hand; ticking exactly one tier's set highlights that tier |
+
+- Caches, temp directories and mounted directories (extra mounts other than the work directory are only recorded as paths, never copied) are never exported.
+- **Secrets are exported by default** (otherwise the new machine cannot chat right away). The file contains your API keys, so keep it safe; you can untick it and fill the keys in "Container settings" after importing.
+- Saving: **Direct download** (default) is received by the browser and uses no server disk, but keep the page open until it starts; **Save on server** writes to `~/.manyoyo/exports/`, lets you close the page, and uses server disk (free space is checked first).
+- While exporting, the containers are paused (and restored afterwards); chat, terminal, files, settings and delete are unavailable for a moment. The sidebar card spins; click it to see progress or cancel. You cannot export while an AGENT is running.
+- Compression: "Fast" (zstd 3, default) or "Smaller" (zstd 10, about 20% smaller, 4× slower). The file is `manyoyo-export-YYYYMMDD-HHmmss.tar.zst`; inspect it with `zstd -d` and `tar t`.
+
+**Import**: "Export / Import → Import container…", choose a local file or one in `~/.manyoyo/exports/` (for large files `scp` them into that directory first to avoid reverse-proxy upload limits). Only the start of the file is read first to show a manifest; then confirm each container:
+
+- The container name after import (duplicates are renamed automatically) and the local work directory (must not exist yet or be empty; the path inside the container does not change, so the Agent can keep its context).
+- Image: "same as before" or "use this machine's default version".
+- High-risk settings in the archive (sock / dind mode, extra mounts, port mappings, autostart script, "unrestricted" network) are off by default and only apply if ticked; the `first` command is never run on import.
+- The file is unpacked while it arrives, without a temporary copy; an interrupted upload, an incomplete file or a cancel automatically undoes the containers, directories and history created by this import.
+
+**Migrating to a new image version**: export with "Standard" and choose "use this machine's default version" when importing. System-layer changes are left out; user data, Agent records, work directory and chat history all come along, and the container is rebuilt on the new image so you can keep chatting. Delete the old container yourself once you are happy.
 
 ## Web Frontend
 
