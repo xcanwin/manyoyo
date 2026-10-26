@@ -248,6 +248,30 @@ describe("ModelServicesPanel", () => {
     ).toBe(false)
   })
 
+  test("订阅登录也能填 Base URL、模型和更多模型，一并发出", async () => {
+    await mount()
+    await click("添加模型服务")
+    await click("订阅登录")
+    expect(document.getElementById("ms-base-url")).toBeTruthy()
+    expect(document.getElementById("ms-model")).toBeTruthy()
+    expect(pageText()).toContain("只有转发订阅令牌的网关才需要填")
+    expect(pageText()).not.toContain("删掉同一项里的 API Key 和 Base URL")
+    await typeInto("ms-key", "oauth-token-123456")
+    await typeInto("ms-base-url", "https://gw.test")
+    await typeInto("ms-model", "claude-x")
+    await click("更多模型设置")
+    await typeInto("ms-ANTHROPIC_DEFAULT_HAIKU_MODEL", "h")
+    await click("保存")
+    expect(post("/api/model-services")?.body).toMatchObject({
+      agent: "claude",
+      subscription: true,
+      key: "oauth-token-123456",
+      baseUrl: "https://gw.test",
+      model: "claude-x",
+      models: { ANTHROPIC_DEFAULT_HAIKU_MODEL: "h" },
+    })
+  })
+
   test("没填 Key 不发请求并提示", async () => {
     await mount()
     await click("添加模型服务")

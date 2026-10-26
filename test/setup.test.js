@@ -50,10 +50,10 @@ describe('setup helpers', () => {
         })).toEqual(['claude', 'codex', 'gemini']);
     });
 
-    test('订阅令牌会删掉同一个运行配置里的 API Key 类变量和 Base URL，其它变量保留', () => {
+    test('订阅令牌会删掉同一个运行配置里的 API Key 类变量，Base URL 和其它变量保留', () => {
         const existingRun = { yolo: 'c', env: { ANTHROPIC_AUTH_TOKEN: 'k', ANTHROPIC_API_KEY: 'k2', ANTHROPIC_BASE_URL: 'https://x.test', ANTHROPIC_MODEL: 'm' } };
         const profile = buildAgentRunProfile('claude', { CLAUDE_CODE_OAUTH_TOKEN: 'oauth-tok' }, { existingRun });
-        expect(profile.env).toEqual({ ANTHROPIC_MODEL: 'm', CLAUDE_CODE_OAUTH_TOKEN: 'oauth-tok' });
+        expect(profile.env).toEqual({ ANTHROPIC_BASE_URL: 'https://x.test', ANTHROPIC_MODEL: 'm', CLAUDE_CODE_OAUTH_TOKEN: 'oauth-tok' });
         // 同时给了 Key 就不删（用户明确要 Key）
         const both = buildAgentRunProfile('claude', { CLAUDE_CODE_OAUTH_TOKEN: 'oauth-tok', ANTHROPIC_AUTH_TOKEN: 'k3' }, { existingRun });
         expect(both.env.ANTHROPIC_AUTH_TOKEN).toBe('k3');

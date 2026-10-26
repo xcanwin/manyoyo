@@ -679,9 +679,12 @@ function ServiceDialog({
               </Field>
             ) : null}
 
-            {!subscriptionOnly ? (
+            {!codexSubscription ? (
               <Field>
-                <FieldLabel htmlFor="ms-base-url">Base URL</FieldLabel>
+                <FieldLabel htmlFor="ms-base-url">
+                  Base URL
+                  {subscriptionOnly ? <Hint>（可选）</Hint> : null}
+                </FieldLabel>
                 <Input
                   id="ms-base-url"
                   value={form.baseUrl}
@@ -690,6 +693,11 @@ function ServiceDialog({
                   readOnly={Boolean(provider) && !editing}
                   onChange={(event) => patch({ baseUrl: event.target.value })}
                 />
+                {subscriptionOnly ? (
+                  <FieldDescription>
+                    只有转发订阅令牌的网关才需要填。
+                  </FieldDescription>
+                ) : null}
               </Field>
             ) : null}
 
@@ -709,12 +717,12 @@ function ServiceDialog({
                   />
                   {subscriptionOnly && form.agent === "claude" ? (
                     <FieldDescription>
-                      保存后会删掉同一项里的 API Key 和 Base URL，否则 Claude
-                      Code CLI 会优先用 Key，订阅不生效。
+                      保存后会删掉同一项里的 API Key，否则 Claude Code CLI
+                      会优先用 Key，订阅不生效。
                     </FieldDescription>
                   ) : null}
                 </Field>
-                {!subscriptionOnly ? (
+                {!codexSubscription ? (
                   <Field>
                     <FieldLabel htmlFor="ms-model">模型</FieldLabel>
                     <Input
@@ -730,7 +738,7 @@ function ServiceDialog({
                     />
                   </Field>
                 ) : null}
-                {form.agent === "claude" && !subscriptionOnly ? (
+                {form.agent === "claude" ? (
                   <SectionToggle title="更多模型设置">
                     <FieldGroup>
                       {CLAUDE_MODEL_FIELDS.map((item) => (

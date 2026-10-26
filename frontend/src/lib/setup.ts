@@ -136,6 +136,7 @@ export function validateStep(step: 1 | 2 | 3, form: SetupForm, agent: SetupAgent
   if (step === 2) {
     if (form.mode === "subscription") {
       if (agent?.id !== "claude") return "Codex CLI 的订阅登录要进容器终端运行 codex login --device-auth，向导里请先选其它接入方式"
+      if (form.baseUrl.trim() && !isValidBaseUrl(form.baseUrl)) return "Base URL 必须以 http:// 或 https:// 开头"
       return form.apiKey.trim() ? "" : "请粘贴订阅令牌"
     }
     if (!form.apiKey.trim()) return "请填写 API Key"
@@ -154,7 +155,7 @@ export function buildEnvBody(agent: SetupAgent, form: SetupForm): Record<string,
   const env: Record<string, string> = {}
   const key = form.apiKey.trim()
   if (key) env[form.mode === "compatible" && form.keyEnv ? form.keyEnv : getModeKeyEnvName(agent, form.mode)] = key
-  if (form.mode === "compatible" && form.baseUrl.trim()) env[agent.baseUrlKey] = form.baseUrl.trim()
+  if ((form.mode === "compatible" || form.mode === "subscription") && form.baseUrl.trim()) env[agent.baseUrlKey] = form.baseUrl.trim()
   if (form.mode === "compatible") Object.assign(env, form.extraEnv ?? {})
   if (form.model.trim()) env[agent.modelKey] = form.model.trim()
   return env

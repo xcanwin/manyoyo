@@ -98,8 +98,9 @@ describe("getReadiness", () => {
 })
 
 describe("buildEnvBody 订阅令牌", () => {
-  test("订阅登录把令牌写进 CLAUDE_CODE_OAUTH_TOKEN，不写 Base URL", () => {
-    expect(buildEnvBody(claude, form({ mode: "subscription", apiKey: "tok", baseUrl: "https://x.test" }))).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: "tok" })
+  test("订阅登录把令牌写进 CLAUDE_CODE_OAUTH_TOKEN；填了 Base URL 也一并写入", () => {
+    expect(buildEnvBody(claude, form({ mode: "subscription", apiKey: "tok", baseUrl: "https://x.test" }))).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: "tok", ANTHROPIC_BASE_URL: "https://x.test" })
+    expect(buildEnvBody(claude, form({ mode: "subscription", apiKey: "tok" }))).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: "tok" })
   })
 })
 
@@ -124,6 +125,7 @@ describe("validateStep", () => {
     // 订阅登录：Claude 粘贴长期令牌；Codex 要进容器终端登录，向导里不能保存
     expect(validateStep(2, form({ mode: "subscription" }), claude)).toMatch(/令牌/)
     expect(validateStep(2, form({ mode: "subscription", apiKey: "t" }), claude)).toBe("")
+    expect(validateStep(2, form({ mode: "subscription", apiKey: "t", baseUrl: "gw" }), claude)).toMatch(/http/)
     expect(validateStep(2, form({ mode: "subscription", apiKey: "t" }), { ...claude, id: "codex" })).toMatch(/终端/)
     expect(validateStep(2, form({ mode: "compatible", apiKey: "k" }), claude)).toMatch(/Base URL/)
     expect(validateStep(2, form({ mode: "compatible", apiKey: "k", baseUrl: "ftp://x" }), claude)).toMatch(/http/)

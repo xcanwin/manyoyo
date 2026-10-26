@@ -50,7 +50,7 @@ description: 在网页里添加智谱、DeepSeek 等模型服务，同一个 Key
 
 ## 订阅登录
 
-- **Claude Code**：在任意有浏览器的电脑上运行 `claude setup-token`，把得到的长期令牌粘贴到“订阅登录”里；也可以建好会话后在容器的终端里运行 `claude`，按提示登录（凭据只在那个容器里）。保存令牌时会删掉同一项里的 API Key 和 Base URL，否则 Claude Code 会优先用 Key。
+- **Claude Code**：在任意有浏览器的电脑上运行 `claude setup-token`，把得到的长期令牌粘贴到“订阅登录”里；也可以建好会话后在容器的终端里运行 `claude`，按提示登录（凭据只在那个容器里）。保存令牌时会删掉同一项里的 API Key，否则 Claude Code 会优先用 Key。Base URL 和模型选填，只有转发订阅令牌的网关才需要填。
 - **Codex**：在容器的终端里运行 `codex login --device-auth`，按提示用浏览器登录。登录只在那个容器里有效，换容器要重新登录。
 
 MANYOYO 不会复制宿主机的登录凭据到容器里。

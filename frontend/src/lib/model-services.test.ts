@@ -45,6 +45,10 @@ describe("validateServiceForm", () => {
   test("编辑：Key 可以留空", () => {
     expect(validateServiceForm(form({ providerId: "zhipu" }), "edit")).toBe("")
   })
+  test("订阅登录：Base URL 选填但填了要合法；编辑时令牌可留空", () => {
+    expect(validateServiceForm(form({ mode: "subscription", key: "t", baseUrl: "gw" }), "create")).toMatch(/http/)
+    expect(validateServiceForm(form({ mode: "subscription", baseUrl: "https://gw.test" }), "edit")).toBe("")
+  })
   test("订阅登录：Claude 要令牌，Codex 不在这里保存", () => {
     expect(
       validateServiceForm(form({ mode: "subscription" }), "create")
@@ -76,6 +80,14 @@ describe("请求体", () => {
       key: "t",
       subscription: true,
     })
+    expect(buildCreateBody(form({ key: "t", mode: "subscription", baseUrl: " https://gw.test ", model: "m" }))).toEqual({
+      agent: "claude",
+      key: "t",
+      subscription: true,
+      baseUrl: "https://gw.test",
+      model: "m",
+    })
+    expect(buildEditBody(form({ mode: "subscription", baseUrl: "https://gw.test" }))).toMatchObject({ subscription: true, baseUrl: "https://gw.test" })
   })
   test("编辑：Key 留空不发 key", () => {
     expect(

@@ -443,6 +443,19 @@ export function SetupWizard({
                         onChange={(event) => setField("apiKey", event.target.value)}
                       />
                     </Field>
+                    {form.mode === "subscription" ? (
+                      <Field>
+                        <FieldLabel htmlFor="setup-sub-base-url">Base URL（可选）</FieldLabel>
+                        <Input
+                          id="setup-sub-base-url"
+                          inputMode="url"
+                          placeholder={baseUrlPlaceholder(agent)}
+                          value={form.baseUrl}
+                          onChange={(event) => setField("baseUrl", event.target.value)}
+                        />
+                        <FieldDescription>只有转发订阅令牌的网关才需要填。</FieldDescription>
+                      </Field>
+                    ) : null}
                     <Field>
                       <FieldLabel htmlFor="setup-model">模型（可选）</FieldLabel>
                       <Input

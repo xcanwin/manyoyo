@@ -136,9 +136,12 @@ describe('buildReuseService / buildNewService', () => {
         expect(() => buildNewService(config, { agent: 'nope', key: 'k' })).toThrow(/不支持/);
     });
 
-    test('订阅令牌：只有 Claude 支持，不带 Base URL', () => {
+    test('订阅令牌：只有 Claude 支持，Base URL 和模型选填', () => {
         const { profile } = buildNewService(config, { agent: 'claude', subscription: true, key: 'oauth-token-123456' });
         expect(profile.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'oauth-token-123456' });
+        const withGateway = buildNewService(config, { agent: 'claude', subscription: true, key: 'oauth-token-123456', baseUrl: 'https://gw.example.com', model: 'claude-x', models: { ANTHROPIC_DEFAULT_HAIKU_MODEL: 'h' } });
+        expect(withGateway.profile.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'oauth-token-123456', ANTHROPIC_BASE_URL: 'https://gw.example.com', ANTHROPIC_MODEL: 'claude-x', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'h' });
+        expect(() => buildNewService(config, { agent: 'claude', subscription: true, key: 'oauth-token-123456', baseUrl: 'ftp://x' })).toThrow(/http/);
         expect(() => buildNewService(config, { agent: 'codex', subscription: true, key: 'x' })).toThrow();
     });
 });
@@ -213,10 +216,14 @@ describe('buildServiceEdit + applyConfigOps', () => {
         expect(listModelServices({ runs: { 'codex-z': { yolo: 'cx', env: { OPENAI_API_KEY: 'k-1234567890' } } } })[0]).not.toHaveProperty('models');
     });
 
-    test('保存订阅令牌后，同一个运行配置里的 API Key 类变量和 Base URL 被删掉', () => {
+    test('保存订阅令牌后，同一个运行配置里的 API Key 类变量被删掉，Base URL 保留', () => {
         const { ops } = buildServiceEdit(config, 'claude-glm', { key: 'oauth-token-123456', subscription: true });
         const env = JSON5.parse(applyConfigOps(RAW, ops)).runs['claude-glm'].env;
-        expect(env).toEqual({ API_TIMEOUT_MS: 3000000, CLAUDE_CODE_OAUTH_TOKEN: 'oauth-token-123456' });
+        expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('oauth-token-123456');
+        expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+        expect(env.ANTHROPIC_BASE_URL).toBeDefined();
+        const changed = buildServiceEdit(config, 'claude-glm', { key: 'oauth-token-123456', subscription: true, baseUrl: 'https://gw.example.com' });
+        expect(JSON5.parse(applyConfigOps(RAW, changed.ops)).runs['claude-glm'].env.ANTHROPIC_BASE_URL).toBe('https://gw.example.com');
     });
 
     test('新增运行配置落盘后其余内容不变', () => {

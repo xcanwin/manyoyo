@@ -50,7 +50,7 @@ Each provider's official guide is linked below the provider buttons. For any oth
 
 ## Subscription login
 
-- **Claude Code**: on any computer with a browser run `claude setup-token` and paste the long-lived token into "Subscription login"; or create the session and run `claude` in the container's terminal and follow the prompts (credentials stay in that container). Saving a token removes the API key and Base URL from the same entry, otherwise Claude Code prefers the key.
+- **Claude Code**: on any computer with a browser run `claude setup-token` and paste the long-lived token into "Subscription login"; or create the session and run `claude` in the container's terminal and follow the prompts (credentials stay in that container). Saving a token removes the API key from the same entry, otherwise Claude Code prefers the key. Base URL and model are optional; only needed for a gateway that forwards subscription tokens.
 - **Codex**: in the container's terminal run `codex login --device-auth` and sign in with a browser. The login only lives in that container; a new container needs a new login.
 
 MANYOYO never copies host login credentials into containers.

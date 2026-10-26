@@ -122,7 +122,9 @@ export function validateServiceForm(
   if (form.mode === "subscription") {
     if (form.agent !== "claude")
       return "Codex CLI 的订阅登录在容器终端里完成，这里不用保存"
-    return form.key.trim() ? "" : "请粘贴订阅令牌"
+    if (form.baseUrl.trim() && !/^https?:\/\//i.test(form.baseUrl.trim()))
+      return "Base URL 必须以 http:// 或 https:// 开头"
+    return form.key.trim() || mode === "edit" ? "" : "请粘贴订阅令牌"
   }
   if (mode === "create" && !form.key.trim()) return "请填写 API Key"
   if (!form.providerId) {
@@ -149,8 +151,10 @@ export function buildCreateBody(form: ServiceForm): Record<string, unknown> {
   }
   if (form.name.trim()) body.name = form.name.trim()
   if (form.model.trim()) body.model = form.model.trim()
-  if (form.mode === "subscription") body.subscription = true
-  else if (form.providerId) body.providerId = form.providerId
+  if (form.mode === "subscription") {
+    body.subscription = true
+    if (form.baseUrl.trim()) body.baseUrl = form.baseUrl.trim()
+  } else if (form.providerId) body.providerId = form.providerId
   else body.baseUrl = form.baseUrl.trim()
   // 新增时没填的不发（服务端本来也不写空值）
   if (form.agent === "claude") {
@@ -177,7 +181,7 @@ export function buildEditBody(
   if (syncContainers) body.syncContainers = true
   if (form.key.trim()) body.key = form.key.trim()
   if (form.mode === "subscription") body.subscription = true
-  else body.baseUrl = form.baseUrl.trim()
+  body.baseUrl = form.baseUrl.trim()
   if (form.agent === "claude") addClaudeExtras(body, form)
   return body
 }
