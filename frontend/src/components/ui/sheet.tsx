@@ -28,8 +28,8 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
   return (
     <SheetPrimitive.Backdrop
       data-slot="sheet-overlay"
-      // 本地修改：与 Dialog / AlertDialog 共用同一种遮罩
-      className={cn(OVERLAY_CLASS, className)}
+      // 本地修改：与 Dialog / AlertDialog 共用同一种遮罩；时长与面板的 duration-200 一致，遮罩不会先于面板消失
+      className={cn(OVERLAY_CLASS, "duration-200", className)}
       {...props}
     />
   )
