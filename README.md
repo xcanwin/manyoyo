@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/manyoyo-logo-09-cyberpunk-terminal.svg" alt="MANYOYO logo" width="560" />
+  <img src="./assets/manyoyo-robots-fighting.png" alt="MANYOYO logo" width="720" />
 </p>
 
 # <p align="center"><a href="https://github.com/xcanwin/manyoyo">MANYOYO（慢悠悠）</a></p>
