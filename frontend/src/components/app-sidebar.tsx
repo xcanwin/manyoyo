@@ -2,6 +2,7 @@ import * as React from "react"
 import { markFreshSession } from "@/lib/fresh-session"
 import {
   ArrowLeftIcon,
+  ArrowUpDownIcon,
   LogOutIcon,
   MessageCircleIcon,
   MoreHorizontalIcon,
@@ -45,6 +46,14 @@ import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { clearAllComposerData, countPendingOutbox } from "@/lib/composer-store"
 import { performLogout } from "@/lib/logout"
 import {
+  SORT_LABELS,
+  loadSidebarSort,
+  saveSidebarSort,
+  sortAgentSessions,
+  sortContainerGroups,
+  type SortKey,
+} from "@/lib/sidebar-sort"
+import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbList,
@@ -55,6 +64,8 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -128,7 +139,7 @@ function suggestCloneContainerName(containers: ContainerGroup[], baseName: strin
 }
 
 export function AppSidebar({
-  containers,
+  containers: containersRaw,
   loading,
   error,
   activeSessionName,
@@ -150,6 +161,19 @@ export function AppSidebar({
   onCreatingAgentContainerChange: (containerName: string | null) => void
 }) {
   const { isMobile, setOpenMobile } = useSidebar()
+  // 排序偏好：容器层排容器、AGENT 层排当前容器里的 AGENT（置顶永远在最前）
+  const [sort, setSort] = React.useState(loadSidebarSort)
+  const containers = React.useMemo(() => sortContainerGroups(containersRaw, sort.containers), [containersRaw, sort.containers])
+  // 正在删除（等服务端返回并刷新完列表）的容器 / AGENT：卡片转圈并禁用，避免重复点
+  const [removingKeys, setRemovingKeys] = React.useState<ReadonlySet<string>>(new Set())
+  function markRemoving(key: string, on: boolean) {
+    setRemovingKeys((prev) => {
+      const next = new Set(prev)
+      if (on) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }
   const { confirm: confirmRaw, dialog: confirmDialog } = useConfirmDialog()
   // 手机上侧栏本身是一层 Sheet：从里面打开弹窗前先收起侧栏，弹窗（挂在 Sheet 外面）后面还能再叠一层（STYLE.md 第 9 节）
   function closeSidebar() {
@@ -209,8 +233,8 @@ export function AppSidebar({
   )
   const activeGroup = containers.find((group) => group.containerName === navContainer)
   const visibleAgentSessions = React.useMemo(
-    () => (activeGroup?.sessions ?? []).filter((s) => s.synthetic !== true),
-    [activeGroup]
+    () => sortAgentSessions((activeGroup?.sessions ?? []).filter((s) => s.synthetic !== true), sort.agents),
+    [activeGroup, sort.agents]
   )
 
   // AGENT 多到需要滚动时，刷新页面或从别处切回来，选中项可能落在可视区外面，
@@ -308,7 +332,7 @@ export function AppSidebar({
   }
 
   // 容器行的 ⋯ 与面包屑上的 ⋯ 共用同一份菜单，按作用对象分组：备注 / 子 AGENT / 容器复制 / 删除
-  function renderContainerMenuContent(containerName: string, remark: string, status: string, side: "right" | "bottom") {
+  function renderContainerMenuContent(containerName: string, remark: string, status: string, side: "right" | "bottom", pinned: boolean) {
     // history = 容器已不存在，没有可启停的对象
     const running = /^Up\b/.test(status)
     return (
@@ -317,6 +341,9 @@ export function AppSidebar({
           <DropdownMenuLabel>容器</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => editContainerRemark(containerName, remark)}>
             编辑备注
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void toggleContainerPin(containerName, pinned)}>
+            {pinned ? "取消置顶" : "置顶容器"}
           </DropdownMenuItem>
           {status !== "history" ? (
             <DropdownMenuItem onClick={() => void toggleContainerRunning(containerName, running)}>
@@ -514,6 +541,7 @@ export function AppSidebar({
     )
     if (!choice) return
     const removeHistory = choice === "with-history"
+    markRemoving(containerName, true)
     try {
       await apiPost(`/api/sessions/${encodeURIComponent(containerName)}/remove`, {
         removeHistory,
@@ -529,6 +557,18 @@ export function AppSidebar({
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "删除容器失败")
+    } finally {
+      markRemoving(containerName, false)
+    }
+  }
+
+  async function toggleContainerPin(containerName: string, pinned: boolean) {
+    try {
+      await apiPost(`/api/sessions/${encodeURIComponent(containerName)}/container-pin`, { pinned: !pinned })
+      toast.success(pinned ? "已取消置顶" : "已置顶")
+      await onRefresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "置顶失败")
     }
   }
 
@@ -578,6 +618,7 @@ export function AppSidebar({
     )
     if (!choice) return
     const removeHistory = choice === "with-history"
+    markRemoving(session.name, true)
     try {
       await apiPost(`/api/sessions/${encodeURIComponent(session.name)}/remove-with-history`, {
         removeHistory,
@@ -589,6 +630,8 @@ export function AppSidebar({
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "删除 AGENT 失败")
+    } finally {
+      markRemoving(session.name, false)
     }
   }
 
@@ -653,11 +696,11 @@ export function AppSidebar({
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger
-                render={<Button variant="outline" size="icon" title="容器操作" aria-label="容器操作" />}
+                render={<Button variant="outline" size="icon" title="容器操作" aria-label="容器操作" disabled={removingKeys.has(activeGroup.containerName)} />}
               >
                 <MoreHorizontalIcon />
               </DropdownMenuTrigger>
-              {renderContainerMenuContent(activeGroup.containerName, activeGroup.containerRemark, activeGroup.status, "bottom")}
+              {renderContainerMenuContent(activeGroup.containerName, activeGroup.containerRemark, activeGroup.status, "bottom", activeGroup.pinned === true)}
             </DropdownMenu>
           </div>
         ) : (
@@ -691,6 +734,34 @@ export function AppSidebar({
                 </Button>
               )}
             </BreadcrumbItem>
+            <BreadcrumbItem className="ml-auto shrink-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="outline" size={isMobile ? "icon-xl" : "icon"} title="排序" aria-label="排序" />}
+                >
+                  <ArrowUpDownIcon />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="bottom" align="end" className="w-40">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{navLevel === "containers" ? "容器排序" : "AGENT 排序"}</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={navLevel === "containers" ? sort.containers : sort.agents}
+                      onValueChange={(value) => {
+                        const next = { ...sort, [navLevel === "containers" ? "containers" : "agents"]: value as SortKey }
+                        setSort(next)
+                        saveSidebarSort(next)
+                      }}
+                    >
+                      {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                        <DropdownMenuRadioItem key={key} value={key} closeOnClick>
+                          {SORT_LABELS[key]}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
         {error ? (
@@ -708,6 +779,8 @@ export function AppSidebar({
                       <SidebarMenuButton
                         size="lg"
                         isActive={group.containerName === activeContainerName}
+                        disabled={removingKeys.has(group.containerName)}
+                        aria-busy={removingKeys.has(group.containerName) || undefined}
                         onClick={() => {
                           goToAgents(group.containerName)
                           selectSession(
@@ -721,22 +794,26 @@ export function AppSidebar({
                             {group.containerRemark || group.containerName}
                           </span>
                           {group.pinned ? (
-                            <PinIcon aria-label="有置顶的 AGENT" className="size-3.5 shrink-0 text-muted-foreground" />
+                            <PinIcon aria-label="已置顶" className="size-3.5 shrink-0 text-muted-foreground" />
                           ) : null}
-                          <Badge
-                            variant={
-                              group.status.toLowerCase().includes("up")
-                                ? "success"
-                                : "outline"
-                            }
-                            className="ml-auto shrink-0"
-                          >
-                            {group.status === "history"
-                              ? "仅历史"
-                              : group.status.toLowerCase().includes("up")
-                                ? "运行中"
-                                : "已停止"}
-                          </Badge>
+                          {removingKeys.has(group.containerName) ? (
+                            <Spinner role="status" aria-label="删除中" className="ml-auto shrink-0" />
+                          ) : (
+                            <Badge
+                              variant={
+                                group.status.toLowerCase().includes("up")
+                                  ? "success"
+                                  : "outline"
+                              }
+                              className="ml-auto shrink-0"
+                            >
+                              {group.status === "history"
+                                ? "仅历史"
+                                : group.status.toLowerCase().includes("up")
+                                  ? "运行中"
+                                  : "已停止"}
+                            </Badge>
+                          )}
                         </span>
                         <Hint className="w-full truncate">
                           {group.hostPath}
@@ -745,12 +822,12 @@ export function AppSidebar({
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           render={
-                            <SidebarMenuAction showOnHover title="更多操作" aria-label="更多操作">
+                            <SidebarMenuAction showOnHover title="更多操作" aria-label="更多操作" disabled={removingKeys.has(group.containerName)}>
                               <MoreHorizontalIcon />
                             </SidebarMenuAction>
                           }
                         />
-                        {renderContainerMenuContent(group.containerName, group.containerRemark, group.status, "right")}
+                        {renderContainerMenuContent(group.containerName, group.containerRemark, group.status, "right", group.pinned === true)}
                       </DropdownMenu>
                     </SidebarMenuItem>
                   ))
@@ -760,6 +837,8 @@ export function AppSidebar({
                         ref={activeSessionName === session.name ? activeSessionRef : undefined}
                         size="lg"
                         isActive={activeSessionName === session.name}
+                        disabled={removingKeys.has(session.name) || removingKeys.has(session.containerName)}
+                        aria-busy={removingKeys.has(session.name) || removingKeys.has(session.containerName) || undefined}
                         onClick={() => selectSession(session)}
                         className="h-auto flex-col items-start gap-1 py-2.5"
                       >
@@ -770,8 +849,11 @@ export function AppSidebar({
                           {session.pinned ? (
                             <PinIcon aria-label="已置顶" className="size-3.5 shrink-0 text-muted-foreground" />
                           ) : null}
+                          {removingKeys.has(session.name) || removingKeys.has(session.containerName) ? (
+                            <Spinner role="status" aria-label="删除中" className="ml-auto shrink-0" />
+                          ) : null}
                           {/* 执行中：静态绿点（常驻元素不用无限动画） */}
-                          {session.agentRunning ? (
+                          {session.agentRunning && !removingKeys.has(session.name) && !removingKeys.has(session.containerName) ? (
                             <span
                               role="status"
                               aria-label="执行中"
@@ -779,7 +861,7 @@ export function AppSidebar({
                               className="ml-auto size-2 shrink-0 rounded-full bg-success"
                             />
                           ) : null}
-                          {session.archived ? (
+                          {session.archived && !removingKeys.has(session.name) && !removingKeys.has(session.containerName) ? (
                             <Badge variant="outline" className="ml-auto shrink-0">
                               已停止
                             </Badge>
@@ -792,7 +874,7 @@ export function AppSidebar({
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           render={
-                            <SidebarMenuAction showOnHover title="更多操作" aria-label="更多操作">
+                            <SidebarMenuAction showOnHover title="更多操作" aria-label="更多操作" disabled={removingKeys.has(session.name) || removingKeys.has(session.containerName)}>
                               <MoreHorizontalIcon />
                             </SidebarMenuAction>
                           }

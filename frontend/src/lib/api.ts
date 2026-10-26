@@ -15,6 +15,9 @@ export type SessionSummary = {
   firstPrompt?: string
   pinned?: boolean
   containerRemark: string
+  // 容器置顶与容器真实创建时间（服务端从容器信息取，仅剩历史的容器没有）
+  containerPinned?: boolean
+  containerCreatedAt?: string | null
   status: string
   image: string
   createdAt: string | null
@@ -598,8 +601,9 @@ export type ContainerGroup = {
   hostPath: string
   updatedAt: string
   sessions: SessionSummary[]
-  // 容器里有置顶的 AGENT（排序与图标用）
+  // 容器自己的置顶（AGENT 置顶只影响容器内的顺序）
   pinned?: boolean
+  containerCreatedAt?: string | null
 }
 
 export const IMAGE_PROBLEM_EVENT = "manyoyo:image-problem"
@@ -909,6 +913,8 @@ export function groupSessionsByContainer(sessions: SessionSummary[]): ContainerG
         image: session.image || "",
         hostPath: session.hostPath || "未配置目录",
         updatedAt: session.updatedAt || "",
+        containerCreatedAt: session.containerCreatedAt || null,
+        pinned: session.containerPinned === true,
         sessions: [],
       })
     }
@@ -921,9 +927,8 @@ export function groupSessionsByContainer(sessions: SessionSummary[]): ContainerG
       group.updatedAt = session.updatedAt
     }
   }
-  // 置顶：容器内置顶的 AGENT 排最前（其余保持原顺序）；含置顶 AGENT 的容器排在容器列表最前
+  // 置顶：容器自己置顶的排在容器列表最前；容器内置顶的 AGENT 排最前（不再带动容器）
   for (const group of groups.values()) {
-    group.pinned = group.sessions.some((session) => session.pinned === true)
     group.sessions = [
       ...group.sessions.filter((session) => session.pinned === true),
       ...group.sessions.filter((session) => session.pinned !== true),

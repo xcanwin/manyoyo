@@ -527,6 +527,64 @@ describe('Web Server Session Clone/Duplicate/Cascade Delete', () => {
         }
     });
 
+    test('container-pin 置顶容器：落盘、列表带 containerPinned、容器删了保留历史后仍在；非默认层级被拒；列表带容器真实创建时间', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-container-pin-'));
+        const port = await getFreePort();
+        const webHistoryDir = path.join(tempHost, 'web-history');
+        writeHistoryFile(webHistoryDir, 'pin-target', {
+            containerName: 'pin-target',
+            applied: { containerName: 'pin-target', hostPath: tempHost },
+            agents: { default: { agentId: 'default', agentName: 'AGENT 1', messages: [] }, 'agent-2': { agentId: 'agent-2' } }
+        });
+        let handle = null;
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port, {
+                containerExists: () => true,
+                dockerExecArgs: args => {
+                    if (Array.isArray(args) && args[0] === 'ps') return 'pin-target\tUp 2 minutes\tlocalhost/xcanwin/manyoyo:1.0.0-common\n';
+                    if (Array.isArray(args) && args[0] === 'inspect') return '/pin-target\t\t2026-10-01T08:00:00.123456789Z\n';
+                    return '';
+                }
+            }));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const authCookie = await loginAndGetCookie(baseUrl);
+            const post = (name, body) => request(`${baseUrl}/api/sessions/${name}/container-pin`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const list = async () => (await request(`${baseUrl}/api/sessions`, { headers: { Cookie: authCookie } })).json.sessions;
+
+            let target = (await list()).find(item => item.name === 'pin-target');
+            expect(target.containerPinned).toBe(false);
+            expect(target.containerCreatedAt).toBe('2026-10-01T08:00:00.123Z');
+
+            const setRes = await post('pin-target', { pinned: true });
+            expect(setRes.response.status).toBe(200);
+            expect(setRes.json).toEqual({ containerName: 'pin-target', pinned: true });
+            target = (await list()).find(item => item.name === 'pin-target');
+            expect(target.containerPinned).toBe(true);
+            expect(JSON.parse(fs.readFileSync(path.join(webHistoryDir, 'pin-target.json'), 'utf8')).pinned).toBe(true);
+
+            expect((await post('pin-target~agent-2', { pinned: true })).response.status).toBe(400);
+
+            const removed = await request(`${baseUrl}/api/sessions/pin-target/remove-with-history`, {
+                method: 'POST',
+                headers: { Cookie: authCookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ removeHistory: false })
+            });
+            expect(removed.response.status).toBe(200);
+            expect((await list()).find(item => item.containerName === 'pin-target').containerPinned).toBe(true);
+
+            expect((await post('pin-target', { pinned: false })).json.pinned).toBe(false);
+        } finally {
+            if (handle && typeof handle.close === 'function') {
+                await handle.close();
+            }
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+
     test('container-remark rejects a non-default agent session key', async () => {
         const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-container-remark-guard-'));
         const port = await getFreePort();

@@ -860,17 +860,17 @@ describe("sessionDisplayTitle", () => {
 })
 
 describe("groupSessionsByContainer 置顶", () => {
-  const s = (containerName: string, agentId: string, updatedAt: string, pinned = false) =>
-    ({ name: `${containerName}~${agentId}`, containerName, agentId, updatedAt, pinned, status: "Up" }) as never
-  test("含置顶 AGENT 的容器排最前（标记 pinned），容器内置顶的 AGENT 排最前，其余保持原顺序", async () => {
+  const s = (containerName: string, agentId: string, updatedAt: string, pinned = false, containerPinned = false) =>
+    ({ name: `${containerName}~${agentId}`, containerName, agentId, updatedAt, pinned, containerPinned, status: "Up" }) as never
+  test("容器自己置顶的排最前；AGENT 置顶只让它在容器内排最前，不带动容器", async () => {
     const { groupSessionsByContainer } = await import("./api")
     const groups = groupSessionsByContainer([
       s("new", "a", "2026-10-03T00:00:00Z"),
       s("old", "a", "2026-10-01T00:00:00Z"),
       s("old", "b", "2026-10-01T00:00:00Z", true),
-      s("mid", "a", "2026-10-02T00:00:00Z"),
+      s("mid", "a", "2026-10-02T00:00:00Z", false, true),
     ])
-    expect(groups.map((g) => [g.containerName, g.pinned])).toEqual([["old", true], ["new", false], ["mid", false]])
-    expect(groups[0].sessions.map((x) => x.agentId)).toEqual(["b", "a"])
+    expect(groups.map((g) => [g.containerName, g.pinned])).toEqual([["mid", true], ["new", false], ["old", false]])
+    expect(groups[2].sessions.map((x) => x.agentId)).toEqual(["b", "a"])
   })
 })
