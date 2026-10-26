@@ -36,7 +36,7 @@ beforeEach(() => {
     fs.mkdirSync(home, { recursive: true });
     fs.mkdirSync(fakeBin, { recursive: true });
 });
-afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+afterEach(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
 
 const script = (file, body) => fs.writeFileSync(file, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
 
