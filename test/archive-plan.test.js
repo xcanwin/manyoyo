@@ -26,6 +26,14 @@ describe('lib/archive/plan', () => {
         expect(plan.classifyLayerPath('relative')).toBeNull();
     });
 
+    test('/tmp 整体不导出，但 /tmp/.playwright-cli（Agent 浏览器的截图、二维码）放行，归到“Agent 其余改动”', () => {
+        expect(plan.classifyLayerPath('/tmp/.playwright-cli/qrcode.jpg')).toBe('agentExtras');
+        expect(plan.classifyLayerPath('/tmp/.playwright-cli')).toBe('agentExtras');
+        expect(plan.classifyLayerPath('/tmp/other/x')).toBeNull();
+        expect(plan.classifyLayerPath('/tmp/.playwright-cli/x', ['/tmp'])).toBeNull();
+        expect(plan.layerScopes(new Set(['agentExtras']), [])).toContain('/tmp/.playwright-cli');
+    });
+
     test('分类：会话记录 / Agent 其余改动 / 系统层', () => {
         expect(plan.classifyLayerPath('/root/.claude/projects/-w/abc.jsonl')).toBe('agentSessions');
         expect(plan.classifyLayerPath('/root/.claude.json')).toBe('agentSessions');

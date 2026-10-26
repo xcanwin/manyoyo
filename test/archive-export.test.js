@@ -243,6 +243,16 @@ describe('lib/archive/export 整体', () => {
         expect(how).toEqual(['pause', 'stop']);
     });
 
+    test('暂停后读不到容器文件：立刻恢复运行，改成不暂停直接读，数据照样带全', async () => {
+        const runtime = fakeRuntime();
+        runtime.canRead = () => false;
+        const { entries, result } = await doExport(['history', 'agentSessions'], { runtime });
+        expect(runtime.calls.pause).toEqual(['box1']);
+        expect(runtime.calls.unpause).toEqual(['box1']);
+        expect(result.stats.pauseUnusable).toBe(1);
+        expect(entries['c/0/layer/root/.codex/sessions/s.jsonl'].content).toBe('SESSION');
+    });
+
     test('取消：check 抛错时中止并恢复暂停', async () => {
         let n = 0;
         const runtime = fakeRuntime();

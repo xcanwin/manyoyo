@@ -159,10 +159,10 @@ Move a container together with its conversations to another machine (or onto a n
 | Full | Standard + software installed in the container and global packages, per-turn rewind snapshots. System-layer changes are only restored when the target has the same image version |
 | Custom | Tick contents by hand; ticking exactly one tier's set highlights that tier |
 
-- Caches, temp directories and mounted directories (extra mounts other than the work directory are only recorded as paths, never copied) are never exported.
+- Caches, temp directories (except `/tmp/.playwright-cli`, where the Agent's browser tool keeps screenshots and QR codes; it is included from "Standard" up) and mounted directories (extra mounts other than the work directory are only recorded as paths, never copied) are never exported.
 - **Secrets are exported by default** (otherwise the new machine cannot chat right away). The file contains your API keys, so keep it safe; you can untick it: API keys, token-like env vars and each Agent's login credentials (e.g. Claude's `.credentials.json`, Codex's `auth.json`) are then left out, and you add the keys in "Container settings" and log in again after importing.
 - Saving: **Direct download** (default) is received by the browser and uses no server disk, but keep the page open until it starts; **Save on server** writes to `~/.manyoyo/exports/`, lets you close the page, and uses server disk (free space is checked first).
-- While exporting, the containers are paused (and restored afterwards); chat, terminal, files, settings and delete are unavailable for a moment. The sidebar card spins; click it to see progress or cancel. You cannot export while an AGENT is running.
+- While exporting, the containers are paused (and restored afterwards; if a container's files cannot be read while paused, it is read live instead); chat, terminal, files, settings and delete are unavailable for a moment. The sidebar card spins; click it to see progress or cancel. You cannot export while an AGENT is running.
 - Compression: "Fast" (zstd 3, default) or "Smaller" (zstd 10, about 20% smaller, 4× slower). The file is `manyoyo-export-YYYYMMDD-HHmmss.tar.zst`; inspect it with `zstd -d` and `tar t`.
 
 **Import**: "Export / Import → Import container…", choose a local file or one in `~/.manyoyo/exports/` (for large files `scp` them into that directory first to avoid reverse-proxy upload limits). Only the start of the file is read first to show a manifest; then confirm each container:
