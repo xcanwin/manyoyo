@@ -218,7 +218,7 @@ export function ExportDialog({
               <div className="flex min-w-0 flex-col gap-1">
                 <FieldLabel htmlFor="export-secrets">包含密钥（API Key 等）</FieldLabel>
                 <FieldDescription>
-                  不带密钥就没法在新机器上直接对话。文件里有你的 API Key，请妥善保管；取消勾选后，导入后到“设置容器”里补。
+                  不带密钥就没法在新机器上直接对话。文件里有你的 API Key，请妥善保管；取消勾选后，API Key、令牌类变量和各 Agent 的登录凭据都不会进文件，导入后到“设置容器”里补 Key、重新登录。
                 </FieldDescription>
               </div>
             </Field>

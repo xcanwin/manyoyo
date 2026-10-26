@@ -144,7 +144,7 @@ describe("导入弹窗", () => {
     const post = calls.find((c) => c.method === "POST" && c.url === "/api/imports")
     expect(post?.body).toEqual({
       serverFile: "manyoyo-export-20261027-000000.tar.zst",
-      plan: { containers: { 0: { name: "box1-2", hostPath: "/new/box1-2", imageMode: "same", confirm: { volumes: [], ports: false, autostart: true, networkOpen: false } } } },
+      plan: { containers: { 0: { name: "box1-2", hostPath: "/new/box1-2", imageMode: "same", confirm: { volumes: [], ports: false, autostart: true, envFiles: [], networkOpen: false } } } },
     })
   })
 })

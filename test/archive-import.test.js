@@ -208,6 +208,32 @@ describe('lib/archive/import', () => {
         expect(fs.readdirSync(dest)).toEqual(['mine.txt']);
     });
 
+    test('两个不同的工作目录导入到同一个位置：拒绝（会互相覆盖）；建容器中途失败：已建出来的容器也要撤销', async () => {
+        const manifest = MANIFEST({
+            containers: [
+                { idx: 0, name: 'box1', image: 'img:1', containerPath: '/w', hostPath: '/old', work: 0 },
+                { idx: 1, name: 'box3', image: 'img:1', containerPath: '/w2', hostPath: '/old2', work: 1 }
+            ],
+            workdirs: [{ n: 0 }, { n: 1 }]
+        });
+        const entries = [{ name: 'c/0/history.json', content: '{}' }, { name: 'c/0/layer/root/.codex/sessions/a.jsonl', content: 'x' }, { name: 'c/1/history.json', content: '{}' }, { name: 'c/1/layer/root/.codex/sessions/b.jsonl', content: 'y' }];
+        const job = registry.create({ type: 'import', containers: ['box2', 'box4'] });
+        await expect(importArchive({
+            source: Readable.from([archive(manifest, entries)]),
+            plan: { containers: { 0: { name: 'box2', hostPath: dest, imageMode: 'same', confirm: {} }, 1: { name: 'box4', hostPath: dest, imageMode: 'same', confirm: {} } } },
+            deps, job
+        })).rejects.toThrow(/同一个位置/);
+        expect(calls.removed.map(x => x[0])).toContain('box2');
+        expectNothingLeft();
+
+        // 建容器时抛错，但容器已经建出来（onCreated 已回调）：撤销时要把它删掉
+        const failing = { ...deps, createContainer: async args => { args.onCreated('box2', 'cccccccccccccccc'); throw new Error('建容器后续步骤失败'); } };
+        const job2 = registry.create({ type: 'import', containers: ['box2'] });
+        await expect(importArchive({ source: Readable.from([archive(MANIFEST(), goodEntries())]), plan: planOf(), deps: failing, job: job2 })).rejects.toThrow(/后续步骤失败/);
+        expect(calls.removed.some(x => x[0] === 'box2' && x[1] === 'cccccccccccccccc')).toBe(true);
+        expectNothingLeft();
+    });
+
     test('取消：任务被取消时整体撤销', async () => {
         const job = registry.create({ type: 'import', containers: ['box2'] });
         let n = 0;

@@ -97,6 +97,37 @@ describe('lib/web/container-jobs', () => {
         expect(after.busyFor('paused-ok')).toBeNull();
     });
 
+    test('同一个 HOME 上另一个还活着的 serve 进程的任务不会被当成崩溃残留；失败的恢复动作保留记录等下次再试', () => {
+        const dir = path.join(home, '.manyoyo', 'jobs');
+        fs.mkdirSync(dir, { recursive: true });
+        const mk = (id, pid) => fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify({ id, type: 'export', pid, containers: ['x'], paused: [{ name: 'x', id: 'aaaaaaaaaaaaaaaa', how: 'pause' }], created: { containers: [], dirs: [], historyFiles: [] } }));
+        mk('1111111111111111', process.ppid); // 另一个活着的进程
+        mk('2222222222222222', process.pid); // 同进程 = 上一代 registry 的残留
+        const unpaused = [];
+        const reports = createJobRegistry({ homeDir: home }).recover({
+            containerIdOf: () => 'aaaaaaaaaaaaaaaa', isPaused: () => true, unpause: n => { unpaused.push(n); throw new Error('运行时还没好'); }, removeContainer() {}, removePath() {}
+        });
+        expect(unpaused).toEqual(['x']);
+        expect(reports.map(r => r.id)).toEqual(['2222222222222222']);
+        expect(reports[0].failed).toEqual(['x']);
+        // 活着的进程的记录和失败的记录都还在
+        expect(fs.readdirSync(dir).sort()).toEqual(['1111111111111111.json', '2222222222222222.json']);
+    });
+
+    test('停止方式的导出任务：重启后只在 manyoyo.id 对得上且容器已停止时启动', () => {
+        const registry = createJobRegistry({ homeDir: home });
+        const job = registry.create({ type: 'export', containers: ['s1', 's2'] });
+        job.addPaused('s1', 'aaaaaaaaaaaaaaaa', 'stop');
+        job.addPaused('s2', 'bbbbbbbbbbbbbbbb', 'stop');
+        const started = [];
+        createJobRegistry({ homeDir: home }).recover({
+            containerIdOf: n => ({ s1: 'aaaaaaaaaaaaaaaa', s2: 'cccccccccccccccc' }[n]),
+            isPaused: () => true, isStopped: () => true, unpause() { throw new Error('不该 unpause'); },
+            start: n => started.push(n), removeContainer() {}, removePath() {}
+        });
+        expect(started).toEqual(['s1']);
+    });
+
     test('损坏的任务记录被丢弃，不影响启动', () => {
         const dir = path.join(home, '.manyoyo', 'jobs');
         fs.mkdirSync(dir, { recursive: true });

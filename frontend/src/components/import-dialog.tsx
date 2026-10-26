@@ -196,7 +196,7 @@ export function ImportDialog({
                 disabled={running}
                 onChange={(event) => patchEdit(container.idx, { name: event.target.value })}
               />
-              {container.nameTaken ? <FieldDescription>本机已有同名容器，已自动换了名字。</FieldDescription> : null}
+              {container.nameTaken && edit.name === container.suggestedName ? <FieldDescription>本机已有同名容器，已自动换了名字。</FieldDescription> : null}
             </Field>
             {container.work !== null ? (
               <Field>

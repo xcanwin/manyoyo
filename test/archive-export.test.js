@@ -110,7 +110,7 @@ describe('lib/archive/export 整体', () => {
         sentinel = path.join(home, 'sentinel.txt');
         fs.writeFileSync(sentinel, 'SENTINEL-DATA');
         fs.symlinkSync(sentinel, path.join(work, 'evil'));
-        const state = containerState.createState({ homeDir: home, id: ID, envLines: ['ANTHROPIC_AUTH_TOKEN=sk-secret-1234', 'ANTHROPIC_MODEL=m'], autostart: 'echo hi' });
+        const state = containerState.createState({ homeDir: home, id: ID, envLines: ['ANTHROPIC_AUTH_TOKEN=sk-secret-1234', 'ANTHROPIC_MODEL=m'], autostart: 'API_KEY=sk-inline-secret echo hi' });
         fs.mkdirSync(path.join(state.box, 'uploads'));
         fs.writeFileSync(path.join(state.box, 'uploads', 'a.png'), 'PNG');
         fs.writeFileSync(path.join(historyDir, 'box1.json'), '{}');
@@ -124,13 +124,14 @@ describe('lib/archive/export 整体', () => {
         const calls = { pause: [], unpause: [], cp: [] };
         const diff = over.diff || [
             'A /usr/local/bin/mytool', 'A /root/.codex/sessions/s.jsonl', 'A /root/.codex/.tmp/big', 'A /root/.codex/skills/x.md',
-            'A /root/.claude/projects/p/abc.jsonl', 'A /tmp/junk', 'A /workspace/in-mount', 'D /etc/old.conf'
+            'A /root/.claude/projects/p/abc.jsonl', 'A /tmp/junk', 'A /workspace/in-mount', 'D /etc/old.conf',
+            'A /root/.codex/auth.json', 'A /root/.claude/.credentials.json'
         ].join('\n');
         const trees = {
             '/usr/local': [{ name: 'local', type: 'dir' }, { name: 'local/bin/mytool', content: 'BIN' }, { name: 'local/bin/not-in-diff', content: 'IMAGE-FILE' }],
-            '/root/.codex': [{ name: '.codex/sessions/s.jsonl', content: 'SESSION' }, { name: '.codex/.tmp/big', content: 'CACHE' }, { name: '.codex/skills/x.md', content: 'SKILL' }, { name: '.codex/image-own', content: 'FROM-IMAGE' }],
+            '/root/.codex': [{ name: '.codex/sessions/s.jsonl', content: 'SESSION' }, { name: '.codex/.tmp/big', content: 'CACHE' }, { name: '.codex/skills/x.md', content: 'SKILL' }, { name: '.codex/image-own', content: 'FROM-IMAGE' }, { name: '.codex/auth.json', content: 'OAUTH-REFRESH-TOKEN' }],
             '/root/.claude/projects': [{ name: 'projects/p/abc.jsonl', content: 'CLAUDE-SESSION' }],
-            '/root/.claude': [{ name: '.claude/projects/p/abc.jsonl', content: 'CLAUDE-SESSION' }],
+            '/root/.claude': [{ name: '.claude/projects/p/abc.jsonl', content: 'CLAUDE-SESSION' }, { name: '.claude/.credentials.json', content: 'OAUTH-CLAUDE' }],
             '/workspace': [{ name: 'workspace/in-mount', content: 'MOUNTED' }],
             '/workspace/in-mount': [{ name: 'in-mount', content: 'MOUNTED' }]
         };
@@ -152,7 +153,7 @@ describe('lib/archive/export 整体', () => {
     async function doExport(items, extra = {}) {
         const runtime = extra.runtime || fakeRuntime();
         const { sink, buffer } = collectingSink();
-        const history = { containerName: 'box1', remark: '备注', applied: { hostPath: work, containerPath: '/workspace' }, runtimeSnapshot: { hostPath: work, containerPath: '/workspace', env: { ANTHROPIC_AUTH_TOKEN: 'sk-secret-1234', ANTHROPIC_MODEL: 'm' } }, agents: {} };
+        const history = { containerName: 'box1', remark: '备注', applied: { hostPath: work, containerPath: '/workspace' }, runtimeSnapshot: { hostPath: work, containerPath: '/workspace', agentPromptCommand: 'ANTHROPIC_AUTH_TOKEN=sk-cmd-secret claude -p {prompt}', env: { ANTHROPIC_AUTH_TOKEN: 'sk-secret-1234', ANTHROPIC_MODEL: 'm' } }, agents: {} };
         const result = await exportArchive({
             out: sink,
             containers: [{ name: 'box1' }],
@@ -225,6 +226,21 @@ describe('lib/archive/export 整体', () => {
         broken.cp = () => { throw new Error('boom'); };
         await expect(doExport(['history', 'agentSessions'], { runtime: broken })).rejects.toThrow('boom');
         expect(broken.calls.unpause).toEqual(['box1']);
+    });
+
+    test('暂停不可用时退回“停止 → 导出 → 启动”，并在任务记录里标明是 stop', async () => {
+        const runtime = fakeRuntime();
+        runtime.pause = () => { throw new Error('cgroup 不支持暂停'); };
+        runtime.calls.stop = [];
+        runtime.calls.start = [];
+        runtime.stop = name => runtime.calls.stop.push(name);
+        runtime.start = name => runtime.calls.start.push(name);
+        const how = [];
+        await doExport(['history', 'agentSessions'], { runtime, hooks: { onPause: (name, info, h) => how.push(h) } });
+        expect(runtime.calls.stop).toEqual(['box1']);
+        expect(runtime.calls.start).toEqual(['box1']);
+        expect(runtime.calls.unpause).toEqual([]);
+        expect(how).toEqual(['pause', 'stop']);
     });
 
     test('取消：check 抛错时中止并恢复暂停', async () => {

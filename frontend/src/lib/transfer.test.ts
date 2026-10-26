@@ -37,14 +37,14 @@ describe("档位与内容项", () => {
 
 describe("导入时的风险确认", () => {
   const container = {
-    idx: 0, name: "a", risks: { containerMode: "sock", volumes: ["/:/host", "/d:/data"], ports: ["80:80"], autostart: true, networkOpen: true },
+    idx: 0, name: "a", risks: { containerMode: "sock", volumes: ["/:/host", "/d:/data"], ports: ["80:80"], autostart: true, envFiles: ["/home/u/.env"], networkOpen: true },
   } as unknown as ImportContainer
 
   test("每个高风险设置一项，没勾的不会出现在确认里", () => {
-    expect(riskItems(container).map((r) => r.key)).toEqual(["mode:sock", "volume:/:/host", "volume:/d:/data", "ports", "autostart", "networkOpen"])
-    expect(confirmFromChecked(container, new Set())).toEqual({ containerMode: undefined, volumes: [], ports: false, autostart: false, networkOpen: false })
-    expect(confirmFromChecked(container, new Set(["mode:sock", "volume:/d:/data", "autostart"]))).toEqual({
-      containerMode: "sock", volumes: ["/d:/data"], ports: false, autostart: true, networkOpen: false,
+    expect(riskItems(container).map((r) => r.key)).toEqual(["mode:sock", "volume:/:/host", "volume:/d:/data", "ports", "autostart", "envfile:/home/u/.env", "networkOpen"])
+    expect(confirmFromChecked(container, new Set())).toEqual({ containerMode: undefined, volumes: [], ports: false, autostart: false, envFiles: [], networkOpen: false })
+    expect(confirmFromChecked(container, new Set(["mode:sock", "volume:/d:/data", "autostart", "envfile:/home/u/.env"]))).toEqual({
+      containerMode: "sock", volumes: ["/d:/data"], ports: false, autostart: true, envFiles: ["/home/u/.env"], networkOpen: false,
     })
     expect(riskItems({ idx: 1, name: "b", risks: {} } as unknown as ImportContainer)).toEqual([])
   })

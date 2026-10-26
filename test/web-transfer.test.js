@@ -42,7 +42,7 @@ async function extract(buffer) {
 }
 
 describe('网页导出 / 导入接口', () => {
-    let home, handle, baseUrl, cookie, existing, execCalls, runtime, holdCp, fakeDockerLog;
+    let home, handle, baseUrl, cookie, existing, execCalls, runtime, holdCp, fakeDockerLog, statfsFree;
     const api = (method, route, body, headers = {}) => request(`${baseUrl}${route}`, { method, headers: { Cookie: cookie, ...(body !== undefined && !Buffer.isBuffer(body) ? { 'Content-Type': 'application/json' } : {}), ...headers }, body: body === undefined ? undefined : (Buffer.isBuffer(body) ? body : JSON.stringify(body)) });
 
     function writeHistory(name, data) {
@@ -55,6 +55,7 @@ describe('网页导出 / 导入接口', () => {
         existing = new Set();
         execCalls = [];
         holdCp = null;
+        statfsFree = null;
         runtime = {
             inspect: name => (existing.has(name) ? { id: 'aaaaaaaaaaaaaaaa', image: 'img:1', status: 'running', mounts: [] } : null),
             pause() {}, unpause() {}, diff: () => '',
@@ -73,6 +74,7 @@ describe('网页导出 / 导入接口', () => {
         handle = await startWebServer({
             serverHost: '127.0.0.1', serverPort: port, authUser: 'webadmin', authPass: 'topsecret', authPassAuto: false,
             dockerCmd: fakeDocker, networkManager: fakeNetworkManager(), transferRuntime: runtime,
+            statfsSync: p => (statfsFree === null ? require('fs').statfsSync(p) : { bavail: statfsFree, bsize: 1 }),
             hostPath: home, homeDir: home, containerPath: '/workspace', imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.0.0-common',
             execCommandPrefix: '', execCommand: '', execCommandSuffix: '', contModeArgs: [], containerEnvs: [], containerVolumes: [],
             validateHostPath: () => {}, formatDate: () => '0101-0000',
@@ -217,6 +219,46 @@ describe('网页导出 / 导入接口', () => {
         expect(JSON.parse(ev.trim())).toMatchObject({ aggregateId: 'dst1', sessionId: 'dst1', seq: 1 });
         const execLog = fs.existsSync(fakeDockerLog) ? fs.readFileSync(fakeDockerLog, 'utf8') : '';
         expect(execLog).not.toContain('first-ran');
+    });
+
+    test('名字预留与清理接口：导出期间别处不能同名新建容器（409）、不能清理历史 / 目录；上传超时设为不限', async () => {
+        existing.add('busy2');
+        writeHistory('busy2', { agents: { default: { agentId: 'default', messages: [] } } });
+        holdCp = new PassThrough();
+        const created = await api('POST', '/api/exports', { containers: ['busy2'], items: ['history', 'agentSessions'], output: 'server' });
+        expect(created.status).toBe(200);
+        await new Promise(r => setTimeout(r, 100));
+        const dup = await api('POST', '/api/sessions', { createOptions: { containerName: 'busy2', hostPath: home, containerPath: home } });
+        expect(dup.status).toBe(409);
+        expect((await api('DELETE', '/api/storage/histories', { names: ['busy2'] })).status).toBe(409);
+        expect(handle.server.requestTimeout).toBe(0);
+        holdCp.end();
+        for (let i = 0; i < 50; i += 1) {
+            const job = (await api('GET', `/api/jobs/${created.json.jobId}`)).json.job;
+            if (job.status !== 'running') break;
+            await new Promise(r => setTimeout(r, 50));
+        }
+        expect((await api('DELETE', '/api/storage/histories', { names: ['busy2'] })).status).not.toBe(409);
+    });
+
+    test('磁盘不足：导出到服务器在开始前被拒（507，不留 .part）；导入按剩余空间限制解包大小，超出就撤销', async () => {
+        writeHistory('src1', { runtimeSnapshot: { hostPath: path.join(home, 'oldwork'), containerPath: '/workspace' }, agents: { default: { agentId: 'default', messages: [] } } });
+        statfsFree = 100 * 1024 * 1024; // 比 1GiB 安全余量还小
+        const refused = await api('POST', '/api/exports', { containers: ['src1'], tier: 'light', output: 'server', estimate: 1000 });
+        expect(refused.status).toBe(507);
+        expect(refused.json.error).toContain('磁盘');
+        const exportsDir = path.join(home, '.manyoyo', 'exports');
+        expect(fs.existsSync(exportsDir) ? fs.readdirSync(exportsDir).filter(f => f.endsWith('.part')) : []).toEqual([]);
+        // 直接下载模式不看服务器磁盘
+        statfsFree = null;
+        const created = await api('POST', '/api/exports', { containers: ['src1'], tier: 'light', output: 'download' });
+        const full = (await api('GET', created.json.downloadUrl)).buffer;
+        statfsFree = 1024 * 1024 * 1024 + 10; // 只够 10 字节解包
+        const plan = encodeURIComponent(JSON.stringify({ containers: { 0: { name: 'dst3', hostPath: path.join(home, 'work3'), imageMode: 'same', confirm: {} } } }));
+        const result = await request(`${baseUrl}/api/imports?plan=${plan}`, { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/octet-stream' }, body: full });
+        expect(result.status).toBeGreaterThanOrEqual(400);
+        expect(fs.existsSync(path.join(home, 'web-history', 'dst3.json'))).toBe(false);
+        expect(fs.existsSync(path.join(home, 'work3'))).toBe(false);
     });
 
     test('上传中途断开：导入失败，新建的东西全部撤销', async () => {

@@ -145,7 +145,7 @@ When the web UI runs an Agent it adds a system prompt (replies are shown in a we
 
 ## Export and Import
 
-Move a container together with its conversations to another machine (or onto a newer image version on the same machine). Use the "Export / Import" button at the top of the sidebar, or "Export…" in a container's ⋯ menu.
+Move a container together with its conversations to another machine (or onto a newer image version on the same machine). Entry points: the download icon at the top of the sidebar (tooltip "Export / Import"; choose "Export container…" or "Import container…"), or "Export…" in a container's ⋯ menu. To keep chatting on a new machine, "Standard" is enough ("Light" also continues the chat but leaves the work directory behind).
 
 **Export**: pick containers and a tier, then start.
 
@@ -157,16 +157,17 @@ Move a container together with its conversations to another machine (or onto a n
 | Custom | Tick contents by hand; ticking exactly one tier's set highlights that tier |
 
 - Caches, temp directories and mounted directories (extra mounts other than the work directory are only recorded as paths, never copied) are never exported.
-- **Secrets are exported by default** (otherwise the new machine cannot chat right away). The file contains your API keys, so keep it safe; you can untick it and fill the keys in "Container settings" after importing.
+- **Secrets are exported by default** (otherwise the new machine cannot chat right away). The file contains your API keys, so keep it safe; you can untick it: API keys, token-like env vars and each Agent's login credentials (e.g. Claude's `.credentials.json`, Codex's `auth.json`) are then left out, and you add the keys in "Container settings" and log in again after importing.
 - Saving: **Direct download** (default) is received by the browser and uses no server disk, but keep the page open until it starts; **Save on server** writes to `~/.manyoyo/exports/`, lets you close the page, and uses server disk (free space is checked first).
 - While exporting, the containers are paused (and restored afterwards); chat, terminal, files, settings and delete are unavailable for a moment. The sidebar card spins; click it to see progress or cancel. You cannot export while an AGENT is running.
 - Compression: "Fast" (zstd 3, default) or "Smaller" (zstd 10, about 20% smaller, 4× slower). The file is `manyoyo-export-YYYYMMDD-HHmmss.tar.zst`; inspect it with `zstd -d` and `tar t`.
 
 **Import**: "Export / Import → Import container…", choose a local file or one in `~/.manyoyo/exports/` (for large files `scp` them into that directory first to avoid reverse-proxy upload limits). Only the start of the file is read first to show a manifest; then confirm each container:
 
-- The container name after import (duplicates are renamed automatically) and the local work directory (must not exist yet or be empty; the path inside the container does not change, so the Agent can keep its context).
+- The container name after import (duplicates are renamed automatically) and the local work directory (by default a sub-directory named after the new container inside the quick-chat directory; it must not exist yet or be empty). The host directory can be anything, but the **path inside the container stays the same** (the dialog shows it) so the Agent can keep its context.
 - Image: "same as before" or "use this machine's default version".
-- High-risk settings in the archive (sock / dind mode, extra mounts, port mappings, autostart script, "unrestricted" network) are off by default and only apply if ticked; the `first` command is never run on import.
+- High-risk settings in the archive (sock / dind mode, extra mounts, port mappings, autostart script, env files, custom network rules) are off by default, and any image that is not a manyoyo image is replaced by this machine's default image and only apply if ticked; the `first` command is never run on import.
+- When the import finishes the new container shows up in the sidebar (it is not opened automatically).
 - The file is unpacked while it arrives, without a temporary copy; an interrupted upload, an incomplete file or a cancel automatically undoes the containers, directories and history created by this import.
 
 **Migrating to a new image version**: export with "Standard" and choose "use this machine's default version" when importing. System-layer changes are left out; user data, Agent records, work directory and chat history all come along, and the container is rebuilt on the new image so you can keep chatting. Delete the old container yourself once you are happy.

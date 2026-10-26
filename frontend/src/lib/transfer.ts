@@ -33,6 +33,7 @@ export type ImportRisks = {
   volumes?: string[]
   ports?: string[]
   autostart?: boolean
+  envFiles?: string[]
   networkOpen?: boolean
 }
 
@@ -66,6 +67,7 @@ export type ImportConfirm = {
   volumes: string[]
   ports: boolean
   autostart: boolean
+  envFiles: string[]
   networkOpen: boolean
 }
 
@@ -241,7 +243,9 @@ export function riskItems(container: ImportContainer): { key: string; label: str
   if ((r.ports || []).length)
     out.push({ key: "ports", label: `端口映射 ${(r.ports || []).join("、")}` })
   if (r.autostart) out.push({ key: "autostart", label: "自启动脚本（容器每次启动都会运行）" })
-  if (r.networkOpen) out.push({ key: "networkOpen", label: "网络“不限制”（容器可访问任何地址）" })
+  for (const file of r.envFiles || [])
+    out.push({ key: `envfile:${file}`, label: `环境变量文件 ${file}（本机文件，内容会进容器环境）` })
+  if (r.networkOpen) out.push({ key: "networkOpen", label: "自定义网络规则（可能放开出站访问，包括内网）" })
   return out
 }
 
@@ -256,6 +260,7 @@ export function confirmFromChecked(
     volumes: (r.volumes || []).filter((volume) => checked.has(`volume:${volume}`)),
     ports: checked.has("ports"),
     autostart: checked.has("autostart"),
+    envFiles: (r.envFiles || []).filter((file) => checked.has(`envfile:${file}`)),
     networkOpen: checked.has("networkOpen"),
   }
 }
