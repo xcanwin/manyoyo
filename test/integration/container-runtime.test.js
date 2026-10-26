@@ -166,7 +166,7 @@ describeWithRuntime('Container runtime integration', () => {
                 }
             }, 20000);
 
-            test('serve --stop without listen should require explicit listen', async () => {
+            test('serve --stop without listen should stop every running serve', async () => {
                 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-serve-stop-many-'));
                 const portA = await getFreePort();
                 const portB = await getFreePort();
@@ -184,13 +184,16 @@ describeWithRuntime('Container runtime integration', () => {
                 try {
                     await waitForHttpReady(portA);
                     await waitForHttpReady(portB);
-                    expect(() => {
-                        execSync(`node ${BIN_PATH} serve --stop`, {
-                            encoding: 'utf-8',
-                            env: { ...process.env, HOME: tempHome },
-                            stdio: 'pipe'
-                        });
-                    }).toThrow(/必须显式传入 listen/);
+                    const stopped = execSync(`node ${BIN_PATH} serve --stop`, {
+                        encoding: 'utf-8',
+                        env: { ...process.env, HOME: tempHome },
+                        stdio: 'pipe'
+                    });
+                    expect(stopped).toContain(`127.0.0.1:${portA}`);
+                    expect(stopped).toContain(`127.0.0.1:${portB}`);
+                    for (const pid of [pidA, pidB]) {
+                        expect(() => process.kill(pid, 0)).toThrow();
+                    }
                 } finally {
                     try {
                         execSync(`node ${BIN_PATH} serve 127.0.0.1:${portA} --stop`, {
