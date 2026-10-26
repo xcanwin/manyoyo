@@ -221,6 +221,18 @@ describe('网页导出 / 导入接口', () => {
         expect(execLog).not.toContain('first-ran');
     });
 
+    test('导入工作目录：~/.manyoyo/work 下的子目录可以，其它 ~/.manyoyo 里的位置拒绝', async () => {
+        writeHistory('src1', { runtimeSnapshot: { hostPath: path.join(home, 'o'), containerPath: '/workspace' }, agents: { default: { agentId: 'default', messages: [] } } });
+        const created = await api('POST', '/api/exports', { containers: ['src1'], tier: 'light', output: 'server' });
+        for (let i = 0; i < 50; i += 1) { const j = (await api('GET', `/api/jobs/${created.json.jobId}`)).json.job; if (j.status !== 'running') break; await new Promise(r => setTimeout(r, 50)); }
+        const file = (await api('GET', '/api/exports')).json.files[0].name;
+        const bad = await api('POST', '/api/imports', { serverFile: file, plan: { containers: { 0: { name: 'dst9', hostPath: path.join(home, '.manyoyo', 'web-history', 'x') } } } });
+        expect(bad.status).toBe(400);
+        expect(bad.json.error).toContain('~/.manyoyo');
+        const ok = await api('POST', '/api/imports', { serverFile: file, plan: { containers: { 0: { name: 'dst9', hostPath: path.join(home, '.manyoyo', 'work', 'dst9') } } } });
+        expect(ok.status).toBe(200);
+    });
+
     test('名字预留与清理接口：导出期间别处不能同名新建容器（409）、不能清理历史 / 目录；上传超时设为不限', async () => {
         existing.add('busy2');
         writeHistory('busy2', { agents: { default: { agentId: 'default', messages: [] } } });

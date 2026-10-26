@@ -346,12 +346,13 @@ export function ImportDialog({
               </AlertDescription>
             </Alert>
           ) : null}
-          {error ? (
-            <Alert variant="destructive" className="mt-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
         </DialogBody>
+        {/* 错误放在滚动区外面：表单很长时，滚动区底部的提示用户看不到 */}
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
         <DialogFooter>
           {running && abortable ? (
             <Button variant="outline" onClick={() => abortRef.current?.()}>
