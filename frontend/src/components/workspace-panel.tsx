@@ -2418,12 +2418,13 @@ export function WorkspacePanel({
               <div className="flex min-h-24 flex-[2] flex-col items-center justify-end gap-2 pb-5 text-center">
                 {/* 空会话的欢迎标题：只此一处放大（STYLE.md 第 14 节例外） */}
                 <h2 className="text-3xl font-bold tracking-tight">想让 AGENT 做什么？</h2>
-                <p className="text-muted-foreground">用一句话说清楚，AGENT 会在这个目录里动手。</p>
+                <p className="text-muted-foreground">AGENT 位于安全容器中，会在这个共享目录里执行任务。</p>
               </div>
               <div className="w-full max-w-4xl shrink-0">{composerNode}</div>
               <div className="flex min-h-24 max-w-4xl flex-[3] flex-wrap content-start justify-center gap-2 px-3 pt-5">
+                {/* 示例任务是次要入口，字色浅一点，让视觉焦点留在输入框 */}
                 {STARTER_PROMPTS.map((text) => (
-                  <Button key={text} variant="outline" size={isMobile ? "lg" : "sm"} onClick={() => updateDraft(text)}>
+                  <Button key={text} variant="outline" size={isMobile ? "lg" : "sm"} className="text-foreground/60 hover:text-foreground" onClick={() => updateDraft(text)}>
                     {text}
                   </Button>
                 ))}
