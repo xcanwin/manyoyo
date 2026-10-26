@@ -44,6 +44,9 @@ manyoyo serve 127.0.0.1:3000 -d
 # 停止指定后台服务
 manyoyo serve 127.0.0.1:3000 --stop
 
+# 停止本机所有后台服务（不写监听地址）
+manyoyo serve --stop
+
 # 重启指定后台服务
 manyoyo serve 127.0.0.1:3000 -U admin -P 'StrongPassword' -d --restart
 ```

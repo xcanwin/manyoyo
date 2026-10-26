@@ -1394,7 +1394,7 @@ https://github.com/xcanwin/manyoyo
 `);
     applyRunStyleOptions(serveCommand, { includeRmOnExit: false, includeWebAuthOptions: true });
     serveCommand.option('-d, --detach', '后台启动网页服务并立即返回');
-    serveCommand.option('--stop', '停止后台网页服务；必须显式传入 listen');
+    serveCommand.option('--stop', '停止后台网页服务；不传 listen 时停止本机所有正在运行的网页服务');
     serveCommand.option('--restart', '重启后台网页服务；必须显式传入 listen');
     serveCommand.option('--list', '列出正在运行的网页服务（监听地址、PID、版本、启动命令）');
     serveCommand.action((listen, options) => {
@@ -2014,8 +2014,38 @@ function writeServePidFile(runtime, serverHandle) {
     return pidFile.path;
 }
 
+// manyoyo serve --stop（不带 listen）：停掉本机所有正在运行的 serve 实例
+async function stopAllServeProcesses() {
+    const instances = listServeInstances();
+    if (!instances.length) {
+        console.log(`${YELLOW}⚠️  没有运行中的 serve 实例${NC}`);
+        return 0;
+    }
+    let stopped = 0;
+    for (const instance of instances) {
+        const cut = instance.listen.lastIndexOf(':');
+        const host = instance.listen.slice(0, cut).replace(/^\[|\]$/g, '');
+        const port = Number(instance.listen.slice(cut + 1));
+        const target = getServePidTarget(host, port);
+        const pid = target ? target.pid : instance.pid;
+        try { process.kill(pid, 'SIGTERM'); } catch (e) { if (!e || e.code !== 'ESRCH') throw e; }
+        await sleep(200);
+        if (isProcessRunning(pid)) {
+            try { process.kill(pid, 'SIGKILL'); } catch (e) { if (!e || e.code !== 'ESRCH') throw e; }
+        }
+        if (target) removeServePidFile(target.path);
+        console.log(`${GREEN}✅ 已停止 serve: ${instance.listen} (pid: ${pid})${NC}`);
+        stopped += 1;
+    }
+    return stopped;
+}
+
 async function stopServeProcess(runtime, options = {}) {
     const commandName = options.commandName || '--stop';
+    if (commandName === '--stop' && runtime && !runtime.serverListenSpecified) {
+        await stopAllServeProcesses();
+        return true;
+    }
     if (!runtime || !runtime.serverListenSpecified) {
         throw new Error(`serve ${commandName} 必须显式传入 listen，例如 manyoyo serve 127.0.0.1:3000 ${commandName}`);
     }

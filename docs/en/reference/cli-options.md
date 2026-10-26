@@ -89,7 +89,7 @@ These commands share the same core runtime options:
 | `-U, --user <username>` | Login username, default `admin` |
 | `-P, --pass <password>` | Login password; randomly generated at startup if omitted |
 | `-d, --detach` | Start the web server in background and return immediately; if no password is set, prints the generated password for this run |
-| `--stop` | Stop a background web server; `[listen]` is required and targets that instance exactly |
+| `--stop` | Stop a background web server; with `[listen]` it stops exactly that instance, without it it stops every running web server on this machine |
 | `--restart` | Restart a background web server; `[listen]` is required, and it stops the matched instance before starting with current arguments |
 | `--list` | List running web services (listen address, PID, version, start command; the password shows as `******`); cannot be combined with other serve options |
 
