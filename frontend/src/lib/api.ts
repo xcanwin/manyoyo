@@ -1,5 +1,7 @@
 import type { ContextUsage } from "@/lib/context-usage"
 
+export type ContainerJob = { id: string; type: "export" | "import"; stage: string; bytes: number; estimate: number }
+
 export type SessionSummary = {
   name: string
   containerName: string
@@ -18,6 +20,8 @@ export type SessionSummary = {
   // 容器置顶与容器真实创建时间（服务端从容器信息取，仅剩历史的容器没有）
   containerPinned?: boolean
   containerCreatedAt?: string | null
+  // 容器正在导出 / 导入时服务端带上的进度
+  job?: ContainerJob
   status: string
   image: string
   createdAt: string | null
@@ -604,6 +608,7 @@ export type ContainerGroup = {
   // 容器自己的置顶（AGENT 置顶只影响容器内的顺序）
   pinned?: boolean
   containerCreatedAt?: string | null
+  job?: ContainerJob
 }
 
 export const IMAGE_PROBLEM_EVENT = "manyoyo:image-problem"
@@ -915,6 +920,7 @@ export function groupSessionsByContainer(sessions: SessionSummary[]): ContainerG
         updatedAt: session.updatedAt || "",
         containerCreatedAt: session.containerCreatedAt || null,
         pinned: session.containerPinned === true,
+        job: session.job,
         sessions: [],
       })
     }

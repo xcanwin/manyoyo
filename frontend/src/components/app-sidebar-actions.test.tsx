@@ -23,7 +23,8 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined })
-      return new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } })
+      const preview = { tiers: [{ id: "standard", label: "标准" }], items: [{ id: "history", label: "网页聊天记录", hint: "", tiers: ["standard"] }], estimates: { history: 0 }, containers: [], zstd: true, freeBytes: null }
+      return new Response(JSON.stringify(String(url).startsWith("/api/transfer/preview") ? preview : String(url).startsWith("/api/jobs/") ? { job: { id: "0123456789abcdef", type: "export", status: "running", containers: ["a-box"], stage: "容器内数据", container: "a-box", bytes: 10, estimate: 100, error: "", result: null, cancelRequested: false } } : {}), { status: 200, headers: { "content-type": "application/json" } })
     })
   )
   container = document.createElement("div")
@@ -126,5 +127,37 @@ describe("删除中", () => {
     await tick()
     expect(card().querySelector('[aria-label="删除中"]')).toBeNull()
     expect(card().textContent).toContain("运行中")
+  })
+})
+
+describe("导出 / 导入中的容器", () => {
+  const job = { id: "0123456789abcdef", type: "export" as const, stage: "容器内数据", bytes: 10, estimate: 100 }
+  test("卡片转圈并禁用 ⋯；点卡片打开进度弹窗而不是进入容器", async () => {
+    await mount({ groups: [group("a-box", "2026-10-01T00:00:00Z", { job })] })
+    const card = () => document.querySelector('[data-container-name="a-box"]')!
+    expect(card().querySelector('[aria-label="导出中"]')).toBeTruthy()
+    expect(card().textContent).not.toContain("运行中")
+    expect((card().querySelector('[aria-label="更多操作"]') as HTMLButtonElement).disabled).toBe(true)
+    await act(async () => (card().querySelector("button[aria-busy]") as HTMLButtonElement).click())
+    await tick()
+    expect(calls.some((c) => c.url === "/api/jobs/0123456789abcdef")).toBe(true)
+    expect(document.body.textContent).toContain("正在导出")
+  })
+
+  test("容器 ⋯ 菜单有“导出…”，全局入口有“导出容器… / 导入容器…”", async () => {
+    await mount({ groups: [group("a-box", "2026-10-01T00:00:00Z")] })
+    await press("更多操作")
+    expect(find("导出…")).toBeTruthy()
+    await press("导出…")
+    await tick()
+    expect(document.body.textContent).toContain("导出容器")
+    expect(calls.some((c) => c.url.startsWith("/api/transfer/preview?containers=a-box"))).toBe(true)
+  })
+
+  test("全局入口：导入容器…", async () => {
+    await mount({ groups: [group("a-box", "2026-10-01T00:00:00Z")] })
+    await press("导出 / 导入")
+    await press("导入容器…")
+    expect(document.body.textContent).toContain("选一个 manyoyo 导出的文件")
   })
 })

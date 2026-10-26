@@ -3,6 +3,7 @@ import { markFreshSession } from "@/lib/fresh-session"
 import {
   ArrowLeftIcon,
   ArrowUpDownIcon,
+  DownloadIcon,
   LogOutIcon,
   MessageCircleIcon,
   MoreHorizontalIcon,
@@ -36,6 +37,9 @@ import { Hint } from "@/components/hint"
 import { Spinner } from "@/components/ui/spinner"
 import { CloneNameDialog, type CloneMode } from "@/components/clone-name-dialog"
 import { CreateContainerDialog } from "@/components/create-container-dialog"
+import { ExportDialog } from "@/components/export-dialog"
+import { ImportDialog } from "@/components/import-dialog"
+import { TransferProgressDialog } from "@/components/transfer-progress-dialog"
 import { LogsDialog } from "@/components/logs-dialog"
 import { PromptDialog } from "@/components/prompt-dialog"
 import { QuickChatSetupDialog } from "@/components/quick-chat-setup-dialog"
@@ -191,6 +195,10 @@ export function AppSidebar({
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [logsOpen, setLogsOpen] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
+  // 导出 / 导入：弹窗、进度弹窗（点转圈的卡片打开）
+  const [exportInitial, setExportInitial] = React.useState<string[] | null>(null)
+  const [importOpen, setImportOpen] = React.useState(false)
+  const [progressJobId, setProgressJobId] = React.useState<string | null>(null)
   const [remarkDialog, setRemarkDialog] = React.useState<{
     kind: "container" | "agent"
     key: string
@@ -225,6 +233,14 @@ export function AppSidebar({
       return null
     })
   }
+
+  // 有容器正在导出 / 导入时定时刷新列表，卡片上的转圈才会在任务结束后消失（进度弹窗在读同一个任务）
+  const hasTransferJob = containersRaw.some((group) => group.job)
+  React.useEffect(() => {
+    if (!hasTransferJob) return
+    const timer = window.setInterval(() => void onRefresh(), 2000)
+    return () => window.clearInterval(timer)
+  }, [hasTransferJob, onRefresh])
 
   // synthetic 是"从未真正对话过"的默认 AGENT 占位符，不计入 AGENT 数也不在列表里展示
   const agentCount = containers.reduce(
@@ -341,6 +357,9 @@ export function AppSidebar({
           <DropdownMenuLabel>容器</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => editContainerRemark(containerName, remark)}>
             编辑备注
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => { closeSidebar(); setExportInitial([containerName]) }}>
+            导出…
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => void toggleContainerPin(containerName, pinned)}>
             {pinned ? "取消置顶" : "置顶容器"}
@@ -649,6 +668,17 @@ export function AppSidebar({
           {quickChatBusy ? "创建中..." : "快捷对话"}
         </Button>
         <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<Button size="icon-lg" variant="outline" title="导出 / 导入" aria-label="导出 / 导入" />}
+            >
+              <DownloadIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="bottom" align="start" className="w-44">
+              <DropdownMenuItem onClick={() => { closeSidebar(); setExportInitial([]) }}>导出容器…</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { closeSidebar(); setImportOpen(true) }}>导入容器…</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button className="flex-1" size="lg" variant="outline" onClick={() => {
             closeSidebar()
             setCreateOpen(true)
@@ -696,7 +726,7 @@ export function AppSidebar({
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger
-                render={<Button variant="outline" size="icon" title="容器操作" aria-label="容器操作" disabled={removingKeys.has(activeGroup.containerName)} />}
+                render={<Button variant="outline" size="icon" title="容器操作" aria-label="容器操作" disabled={removingKeys.has(activeGroup.containerName) || Boolean(activeGroup.job)} />}
               >
                 <MoreHorizontalIcon />
               </DropdownMenuTrigger>
@@ -780,8 +810,13 @@ export function AppSidebar({
                         size="lg"
                         isActive={group.containerName === activeContainerName}
                         disabled={removingKeys.has(group.containerName)}
-                        aria-busy={removingKeys.has(group.containerName) || undefined}
+                        aria-busy={removingKeys.has(group.containerName) || Boolean(group.job) || undefined}
                         onClick={() => {
+                          if (group.job) {
+                            closeSidebar()
+                            setProgressJobId(group.job.id)
+                            return
+                          }
                           goToAgents(group.containerName)
                           selectSession(
                             pickDefaultSessionForContainer(group.sessions, activeSessionName)
@@ -796,8 +831,12 @@ export function AppSidebar({
                           {group.pinned ? (
                             <PinIcon aria-label="已置顶" className="size-3.5 shrink-0 text-muted-foreground" />
                           ) : null}
-                          {removingKeys.has(group.containerName) ? (
-                            <Spinner role="status" aria-label="删除中" className="ml-auto shrink-0" />
+                          {removingKeys.has(group.containerName) || group.job ? (
+                            <Spinner
+                              role="status"
+                              aria-label={group.job ? (group.job.type === "export" ? "导出中" : "导入中") : "删除中"}
+                              className="ml-auto shrink-0"
+                            />
                           ) : (
                             <Badge
                               variant={
@@ -822,7 +861,7 @@ export function AppSidebar({
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           render={
-                            <SidebarMenuAction showOnHover title="更多操作" aria-label="更多操作" disabled={removingKeys.has(group.containerName)}>
+                            <SidebarMenuAction showOnHover title="更多操作" aria-label="更多操作" disabled={removingKeys.has(group.containerName) || Boolean(group.job)}>
                               <MoreHorizontalIcon />
                             </SidebarMenuAction>
                           }
@@ -837,8 +876,8 @@ export function AppSidebar({
                         ref={activeSessionName === session.name ? activeSessionRef : undefined}
                         size="lg"
                         isActive={activeSessionName === session.name}
-                        disabled={removingKeys.has(session.name) || removingKeys.has(session.containerName)}
-                        aria-busy={removingKeys.has(session.name) || removingKeys.has(session.containerName) || undefined}
+                        disabled={removingKeys.has(session.name) || removingKeys.has(session.containerName) || Boolean(activeGroup?.job)}
+                        aria-busy={removingKeys.has(session.name) || removingKeys.has(session.containerName) || Boolean(activeGroup?.job) || undefined}
                         onClick={() => selectSession(session)}
                         className="h-auto flex-col items-start gap-1 py-2.5"
                       >
@@ -953,6 +992,30 @@ export function AppSidebar({
         onOpenContainer={openContainerFromSettings}
       />
       <LogsDialog open={logsOpen} onOpenChange={setLogsOpen} />
+      <ExportDialog
+        open={exportInitial !== null}
+        onOpenChange={(open) => !open && setExportInitial(null)}
+        containers={containersRaw.map((group) => ({ name: group.containerName, remark: group.containerRemark, status: group.status }))}
+        initialSelected={exportInitial ?? []}
+        onStarted={(info) => {
+          void onRefresh()
+          if (info.output === "server") setProgressJobId(info.jobId)
+          else toast.message("已开始导出，浏览器开始接收后侧栏会显示进度")
+        }}
+      />
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={(names) => {
+          toast.success(`已导入 ${names.join("、")}`)
+          void onRefresh()
+        }}
+      />
+      <TransferProgressDialog
+        jobId={progressJobId}
+        onClose={() => setProgressJobId(null)}
+        onFinished={() => void onRefresh()}
+      />
 
       <SearchDialog
         open={searchOpen}
