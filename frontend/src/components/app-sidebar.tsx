@@ -1,4 +1,5 @@
 import * as React from "react"
+import { markFreshSession } from "@/lib/fresh-session"
 import {
   ArrowLeftIcon,
   LogOutIcon,
@@ -376,9 +377,10 @@ export function AppSidebar({
 
   // 新建成功但会话列表没刷新出来时必须明说：refresh 失败只会返回空数组、不抛错，
   // 否则表现为"点了新建什么都没发生"（服务端其实已经建好了）
-  function selectCreatedSession(freshSessions: SessionSummary[], matcher: (s: SessionSummary) => boolean) {
+  function selectCreatedSession(freshSessions: SessionSummary[], matcher: (s: SessionSummary) => boolean, empty = false) {
     const created = freshSessions.find(matcher)
     if (created) {
+      if (empty) markFreshSession(created.name)
       applySelectedSession(created)
       return
     }
@@ -400,7 +402,7 @@ export function AppSidebar({
     try {
       const freshSessions = await onRefresh()
       goToAgents(name)
-      selectCreatedSession(freshSessions, (s) => s.name === name || s.containerName === name)
+      selectCreatedSession(freshSessions, (s) => s.name === name || s.containerName === name, true)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "刷新会话列表失败")
     }
@@ -460,7 +462,7 @@ export function AppSidebar({
       const newName = typeof data.name === "string" ? data.name : ""
       const freshSessions = await onRefresh()
       goToAgents(containerName)
-      selectCreatedSession(freshSessions, (s) => s.name === newName)
+      selectCreatedSession(freshSessions, (s) => s.name === newName, true)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "新建 AGENT 失败")
     } finally {

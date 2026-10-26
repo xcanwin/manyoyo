@@ -53,6 +53,7 @@ import { useSyncLoop } from "@/hooks/use-sync-loop"
 import { useResumeIndicator } from "@/hooks/use-resume-indicator"
 import { formatDateTime } from "@/lib/format"
 import { useFadingPill } from "@/hooks/use-fading-pill"
+import { isFreshSession, showBottomComposer } from "@/lib/fresh-session"
 import { anchoredScrollTop, computeReplyJump, computeScrollAnchor, computeScrollRestore, isFollowPaused, isOwnScroll, isScrollInput, getBubbleState, nextHasNewBelow, shouldLoadEarlier, type ScrollAnchor } from "@/lib/chat-behavior"
 import {
   clearOutbox,
@@ -1350,7 +1351,12 @@ export function WorkspacePanel({
   const [restoreNotice, setRestoreNotice] = React.useState<RestoreNotice | null>(null)
   // 刚放回输入框的内容和它原来的 clientId：原样重发就沿用，服务端按 clientId 去重
   const restoredRef = React.useRef<RestoredPrompt | null>(null)
-  const [mode, setMode] = React.useState<"agent" | "command">("agent")
+  // 模式按会话派生：切会话的同一次渲染就回到 agent，不等 effect 重置（否则有一帧 mode 还是旧值，空会话不居中）
+  const [modeState, setModeState] = React.useState<{ session: string | undefined; mode: "agent" | "command" }>({ session: undefined, mode: "agent" })
+  const mode = modeState.session === activeSession?.name ? modeState.mode : "agent"
+  const activeNameRef = React.useRef(activeSession?.name)
+  activeNameRef.current = activeSession?.name
+  const setMode = React.useCallback((next: "agent" | "command") => setModeState({ session: activeNameRef.current, mode: next }), [])
   // 按会话名记录"本标签页正在为哪些会话跑 stream"，而不是单个全局布尔值——
   // 否则切到另一个 agent 时，输入框/发送按钮会继续显示上一个 agent 的状态
   const [sendingNames, setSendingNames] = React.useState<Set<string>>(() => new Set())
@@ -1435,14 +1441,14 @@ export function WorkspacePanel({
     setDraft(saved)
     setRestoreNotice(null)
     restoredRef.current = null
-    setMode("agent")
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession?.name])
 
   const activeSessionMessages = activeSession ? messagesBySession[activeSession.name] : undefined
   // 已有该会话的消息快照（哪怕是空数组）：切换回来时先立即显示缓存内容，
   // 后台刷新到位后无感更新——而不是先转一圈加载 Spinner 把界面闪空白
-  const hasCachedMessages = activeSessionMessages !== undefined
+  // 刚新建的空会话也算有缓存（空数组），第一帧就居中，不先转圈
+  const hasCachedMessages = activeSessionMessages !== undefined || isFreshSession(activeSession?.name)
   const messages = activeSessionMessages ?? []
   const rounds = React.useMemo(() => buildRoundOptions(activeSessionMessages ?? []), [activeSessionMessages])
   const modelDenied = React.useMemo(() => findModelDenied(activeSessionMessages ?? []), [activeSessionMessages])
@@ -1572,7 +1578,7 @@ export function WorkspacePanel({
         )
       }
     },
-    [updateDraft]
+    [updateDraft, setMode]
   )
 
   const setHasMore = React.useCallback((name: string, hasMore: boolean) => {
@@ -2562,7 +2568,7 @@ export function WorkspacePanel({
         />
       ) : null}
 
-      {view === "activity" && !emptyConversation ? composerNode : null}
+      {view === "activity" && showBottomComposer({ emptyConversation, creatingAgent, loadingFirst: messagesLoading && !hasCachedMessages }) ? composerNode : null}
 
       {forkDialog}
       <RewindDialog

@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
+import sheetSrc from "./sheet.tsx?raw"
 import { describe, expect, test } from "vitest"
 
 import { OVERLAY_CLASS } from "./overlay-class"
@@ -10,7 +9,6 @@ describe("遮罩淡出", () => {
   })
 
   test("Sheet 遮罩时长与面板一致", () => {
-    const src = readFileSync(join(__dirname, "sheet.tsx"), "utf8")
-    expect(src).toMatch(/cn\(OVERLAY_CLASS, "duration-200"/)
+    expect(sheetSrc).toMatch(/cn\(OVERLAY_CLASS, "duration-200"/)
   })
 })
