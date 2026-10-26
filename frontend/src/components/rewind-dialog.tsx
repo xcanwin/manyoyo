@@ -99,7 +99,7 @@ export function RewindDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => (!next && !busy ? onClose() : undefined)}>
-      <DialogContent size="lg">
+      <DialogContent size="md">
         <DialogTitle>回退到这里</DialogTitle>
         <DialogDescription>这条提示词会放回输入框，它和之后的内容会被撤销。</DialogDescription>
         {loading ? (
@@ -133,7 +133,7 @@ export function RewindDialog({
             <AlertDescription className="break-words">{error}</AlertDescription>
           </Alert>
         ) : null}
-        <DialogFooter>
+        <DialogFooter className="sm:flex-wrap">
           <Button variant="outline" disabled={busy !== null} onClick={onClose}>
             取消
           </Button>

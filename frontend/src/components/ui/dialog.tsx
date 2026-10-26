@@ -47,9 +47,9 @@ const dialogContentVariants = cva(
       size: {
         sm: "sm:max-w-sm",
         md: "sm:max-w-md",
-        lg: "flex max-h-dvh flex-col max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:ring-0 md:max-h-[85dvh] md:max-w-xl",
-        xl: "flex max-h-dvh flex-col max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:ring-0 md:max-h-[85dvh] md:max-w-3xl",
-        wide: "flex max-h-dvh flex-col max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:ring-0 md:h-[85dvh] md:max-w-[min(96vw,80rem)]",
+        lg: "flex max-h-dvh flex-col max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:ring-0 max-md:pt-[max(1rem,env(safe-area-inset-top))] md:max-h-[85dvh] md:max-w-xl",
+        xl: "flex max-h-dvh flex-col max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:ring-0 max-md:pt-[max(1rem,env(safe-area-inset-top))] md:max-h-[85dvh] md:max-w-3xl",
+        wide: "flex max-h-dvh flex-col max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:ring-0 max-md:pt-[max(1rem,env(safe-area-inset-top))] md:h-[85dvh] md:max-w-[min(96vw,80rem)]",
       },
     },
     defaultVariants: { size: "md" },
@@ -82,7 +82,7 @@ function DialogContent({
             render={
               <Button
                 variant="ghost"
-                className="absolute top-2 right-2"
+                className="absolute top-[max(0.5rem,env(safe-area-inset-top))] right-2 md:top-2"
                 size="icon-sm"
               />
             }

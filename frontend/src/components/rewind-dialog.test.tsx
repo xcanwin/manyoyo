@@ -39,6 +39,12 @@ async function mount(msg: ChatMessage, onDone = vi.fn(), onClose = vi.fn()) {
 const okPreview = { agentProgram: "claude", precise: true, files: { ok: true, total: 3, modify: 1, delete: 1, restore: 1, files: [{ path: "a.txt", action: "modify" }, { path: "b.txt", action: "restore" }, { path: "c.txt", action: "delete" }] } }
 
 describe("RewindDialog", () => {
+  test("用居中小卡片（md），手机上不全屏：全屏会盖住遮罩、内容又很少，看上去贴顶白底", async () => {
+    apiPost.mockResolvedValue(okPreview)
+    await mount(message())
+    expect(document.querySelector("[data-slot=dialog-content]")?.getAttribute("data-size")).toBe("md")
+  })
+
   test("先预览：显示数量和文件列表；三个选项加一个取消", async () => {
     apiPost.mockResolvedValue(okPreview)
     await mount(message())
