@@ -69,6 +69,14 @@ describe('lib/archive/tar', () => {
         expect((await collect(noEnd)).length).toBe(1);
     });
 
+    test('结束块之后的补零会被读完（上游进程才能正常退出）', async () => {
+        const archive = Buffer.concat([entry({ name: 'a', type: 'file' }, 'x'), END_BLOCKS, Buffer.alloc(100000)]);
+        let consumed = 0;
+        const source = (async function* () { for (let i = 0; i < archive.length; i += 4096) { consumed = Math.min(archive.length, i + 4096); yield archive.subarray(i, i + 4096); } })();
+        for await (const item of readTarEntries(source)) { for await (const piece of item.body) void piece; }
+        expect(consumed).toBe(archive.length);
+    });
+
     test('硬链接、设备等类型被标出来交给调用方（不会当普通文件）', async () => {
         const hard = Buffer.concat([encodeEntryHeader({ name: 'h', type: 'file', size: 0 })]);
         hard[156] = '1'.charCodeAt(0);
