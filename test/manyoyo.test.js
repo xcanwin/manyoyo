@@ -156,7 +156,16 @@ describe('MANYOYO CLI', () => {
                 const output = await new Promise(resolve => {
                     const child = require('child_process').spawn('script', ['-qec', `node ${BIN_PATH} --post-install --headless`, '/dev/null'], { env: { ...process.env, HOME: tempHome }, stdio: ['pipe', 'pipe', 'pipe'] });
                     let text = '';
-                    child.stdout.on('data', chunk => { text += chunk; if (text.includes('请选择 [默认选1]') && !child.stdin.writableEnded) child.stdin.write('3\n'); });
+                    // 进程可能在我们写入前就退出：stdin 报 EPIPE 不能变成未处理的错误；只回答一次
+                    child.stdin.on('error', () => {});
+                    let answered = false;
+                    child.stdout.on('data', chunk => {
+                        text += chunk;
+                        if (!answered && text.includes('请选择 [默认选1]') && child.stdin.writable) {
+                            answered = true;
+                            child.stdin.write('3\n');
+                        }
+                    });
                     child.on('close', () => resolve(text));
                     // 整套测试并行跑、CI 机器又慢时，node 冷启动加上伪终端可能超过 15 秒（曾因此偶发失败）
                     setTimeout(() => child.kill('SIGKILL'), 50000);
