@@ -158,7 +158,8 @@ describe('MANYOYO CLI', () => {
                     let text = '';
                     child.stdout.on('data', chunk => { text += chunk; if (text.includes('请选择 [默认选1]') && !child.stdin.writableEnded) child.stdin.write('3\n'); });
                     child.on('close', () => resolve(text));
-                    setTimeout(() => child.kill('SIGKILL'), 15000);
+                    // 整套测试并行跑、CI 机器又慢时，node 冷启动加上伪终端可能超过 15 秒（曾因此偶发失败）
+                    setTimeout(() => child.kill('SIGKILL'), 50000);
                 });
                 expect(output).toContain('这台机器没有图形界面，怎么完成首次配置？');
                 expect(output).toContain('1) 在终端里配置（推荐）');
@@ -168,7 +169,7 @@ describe('MANYOYO CLI', () => {
             } finally {
                 fs.rmSync(tempHome, { recursive: true, force: true });
             }
-        });
+        }, 60000);
 
         test('install subcommand was removed', () => {
                 const result = require('child_process').spawnSync('node', [BIN_PATH, 'install', 'docker-cli-plugin'], { encoding: 'utf-8' });
