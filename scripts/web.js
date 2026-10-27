@@ -24,6 +24,19 @@ function run(args) {
     }
 }
 
+// 装依赖要访问 npm 仓库，CI 上偶发 ECONNRESET（整条流水线因此红）：失败就清掉半成品 node_modules 重试，最多 3 次
+function installWithRetry() {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+        const result = spawnSync('npm', ['ci'], { cwd: frontendDir, stdio: 'inherit', shell });
+        if (!result.error && result.status === 0) return;
+        fs.rmSync(path.join(frontendDir, 'node_modules'), { recursive: true, force: true });
+        if (attempt === 3) process.exit(result.status == null ? 1 : result.status);
+        const delay = attempt * Number(process.env.MANYOYO_NPM_RETRY_MS || 5000);
+        console.warn(`前端依赖安装失败，${Math.round(delay / 1000)} 秒后重试（${attempt}/3）`);
+        spawnSync(process.execPath, ['-e', `setTimeout(() => {}, ${delay})`]);
+    }
+}
+
 const action = process.argv[2];
 if (!COMMANDS[action]) {
     console.error('用法: node scripts/web.js <build|build-release|dev|test>');
@@ -37,6 +50,6 @@ if (action === 'build' && process.env.MANYOYO_SKIP_WEB_BUILD === '1' && fs.exist
 }
 
 if (!fs.existsSync(path.join(frontendDir, 'node_modules'))) {
-    run(['ci']);
+    installWithRetry();
 }
 run(COMMANDS[action]);
