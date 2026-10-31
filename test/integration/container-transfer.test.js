@@ -101,7 +101,7 @@ maybe('容器导出 / 导入（真实容器 + 真实 serve）', () => {
         names.push(nameA);
         const created = await A.api('POST', '/api/sessions', { createOptions: { containerName: nameA, hostPath: work, containerPath: work } });
         expect(created.status).toBe(200);
-        const setup = rt(['exec', nameA, 'bash', '-c', `mkdir -p /root/.claude/projects/x /root/.codex/sessions /root/.codex/.tmp /usr/local/bin && echo '{"a":1}' > /root/.claude/projects/x/11111111-1111-1111-1111-111111111111.jsonl && echo s > /root/.codex/sessions/s.jsonl && dd if=/dev/urandom of=/root/.codex/.tmp/big bs=1M count=5 2>/dev/null && printf '#!/bin/sh\\necho hi\\n' > /usr/local/bin/mytool && chmod +x /usr/local/bin/mytool && echo c > /tmp/junk`]);
+        const setup = rt(['exec', nameA, 'bash', '-c', `mkdir -p /root/.claude/projects/x /root/.codex/sessions /root/.codex/.tmp /usr/local/bin && echo '{"a":1}' > /root/.claude/projects/x/11111111-1111-1111-1111-111111111111.jsonl && echo s > /root/.codex/sessions/s.jsonl && dd if=/dev/urandom of=/root/.codex/.tmp/big bs=1M count=5 2>/dev/null && printf '#!/bin/sh\\necho hi\\n' > /usr/local/bin/mytool && chmod +x /usr/local/bin/mytool && echo c > /tmp/junk && echo '{"primaryApiKey":"sk-INTSENTINEL-0123456789abcdef"}' > /root/.claude.json`]);
         expect(setup.status).toBe(0);
         const id = rt(['inspect', '-f', '{{index .Config.Labels "manyoyo.id"}}', nameA]).stdout.trim();
         const uploads = path.join(A.home, '.manyoyo', 'containers', id, 'box', 'uploads');
@@ -109,10 +109,29 @@ maybe('容器导出 / 导入（真实容器 + 真实 serve）', () => {
         fs.writeFileSync(path.join(uploads, 'a.png'), 'PNG');
     }, 180000);
 
+    // 导出分两段：先在后台准备（status=ready），再 GET 下载；兼容地等到可以下载为止
+    async function waitJob(server, jobId, states, timeoutMs = 120000) {
+        const finished = ['failed', 'cancelled', 'interrupted'];
+        const deadline = Date.now() + timeoutMs;
+        for (;;) {
+            const r = await server.api('GET', `/api/jobs/${jobId}`);
+            if (r.json && r.json.job && states.includes(r.json.job.status)) return r.json.job;
+            if (r.json && r.json.job && finished.includes(r.json.job.status) && !states.includes(r.json.job.status)) throw new Error(`任务 ${r.json.job.status}: ${r.json.job.error}`);
+            if (Date.now() > deadline) throw new Error(`等任务 ${states.join('/')} 超时`);
+            await sleep(200);
+        }
+    }
+
+    async function startExport(body, server = A) {
+        const created = await server.api('POST', '/api/exports', body);
+        expect([200, 202]).toContain(created.status);
+        const job = await waitJob(server, created.json.jobId, ['ready', 'waiting']);
+        return { ...created.json, downloadUrl: job.downloadUrl || created.json.downloadUrl };
+    }
+
     async function doExport(tier, extra = {}) {
-        const created = await A.api('POST', '/api/exports', { containers: [nameA], tier, output: 'download', ...extra });
-        expect(created.status).toBe(200);
-        const res = await A.api('GET', created.json.downloadUrl);
+        const created = await startExport({ containers: [nameA], tier, output: 'download', ...extra });
+        const res = await A.api('GET', created.downloadUrl);
         expect(res.status).toBe(200);
         return { buffer: res.buf, entries: await listEntries(res.buf) };
     }
@@ -142,41 +161,91 @@ maybe('容器导出 / 导入（真实容器 + 真实 serve）', () => {
             expect(JSON.stringify(result.entries)).not.toContain('SENTINEL-DATA');
         }
         expect(full.entries['w/0/evil'].type).toBe('symlink');
+
+        // 不带密钥：准备阶段要从真实容器里读配置文件（cp 只读第一个条目就会堵住，这条在单测的假 cp 流里测不出来），配置文件按字段清空
+        expect(JSON.stringify(full.entries)).toContain('sk-INTSENTINEL-0123456789abcdef');
+        const noSecrets = await doExport('full', { includeSecrets: false });
+        expect(JSON.stringify(noSecrets.entries)).not.toContain('sk-INTSENTINEL-0123456789abcdef');
+        expect(JSON.parse(noSecrets.entries['c/0/layer/root/.claude.json'].content).primaryApiKey).toBe('');
+        expect(Object.keys(noSecrets.entries)).toContain('c/0/layer/usr/local/bin/mytool');
     }, 240000);
 
-    test('运行中的容器导出期间是暂停状态，结束后恢复运行；已停止的导出后仍是停止', async () => {
-        fs.writeFileSync(path.join(work, 'big.bin'), crypto.randomBytes(200 * 1024 * 1024));
-        const created = await A.api('POST', '/api/exports', { containers: [nameA], tier: 'standard', output: 'download' });
-        const url = `${A.base}${created.json.downloadUrl}`;
-        const res = await fetch(url, { headers: { Cookie: A.cookie } });
+    // DEF-01：docker 的 cp 进行期间容器被锁，serve 在事件循环里同步 inspect 同一个容器就会永久卡死（podman 不会）
+    test('读容器内数据期间（下载被读得很慢）serve 不冻结：侧栏列表、healthz 每次都在 2.5 秒内响应', async () => {
+        const fill = rt(['exec', nameA, 'bash', '-c', 'dd if=/dev/urandom of=/root/.claude/projects/x/big.bin bs=1M count=96 2>/dev/null']);
+        expect(fill.status).toBe(0);
+        const created = await startExport({ containers: [nameA], tier: 'light', output: 'download' });
+        const res = await fetch(`${A.base}${created.downloadUrl}`, { headers: { Cookie: A.cookie } });
         const reader = res.body.getReader();
         await reader.read();
-        await sleep(300);
-        expect(rt(['inspect', '-f', '{{.State.Status}}', nameA]).stdout.trim()).toBe('paused');
+        await sleep(1500); // 不再读：cp 被背压堵在管道上，持有容器锁
+        const worst = [];
+        try {
+            for (let i = 0; i < 4; i += 1) {
+                for (const route of ['/api/sessions', '/healthz']) {
+                    const started = Date.now();
+                    await fetch(`${A.base}${route}`, { headers: { Cookie: A.cookie }, redirect: 'manual', signal: AbortSignal.timeout(6000) }).catch(() => null);
+                    worst.push(Date.now() - started);
+                }
+                await sleep(500);
+            }
+        } finally {
+            reader.cancel().catch(() => {});
+        }
+        expect(Math.max(...worst)).toBeLessThan(2500);
+        rt(['exec', nameA, 'rm', '-f', '/root/.claude/projects/x/big.bin']);
+        for (let i = 0; i < 40 && status() === 'paused'; i += 1) await sleep(250);
+    }, 240000);
+
+    // 用 ps 取状态：docker 在 cp 进行期间会让同一容器的 inspect 一直等
+    const status = () => rt(['ps', '-a', '--filter', `name=^${nameA}$`, '--format', '{{.State}}']).stdout.trim();
+    const bigLayer = () => expect(rt(['exec', nameA, 'bash', '-c', 'dd if=/dev/urandom of=/root/.claude/projects/x/big.bin bs=1M count=96 2>/dev/null']).status).toBe(0);
+    const rmBigLayer = () => rt(['exec', nameA, 'rm', '-f', '/root/.claude/projects/x/big.bin']);
+
+    test('只在读容器内数据期间暂停，结束后恢复运行；读工作目录时容器是运行的；已停止的导出后仍是停止', async () => {
+        // 容器内的数据读得很慢：这期间是暂停的
+        bigLayer();
+        const layerJob = await startExport({ containers: [nameA], tier: 'light', output: 'download' });
+        const res = await fetch(`${A.base}${layerJob.downloadUrl}`, { headers: { Cookie: A.cookie } });
+        const reader = res.body.getReader();
+        await reader.read();
+        await sleep(1500);
+        expect(status()).toBe('paused');
         for (;;) { const { done } = await reader.read(); if (done) break; }
-        for (let i = 0; i < 40 && rt(['inspect', '-f', '{{.State.Status}}', nameA]).stdout.trim() !== 'running'; i += 1) await sleep(250);
-        expect(rt(['inspect', '-f', '{{.State.Status}}', nameA]).stdout.trim()).toBe('running');
+        for (let i = 0; i < 40 && status() !== 'running'; i += 1) await sleep(250);
+        expect(status()).toBe('running');
+        rmBigLayer();
+
+        // 工作目录读得很慢：容器照常运行（决策：读宿主机上的东西不暂停）
+        fs.writeFileSync(path.join(work, 'big.bin'), crypto.randomBytes(200 * 1024 * 1024));
+        const workJob = await startExport({ containers: [nameA], tier: 'standard', output: 'download' });
+        const res2 = await fetch(`${A.base}${workJob.downloadUrl}`, { headers: { Cookie: A.cookie } });
+        const reader2 = res2.body.getReader();
+        await reader2.read();
+        await sleep(1500);
+        expect(status()).toBe('running');
+        for (;;) { const { done } = await reader2.read(); if (done) break; }
         fs.rmSync(path.join(work, 'big.bin'));
 
         rt(['stop', '-t', '1', nameA]);
         await doExport('light');
-        expect(rt(['inspect', '-f', '{{.State.Status}}', nameA]).stdout.trim()).toBe('exited');
+        expect(status()).toBe('exited');
         rt(['start', nameA]);
     }, 240000);
 
     test('导出时 serve 被 kill -9：容器仍是暂停；重启 serve 后自动恢复，任务显示已中断', async () => {
-        fs.writeFileSync(path.join(work, 'big.bin'), crypto.randomBytes(200 * 1024 * 1024));
-        const created = await A.api('POST', '/api/exports', { containers: [nameA], tier: 'standard', output: 'download' });
-        const res = await fetch(`${A.base}${created.json.downloadUrl}`, { headers: { Cookie: A.cookie } });
+        bigLayer();
+        const created = await startExport({ containers: [nameA], tier: 'light', output: 'download' });
+        const res = await fetch(`${A.base}${created.downloadUrl}`, { headers: { Cookie: A.cookie } });
         const reader = res.body.getReader();
         await reader.read();
-        await sleep(300);
-        expect(rt(['inspect', '-f', '{{.State.Status}}', nameA]).stdout.trim()).toBe('paused');
+        await sleep(1500);
+        expect(status()).toBe('paused');
         A.child.kill('SIGKILL');
         reader.cancel().catch(() => {});
         await sleep(500);
-        expect(rt(['inspect', '-f', '{{.State.Status}}', nameA]).stdout.trim()).toBe('paused');
-        fs.rmSync(path.join(work, 'big.bin'));
+        expect(status()).toBe('paused');
+        rmBigLayer();
         const home = A.home;
         servers.splice(servers.indexOf(A), 1);
         // 在同一个 HOME 上重新起 serve
@@ -202,7 +271,7 @@ maybe('容器导出 / 导入（真实容器 + 真实 serve）', () => {
             };
             return server;
         })();
-        expect(rt(['inspect', '-f', '{{.State.Status}}', nameA]).stdout.trim()).toBe('running');
+        expect(status()).toBe('running');
         const jobs = await again.api('GET', '/api/jobs');
         expect(jobs.json.jobs.map(job => job.status)).toContain('interrupted');
         A = Object.assign(again, { api: (method, route, body, headers) => {
@@ -216,8 +285,18 @@ maybe('容器导出 / 导入（真实容器 + 真实 serve）', () => {
         const B = await startServe('B');
         const workB = path.join(root, 'workB');
         names.push(nameB);
-        const plan = (name, host) => encodeURIComponent(JSON.stringify({ containers: { 0: { name, hostPath: host, imageMode: 'same', confirm: {} } } }));
-        const post = (body, name, host) => B.api('POST', `/api/imports?plan=${plan(name, host)}`, body, { 'Content-Type': 'application/octet-stream' });
+        // 导入分两步：先登记设置（JSON），再把归档本身 POST 到 uploadUrl；响应后任务在后台收尾，轮询到结束
+        const post = async (body, name, host) => {
+            const registered = await B.api('POST', '/api/imports/uploads', { plan: { containers: { 0: { name, hostPath: host, imageMode: 'same', confirm: {} } } } });
+            expect(registered.status).toBe(200);
+            const uploaded = await B.api('POST', registered.json.uploadUrl, body, { 'Content-Type': 'application/octet-stream' });
+            if (uploaded.status === 202) {
+                const job = await waitJob(B, uploaded.json.jobId, ['done', 'failed', 'cancelled']);
+                return { status: job.status === 'done' ? 200 : 500, job };
+            }
+            await waitJob(B, registered.json.jobId, ['failed', 'cancelled', 'done']);
+            return uploaded;
+        };
 
         // 截断：撤销干净
         const cut = await post(full.subarray(0, Math.floor(full.length / 2)), nameB, workB);

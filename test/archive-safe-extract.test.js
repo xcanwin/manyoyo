@@ -100,4 +100,33 @@ describe('lib/archive/safe-extract（导入解包的安全规则）', () => {
         await extractor.addFile('a', 0o644, bodyOf('x'), 1);
         await expect(extractor.addFile('a/x', 0o644, bodyOf('x'), 1)).rejects.toThrow(UnsafeEntryError);
     });
+
+    test('稀疏文件：全 0 的块不落盘（实际占盘远小于文件大小），内容与大小不变', async () => {
+        const extractor = new SafeExtractor(root);
+        const mb = 1024 * 1024;
+        async function* body() {
+            yield Buffer.from('head');
+            for (let i = 0; i < 32; i += 1) yield Buffer.alloc(mb);
+            yield Buffer.from('tail');
+        }
+        const size = 4 + 32 * mb + 4;
+        await extractor.addFile('sparse.bin', 0o644, body(), size);
+        const target = path.join(root, 'sparse.bin');
+        const stat = fs.statSync(target);
+        expect(stat.size).toBe(size);
+        expect(stat.blocks * 512).toBeLessThan(mb);
+        const fd = fs.openSync(target, 'r');
+        const buf = Buffer.alloc(8);
+        fs.readSync(fd, buf, 0, 4, 0);
+        fs.readSync(fd, buf, 4, 4, size - 4);
+        fs.closeSync(fd);
+        expect(buf.toString()).toBe('headtail');
+        expect(fs.readFileSync(target).subarray(4, 4 + mb).every(b => b === 0)).toBe(true);
+    });
+
+    test('正文中途出错时报的是原始错误，不是关两次 fd 的 EBADF', async () => {
+        const extractor = new SafeExtractor(root);
+        async function* broken() { yield Buffer.from('abc'); throw new Error('tar 流被截断'); }
+        await expect(extractor.addFile('cut', 0o644, broken(), 10)).rejects.toThrow('tar 流被截断');
+    });
 });

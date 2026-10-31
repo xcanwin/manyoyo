@@ -16,7 +16,7 @@ function tar(entries, { end = true } = {}) {
     for (const e of entries) {
         const body = Buffer.from(e.content || '');
         const size = (e.type || 'file') === 'file' ? body.length : 0;
-        parts.push(encodeEntryHeader({ name: e.name, type: e.type || 'file', size, linkname: e.linkname, mode: e.mode }), size ? body : Buffer.alloc(0), Buffer.alloc(size ? pad(size) : 0));
+        parts.push(encodeEntryHeader({ name: e.name, type: e.type || 'file', size, linkname: e.linkname, mode: e.mode, uid: e.uid, gid: e.gid }), size ? body : Buffer.alloc(0), Buffer.alloc(size ? pad(size) : 0));
     }
     if (end) parts.push(END_BLOCKS);
     return Buffer.concat(parts);
@@ -264,5 +264,93 @@ describe('lib/archive/import', () => {
         expect(fs.readFileSync(path.join(dest, 'f.txt'), 'utf8')).toBe('round');
         expect(JSON.parse(fs.readFileSync(path.join(historyDir, 'box2.json'), 'utf8')).remark).toBe('r');
         expect(calls.created[0].stateFiles.env).toContain('K=v');
+    });
+
+    describe('源容器里删掉的系统层文件（layer-deleted.json）', () => {
+        const withDeleted = list => [
+            { name: 'c/0/history.json', content: JSON.stringify({ containerName: 'box1', agents: {} }) },
+            { name: 'c/0/layer/usr/local/bin/mytool', content: 'BIN' },
+            { name: 'c/0/layer/usr/lib/lnk', type: 'symlink', linkname: '/usr/lib/real' },
+            { name: 'c/0/layer-deleted.json', content: JSON.stringify(list) },
+            { name: 'w/0', type: 'dir' }
+        ];
+
+        test('镜像相同时按路径过滤后应用：只认系统层、挂载点下的、临时目录、经过归档里符号链接的、相对路径一律不删', async () => {
+            const applied = [];
+            const list = ['/etc/issue', '/usr/share/old', '/workspace/secret', '/tmp/x', '/root/.cache/y', '/usr/lib/lnk/inside', '../etc/shadow', 'etc/relative', '/proc/1', '/'];
+            const { promise } = run(archive(MANIFEST(), withDeleted(list)), {}, { applyDeleted: async (name, paths) => { applied.push({ name, paths }); } });
+            const result = await promise;
+            expect(applied).toEqual([{ name: 'box2', paths: ['/etc/issue', '/usr/share/old'] }]);
+            expect(result.details[0].dropped).toEqual([]);
+        });
+
+        test('归档来自别人：系统目录本身和账号 / 动态链接配置一律不删（/usr、/usr/bin、/etc/passwd、/usr/local 这类），深一层的才放行', async () => {
+            const applied = [];
+            const list = ['/usr', '/bin', '/etc', '/usr/bin', '/usr/local', '/var/lib', '/etc/passwd', '/etc/shadow', '/etc/apt', '/etc/issue', '/opt/old-tool', '/usr/local/bin/old', '/var/lib/dpkg/info/x'];
+            const { promise } = run(archive(MANIFEST(), withDeleted(list)), {}, { applyDeleted: async (name, paths) => { applied.push(...paths); } });
+            await promise;
+            expect(applied).toEqual(['/etc/issue', '/opt/old-tool', '/usr/local/bin/old', '/var/lib/dpkg/info/x']);
+        });
+
+        test('镜像不同（用了默认镜像）不应用；应用失败不让导入失败，记进“没能还原”', async () => {
+            const applied = [];
+            const other = run(archive(MANIFEST(), withDeleted(['/etc/issue'])), {}, { runtime: { ...deps.runtime, inspect: () => ({ mounts: [], image: 'other:2' }) }, applyDeleted: async (...a) => { applied.push(a); } });
+            await other.promise;
+            expect(applied).toEqual([]);
+            fs.rmSync(dest, { recursive: true, force: true });
+            const failing = run(archive(MANIFEST(), withDeleted(['/etc/issue'])), { name: 'box3' }, { applyDeleted: async () => { throw new Error('exec 失败'); } });
+            const result = await failing.promise;
+            expect(result.details[0].dropped.join('|')).toContain('没能还原');
+        });
+    });
+
+    test('导入结果里每个容器带着没能还原的东西：未确认的风险项、用了默认镜像时跳过的系统层', async () => {
+        deps.createContainer = async args => {
+            const state = containerState.createState({ homeDir: home, id: 'cccccccccccccccc', envLines: [] });
+            return { containerName: args.newName, id: 'cccccccccccccccc', paths: state, dropped: ['挂载 /a:/b 未确认'] };
+        };
+        const buf = archive(MANIFEST(), [
+            { name: 'c/0/history.json', content: JSON.stringify({ containerName: 'box1', agents: {} }) },
+            { name: 'c/0/layer/usr/local/bin/mytool', content: 'BIN' },
+            { name: 'c/0/layer/usr/local/bin/other', content: 'BIN2' },
+            { name: 'w/0', type: 'dir' }
+        ]);
+        const { promise } = run(buf, {}, { runtime: { ...deps.runtime, inspect: () => ({ mounts: [], image: 'localhost/xcanwin/manyoyo:2.3.1-common' }) } });
+        const result = await promise;
+        expect(result.details).toEqual([expect.objectContaining({ name: 'box2', oldName: 'box1', dropped: ['挂载 /a:/b 未确认'], layerSkippedSystem: 2, sameImage: false, imageUsed: 'localhost/xcanwin/manyoyo:2.3.1-common' })]);
+        expect(result.containers).toEqual(['box2']);
+    });
+
+    test('请求体收完（归档完整）时先通知上传请求可以答复，收尾（写进容器、放置工作目录）还在后面', async () => {
+        const order = [];
+        const buf = archive(MANIFEST(), goodEntries());
+        const job = registry.create({ type: 'import', containers: ['box2'] });
+        const result = await importArchive({
+            source: Readable.from([buf]), plan: planOf(), job, deps,
+            onBodyComplete: () => order.push(`body-complete(workdir-placed=${fs.existsSync(path.join(dest, 'main.py'))})`)
+        });
+        // 工作目录是请求体收完之后才放到位的
+        expect(order).toEqual(['body-complete(workdir-placed=false)']);
+        expect(fs.readFileSync(path.join(dest, 'main.py'), 'utf8')).toBe('print(1)');
+        expect(result.containers).toEqual(['box2']);
+        // 归档不完整时不会通知
+        const never = [];
+        const cut = registry.create({ type: 'import', containers: ['box3'] });
+        fs.rmSync(dest, { recursive: true, force: true });
+        await expect(importArchive({ source: Readable.from([buf.subarray(0, buf.length - 40)]), plan: planOf({ name: 'box3' }), job: cut, deps, onBodyComplete: () => never.push(1) })).rejects.toThrow();
+        expect(never).toEqual([]);
+    });
+
+    test('容器层条目的属主 / 权限写回时原样带上', async () => {
+        const buf = archive(MANIFEST(), [
+            { name: 'c/0/history.json', content: JSON.stringify({ containerName: 'box1', agents: {} }) },
+            { name: 'c/0/layer/usr/local/bin/mytool', content: 'BIN', mode: 0o755, uid: 1001, gid: 1002 },
+            { name: 'w/0', type: 'dir' }
+        ]);
+        await run(buf).promise;
+        const raw = Buffer.concat(calls.layer.flatMap(item => item.chunks));
+        let seen = null;
+        for await (const { meta, body } of readTarEntries(Readable.from([raw]))) { for await (const p of body) void p; if (meta.name === 'usr/local/bin/mytool') seen = meta; }
+        expect(seen).toMatchObject({ uid: 1001, gid: 1002, mode: 0o755 });
     });
 });
