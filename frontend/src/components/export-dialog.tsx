@@ -23,15 +23,13 @@ import {
   itemsOfTier,
   matchTier,
   startExport,
+  statusLabel,
   type TransferPreview,
 } from "@/lib/transfer"
 
 export type ExportableContainer = { name: string; remark: string; status: string }
 
-const statusLabel = (status: string) =>
-  status === "history" ? "仅历史" : /^Up\b/.test(status) ? "运行中" : "已停止"
-
-// 导出：选容器 → 选档位（可微调内容）→ 开始。直接下载由浏览器接收，进度看侧栏卡片
+// 导出：选容器 → 选档位（可微调内容）→ 开始。之后在进度弹窗里看准备和下载
 export function ExportDialog({
   open,
   onOpenChange,
@@ -43,7 +41,7 @@ export function ExportDialog({
   onOpenChange: (open: boolean) => void
   containers: ExportableContainer[]
   initialSelected: string[]
-  onStarted: (info: { jobId: string; output: "download" | "server"; file?: string }) => void
+  onStarted: (info: { jobId: string; output: "download" | "server" }) => void
 }) {
   const [selected, setSelected] = React.useState<string[]>(initialSelected)
   const [items, setItems] = React.useState<string[]>([])
@@ -66,6 +64,11 @@ export function ExportDialog({
     }
   }
 
+  // 正在导出 / 导入的容器（侧栏摘要里带着 job）不能再导出：打开弹窗时就标出来并取消勾选，不用等勾选后才发现
+  const busyNames = React.useMemo(
+    () => new Set(containers.filter((container) => container.status === "busy").map((container) => container.name)),
+    [containers]
+  )
   const selectedKey = selected.join(",")
   React.useEffect(() => {
     if (!open) return
@@ -111,23 +114,13 @@ export function ExportDialog({
     setSubmitting(true)
     try {
       const result = await startExport({
-        containers: selected,
+        containers: exportable,
         items,
         includeSecrets,
         compression,
         output,
-        estimate: total.bytes,
       })
-      if (result.downloadUrl) {
-        // 交给浏览器下载：服务端流式输出，不在服务器上落临时文件
-        const link = document.createElement("a")
-        link.href = result.downloadUrl
-        link.download = ""
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-      }
-      onStarted({ jobId: result.jobId, output, file: result.file })
+      onStarted({ jobId: result.jobId, output })
       onOpenChange(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : "开始导出失败")
@@ -136,7 +129,8 @@ export function ExportDialog({
     }
   }
 
-  const disabled = submitting || !selected.length || !items.length || diskShort
+  const exportable = selected.filter((name) => !busyNames.has(name))
+  const disabled = submitting || !exportable.length || !items.length || diskShort
 
   return (
     <Dialog open={open} onOpenChange={(next) => (!submitting ? onOpenChange(next) : undefined)}>
@@ -150,20 +144,25 @@ export function ExportDialog({
             <Field>
               <FieldLabel>要导出的容器</FieldLabel>
               <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border p-2">
-                {containers.map((container) => (
-                  <label key={container.name} className="flex min-h-8 items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(container.name)}
-                      onChange={() => toggleContainer(container.name)}
-                    />
-                    <span className="min-w-0 flex-1 truncate">{container.remark || container.name}</span>
-                    {container.remark ? <Hint mono className="truncate">{container.name}</Hint> : null}
-                    <Badge variant={/^Up\b/.test(container.status) ? "success" : "outline"}>
-                      {statusLabel(container.status)}
-                    </Badge>
-                  </label>
-                ))}
+                {containers.map((container) => {
+                  const status = busyNames.has(container.name) ? "busy" : (preview?.containers.find((item) => item.name === container.name)?.status ?? container.status)
+                  const busy = status === "busy"
+                  return (
+                    <label key={container.name} className="flex min-h-8 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!busy && selected.includes(container.name)}
+                        disabled={busy}
+                        onChange={() => toggleContainer(container.name)}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{container.remark || container.name}</span>
+                      {container.remark ? <Hint mono className="truncate">{container.name}</Hint> : null}
+                      <Badge variant={status === "running" || /^Up\b/.test(status) ? "success" : "outline"}>
+                        {statusLabel(status)}
+                      </Badge>
+                    </label>
+                  )
+                })}
               </div>
             </Field>
 
@@ -218,7 +217,9 @@ export function ExportDialog({
               <div className="flex min-w-0 flex-col gap-1">
                 <FieldLabel htmlFor="export-secrets">包含密钥（API Key 等）</FieldLabel>
                 <FieldDescription>
-                  不带密钥就没法在新机器上直接对话。文件里有你的 API Key，请妥善保管；取消勾选后，API Key、令牌类变量和各 Agent 的登录凭据都不会进文件，导入后到“设置容器”里补 Key、重新登录。
+                  {includeSecrets
+                    ? "文件里有你的 API Key，请妥善保管。不带密钥就没法在新机器上直接对话。"
+                    : "不带密钥：API Key、令牌、密码类变量和登录凭据都会去掉；工作目录里的文件原样带上。"}
                 </FieldDescription>
               </div>
             </Field>
@@ -233,6 +234,7 @@ export function ExportDialog({
                 <ToggleGroupItem value="fast">快速</ToggleGroupItem>
                 <ToggleGroupItem value="small">更小</ToggleGroupItem>
               </ToggleGroup>
+              {compression === "small" ? <FieldDescription>通常更小、更慢。</FieldDescription> : null}
             </Field>
 
             <Field>
@@ -247,7 +249,7 @@ export function ExportDialog({
               </ToggleGroup>
               <FieldDescription>
                 {output === "download"
-                  ? "服务器不占磁盘，但要保持页面打开，直到浏览器开始接收。"
+                  ? "浏览器直接接收，服务器不留文件。"
                   : "保存在服务器的 ~/.manyoyo/exports/，可以关掉页面；会占用服务器磁盘。"}
               </FieldDescription>
             </Field>

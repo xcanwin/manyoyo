@@ -86,6 +86,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { autoDownloadOnce } from "@/lib/transfer"
 
 type NavLevel = "containers" | "agents"
 
@@ -236,6 +237,13 @@ export function AppSidebar({
 
   // 有容器正在导出 / 导入时定时刷新列表，卡片上的转圈才会在任务结束后消失（进度弹窗在读同一个任务）
   const hasTransferJob = containersRaw.some((group) => group.job)
+  // 直接下载的导出准备好了就开始下载：不要求进度弹窗开着（关掉弹窗不会让准备好的下载白白过期）
+  React.useEffect(() => {
+    for (const group of containersRaw) {
+      const job = group.job
+      if (job && job.type === "export" && job.status === "ready" && job.downloadUrl) autoDownloadOnce(job.id, job.downloadUrl)
+    }
+  }, [containersRaw])
   React.useEffect(() => {
     if (!hasTransferJob) return
     const timer = window.setInterval(() => void onRefresh(), 2000)
@@ -995,20 +1003,19 @@ export function AppSidebar({
       <ExportDialog
         open={exportInitial !== null}
         onOpenChange={(open) => !open && setExportInitial(null)}
-        containers={containersRaw.map((group) => ({ name: group.containerName, remark: group.containerRemark, status: group.status }))}
+        containers={containersRaw.map((group) => ({ name: group.containerName, remark: group.containerRemark, status: group.job ? "busy" : group.status }))}
         initialSelected={exportInitial ?? []}
         onStarted={(info) => {
           void onRefresh()
-          if (info.output === "server") setProgressJobId(info.jobId)
-          else toast.message("已开始导出，浏览器开始接收后侧栏会显示进度")
+          setProgressJobId(info.jobId)
         }}
       />
       <ImportDialog
         open={importOpen}
         onOpenChange={setImportOpen}
-        onImported={(names) => {
-          toast.success(`已导入 ${names.join("、")}`)
+        onStarted={(jobId) => {
           void onRefresh()
+          setProgressJobId(jobId)
         }}
       />
       <TransferProgressDialog

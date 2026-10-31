@@ -1,6 +1,16 @@
 import type { ContextUsage } from "@/lib/context-usage"
 
-export type ContainerJob = { id: string; type: "export" | "import"; stage: string; bytes: number; estimate: number }
+export type ContainerJob = {
+  id: string
+  type: "export" | "import"
+  status?: string
+  stage: string
+  bytes: number
+  estimate: number
+  // 直接下载的导出准备好（ready）后才有
+  output?: string
+  downloadUrl?: string
+}
 
 export type SessionSummary = {
   name: string

@@ -1,4 +1,6 @@
 import * as React from "react"
+import { DownloadIcon, Trash2Icon } from "lucide-react"
+import { toast } from "sonner"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -15,18 +17,22 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Hint } from "@/components/hint"
-import { formatBytes } from "@/lib/format"
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
+import { formatBytes, formatDateTime } from "@/lib/format"
 import {
   buildImportPlan,
+  cancelJob,
   confirmFromChecked,
+  deleteServerExport,
+  friendlyError,
   inspectLocalFile,
   inspectServerFile,
   listServerExports,
   riskItems,
   startServerImport,
-  uploadImport,
+  startUploadImport,
+  uploadImportFile,
   type ImportContainer,
   type ImportInspect,
   type ImportPlanEntry,
@@ -37,16 +43,20 @@ type Source = { kind: "local"; file: File } | { kind: "server"; name: string }
 
 type Edit = { name: string; remark: string; hostPath: string; imageMode: "same" | "default"; checked: Set<string> }
 
-// 导入：选文件 → 只读开头看清单 → 改名 / 选目录 / 确认风险 → 开始。边上传边解包，失败自动撤销
+const REMARK_MAX = 200
+
+// 导入：选文件 → 只读开头看清单 → 改名 / 选目录 / 确认风险 → 开始。
+// 开始后导入在后台跑，进度和结果交给进度弹窗；上传中取消或失败会自动撤销
 export function ImportDialog({
   open,
   onOpenChange,
-  onImported,
+  onStarted,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onImported: (containers: string[]) => void
+  onStarted: (jobId: string) => void
 }) {
+  const { confirm, dialog: confirmDialog } = useConfirmDialog()
   const [mode, setMode] = React.useState<"local" | "server">("local")
   const [source, setSource] = React.useState<Source | null>(null)
   const [serverFiles, setServerFiles] = React.useState<ServerExportFile[]>([])
@@ -59,6 +69,7 @@ export function ImportDialog({
   const [progress, setProgress] = React.useState<{ loaded: number; total: number } | null>(null)
   const [error, setError] = React.useState("")
   const abortRef = React.useRef<(() => void) | null>(null)
+  const uploadJobRef = React.useRef<string | null>(null)
   const [abortable, setAbortable] = React.useState(false)
 
   // 每次打开都从头开始（渲染期对比上一次的 open，不在 effect 里同步 setState）
@@ -75,6 +86,7 @@ export function ImportDialog({
     }
   }
 
+  const [listVersion, setListVersion] = React.useState(0)
   React.useEffect(() => {
     if (!open || mode !== "server") return
     let cancelled = false
@@ -88,7 +100,27 @@ export function ImportDialog({
     return () => {
       cancelled = true
     }
-  }, [open, mode])
+  }, [open, mode, listVersion])
+
+  async function removeServerFile(name: string) {
+    const ok = await confirm({
+      title: "删除这个导出文件？",
+      message: `${name}\n删除后无法恢复。`,
+      confirmLabel: "删除",
+    })
+    if (!ok) return
+    try {
+      await deleteServerExport(name)
+      if (source?.kind === "server" && source.name === name) {
+        setSource(null)
+        setManifest(null)
+      }
+      toast.success("已删除")
+      setListVersion((current) => current + 1)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "删除失败")
+    }
+  }
 
   async function inspect(next: Source) {
     setSource(next)
@@ -147,24 +179,35 @@ export function ImportDialog({
     setRunning(true)
     setProgress(null)
     try {
-      let result: { containers: string[] }
+      let jobId: string
       if (source.kind === "server") {
-        result = await startServerImport(source.name, plan)
+        jobId = (await startServerImport(source.name, plan)).jobId
       } else {
-        const upload = uploadImport(source.file, plan, (loaded, total) => setProgress({ loaded, total }))
+        // 第一步失败（名字重复、目录不为空等）立刻报错，不用等上传
+        const reserved = await startUploadImport(plan)
+        uploadJobRef.current = reserved.jobId
+        const upload = uploadImportFile(source.file, reserved.uploadUrl, (loaded, total) => setProgress({ loaded, total }), reserved.jobId)
         abortRef.current = upload.abort
         setAbortable(true)
-        result = await upload.promise
+        jobId = (await upload.promise).jobId
       }
-      onImported(result.containers)
+      onStarted(jobId)
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "导入失败")
+      // 上传没成功：把已登记（预留了名字）的任务取消，不然 2 分钟内换文件重试会被“已经有一个导入在进行”挡住
+      if (uploadJobRef.current) void cancelJob(uploadJobRef.current).catch(() => undefined)
+      setError(friendlyError(err instanceof Error ? err.message : "", "导入失败"))
     } finally {
       abortRef.current = null
+      uploadJobRef.current = null
       setAbortable(false)
       setRunning(false)
     }
+  }
+
+  function cancelUpload() {
+    abortRef.current?.()
+    if (uploadJobRef.current) void cancelJob(uploadJobRef.current).catch(() => undefined)
   }
 
   function renderContainer(container: ImportContainer) {
@@ -188,6 +231,9 @@ export function ImportDialog({
           <span className="min-w-0 flex-1 truncate">{container.remark || container.name}</span>
           <Hint mono className="truncate">{container.name}</Hint>
         </label>
+        {on && (container.imageStatus === "missing" || container.imageStatus === "untrusted") ? (
+          <Hint>本机没有原镜像，将用默认版本，系统层改动不会还原。</Hint>
+        ) : null}
         {on ? (
           <FieldGroup>
             <Field>
@@ -205,9 +251,11 @@ export function ImportDialog({
               <Input
                 id={`imp-remark-${container.idx}`}
                 value={edit.remark}
+                maxLength={REMARK_MAX}
                 disabled={running}
                 onChange={(event) => patchEdit(container.idx, { remark: event.target.value })}
               />
+              <Hint className="self-end">{edit.remark.length}/{REMARK_MAX}</Hint>
             </Field>
             {container.work !== null ? (
               <Field>
@@ -312,21 +360,56 @@ export function ImportDialog({
               </Field>
             ) : (
               <Field>
-                <FieldLabel htmlFor="imp-server-file">服务器上的导出文件</FieldLabel>
-                <NativeSelect
-                  className="w-full"
-                  id="imp-server-file"
-                  value={source?.kind === "server" ? source.name : ""}
-                  disabled={running}
-                  onChange={(event) => event.target.value && void inspect({ kind: "server", name: event.target.value })}
-                >
-                  <NativeSelectOption value="">{serverFiles.length ? "请选择" : "目录里还没有导出文件"}</NativeSelectOption>
-                  {serverFiles.map((file) => (
-                    <NativeSelectOption key={file.name} value={file.name}>
-                      {file.name}（{formatBytes(file.size)}）
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                <FieldLabel>服务器上的导出文件</FieldLabel>
+                <div id="imp-server-file" className="flex max-h-56 flex-col gap-1 overflow-y-auto rounded-md border p-2">
+                  {serverFiles.length ? (
+                    serverFiles.map((file) => {
+                      const selected = source?.kind === "server" && source.name === file.name
+                      return (
+                        <div key={file.name} className="flex min-h-8 items-center gap-2">
+                          <Button
+                            variant={selected ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-auto min-w-0 flex-1 justify-start py-1"
+                            aria-pressed={selected}
+                            disabled={running}
+                            onClick={() => void inspect({ kind: "server", name: file.name })}
+                          >
+                            <span className="flex min-w-0 flex-col items-start">
+                              <span className="w-full truncate font-mono">{file.name}</span>
+                              <Hint>{formatBytes(file.size)} · {formatDateTime(file.mtime)}</Hint>
+                            </span>
+                          </Button>
+                          <span className="flex shrink-0 gap-3">
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="touch-hit"
+                              title="下载"
+                              aria-label={`下载 ${file.name}`}
+                              render={<a href={`/api/exports/files/${encodeURIComponent(file.name)}`} download={file.name} target="_blank" rel="noreferrer" />}
+                            >
+                              <DownloadIcon />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="touch-hit"
+                              title="删除"
+                              aria-label={`删除 ${file.name}`}
+                              disabled={running}
+                              onClick={() => void removeServerFile(file.name)}
+                            >
+                              <Trash2Icon />
+                            </Button>
+                          </span>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <Hint>目录里还没有导出文件</Hint>
+                  )}
+                </div>
               </Field>
             )}
 
@@ -340,7 +423,7 @@ export function ImportDialog({
             {manifest ? (
               <>
                 <Hint>
-                  来自 manyoyo {manifest.manyoyoVersion || "未知版本"}，{manifest.createdAt ? new Date(manifest.createdAt).toLocaleString() : ""}；
+                  来自 manyoyo {manifest.manyoyoVersion || "未知版本"}，{formatDateTime(manifest.createdAt)}；
                   {manifest.includeSecrets ? "含密钥" : "不含密钥，导入后需要在“设置容器”里补 Key"}；本机默认镜像 {manifest.localImage}
                 </Hint>
                 <div className="flex flex-col gap-3">{manifest.containers.map(renderContainer)}</div>
@@ -353,7 +436,7 @@ export function ImportDialog({
               <AlertDescription>
                 {source?.kind === "local" && percent !== null && percent < 100
                   ? `正在上传并解包… ${percent}%（${formatBytes(progress?.loaded)} / ${formatBytes(progress?.total)}）。上传中断会自动撤销，不留下半个容器。`
-                  : "正在导入，完成前请不要关闭页面…"}
+                  : "正在提交导入…"}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -366,7 +449,7 @@ export function ImportDialog({
         ) : null}
         <DialogFooter>
           {running && abortable ? (
-            <Button variant="outline" onClick={() => abortRef.current?.()}>
+            <Button variant="outline" onClick={cancelUpload}>
               取消导入
             </Button>
           ) : (
@@ -379,6 +462,7 @@ export function ImportDialog({
             开始导入
           </Button>
         </DialogFooter>
+        {confirmDialog}
       </DialogContent>
     </Dialog>
   )

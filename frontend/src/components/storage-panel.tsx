@@ -30,6 +30,7 @@ type StorageRow = {
   deletable: boolean
 }
 type DeletedHistory = { name: string; bytes: number; updatedAt: string; remark?: string }
+type ExportFile = { name: string; size: number; mtime: string }
 type SizeState =
   | { bytes?: number; timedOut?: boolean; error?: boolean }
   | "loading"
@@ -70,6 +71,7 @@ export function StoragePanel({
 }: StoragePanelProps) {
   const [rows, setRows] = React.useState<StorageRow[] | null>(null)
   const [histories, setHistories] = React.useState<DeletedHistory[]>([])
+  const [exportFiles, setExportFiles] = React.useState<ExportFile[]>([])
   const [browsing, setBrowsing] = React.useState<string | null>(null)
   const [filter, setFilter] = React.useState<Filter>("all")
   const [error, setError] = React.useState("")
@@ -99,11 +101,13 @@ export function StoragePanel({
         const data = (await apiGet("/api/storage")) as {
           rows?: StorageRow[]
           deletedHistories?: DeletedHistory[]
+          exports?: { files?: ExportFile[] }
         }
         if (round !== generation.current) return
         const list = data.rows || []
         setRows(list)
         setHistories(data.deletedHistories || [])
+        setExportFiles((data.exports && data.exports.files) || [])
         setSizes({})
         // 工作目录自动算体积（两个一组，du 很慢时不把磁盘打满）；你自己的项目目录点了再算
         const queue = list
@@ -184,6 +188,25 @@ export function StoragePanel({
     try {
       for (const item of targets)
         await apiDelete("/api/storage/histories", { name: item.name })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除失败")
+      await load(true)
+      return
+    }
+    await load()
+  }
+
+  async function removeExportFile(item: ExportFile) {
+    if (
+      !(await confirm({
+        title: "删除这个导出文件？",
+        message: `${item.name}（${formatBytes(item.size)}）会被永久删除。`,
+        confirmLabel: "删除",
+      }))
+    )
+      return
+    try {
+      await apiDelete(`/api/exports/files/${encodeURIComponent(item.name)}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除失败")
       await load(true)
@@ -280,6 +303,27 @@ export function StoragePanel({
       key: "mtime",
       header: "修改时间",
       render: (row) => <Hint>{formatDateTime(row.mtimeMs)}</Hint>,
+    },
+  ]
+
+  const exportColumns: DataColumn<ExportFile>[] = [
+    {
+      key: "name",
+      header: "文件",
+      primary: true,
+      render: (item) => <span className="break-all">{item.name}</span>,
+    },
+    {
+      key: "size",
+      header: "占用",
+      render: (item) => (
+        <span className="tabular-nums">{formatBytes(item.size)}</span>
+      ),
+    },
+    {
+      key: "mtime",
+      header: "导出时间",
+      render: (item) => <Hint>{formatDateTime(item.mtime)}</Hint>,
     },
   ]
 
@@ -451,6 +495,30 @@ export function StoragePanel({
                 `${item.name}\n对话记录会被永久删除。`
               )
             }
+          >
+            <Trash2Icon />
+          </Button>
+        )}
+      />
+      <PageHeader
+        title="服务器上的导出文件"
+        description="导出时选“保存到服务器”的文件在 ~/.manyoyo/exports，不再需要的可以删除；也可以在导入窗口里下载或删除。"
+      />
+      <DataTable
+        label="服务器上的导出文件"
+        columns={exportColumns}
+        rows={exportFiles}
+        loading={rows === null}
+        rowKey={(item) => item.name}
+        rowTestId={(item) => `storage-export-${item.name}`}
+        empty={{ title: "没有保存在服务器上的导出文件" }}
+        actions={(item) => (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`删除导出文件 ${item.name}`}
+            title="删除这个导出文件"
+            onClick={() => void removeExportFile(item)}
           >
             <Trash2Icon />
           </Button>

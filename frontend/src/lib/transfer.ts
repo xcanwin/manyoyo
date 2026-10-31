@@ -9,6 +9,7 @@ export type TransferPreview = {
   items: TransferItem[]
   // 每项的估算字节数；null = 未知（容器里的数据要读改动才知道）
   estimates: Record<string, number | null>
+  // status：running | paused | stopped | history | busy（busy = 正在导出 / 导入）
   containers: { name: string; remark: string; status: string }[]
   zstd: boolean
   freeBytes: number | null
@@ -17,15 +18,80 @@ export type TransferPreview = {
 export type TransferJob = {
   id: string
   type: "export" | "import"
-  status: "waiting" | "running" | "done" | "failed" | "cancelled" | "interrupted"
+  status: "preparing" | "ready" | "waiting" | "running" | "done" | "failed" | "cancelled" | "interrupted"
   containers: string[]
   stage: string
   container: string
   bytes: number
   estimate: number
+  // false = 估算不含容器内数据，不能显示百分比
+  estimateComplete: boolean
   error: string
   result: Record<string, unknown> | null
   cancelRequested: boolean
+  output: "download" | "server" | ""
+  downloadUrl: string
+  uploadUrl: string
+  warnings: string[]
+}
+
+export type ImportDetail = {
+  name: string
+  oldName?: string
+  dropped: string[]
+  layerSkippedSystem: number
+  imageUsed?: string
+  sameImage?: boolean
+}
+
+// 容器状态的中文名：认 docker 的状态文本（Up 3 hours (Paused)）和预览接口的枚举
+export function statusLabel(status: string): string {
+  if (status === "history") return "仅历史"
+  if (status === "busy") return "正在导出 / 导入"
+  if (/paused/i.test(status)) return "已暂停"
+  if (status === "running" || /^Up\b/.test(status)) return "运行中"
+  return "已停止"
+}
+
+// 原始报错不给用户看：连接类的底层错误统一换成一句人话
+export function friendlyError(message: string, fallback = "出错了，请重试"): string {
+  const text = String(message || "").trim()
+  if (!text) return fallback
+  if (/Premature close|EBADF|EPIPE|ECONN|ETIMEDOUT|socket hang up|Failed to fetch|NetworkError|aborted/i.test(text))
+    return "连接中断了，请重试"
+  return text
+}
+
+// 导入结束后没能还原的内容，一条一句话
+export function importDropLines(result: Record<string, unknown> | null): string[] {
+  const details = result && Array.isArray(result.details) ? (result.details as ImportDetail[]) : []
+  const lines: string[] = []
+  for (const detail of details) {
+    const name = detail.name || detail.oldName || ""
+    for (const item of detail.dropped || []) lines.push(`${name}：${item}`)
+    if (detail.layerSkippedSystem > 0)
+      lines.push(`${name}：用了默认镜像，${detail.layerSkippedSystem} 个系统层文件没有还原`)
+  }
+  return lines
+}
+
+// 已经自动触发过下载的任务：进度弹窗和侧栏都会看到 ready，下载链接只能用一次，所以每个任务只自动触发一次
+const autoDownloaded = new Set<string>()
+export function autoDownloadOnce(jobId: string, url: string): boolean {
+  if (!url || autoDownloaded.has(jobId)) return false
+  autoDownloaded.add(jobId)
+  triggerDownload(url)
+  return true
+}
+
+// 交给浏览器下载（可能被拦截，调用方要另给一个手动入口）
+export function triggerDownload(url: string) {
+  const link = document.createElement("a")
+  link.href = url
+  link.download = ""
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
 }
 
 export type ImportRisks = {
@@ -49,6 +115,7 @@ export type ImportContainer = {
   nameTaken: boolean
   suggestedName: string
   suggestedHostPath: string
+  imageStatus?: "present" | "missing" | "untrusted" | "unknown"
   risks: ImportRisks
 }
 
@@ -123,16 +190,10 @@ export type ExportRequest = {
   includeSecrets: boolean
   compression: "fast" | "small"
   output: "download" | "server"
-  estimate: number
 }
 
 export const startExport = (body: ExportRequest) =>
-  apiPost("/api/exports", body) as unknown as Promise<{
-    jobId: string
-    output: string
-    downloadUrl?: string
-    file?: string
-  }>
+  apiPost("/api/exports", body) as unknown as Promise<{ jobId: string; output: string }>
 
 export const fetchJob = (id: string) =>
   apiGet(`/api/jobs/${id}`).then((data) => data.job as TransferJob)
@@ -178,11 +239,12 @@ export function startServerImport(
   serverFile: string,
   plan: ReturnType<typeof buildImportPlan>
 ) {
-  return apiPost("/api/imports", { serverFile, plan }) as unknown as Promise<{
-    jobId: string
-    containers: string[]
-  }>
+  return apiPost("/api/imports", { serverFile, plan }) as unknown as Promise<{ jobId: string }>
 }
+
+// 上传导入第一步：登记设置、预留新名字，拿到上传地址
+export const startUploadImport = (plan: ReturnType<typeof buildImportPlan>) =>
+  apiPost("/api/imports/uploads", { plan }) as unknown as Promise<{ jobId: string; uploadUrl: string }>
 
 function parseJsonObject(text: string): Record<string, unknown> {
   try {
@@ -193,41 +255,39 @@ function parseJsonObject(text: string): Record<string, unknown> {
   }
 }
 
-// 上传并导入：XHR 才有上传进度。服务端边收边解包，响应在全部处理完后才回来
-export function uploadImport(
+// 上传导入第二步：XHR 才有上传进度。请求体收完后服务端回 202，之后轮询任务
+// jobId：登记时拿到的任务号。经反向代理时，条目很多的小归档可能让代理在服务端处理期间先超时（502 / 504），
+// 但服务端的导入任务还在跑——这种情况不当成失败，让调用方去看任务进度
+export function uploadImportFile(
   file: File,
-  plan: ReturnType<typeof buildImportPlan>,
-  onProgress: (loaded: number, total: number) => void
-): { promise: Promise<{ jobId: string; containers: string[] }>; abort: () => void } {
+  uploadUrl: string,
+  onProgress: (loaded: number, total: number) => void,
+  jobId = ""
+): { promise: Promise<{ jobId: string }>; abort: () => void } {
   const xhr = new XMLHttpRequest()
-  const promise = new Promise<{ jobId: string; containers: string[] }>(
-    (resolve, reject) => {
-      xhr.open(
-        "POST",
-        `/api/imports?plan=${encodeURIComponent(JSON.stringify(plan))}`
-      )
-      xhr.setRequestHeader("Content-Type", "application/octet-stream")
-      xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest")
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) onProgress(event.loaded, event.total)
-      }
-      xhr.onerror = () => reject(new Error("上传中断，导入已撤销"))
-      xhr.onabort = () => reject(new Error("已取消，导入已撤销"))
-      xhr.onload = () => {
-        const data = parseJsonObject(xhr.responseText)
-        if (xhr.status >= 200 && xhr.status < 300)
-          resolve(data as { jobId: string; containers: string[] })
-        else if (xhr.status === 413)
-          reject(
-            new Error(
-              "文件太大，被反向代理拦下了。先把文件放到服务器的 ~/.manyoyo/exports/，再选“服务器上的文件”"
-            )
-          )
-        else reject(new Error(String(data.error || `导入失败（${xhr.status}）`)))
-      }
-      xhr.send(file)
+  const promise = new Promise<{ jobId: string }>((resolve, reject) => {
+    xhr.open("POST", uploadUrl)
+    xhr.setRequestHeader("Content-Type", "application/octet-stream")
+    xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest")
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded, event.total)
     }
-  )
+    xhr.onerror = () => reject(new Error("上传中断，导入已撤销"))
+    xhr.onabort = () => reject(new Error("已取消，导入已撤销"))
+    xhr.onload = () => {
+      const data = parseJsonObject(xhr.responseText)
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data as { jobId: string })
+      else if ((xhr.status === 502 || xhr.status === 504) && jobId) resolve({ jobId })
+      else if (xhr.status === 413)
+        reject(
+          new Error(
+            "文件太大，被反向代理拦下了。先把文件放到服务器的 ~/.manyoyo/exports/，再选“服务器上的文件”"
+          )
+        )
+      else reject(new Error(friendlyError(String(data.error || ""), `导入失败（${xhr.status}）`)))
+    }
+    xhr.send(file)
+  })
   return { promise, abort: () => xhr.abort() }
 }
 

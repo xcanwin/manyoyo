@@ -1,11 +1,16 @@
-import { describe, expect, test } from "vitest"
+import { afterEach, describe, expect, test, vi } from "vitest"
 
 import {
   confirmFromChecked,
   estimateTotal,
+  friendlyError,
+  importDropLines,
   itemsOfTier,
   matchTier,
+  autoDownloadOnce,
   riskItems,
+  statusLabel,
+  uploadImportFile,
   type ImportContainer,
   type TransferItem,
   type TransferTier,
@@ -47,5 +52,82 @@ describe("导入时的风险确认", () => {
       containerMode: "sock", volumes: ["/d:/data"], ports: false, autostart: true, envFiles: ["/home/u/.env"], networkOpen: false,
     })
     expect(riskItems({ idx: 1, name: "b", risks: {} } as unknown as ImportContainer)).toEqual([])
+  })
+})
+
+describe("容器状态与错误文案", () => {
+  test("statusLabel 认出暂停（docker 与 podman 写法）、忙碌、仅历史", () => {
+    expect(statusLabel("Up 3 hours (Paused)")).toBe("已暂停")
+    expect(statusLabel("Paused")).toBe("已暂停")
+    expect(statusLabel("paused")).toBe("已暂停")
+    expect(statusLabel("Up 1 hour")).toBe("运行中")
+    expect(statusLabel("running")).toBe("运行中")
+    expect(statusLabel("busy")).toBe("正在导出 / 导入")
+    expect(statusLabel("history")).toBe("仅历史")
+    expect(statusLabel("Exited (0) 2 hours ago")).toBe("已停止")
+  })
+
+  test("底层连接错误换成一句人话，其余原样", () => {
+    expect(friendlyError("Premature close")).toBe("连接中断了，请重试")
+    expect(friendlyError("EBADF: bad file descriptor")).toBe("连接中断了，请重试")
+    expect(friendlyError("容器名已存在")).toBe("容器名已存在")
+    expect(friendlyError("", "导入失败")).toBe("导入失败")
+  })
+
+  test("importDropLines：每个容器的丢弃项与系统层各一条", () => {
+    expect(importDropLines(null)).toEqual([])
+    expect(importDropLines({ details: [{ name: "a", dropped: [], layerSkippedSystem: 0 }] })).toEqual([])
+    expect(importDropLines({ details: [{ name: "a", dropped: ["x", "y"], layerSkippedSystem: 2 }] })).toEqual([
+      "a：x", "a：y", "a：用了默认镜像，2 个系统层文件没有还原",
+    ])
+  })
+})
+
+describe("uploadImportFile 经反向代理超时", () => {
+  function fakeXhr(status: number, body: string) {
+    class Xhr {
+      upload = { onprogress: null as unknown }
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      onabort: (() => void) | null = null
+      status = status
+      responseText = body
+      open() {}
+      setRequestHeader() {}
+      send() { queueMicrotask(() => this.onload?.()) }
+      abort() {}
+    }
+    vi.stubGlobal("XMLHttpRequest", Xhr)
+  }
+  afterEach(() => vi.unstubAllGlobals())
+
+  test("502 / 504：服务端任务还在跑，不当成失败，沿用登记时的任务号", async () => {
+    fakeXhr(504, "<html>504 Gateway Time-out</html>")
+    await expect(uploadImportFile(new File(["x"], "a"), "/api/imports/j9/upload", () => {}, "j9").promise).resolves.toEqual({ jobId: "j9" })
+    fakeXhr(502, "")
+    await expect(uploadImportFile(new File(["x"], "a"), "/api/imports/j9/upload", () => {}, "j9").promise).resolves.toEqual({ jobId: "j9" })
+  })
+
+  test("没有任务号时 504 仍是失败；400 之类的错误照常报", async () => {
+    fakeXhr(504, "")
+    await expect(uploadImportFile(new File(["x"], "a"), "/api/imports/j9/upload", () => {}).promise).rejects.toThrow()
+    fakeXhr(400, JSON.stringify({ error: "不是 manyoyo 导出文件" }))
+    await expect(uploadImportFile(new File(["x"], "a"), "/api/imports/j9/upload", () => {}, "j9").promise).rejects.toThrow("不是 manyoyo 导出文件")
+  })
+})
+
+describe("autoDownloadOnce", () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  test("每个任务只自动触发一次（进度弹窗和侧栏都会看到 ready，下载链接只能用一次）", () => {
+    const clicks: string[] = []
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      clicks.push(this.getAttribute("href") || "")
+    })
+    expect(autoDownloadOnce("job-a", "/api/exports/job-a/download")).toBe(true)
+    expect(autoDownloadOnce("job-a", "/api/exports/job-a/download")).toBe(false)
+    expect(autoDownloadOnce("job-b", "/api/exports/job-b/download")).toBe(true)
+    expect(autoDownloadOnce("job-c", "")).toBe(false)
+    expect(clicks).toEqual(["/api/exports/job-a/download", "/api/exports/job-b/download"])
   })
 })

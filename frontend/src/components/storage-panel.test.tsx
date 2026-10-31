@@ -7,6 +7,7 @@ import { StoragePanel } from "@/components/storage-panel"
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const deletedHistories = [{ name: "gone-1", bytes: 2048, updatedAt: "2026-10-01T00:00:00Z", remark: "旧项目" }]
+const exportFiles = [{ name: "manyoyo-export-20261030-010203.tar.zst", size: 5 * 1024 * 1024, mtime: "2026-10-30T01:02:03Z" }]
 const rows = [
   { path: "/h/work/a", managed: true, status: "history-only", sessions: [{ name: "gone-1", state: "deleted" }], mtimeMs: 1, deletable: true, empty: false },
   { path: "/h/work/b", managed: true, status: "in-use", sessions: [{ name: "live-1", state: "running", remark: "前端联调" }], mtimeMs: 2, deletable: false, empty: false },
@@ -26,7 +27,7 @@ describe("StoragePanel", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         calls.push(`${init?.method || "GET"} ${url}`)
-        const body = url.startsWith("/api/storage/size") ? { bytes: 3 * 1024 * 1024 } : url === "/api/storage" ? { rows, deletedHistories } : url.startsWith("/api/storage/files") ? { entries: [{ name: "sub", type: "dir", size: null, mtimeMs: 1 }, { name: "a.txt", type: "file", size: 5, mtimeMs: 1 }], truncated: false } : { removed: true }
+        const body = url.startsWith("/api/storage/size") ? { bytes: 3 * 1024 * 1024 } : url === "/api/storage" ? { rows, deletedHistories, exports: { dir: "/h/.manyoyo/exports", files: exportFiles, bytes: 5 * 1024 * 1024 } } : url.startsWith("/api/storage/files") ? { entries: [{ name: "sub", type: "dir", size: null, mtimeMs: 1 }, { name: "a.txt", type: "file", size: 5, mtimeMs: 1 }], truncated: false } : { removed: true }
         return new Response(JSON.stringify(body), { status: 200 })
       })
     )
@@ -122,7 +123,7 @@ describe("StoragePanel", () => {
   test("版式统一：两块都有小标题，列顺序是 名称 → 占用 → …，图标按钮同一个大小，删除全部历史在小字下面", async () => {
     const container = await mount()
     const headings = Array.from(container.querySelectorAll("h1")).map((h) => h.textContent)
-    expect(headings).toEqual(["宿主机工作目录", "已删除容器的对话历史"])
+    expect(headings).toEqual(["宿主机工作目录", "已删除容器的对话历史", "服务器上的导出文件"])
     const tables = container.querySelectorAll("table")
     expect(Array.from(tables[0].querySelectorAll("th")).map((th) => th.textContent)).toEqual(["宿主机目录", "占用", "关联容器", "修改时间", ""])
     expect(Array.from(tables[1].querySelectorAll("th")).map((th) => th.textContent)).toEqual(["容器", "占用", "最后更新", ""])
@@ -139,5 +140,17 @@ describe("StoragePanel", () => {
     expect(sizes.size).toBe(1)
     const deleteAll = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "删除全部历史")!
     expect(deleteAll.parentElement!.previousElementSibling!.textContent).toContain("容器删掉后")
+  })
+
+  test("服务器上的导出文件：列出名字和大小，删除要二次确认并调用导出文件的删除接口", async () => {
+    const container = await mount()
+    const row = container.querySelector("[data-testid='storage-export-manyoyo-export-20261030-010203.tar.zst']")!
+    expect(row.textContent).toContain("5.0 MB")
+    const button = row.querySelector('button[aria-label="删除导出文件 manyoyo-export-20261030-010203.tar.zst"]') as HTMLButtonElement
+    await act(async () => button.click())
+    const confirm = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "删除" && b !== button) as HTMLButtonElement
+    await act(async () => confirm.click())
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+    expect(calls).toContain("DELETE /api/exports/files/manyoyo-export-20261030-010203.tar.zst")
   })
 })
