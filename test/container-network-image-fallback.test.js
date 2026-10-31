@@ -31,10 +31,12 @@ const noNft = ${JSON.stringify(noNft)};
 if (args[0] === 'ps') { console.log(${JSON.stringify(ID)}); process.exit(0); }
 if (args[0] === 'inspect') { console.log(${JSON.stringify(JSON.stringify(info))}); process.exit(0); }
 if (args[0] === 'network') process.exit(0);
+if (args[0] === 'rm') { fs.appendFileSync(${JSON.stringify(log)}+'.rm', args.join(' ') + '\\n'); process.exit(0); }
 if (args[0] === 'run') {
   const image = args.find(a => /^reg\\//.test(a));
   const entry = args[args.indexOf('--entrypoint') + 1];
   fs.appendFileSync(${JSON.stringify(log)}, image + ' ' + entry + '\\n');
+  fs.appendFileSync(${JSON.stringify(log)}+'.args', JSON.stringify(args) + '\\n');
   if (!existing.includes(image)) { process.stderr.write('Error: ' + image + ': image not known\\n'); process.exit(125); }
   if (entry === 'nft' && noNft.includes(image)) { process.stderr.write('exec: "nft": executable file not found in $PATH\\n'); process.exit(127); }
   if (entry === 'cat') console.log('10.89.0.1 host.containers.internal\\nnameserver 10.89.0.1');
@@ -45,7 +47,9 @@ process.exit(0);
     state.createState({ homeDir: dir, id: ID, envLines: [], meta: { name: 'box' }, netRequired: true });
     const manager = createNetworkManager({ command: fake, homeDir: dir, imageRef: () => DEFAULT_IMAGE, warn: () => {} });
     const runs = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) : []);
-    return { manager, dir, runs };
+    const argsLog = () => (fs.existsSync(`${log}.args`) ? fs.readFileSync(`${log}.args`, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) : []);
+    const removed = () => (fs.existsSync(`${log}.rm`) ? fs.readFileSync(`${log}.rm`, 'utf8').trim().split('\n').filter(Boolean) : []);
+    return { manager, dir, runs, argsLog, removed };
 }
 
 describe('helper 镜像：优先 serve 默认镜像，缺失才退回容器自己的镜像', () => {
@@ -99,5 +103,24 @@ describe('helper 镜像：优先 serve 默认镜像，缺失才退回容器自�
             await expect(manager.apply('box', { expectId: ID })).rejects.toThrow(/网络规则下发失败/);
             expect(runs().filter(line => line.endsWith(' cat'))).toHaveLength(1);
         } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+    });
+
+    test('helper 都带 manyoyo-helper-<8 位十六进制> 的名字（列表要能认出并排除它：目标容器被 cp 锁住时 helper 会卡在 Created，同步 inspect 它也会一起卡住）；失败后尽力删掉', async () => {
+        const ok = setup({ existing: [DEFAULT_IMAGE] });
+        try {
+            await ok.manager.apply('box', { expectId: ID });
+            const names = ok.argsLog().map(args => args[args.indexOf('--name') + 1]);
+            expect(names.length).toBeGreaterThan(0);
+            for (const name of names) expect(name).toMatch(/^manyoyo-helper-[0-9a-f]{8}$/);
+            expect(require('../lib/egress-sidecar').isSidecarName(names[0])).toBe(true);
+            expect(ok.removed()).toEqual([]);
+        } finally { fs.rmSync(ok.dir, { recursive: true, force: true }); }
+        const bad = setup({ existing: [DEFAULT_IMAGE], noNft: [DEFAULT_IMAGE] });
+        try {
+            await bad.manager.apply('box', { expectId: ID }).catch(() => {});
+            const rm = bad.removed();
+            expect(rm.length).toBeGreaterThan(0);
+            expect(rm[0]).toMatch(/^rm -f manyoyo-helper-[0-9a-f]{8}$/);
+        } finally { fs.rmSync(bad.dir, { recursive: true, force: true }); }
     });
 });

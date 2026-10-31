@@ -415,4 +415,23 @@ describe('web storage', () => {
             expect(fs.existsSync(dir)).toBe(true);
         });
     });
+
+    test('正在导出 / 导入的容器不 inspect（docker 在 cp 期间锁着它，inspect 会一直等），其它容器照常', async () => {
+        const { workRoot, historyDir } = setup();
+        const used = path.join(workRoot, '20261001-000006');
+        fs.mkdirSync(used);
+        writeHistory(historyDir, 'busy-1', used);
+        const inspected = [];
+        const base = fakeDocker({ 'busy-1': { state: 'running', mounts: [used] }, 'other-1': { state: 'running', mounts: [] } });
+        const listing = await storage.buildStorageListing({
+            workRoots: [workRoot],
+            historyDir,
+            isTransferBusy: name => name === 'busy-1',
+            dockerExecAsync: async args => { if (args[0] === 'inspect') inspected.push(...args.slice(3)); return base(args); }
+        });
+        expect(inspected).toEqual(['other-1']);
+        // 在用判断仍靠历史里记的路径，目录不会被判成可删
+        const row = listing.rows.find(item => path.basename(item.path) === '20261001-000006');
+        expect(row.deletable).toBe(false);
+    });
 });

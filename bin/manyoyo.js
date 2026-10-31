@@ -726,9 +726,15 @@ function checkPortAvailability(port) {
     });
 }
 
+// docker 在 cp（导出 / 导入）进行期间锁住容器，同一容器的 inspect / pause 会一直等；
+// 同步调用没有超时会把 serve 的事件循环永久卡死，所以这几个子命令默认带超时（最坏情况是慢几秒，不是卡死）
+const SYNC_RUNTIME_TIMEOUT_MS = 15000;
+const SYNC_TIMEOUT_SUBCOMMANDS = new Set(['inspect', 'pause', 'unpause']);
+
 function dockerExecArgs(args, options = {}) {
     try {
-        return runCmd(DOCKER_CMD, args, { env: DOCKER_ENV, ...options });
+        const timeout = options.timeout === undefined && SYNC_TIMEOUT_SUBCOMMANDS.has(args[0]) ? SYNC_RUNTIME_TIMEOUT_MS : options.timeout;
+        return runCmd(DOCKER_CMD, args, { env: DOCKER_ENV, ...options, timeout });
     } catch (e) {
         const info = describeError(getCommandFailureText(e), { command: DOCKER_CMD });
         if (info && DOCKER_DAEMON_ERROR_CODES.has(info.code) && e && e.message) {

@@ -1423,6 +1423,8 @@ if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
   exit 0
 fi
 if [ "$1" = "run" ]; then
+  # 网络规则的一次性 helper（--name manyoyo-helper-xxxx）不是被测容器
+  case "$*" in *manyoyo-helper-*) exit 0;; esac
   shift
   while [ $# -gt 0 ]; do
     if [ "$1" = "--label" ]; then
@@ -1618,6 +1620,8 @@ if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
   exit 0
 fi
 if [ "$1" = "run" ]; then
+  # 网络规则的一次性 helper（--name manyoyo-helper-xxxx）不是被测容器
+  case "$*" in *manyoyo-helper-*) exit 0;; esac
   shift
   while [ $# -gt 0 ]; do
     if [ "$1" = "--label" ]; then
@@ -1717,6 +1721,8 @@ if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then
   exit 0
 fi
 if [ "$1" = "run" ]; then
+  # 网络规则的一次性 helper（--name manyoyo-helper-xxxx）不是被测容器
+  case "$*" in *manyoyo-helper-*) exit 0;; esac
   shift
   while [ $# -gt 0 ]; do
     if [ "$1" = "--label" ]; then

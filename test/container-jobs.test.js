@@ -114,18 +114,114 @@ describe('lib/web/container-jobs', () => {
         expect(fs.readdirSync(dir).sort()).toEqual(['1111111111111111.json', '2222222222222222.json']);
     });
 
-    test('停止方式的导出任务：重启后只在 manyoyo.id 对得上且容器已停止时启动', () => {
+    test('不再有“停止方式”：记录里就算有旧的 how=stop，重启后也不会启动容器，只处理仍处于暂停的', () => {
         const registry = createJobRegistry({ homeDir: home });
-        const job = registry.create({ type: 'export', containers: ['s1', 's2'] });
-        job.addPaused('s1', 'aaaaaaaaaaaaaaaa', 'stop');
-        job.addPaused('s2', 'bbbbbbbbbbbbbbbb', 'stop');
-        const started = [];
+        const job = registry.create({ type: 'export', containers: ['s1'] });
+        job.addPaused('s1', 'aaaaaaaaaaaaaaaa');
+        const unpaused = [];
         createJobRegistry({ homeDir: home }).recover({
-            containerIdOf: n => ({ s1: 'aaaaaaaaaaaaaaaa', s2: 'cccccccccccccccc' }[n]),
-            isPaused: () => true, isStopped: () => true, unpause() { throw new Error('不该 unpause'); },
-            start: n => started.push(n), removeContainer() {}, removePath() {}
+            containerIdOf: () => 'aaaaaaaaaaaaaaaa', isPaused: () => true, unpause: n => unpaused.push(n), start() { throw new Error('不该 start'); }, removeContainer() {}, removePath() {}
         });
-        expect(started).toEqual(['s1']);
+        expect(unpaused).toEqual(['s1']);
+    });
+
+    describe('新状态 preparing / ready / waiting', () => {
+        const recoverActions = { containerIdOf: () => '', isPaused: () => false, unpause() {}, removeContainer() {}, removePath() {} };
+
+        test('都算“进行中”：锁容器（导入时预留新名字）、busyFor / reservedNames / active 都看得到，结束后释放', () => {
+            const registry = createJobRegistry({ homeDir: home });
+            const exporting = registry.create({ type: 'export', containers: ['a'], status: 'preparing' });
+            const importing = registry.create({ type: 'import', containers: ['new1'], status: 'waiting' });
+            expect(registry.busyFor('a')).toBe(exporting);
+            expect(registry.busyFor('new1')).toBe(importing);
+            expect([...registry.reservedNames()]).toEqual(['new1']);
+            expect(registry.active()).toHaveLength(2);
+            expect(registry.running()).toHaveLength(0);
+            exporting.update({ status: 'ready' });
+            expect(registry.busyFor('a')).toBe(exporting);
+            exporting.update({ status: 'running' });
+            expect(registry.running()).toEqual([exporting]);
+            exporting.finish('done');
+            importing.finish('cancelled');
+            expect(registry.busyFor('a')).toBeNull();
+            expect(registry.busyFor('new1')).toBeNull();
+            expect(registry.hasActive()).toBe(false);
+        });
+
+        test('闸门把它们也算进去：准备中 / 等下载 / 等上传的容器同样 409', () => {
+            const registry = createJobRegistry({ homeDir: home });
+            registry.create({ type: 'export', containers: ['a'], status: 'preparing' });
+            registry.create({ type: 'export', containers: ['b'], status: 'ready' });
+            registry.create({ type: 'import', containers: ['c'], status: 'waiting' });
+            for (const name of ['a', 'b', 'c']) expect(gateRequest(registry, 'POST', `/api/sessions/${name}/agent/stream`).status).toBe(409);
+            expect(gateRequest(registry, 'GET', '/api/sessions/a/messages')).toBeNull();
+        });
+
+        test('取消：准备中给信号（由准备流程收尾）；等下载 / 等上传直接结束；已结束的返回 false', () => {
+            const registry = createJobRegistry({ homeDir: home });
+            const preparing = registry.create({ type: 'export', containers: ['a'], status: 'preparing' });
+            const ready = registry.create({ type: 'export', containers: ['b'], status: 'ready' });
+            const waiting = registry.create({ type: 'import', containers: ['c'], status: 'waiting' });
+            expect(registry.cancel(preparing.id)).toBe(true);
+            expect(preparing.status).toBe('preparing');
+            expect(preparing.signal.aborted).toBe(true);
+            expect(() => preparing.check()).toThrow(JobCancelled);
+            expect(registry.cancel(ready.id)).toBe(true);
+            expect(ready.status).toBe('cancelled');
+            expect(registry.cancel(waiting.id)).toBe(true);
+            expect(waiting.status).toBe('cancelled');
+            expect(registry.cancel(ready.id)).toBe(false);
+        });
+
+        test('落盘：三个新状态都有记录，serve 重启后标成已中断（没有暂停过任何容器，不需要恢复动作）', () => {
+            const registry = createJobRegistry({ homeDir: home });
+            const ids = ['preparing', 'ready', 'waiting'].map(status => registry.create({ type: status === 'waiting' ? 'import' : 'export', containers: ['x'], status }).id);
+            expect(fs.readdirSync(registry.dir).sort()).toEqual(ids.map(id => `${id}.json`).sort());
+            const fresh = createJobRegistry({ homeDir: home });
+            const reports = fresh.recover(recoverActions);
+            expect(reports).toHaveLength(3);
+            expect(fresh.list().map(job => job.status)).toEqual(['interrupted', 'interrupted', 'interrupted']);
+            expect(fresh.busyFor('x')).toBeNull();
+            expect(fs.readdirSync(registry.dir)).toEqual([]);
+        });
+
+        test('用户意图（取消）重启后仍然成立：取消过的任务不会被当成残留“复活”', () => {
+            const registry = createJobRegistry({ homeDir: home });
+            const ready = registry.create({ type: 'export', containers: ['x'], status: 'ready' });
+            const waiting = registry.create({ type: 'import', containers: ['y'], status: 'waiting' });
+            registry.cancel(ready.id);
+            registry.cancel(waiting.id);
+            expect(fs.readdirSync(registry.dir)).toEqual([]);
+            const fresh = createJobRegistry({ homeDir: home });
+            expect(fresh.recover(recoverActions)).toEqual([]);
+            expect(fresh.list()).toEqual([]);
+        });
+
+        test('结束 / 超时释放准备好的清单与等待计时器', () => {
+            const registry = createJobRegistry({ homeDir: home });
+            const job = registry.create({ type: 'export', containers: ['x'], status: 'ready' });
+            job.prepared = { big: true };
+            job.waitTimer = setTimeout(() => {}, 100000);
+            job.finish('cancelled');
+            expect(job.prepared).toBeNull();
+        });
+    });
+
+    test('任务结束时还有没能恢复的暂停容器：记录继续留着，下次启动恢复它；恢复完成后记录才删除', () => {
+        const registry = createJobRegistry({ homeDir: home });
+        const job = registry.create({ type: 'export', containers: ['stuck'] });
+        job.addPaused('stuck', 'aaaaaaaaaaaaaaaa');
+        job.finish('failed', { error: '恢复运行失败' });
+        expect(fs.readdirSync(registry.dir)).toEqual([`${job.id}.json`]);
+        const unpaused = [];
+        const fresh = createJobRegistry({ homeDir: home });
+        fresh.recover({ containerIdOf: () => 'aaaaaaaaaaaaaaaa', isPaused: () => true, unpause: n => unpaused.push(n), removeContainer() {}, removePath() {} });
+        expect(unpaused).toEqual(['stuck']);
+        expect(fs.readdirSync(registry.dir)).toEqual([]);
+        // 没有暂停容器的失败任务不留记录
+        const plain = registry.create({ type: 'export', containers: ['ok'] });
+        plain.finish('failed', { error: 'x' });
+        expect(fs.readdirSync(registry.dir)).toEqual([]);
     });
 
     test('损坏的任务记录被丢弃，不影响启动', () => {
