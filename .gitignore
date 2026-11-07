@@ -25,6 +25,7 @@ lib/web/index.html
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/plan-handoff/
+!.claude/plan-handoff.local/
 .agents/skills/*
 !.agents/skills/agents-power/
 !.agents/skills/commit-diff/
