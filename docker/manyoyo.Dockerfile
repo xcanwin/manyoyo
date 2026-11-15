@@ -104,7 +104,8 @@ RUN <<EOX
     # 配置 APT 镜像源
     set -eu
     if [ -n "${APT_MIRROR}" ]; then sed -i "s|http://[^/]*\.ubuntu\.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources; fi
-    ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+    ln -fs /usr/share/zoneinfo/Asia/Singapore /etc/localtime
+    echo "Asia/Singapore" > /etc/timezone
 
     # 安装所有基础依赖
     # 网络与连接
