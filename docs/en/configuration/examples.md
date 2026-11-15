@@ -14,7 +14,7 @@ mkdir -p ~/.manyoyo
 cat > ~/.manyoyo/manyoyo.json << 'EOF2'
 {
     "imageName": "ghcr.io/xcanwin/manyoyo",
-    "imageVersion": "2.3.1-common",
+    "imageVersion": "2.3.2-common",
     "runs": {
         "claude": {
             "envFile": ["/abs/path/anthropic.env"],
