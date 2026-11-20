@@ -243,7 +243,10 @@ export function CreateContainerDialog({
   const [suggestedContainerPath, setSuggestedContainerPath] = React.useState("")
   // 服务端返回的预设（“没有请求覆盖时的有效配置”）：表单以它为基线，只发送改过的字段
   const [preset, setPreset] = React.useState<NewContainerPreset | null>(null)
-  const [presetLoading, setPresetLoading] = React.useState(false)
+  // 初始默认值与运行配置预设各自在途；提交按钮在任一在途时都禁用
+  const [initialLoading, setInitialLoading] = React.useState(false)
+  const [runPresetLoading, setRunPresetLoading] = React.useState(false)
+  const presetLoading = initialLoading || runPresetLoading
   const [presetError, setPresetError] = React.useState("")
   const [presetVersion, setPresetVersion] = React.useState(0)
   // 自动展开：初始 / 切换运行配置时按预设内容展开；之后尊重用户的手动开合
@@ -262,6 +265,9 @@ export function CreateContainerDialog({
   const inferSeqRef = React.useRef(0)
   const presetSeqRef = React.useRef(0)
   const loadSeqRef = React.useRef(0)
+  // 用户当前选的运行配置（同步记录，供初始默认值返回时判断要不要覆盖预设字段）
+  const runSelectionRef = React.useRef("")
+  const runPresetLoadingRef = React.useRef(false)
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
   const isAgentAvailable = useAgentAvailability(open)
 
@@ -346,7 +352,8 @@ export function CreateContainerDialog({
 
   async function loadPreset(runName: string) {
     const seq = ++presetSeqRef.current
-    setPresetLoading(true)
+    runPresetLoadingRef.current = true
+    setRunPresetLoading(true)
     setPresetError("")
     try {
       const value = (await apiGet(
@@ -360,13 +367,21 @@ export function CreateContainerDialog({
       setPreset(null)
       setPresetError(err instanceof Error ? err.message : "读取运行配置的预设失败")
     } finally {
-      if (seq === presetSeqRef.current) setPresetLoading(false)
+      if (seq === presetSeqRef.current) {
+        runPresetLoadingRef.current = false
+        setRunPresetLoading(false)
+      }
     }
   }
 
   const loadDefaults = React.useCallback(async () => {
     const seq = ++loadSeqRef.current
-    setPresetLoading(true)
+    // 重置默认：回到“没有运行配置”的全局预设，同时作废在途的运行配置预设
+    runSelectionRef.current = ""
+    runPresetLoadingRef.current = false
+    setRunPresetLoading(false)
+    presetSeqRef.current += 1
+    setInitialLoading(true)
     setPresetError("")
     try {
       const data = await apiGet("/api/config")
@@ -419,6 +434,37 @@ export function CreateContainerDialog({
         }
       )
       if (seq !== loadSeqRef.current) return
+      const selectedRun = runSelectionRef.current;
+      // 用户在初始默认值返回前已经选了 run（或它的预设还在加载）：只补非预设字段，绝不覆盖自启动 / 网络
+      if (selectedRun || runPresetLoadingRef.current) {
+        const selectedRunConf = selectedRun ? runsMap[selectedRun] : undefined
+        const selectedRunHasHost = typeof selectedRunConf?.hostPath === "string" && selectedRunConf.hostPath.trim() !== ""
+        setSuggestedDir(suggestion?.createHost ? suggestion.host : "")
+        setSuggestedContainerPath(suggestion?.container ?? "")
+        const nextHostPath = suggestion ? suggestion.host : String(defaults.hostPath || "")
+        const nextContainerPath = suggestion ? suggestion.container : String(defaults.containerPath || "")
+        setForm((prev) => ({
+          ...prev,
+          hostPath: selectedRunHasHost
+            ? prev.hostPath
+            : prev.hostPath === DEFAULT_FORM.hostPath ? nextHostPath : prev.hostPath,
+          containerPath: selectedRunHasHost
+            ? prev.containerPath
+            : prev.containerPath === DEFAULT_FORM.containerPath ? nextContainerPath : prev.containerPath,
+          containerName: prev.containerName === DEFAULT_FORM.containerName ? (suggestion?.name ?? "") : prev.containerName,
+          imageName: prev.imageName === DEFAULT_FORM.imageName ? String(defaults.imageName || "") : prev.imageName,
+          imageVersion: prev.imageVersion === DEFAULT_FORM.imageVersion ? String(defaults.imageVersion || "") : prev.imageVersion,
+          containerMode: prev.containerMode === DEFAULT_FORM.containerMode ? String(defaults.containerMode || "") : prev.containerMode,
+          shellPrefix: prev.shellPrefix === DEFAULT_FORM.shellPrefix ? String(defaults.shellPrefix || "") : prev.shellPrefix,
+          shell: prev.shell === DEFAULT_FORM.shell ? String(defaults.shell || "") : prev.shell,
+          shellSuffix: prev.shellSuffix === DEFAULT_FORM.shellSuffix ? String(defaults.shellSuffix || "") : prev.shellSuffix,
+          yolo: prev.yolo === DEFAULT_FORM.yolo ? normalizeYolo(String(defaults.yolo || "")) : prev.yolo,
+          agentPromptCommand: prev.agentPromptCommand === DEFAULT_FORM.agentPromptCommand ? String(defaults.agentPromptCommand || "") : prev.agentPromptCommand,
+          systemPrompt: prev.systemPrompt === DEFAULT_FORM.systemPrompt ? composed : prev.systemPrompt,
+          systemPromptDefault: prev.systemPromptDefault === DEFAULT_FORM.systemPromptDefault ? composed : prev.systemPromptDefault,
+        }))
+        return
+      }
       const baseline = presetValue && typeof presetValue === "object"
         ? (presetValue as NewContainerPreset)
         : null
@@ -466,11 +512,13 @@ export function CreateContainerDialog({
     } catch {
       if (seq !== loadSeqRef.current) return
       setRuns({})
-      setPreset(null)
-      resetCandidates()
-      setForm(DEFAULT_FORM)
+      if (!runSelectionRef.current && !runPresetLoadingRef.current) {
+        setPreset(null)
+        resetCandidates()
+        setForm(DEFAULT_FORM)
+      }
     } finally {
-      if (seq === loadSeqRef.current) setPresetLoading(false)
+      if (seq === loadSeqRef.current) setInitialLoading(false)
     }
     // 预设 / 推断只在打开时和用户操作时触发；这里引用到的都是稳定的 setState 与模块函数
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -510,6 +558,7 @@ export function CreateContainerDialog({
 
   function handleRunChange(value: string | null) {
     const runName = value ?? ""
+    runSelectionRef.current = runName
     const preset = runName ? runs[runName] : undefined
     const normalizedYolo = preset?.yolo
       ? normalizeYolo(String(preset.yolo))

@@ -442,6 +442,25 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(cleared.response.status).toBe(200);
         });
 
+        test('custom 不限制 + auditHttp：覆盖说明按“代理在用”返回 proxied，去掉 auditHttp 才是 unrestricted', async () => {
+            const customAny = { action: 'allow', target: '@any', ports: '', proto: 'all', enabled: true };
+            const audited = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', {
+                policy: { preset: 'custom', outbound: [customAny], inbound: [{ action: 'allow', source: '@any', ports: '', proto: 'all', enabled: true }], auditHttp: true },
+                confirmRisk: true
+            }));
+            expect(audited.response.status).toBe(200);
+            const proxied = await request(`${baseUrl}/api/containers/boxa/network/traffic`, { headers: { Cookie: cookie } });
+            expect(proxied.json.coverage).toEqual({ proxied: true, auditHttp: true, reason: 'proxied' });
+
+            const plain = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', {
+                policy: { preset: 'custom', outbound: [customAny], inbound: [{ action: 'allow', source: '@any', ports: '', proto: 'all', enabled: true }], auditHttp: false },
+                confirmRisk: true
+            }));
+            expect(plain.response.status).toBe(200);
+            const unrestricted = await request(`${baseUrl}/api/containers/boxa/network/traffic`, { headers: { Cookie: cookie } });
+            expect(unrestricted.json.coverage).toEqual({ proxied: false, auditHttp: false, reason: 'unrestricted' });
+        });
+
         test('合并放行与拒绝记录：时间倒序、host 过滤、summary 基于全部记录；DELETE 清空放行记录', async () => {
             const paths = egressPaths(tempHost);
             fs.mkdirSync(paths.traffic, { recursive: true });
@@ -630,6 +649,11 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             const manual = await create({ containerName: 'auto-ext-3', autostart: 'curl -fsS http://host.docker.internal:9999/health\n', autoAllowScriptEndpoints: false });
             expect(manual.response.status).toBe(200);
             expect(state.readNetworkRaw(tempHost, idOf('auto-ext-3')).outbound).toEqual([]);
+            // 克隆 / 重建要能保持“不自动放行”
+            const history = JSON.parse(fs.readFileSync(path.join(tempHost, 'web-history', 'auto-ext-3.json'), 'utf-8'));
+            expect(history.runtimeSnapshot.autoAllowScriptEndpoints).toBe(false);
+            const cloneOptions = require('../lib/web/server').__testing.buildCloneCreateOptionsFromSnapshot(history.runtimeSnapshot, history);
+            expect(cloneOptions.autoAllowScriptEndpoints).toBe(false);
         });
 
         test('地址识别：认证 / 参数 / run 校验；扫描自启动、first 命令、first.env 与 first.envFile', async () => {

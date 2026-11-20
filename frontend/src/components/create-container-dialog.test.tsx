@@ -12,6 +12,8 @@ let runs: Record<string, unknown>
 let presets: Record<string, Record<string, unknown>>
 let inferResult: Record<string, unknown>
 let inferFails: boolean
+let globalPresetGate: Promise<void> | null
+let runPresetGate: Promise<void> | null
 let roots: ReturnType<typeof createRoot>[] = []
 
 const emptyPreset = (run = "") => ({
@@ -28,6 +30,8 @@ beforeEach(() => {
   presets = {}
   inferResult = { candidates: [], truncated: false, preset: "restricted" }
   inferFails = false
+  globalPresetGate = null
+  runPresetGate = null
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }))
   vi.stubGlobal(
     "fetch",
@@ -37,8 +41,11 @@ beforeEach(() => {
       let payload: unknown = {}
       if (url === "/api/config") payload = { parsed: { runs }, defaults: { hostPath: "/srv/serve-cwd", imageName: "img", imageVersion: "1.0.0-common" } }
       else if (url === "/api/system/new-container-defaults") payload = newDefaults
-      else if (url === "/api/system/new-container-preset") payload = presets[""] || emptyPreset()
-      else if (url.startsWith("/api/system/new-container-preset?")) {
+      else if (url === "/api/system/new-container-preset") {
+        if (globalPresetGate) await globalPresetGate
+        payload = presets[""] || emptyPreset()
+      } else if (url.startsWith("/api/system/new-container-preset?")) {
+        if (runPresetGate) await runPresetGate
         const run = decodeURIComponent(new URL(url, "http://localhost").searchParams.get("run") || "")
         payload = presets[run] || emptyPreset(run)
       } else if (url === "/api/system/new-container-preset/infer") {
@@ -268,5 +275,39 @@ describe("运行配置预设带入", () => {
     await act(async () => autostartToggle.click())
     expect((document.getElementById("create-autostart") as HTMLTextAreaElement).value).toBe("")
     expect(document.body.textContent).not.toContain("检测到 2 个可能需要放行的地址")
+  })
+})
+
+describe("预设加载竞态", () => {
+  test("初始默认值晚返回时不会覆盖已经选好的运行配置预设", async () => {
+    runs = { qa: { yolo: "c" } }
+    presets[""] = { run: "", autostart: "GLOBAL-BOOT\n", autostartOnServe: false, network: { version: 2, preset: "restricted", outbound: [], inbound: [], expose: [], autostartOnServe: false } }
+    presets.qa = { run: "qa", autostart: "RUN-BOOT\n", autostartOnServe: false, network: { version: 2, preset: "allowlist", outbound: [{ action: "allow", target: "corp.example.com", ports: "443", proto: "tcp", enabled: true }], inbound: [], expose: [], autostartOnServe: false } }
+    let releaseGlobal = () => {}
+    globalPresetGate = new Promise<void>((resolve) => { releaseGlobal = resolve })
+    await open()
+    await selectRun("qa")
+    expect((document.getElementById("create-autostart") as HTMLTextAreaElement).value).toBe("RUN-BOOT\n")
+    // 全局预设此时才返回，不能覆盖 run 的自启动 / 网络
+    await act(async () => releaseGlobal())
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)) })
+    expect((document.getElementById("create-autostart") as HTMLTextAreaElement).value).toBe("RUN-BOOT\n")
+    expect(document.body.textContent).toContain("仅白名单")
+    await submit()
+    expect(JSON.stringify(calls.find((call) => call.url === "/api/sessions" && call.method === "POST")!.body)).not.toContain("GLOBAL-BOOT")
+  })
+
+  test("运行配置预设加载期间禁用提交，加载完恢复", async () => {
+    runs = { qa: { yolo: "c" } }
+    presets.qa = { run: "qa", autostart: "RUN-BOOT\n", autostartOnServe: false, network: { version: 2, preset: "restricted", outbound: [], inbound: [], expose: [], autostartOnServe: false } }
+    let releaseRun = () => {}
+    await open()
+    runPresetGate = new Promise<void>((resolve) => { releaseRun = resolve })
+    await selectRun("qa")
+    const submitButton = () => Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((item) => item.textContent?.includes("创建并进入") || item.textContent?.includes("读取预设中"))!
+    expect(submitButton().disabled).toBe(true)
+    await act(async () => releaseRun())
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)) })
+    expect(submitButton().disabled).toBe(false)
   })
 })

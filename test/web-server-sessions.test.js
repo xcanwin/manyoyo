@@ -1147,10 +1147,17 @@ describe('会话计划', () => {
             expect(saved.json.plan.items).toEqual([]);
             expect(saved.json.etag).not.toBe(plan.json.etag);
 
+            // 与项目其它 If-Match 接口一致：接受弱校验和 *，错误版本仍 409
+            const weak = await request(`${baseUrl}/api/sessions/plana/plan/dod`, json(cookie, 'PUT', { items: [{ text: '弱校验' }] }, { 'If-Match': `W/"${saved.json.etag}"` }));
+            expect(weak.response.status).toBe(200);
+            const wildcard = await request(`${baseUrl}/api/sessions/plana/plan/dod`, json(cookie, 'PUT', { items: [{ text: '任意版本' }] }, { 'If-Match': '*' }));
+            expect(wildcard.response.status).toBe(200);
+
             const stale = await request(`${baseUrl}/api/sessions/plana/plan/dod`, json(cookie, 'PUT', { items: [{ text: '冲突' }] }, { 'If-Match': plan.json.etag }));
             expect(stale.response.status).toBe(409);
             expect(stale.json.conflict).toBe(true);
-            expect(stale.json.plan.dod).toHaveLength(2);
+            expect(stale.json.plan.dod).toHaveLength(1);
+            expect(stale.json.plan.dod[0].text).toBe('任意版本');
         } finally {
             if (handle && typeof handle.close === 'function') await handle.close();
             fs.rmSync(tempHost, { recursive: true, force: true });

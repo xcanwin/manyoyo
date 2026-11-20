@@ -5,7 +5,7 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
-const { startWebServer } = require('../lib/web/server');
+const { startWebServer, __testing } = require('../lib/web/server');
 
 function getFreePort() {
     return new Promise((resolve, reject) => {
@@ -154,5 +154,23 @@ describe('共享技能 / MCP 接口', () => {
             name: 'bad3', agents: ['claude'], transport: 'http', url: 'https://user:pass@example.com/mcp'
         }));
         expect(userinfo.response.status).toBe(400);
+    });
+});
+
+describe('共享扩展同步的传输保护', () => {
+    test('容器正在导出 / 导入时跳过，不同步 inspect（docker 上 cp 期间 inspect 会一直等）', async () => {
+        const calls = [];
+        const ctx = {
+            homeDir: fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-shared-busy-')),
+            dockerExecArgs: (...args) => { calls.push(args); throw new Error('不应该 inspect'); }
+        };
+        const state = { jobs: { busyFor: name => (name === 'busybox' ? { id: 'job-1' } : null) } };
+        try {
+            const result = await __testing.applySharedExtensions(ctx, state, 'busybox', '0123456789abcdef', '', false);
+            expect(result).toMatchObject({ applied: false, skipped: true, reason: 'busy' });
+            expect(calls).toEqual([]);
+        } finally {
+            fs.rmSync(ctx.homeDir, { recursive: true, force: true });
+        }
     });
 });

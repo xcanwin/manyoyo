@@ -24,7 +24,7 @@ Deleting a container does not delete the shared library. The library only manage
 
 - New containers: the whole `skills/` directory is mounted read-only and links are created in the container home, so later library updates are visible immediately. Containers cannot modify the shared files.
 - Existing containers (created before the library existed): click "Sync to this container" to copy the content; re-sync after the library changes.
-- Same-named directories or MCP servers that the library does not manage are skipped and reported as conflicts, never overwritten.
+- Same-named directories or MCP servers that the library does not manage are skipped and reported as conflicts, never overwritten. Copy mode uses the `.manyoyo-managed` marker inside the skill directory to recognize its own copies; if the marker is missing or the hash does not match (for example, you replaced it with your own directory), it is kept and reported as a conflict.
 
 ## Secrets and trust boundaries
 

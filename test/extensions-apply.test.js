@@ -106,7 +106,16 @@ describe('extensions-apply', () => {
         const { run } = makeFakeRun();
         const runCopy = async (args, opts = {}) => {
             if (args[0] === 'node' && args[2] === apply.SKILL_COPY_PREPARE_SCRIPT) {
-                return { code: 0, stdout: JSON.stringify({ base: { claude: '/home/u/.claude/skills', codex: '/home/u/.codex/skills' }, existing: ['claude/only-claude'], conflicts: [] }), stderr: '' };
+                return {
+                    code: 0,
+                    stdout: JSON.stringify({
+                        base: { claude: '/home/u/.claude/skills', codex: '/home/u/.codex/skills' },
+                        copy: [{ agent: 'claude', name: 'shared' }, { agent: 'codex', name: 'shared' }],
+                        upToDate: [],
+                        conflicts: [{ type: 'skill', agent: 'claude', name: 'only-claude', reason: 'user-replaced' }]
+                    }),
+                    stderr: ''
+                };
             }
             return run(args, opts);
         };
@@ -125,7 +134,106 @@ describe('extensions-apply', () => {
             [path.join(home, '.manyoyo', 'extensions', 'skills', 'common', 'shared'), '/home/u/.claude/skills/shared'],
             [path.join(home, '.manyoyo', 'extensions', 'skills', 'common', 'shared'), '/home/u/.codex/skills/shared']
         ]));
-        expect(result.conflicts).toEqual(expect.arrayContaining([{ type: 'skill', agent: 'claude', name: 'only-claude' }]));
+        expect(result.conflicts).toEqual(expect.arrayContaining([{ type: 'skill', agent: 'claude', name: 'only-claude', reason: 'user-replaced' }]));
         expect(result.warnings.some(message => message.includes('boom'))).toBe(true);
+        expect(result.pending).toBe(true);
+    });
+});
+
+describe('extensions-apply：受管标记与失败重试', () => {
+    let home;
+    beforeEach(() => {
+        home = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-managed-'));
+        store.writeSkill(home, 'common', 'demo', '---\nname: demo\n---\ncontent\n');
+    });
+    afterEach(() => {
+        fs.rmSync(home, { recursive: true, force: true });
+    });
+
+    function runPrepare(params) {
+        return require('child_process').spawnSync(process.execPath, ['-e', apply.SKILL_COPY_PREPARE_SCRIPT, JSON.stringify(params)], {
+            encoding: 'utf-8',
+            env: { ...process.env, HOME: home }
+        });
+    }
+
+    test('准备脚本不删除用户替换的同名目录；只清理标记与旧哈希匹配的受管副本', () => {
+        const userDir = path.join(home, '.claude/skills/keepme');
+        fs.mkdirSync(userDir, { recursive: true });
+        fs.writeFileSync(path.join(userDir, 'SKILL.md'), '用户自己的内容');
+        const staleDir = path.join(home, '.codex/skills/managed');
+        fs.mkdirSync(staleDir, { recursive: true });
+        fs.writeFileSync(path.join(staleDir, 'SKILL.md'), '旧副本');
+        fs.writeFileSync(path.join(staleDir, '.manyoyo-managed'), JSON.stringify({ app: 'manyoyo', version: 1, hash: 'oldhash' }));
+        const mismatchedDir = path.join(home, '.claude/skills/mismatch');
+        fs.mkdirSync(mismatchedDir, { recursive: true });
+        fs.writeFileSync(path.join(mismatchedDir, 'SKILL.md'), '被用户替换过');
+        fs.writeFileSync(path.join(mismatchedDir, '.manyoyo-managed'), JSON.stringify({ app: 'manyoyo', version: 1, hash: 'marker-hash' }));
+
+        const result = runPrepare({
+            items: { claude: [], codex: [{ name: 'managed', hash: 'newhash' }] },
+            previous: {
+                claude: [{ name: 'keepme', hash: 'oldhash' }, { name: 'mismatch', hash: 'state-hash' }],
+                codex: [{ name: 'managed', hash: 'oldhash' }]
+            }
+        });
+        expect(result.status).toBe(0);
+        const parsed = JSON.parse(result.stdout);
+        // 没有标记 → 用户目录，保留并记冲突
+        expect(fs.existsSync(path.join(userDir, 'SKILL.md'))).toBe(true);
+        expect(parsed.conflicts).toEqual(expect.arrayContaining([expect.objectContaining({ agent: 'claude', name: 'keepme', reason: 'user-replaced' })]));
+        // 标记哈希和 state 不一致 → 保留并记冲突
+        expect(fs.existsSync(path.join(mismatchedDir, 'SKILL.md'))).toBe(true);
+        expect(parsed.conflicts).toEqual(expect.arrayContaining([expect.objectContaining({ agent: 'claude', name: 'mismatch', reason: 'marker-mismatch' })]));
+        // 标记与 state 哈希匹配 → 清掉并重新复制
+        expect(fs.existsSync(staleDir)).toBe(false);
+        expect(parsed.copy).toEqual([{ agent: 'codex', name: 'managed' }]);
+    });
+
+    test('挂载脚本失败：产生 warning 且下一次不会 skipped；成功后第二次才 skipped', async () => {
+        let skillCode = 1;
+        const calls = [];
+        const run = async (args, opts = {}) => {
+            calls.push(args);
+            if (args[0] === 'node' && args[2] === apply.SKILL_LINK_SCRIPT) {
+                return skillCode === 0
+                    ? { code: 0, stdout: JSON.stringify({ skills: { claude: ['demo'], codex: ['demo'] }, conflicts: [], warnings: [] }), stderr: '' }
+                    : { code: 1, stdout: '', stderr: 'boom-skill' };
+            }
+            if (args[0] === 'node' && args[2] === apply.MCP_EXISTS_SCRIPT) return { code: 0, stdout: JSON.stringify({ claude: [], codex: [] }), stderr: '' };
+            return { code: 0, stdout: '{}', stderr: '' };
+        };
+        const first = await apply.applyExtensions({ homeDir: home, containerName: 'box', containerId: '0123456789abcdef', mode: 'mount', runInContainer: run });
+        expect(first.pending).toBe(true);
+        expect(first.warnings.join('\n')).toContain('boom-skill');
+        expect(apply.readState(home, '0123456789abcdef').pending).toBe(true);
+        const second = await apply.applyExtensions({ homeDir: home, containerName: 'box', containerId: '0123456789abcdef', mode: 'mount', runInContainer: run });
+        expect(second.skipped).toBeUndefined();
+        expect(second.applied).toBe(true);
+
+        skillCode = 0;
+        const third = await apply.applyExtensions({ homeDir: home, containerName: 'box', containerId: '0123456789abcdef', mode: 'mount', runInContainer: run });
+        expect(third.pending).toBe(false);
+        const fourth = await apply.applyExtensions({ homeDir: home, containerName: 'box', containerId: '0123456789abcdef', mode: 'mount', runInContainer: run });
+        expect(fourth).toEqual(expect.objectContaining({ applied: false, skipped: true }));
+        expect(calls.length).toBeGreaterThan(0);
+    });
+
+    test('MCP 下发脚本失败也算 pending，下次重试', async () => {
+        let failMcp = true;
+        const run = async (args) => {
+            if (args[0] === 'node' && args[2] === apply.SKILL_LINK_SCRIPT) return { code: 0, stdout: JSON.stringify({ skills: { claude: [], codex: [] }, conflicts: [], warnings: [] }), stderr: '' };
+            if (args[0] === 'node' && args[2] === apply.MCP_EXISTS_SCRIPT) return { code: 0, stdout: JSON.stringify({ claude: [], codex: [] }), stderr: '' };
+            if (args[0] === '/bin/bash') return failMcp ? { code: 1, stdout: '', stderr: 'mcp-fail' } : { code: 0, stdout: '', stderr: '' };
+            return { code: 0, stdout: '{}', stderr: '' };
+        };
+        store.saveMcp(home, { name: 'echo', agents: ['claude'], transport: 'stdio', command: 'npx' });
+        const first = await apply.applyExtensions({ homeDir: home, containerName: 'box', containerId: 'fedcba9876543210', mode: 'mount', runInContainer: run });
+        expect(first.pending).toBe(true);
+        expect(first.warnings.join('\n')).toContain('mcp-fail');
+        failMcp = false;
+        const second = await apply.applyExtensions({ homeDir: home, containerName: 'box', containerId: 'fedcba9876543210', mode: 'mount', runInContainer: run });
+        expect(second.pending).toBe(false);
+        expect(apply.readState(home, 'fedcba9876543210').pending).toBe(false);
     });
 });
