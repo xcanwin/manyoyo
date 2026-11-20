@@ -104,6 +104,12 @@ const out = [
   { type: 'stream_event', event: { type: 'message_start', message: { usage: { input_tokens: 0, output_tokens: 0 } } } },
   { type: 'stream_event', event: { type: 'message_delta', usage: { input_tokens: 1200, cache_read_input_tokens: 800, cache_creation_input_tokens: 0, output_tokens: 50 } } },
   { type: 'assistant', message: { content: [{ type: 'text', text: '好' }] } },
+  ...(prompt.includes('PLANRUN') ? [
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'todo-1', name: 'TodoWrite', input: { todos: [{ content: '写代码', status: 'in_progress' }, { content: '写测试', status: 'pending' }] } }] } },
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'task-1', name: 'TaskCreate', input: { subject: '跑测试' } }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'task-1', content: 'Task #4 created successfully' }] } },
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'update-1', name: 'TaskUpdate', input: { taskId: '4', status: 'completed' } }] } }
+  ] : []),
   { type: 'result', subtype: 'success', result: '好', session_id: sessionId, modelUsage: { m: { contextWindow: 200000 } } }
 ];
 // init 事件立刻输出（真 claude 也是开头就给会话 id），其余的慢运行时延后
@@ -756,5 +762,60 @@ describe('目录列举的前缀与数量上限（@ 补全用）', () => {
         } finally {
             fs.rmSync(dir, { recursive: true, force: true });
         }
+    });
+});
+
+describe('计划（TodoWrite / TaskCreate / TaskUpdate 投影）', () => {
+    test('一轮结束后落盘：/messages 带 plan，流里有 plan 事件；旧 session 按空计划读', async () => {
+        await withServer(async ({ baseUrl, cookie }) => {
+            const before = await request(`${baseUrl}/api/sessions/demo/plan`, { headers: { Cookie: cookie } });
+            expect(before.response.status).toBe(200);
+            expect(before.json.plan).toEqual(expect.objectContaining({ version: 1, items: [], dod: [] }));
+
+            const stream = await request(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: cookie },
+                body: JSON.stringify({ prompt: 'PLANRUN 做个计划', clientMessageId: 'plan-run-0001' })
+            });
+            expect(stream.response.status).toBe(200);
+            expect(stream.text).toContain('"type":"plan"');
+
+            const after = await request(`${baseUrl}/api/sessions/demo/plan`, { headers: { Cookie: cookie } });
+            expect(after.response.status).toBe(200);
+            expect(after.json.plan.items.map(item => [item.id, item.subject, item.status])).toEqual([
+                ['todo:1', '写代码', 'in_progress'],
+                ['todo:2', '写测试', 'pending'],
+                ['task:4', '跑测试', 'completed']
+            ]);
+            expect(after.json.etag).toMatch(/^[0-9a-f]{16}$/);
+
+            const messages = await request(`${baseUrl}/api/sessions/demo/messages`, { headers: { Cookie: cookie } });
+            expect(messages.json.plan.items).toHaveLength(3);
+            expect(messages.json.planEtag).toBe(after.json.etag);
+
+            const detail = await request(`${baseUrl}/api/sessions/demo/detail`, { headers: { Cookie: cookie } });
+            expect(detail.json.plan.items).toHaveLength(3);
+            expect(detail.json.planEtag).toBe(after.json.etag);
+
+            const saved = await request(`${baseUrl}/api/sessions/demo/plan/dod`, {
+                method: 'PUT',
+                headers: { Cookie: cookie, 'Content-Type': 'application/json', 'If-Match': after.json.etag },
+                body: JSON.stringify({ items: [{ text: '功能跑通', checked: true }] })
+            });
+            expect(saved.response.status).toBe(200);
+            expect(saved.json.plan.items).toHaveLength(3);
+            expect(saved.json.plan.dod[0]).toEqual(expect.objectContaining({ text: '功能跑通', checked: true, checkedBy: 'user' }));
+
+            // 第二轮不再上报计划：内容不变，不重复写盘；DoD 保留
+            await request(`${baseUrl}/api/sessions/demo/agent/stream`, {
+                method: 'POST',
+                headers: { Cookie: cookie },
+                body: JSON.stringify({ prompt: '再聊一句', clientMessageId: 'plan-run-0002' })
+            });
+            const stable = await request(`${baseUrl}/api/sessions/demo/plan`, { headers: { Cookie: cookie } });
+            expect(stable.json.plan.items).toHaveLength(3);
+            expect(stable.json.plan.dod).toHaveLength(1);
+            expect(stable.json.plan.revision).toBe(saved.json.plan.revision);
+        });
     });
 });

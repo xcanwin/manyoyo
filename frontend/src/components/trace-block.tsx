@@ -304,7 +304,7 @@ function TraceEventRow({
 
 const TASK_LIST_VISIBLE = 8
 
-function TaskStatusIcon({ status }: { status: TaskItem["status"] }) {
+export function TaskStatusIcon({ status }: { status: "pending" | "in_progress" | "completed" }) {
   if (status === "completed") return <CircleCheckIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
   if (status === "in_progress") return <CircleDotIcon className="mt-0.5 size-3.5 shrink-0 text-foreground" />
   return <CircleIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />

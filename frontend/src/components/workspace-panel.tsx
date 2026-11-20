@@ -113,6 +113,7 @@ import { FilesPanel, type FilesEditorState } from "@/components/files-panel"
 import { configLabel } from "@/lib/config-labels"
 import { ChangesPanel } from "@/components/changes-panel"
 import { NetworkPanel } from "@/components/network-panel"
+import { PlanPanel } from "@/components/plan-panel"
 import { ExtensionsPanel } from "@/components/extensions-panel"
 import { useComposerSuggestions } from "@/components/composer-suggestions"
 import { HtmlPreviewPanel, type HtmlPreviewState } from "@/components/html-preview-panel"
@@ -141,15 +142,17 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { TRACE_ALIGN_EVENT, TraceBlock } from "@/components/trace-block"
+import { normalizePlan, type Plan } from "@/lib/plan"
 import { ContainerManagePanel } from "@/components/container-manage/container-manage-panel"
 
 import { Hint } from "@/components/hint"
 import { KeyValueList } from "@/components/key-value-list"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
-type View = "activity" | "files" | "terminal" | "changes" | "network" | "extensions" | "container" | "config" | "detail"
+type View = "activity" | "plan" | "files" | "terminal" | "changes" | "network" | "extensions" | "container" | "config" | "detail"
 
 const VIEW_LABELS: Record<View, string> = {
   activity: "聊天",
+  plan: "计划",
   files: "文件",
   terminal: "终端",
   changes: "改动",
@@ -161,7 +164,7 @@ const VIEW_LABELS: Record<View, string> = {
 }
 
 // ⋯ 里按归属分两组：聊天属于 AGENT，文件、终端等属于它所在的容器
-const AGENT_VIEWS: View[] = ["activity", "detail"]
+const AGENT_VIEWS: View[] = ["activity", "plan", "detail"]
 const CONTAINER_VIEWS: View[] = ["files", "terminal", "changes", "network", "extensions", "container", "config"]
 
 // visibilitychange 与 focus 几乎同时触发，窗口内只同步一次
@@ -1310,6 +1313,13 @@ export function WorkspacePanel({
   creatingAgent: boolean
 }) {
   const [view, setView] = React.useState<View>("activity")
+  // 计划视图里从流事件拿到的实时计划（打开视图时 PlanPanel 自己会再拉一次，带 etag）
+  const [livePlan, setLivePlan] = React.useState<{ sessionName: string; plan: Plan } | null>(null)
+  const planDirtyRef = React.useRef(false)
+  const handlePlanDirty = React.useCallback((dirty: boolean) => {
+    planDirtyRef.current = dirty
+  }, [])
+  const { confirm: confirmPlanLeave, dialog: planLeaveDialog } = useConfirmDialog()
   const isMobile = useIsMobile()
   const activeSessionName = activeSession?.name ?? null
   // 终端一旦打开就常驻：切到聊天/文件等标签只是隐藏，不卸载——卸载会关掉
@@ -1526,6 +1536,15 @@ export function WorkspacePanel({
   async function changeView(next: View) {
     if (view === next) return
     if (view === "files" && !(await confirmLeaveIfDirty())) return
+    if (view === "plan" && planDirtyRef.current) {
+      const ok = await confirmPlanLeave({
+        title: "验收标准还没保存",
+        message: "切走会丢掉还没保存的修改。",
+        confirmLabel: "放弃修改",
+      })
+      if (!ok) return
+      planDirtyRef.current = false
+    }
     setView(next)
   }
 
@@ -2192,6 +2211,8 @@ export function WorkspacePanel({
               { replyMessageId: event.replyMessageId }
             )
           )
+        } else if (event.type === "plan") {
+          setLivePlan({ sessionName: name, plan: normalizePlan(event.plan) })
         } else if (event.type === "queue_next") {
           // 服务端接着发排队的下一条：这条流到此为止，后面由恢复轮询跟随下一轮
           sawQueueNext = true
@@ -2500,6 +2521,18 @@ export function WorkspacePanel({
             <EmptyPane text="请先选择左侧的容器 / AGENT" />
           )
         ) : null}
+        {view === "plan" ? (
+          activeSession ? (
+            <PlanPanel
+              key={activeSession.name}
+              session={activeSession}
+              livePlan={livePlan && livePlan.sessionName === activeSession.name ? livePlan.plan : null}
+              onDirtyChange={handlePlanDirty}
+            />
+          ) : (
+            <EmptyPane text="请先选择左侧的容器 / AGENT" />
+          )
+        ) : null}
         {view === "network" ? (
           activeSession ? (
             <NetworkPanel
@@ -2590,6 +2623,7 @@ export function WorkspacePanel({
       {view === "activity" && showBottomComposer({ emptyConversation, creatingAgent, loadingFirst: messagesLoading && !hasCachedMessages }) ? composerNode : null}
 
       {forkDialog}
+      {planLeaveDialog}
       <RewindDialog
         open={rewindTarget !== null}
         sessionName={activeSession?.name ?? ""}

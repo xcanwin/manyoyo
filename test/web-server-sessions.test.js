@@ -1104,3 +1104,56 @@ describe('Web Server Container/Agent Removal with optional history', () => {
         }
     });
 });
+
+describe('会话计划', () => {
+    test('GET /plan 返回空计划与 etag；/messages 带 plan；PUT DoD 要 If-Match，冲突 409', async () => {
+        const tempHost = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-web-plan-'));
+        const port = await getFreePort();
+        let handle = null;
+        const json = (cookie, method, body, extra = {}) => ({
+            method,
+            headers: { Cookie: cookie, 'Content-Type': 'application/json', ...extra },
+            body: JSON.stringify(body)
+        });
+        try {
+            handle = await startWebServer(buildServerOptions(tempHost, port));
+            const baseUrl = `http://127.0.0.1:${handle.port || port}`;
+            const cookie = await loginAndGetCookie(baseUrl);
+            const created = await request(`${baseUrl}/api/sessions`, json(cookie, 'POST', {
+                createOptions: { containerName: 'plana', hostPath: tempHost }
+            }));
+            expect(created.response.status).toBe(200);
+
+            const plan = await request(`${baseUrl}/api/sessions/plana/plan`, { headers: { Cookie: cookie } });
+            expect(plan.response.status).toBe(200);
+            expect(plan.json.plan).toEqual(expect.objectContaining({ version: 1, items: [], dod: [] }));
+            expect(plan.json.etag).toMatch(/^[0-9a-f]{16}$/);
+
+            const messages = await request(`${baseUrl}/api/sessions/plana/messages`, { headers: { Cookie: cookie } });
+            expect(messages.response.status).toBe(200);
+            expect(messages.json.plan).toEqual(expect.objectContaining({ items: [], dod: [] }));
+            expect(messages.json.planEtag).toBe(plan.json.etag);
+
+            const noMatch = await request(`${baseUrl}/api/sessions/plana/plan/dod`, json(cookie, 'PUT', { items: [{ text: '跑通测试' }] }));
+            expect(noMatch.response.status).toBe(428);
+            expect(noMatch.json.error).toBe('页面已更新，请刷新页面后再保存');
+
+            const saved = await request(`${baseUrl}/api/sessions/plana/plan/dod`, json(cookie, 'PUT', { items: [{ text: '跑通测试' }, { text: '已完成的', checked: true }] }, { 'If-Match': plan.json.etag }));
+            expect(saved.response.status).toBe(200);
+            expect(saved.json.plan.dod).toEqual([
+                expect.objectContaining({ text: '跑通测试', checked: false, checkedBy: 'user' }),
+                expect.objectContaining({ text: '已完成的', checked: true, checkedBy: 'user' })
+            ]);
+            expect(saved.json.plan.items).toEqual([]);
+            expect(saved.json.etag).not.toBe(plan.json.etag);
+
+            const stale = await request(`${baseUrl}/api/sessions/plana/plan/dod`, json(cookie, 'PUT', { items: [{ text: '冲突' }] }, { 'If-Match': plan.json.etag }));
+            expect(stale.response.status).toBe(409);
+            expect(stale.json.conflict).toBe(true);
+            expect(stale.json.plan.dod).toHaveLength(2);
+        } finally {
+            if (handle && typeof handle.close === 'function') await handle.close();
+            fs.rmSync(tempHost, { recursive: true, force: true });
+        }
+    });
+});

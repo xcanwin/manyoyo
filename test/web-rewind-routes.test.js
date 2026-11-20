@@ -305,3 +305,49 @@ describe('Claude：回退对话后的下一轮带 --resume-session-at，且只�
         }, { agentPromptCommand: 'claude -p {prompt}' });
     }, 90000);
 });
+
+describe('计划随回退 / 分叉重算', () => {
+    const todoEvent = (todos, toolId) => ({
+        kind: 'tool', provider: 'claude', toolName: 'TodoWrite', toolId, phase: 'started',
+        arguments: { todos: todos.map(([content, status]) => ({ content, status })) }
+    });
+    const seeded = {
+        plan: {
+            version: 1,
+            revision: 3,
+            updatedAt: '2026-01-01T00:00:00.000Z',
+            items: [{ id: 'todo:1', subject: '三', status: 'pending', source: 'agent', updatedAt: '2026-01-01T00:00:00.000Z' }],
+            dod: [{ id: 'dod_1', text: '跑通测试', note: '', checked: true, checkedAt: '2026-01-01T00:00:00.000Z', checkedBy: 'user' }]
+        },
+        messages: [
+            { id: 'u1', role: 'user', content: '第一轮', mode: 'agent', timestamp: '2026-01-01T00:00:01.000Z' },
+            { id: 't1', role: 'assistant', content: '第一轮执行过程', streamTrace: true, mode: 'agent', timestamp: '2026-01-01T00:00:02.000Z', traceEvents: [todoEvent([['一', 'completed'], ['二', 'in_progress']], 'w1')] },
+            { id: 'u2', role: 'user', content: '第二轮', mode: 'agent', timestamp: '2026-01-01T00:00:03.000Z' },
+            { id: 't2', role: 'assistant', content: '第二轮执行过程', streamTrace: true, mode: 'agent', timestamp: '2026-01-01T00:00:04.000Z', traceEvents: [todoEvent([['三', 'pending']], 'w2')] }
+        ]
+    };
+
+    test('回退后按保留的消息重算 items，DoD 保留；分叉复制 DoD 并按分叉点重算', async () => {
+        await withServer(async ctx => {
+            const before = await ctx.call('GET', '/api/sessions/demo/plan');
+            expect(before.json.plan.items.map(item => item.subject)).toEqual(['三']);
+            expect(before.json.plan.dod).toHaveLength(1);
+
+            // 先在分叉点分叉（分叉不删原消息），再回退
+            const fork = await ctx.call('POST', '/api/sessions/demo/agent/fork', { messageId: 'u2' });
+            expect(fork.status).toBe(200);
+            const forked = await ctx.call('GET', `/api/sessions/${encodeURIComponent(fork.json.name)}/plan`);
+            expect(forked.json.plan.items.map(item => item.subject)).toEqual(['一', '二']);
+            expect(forked.json.plan.dod).toEqual([expect.objectContaining({ id: 'dod_1', text: '跑通测试' })]);
+
+            const rewind = await ctx.call('POST', '/api/sessions/demo/rewind', { messageId: 'u2', scope: 'conversation' });
+            expect(rewind.status).toBe(200);
+            const after = await ctx.call('GET', '/api/sessions/demo/plan');
+            expect(after.json.plan.items.map(item => [item.id, item.subject, item.status])).toEqual([
+                ['todo:1', '一', 'completed'],
+                ['todo:2', '二', 'in_progress']
+            ]);
+            expect(after.json.plan.dod).toEqual([expect.objectContaining({ id: 'dod_1', text: '跑通测试', checked: true })]);
+        }, seeded);
+    }, 60000);
+});
