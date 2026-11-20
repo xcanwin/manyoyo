@@ -212,6 +212,7 @@ export default defineConfig({
                 { text: '迁移已有 Agent 配置', link: '/guide/migrate' },
                 { text: '网页服务与远程访问', link: '/guide/web' },
                 { text: '管理容器的 env、网络与自启动', link: '/guide/container-manage' },
+                { text: '共享技能与 MCP', link: '/guide/extensions' },
                 { text: '安全须知', link: '/guide/security' }
               ]
             },
@@ -317,6 +318,7 @@ export default defineConfig({
                 { text: 'Migrate Existing Agent Configs', link: '/en/guide/migrate' },
                 { text: 'Web Service and Remote Access', link: '/en/guide/web' },
                 { text: 'Manage env, network and autostart', link: '/en/guide/container-manage' },
+                { text: 'Shared skills and MCP', link: '/en/guide/extensions' },
                 { text: 'Security Notes', link: '/en/guide/security' }
               ]
             },

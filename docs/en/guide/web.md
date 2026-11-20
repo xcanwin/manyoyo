@@ -114,7 +114,7 @@ All of these live around the input box and can also be triggered by typing `/com
 - **Review changes**: the "Review changes" button in the Changes view toolbar, or `/review`. Claude uses its built-in `/code-review` if present, otherwise a fixed review prompt is sent; either way it is an ordinary turn. The button is disabled while a task runs or prompts are queued.
 - **Plan mode** (Claude Code only): the "Plan mode" button in the input box (it turns dark and shows "Switched to plan mode" when on) or `/plan`; this turn only makes a plan and changes no files, and it turns itself off after one send. A "Run the plan" button appears under the reply. In plan mode Claude cannot show you multiple-choice questions (that tool does not exist in web chat); when it needs more information it asks in plain text.
 - **Recap**: opening an AGENT that has been idle for 30 minutes shows a grey line "Recap: …" at the bottom of the chat, which you can close; `/recap` generates one on demand.
-- **Skills and MCP**: top bar ⋯ → container group → "Skills and MCP", a read-only list of Claude Code and Codex skills and MCP server status in the container (Claude's MCP check really connects, so it may take a few seconds). The container cannot see host skills: mount the project directory (the project's `.claude/skills` is picked up automatically) or copy them to `~/.claude/skills/` in the container.
+- **Skills and MCP**: top bar ⋯ → container group → "Skills and MCP". The upper part is the host-level shared library (add, edit, delete, sync to this container); below it, skills and MCP status as seen by each Agent in the container (Claude's MCP check really connects, so it may take a few seconds). Paths, risks and syncing are covered in [Shared skills and MCP](./extensions.md).
 - **Automatic title**: after the first message, Claude Code and Codex use one cheap model call to write a short title; a remark or a `/rename` name wins. Tried once per AGENT, never retried on failure.
 - **Tab title**: a `◐` prefix shows while the current conversation has a task running.
 
@@ -141,6 +141,23 @@ Sub-agents and task lists show up in the "execution process": a sub-agent is col
 - When you come back after a while, or the network recovers, the top bar shows sync progress and then "Synced".
 
 New container: the default container name is `my-easy-{now}`, and the host and container directories are `{quickChatPath}/{now}` (`{now}` is `YYYYMMDD-HHmmss`, `{quickChatPath}` is the quick chat directory, or `~/.manyoyo/work` if unset); all three can be changed in "Settings → Basic". The directory is only created when you click "Create and enter".
+New container: the default name is `my-easy-{now}`, the host and container directories are `{quickChatPath}/{now}` (`{now}` is `YYYYMMDD-HHMMSS`, `{quickChatPath}` is the quick-chat directory, `~/.manyoyo/work` by default). All three can be changed in "System settings → Basic"; the directory is only created when you click "Create".
+
+## Run presets in the new-container dialog
+
+After choosing a run, its autostart script, `autostartOnServe` and network rules are shown directly in the dialog, and sections with content expand automatically (marked "from run"). The form uses that preset as its baseline: unchanged fields are not sent, changed ones are. Clearing autostart, turning off serve autostart, or switching the network back to the default are all valid explicit overrides. Without a run, the global configuration applies.
+
+The dialog also scans autostart and `first` (command, `first.env`, `first.envFile`) for addresses that may need to be allowed, with target, port, source and risk. Candidates are suggestions only: they are added to the outbound allowlist only when you tick them. Cloud metadata, very wide ranges and wildcard domains are unticked by default. Detection does not cover every possible syntax and never blocks creation.
+
+## Network view
+
+Top bar ⋯ → container group → "Network" shows HTTP(S) traffic seen by the filtering proxy: allow and deny records in reverse chronological order, plus summary counts, distinct targets and bytes. Denied rows can be allowed in one click. Records contain only host, port, method, status, bytes and duration — no URL path/query, bodies, cookies or `Proxy-Authorization`.
+
+By default only containers with domain rules are observed; without them HTTP(S) is direct and the view explains why. Turning on "Record HTTP(S)" injects the proxy (without loosening any network rule) and only covers HTTP(S) that goes through it; direct IP and non-HTTP traffic remain invisible. Each container keeps at most 2000 records or 1 MiB, cleaned up when the container is deleted.
+
+## Plan view
+
+Top bar ⋯ → AGENT group → "Plan" shows the Agent's plan (Claude's TodoWrite / TaskCreate / TaskUpdate) and lets you maintain your own definition-of-done checklist. The plan is stored with the session, so it survives refreshes, devices, rewinds and forks; rewinds/forks recompute plan items from the retained messages while the checklist is kept. The checklist is display-only: it never blocks the Agent and never executes commands. `/plan` is a prompt mode that asks Claude to plan before editing files — it is not this panel.
 
 Disk usage: removing a container does not remove its work directory on the host. "Settings → Maintenance → Disk usage" lists usage per directory, and work directories whose containers are gone or unused can be cleaned up there; your own project directories, directories pinned by a fixed `hostPath` in the config, and directories containing other mounted disks are never deleted. Each directory can be opened to see its files, and the page also lets you clean up conversation history left by deleted containers. The "empty directories whose container and history are both deleted" filter clears all empty directories in one click; when you delete a container from the sidebar with "delete together with history", its work directory is removed too if it sits inside the MANYOYO work directory and is empty.
 

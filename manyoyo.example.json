@@ -119,6 +119,8 @@
     },
 
     // 运行配置集合：通过 -r <name> 读取 runs.<name>
+    // 网页新建容器时会带入所选配置的 autostart / autostartOnServe / network（可在弹窗里显式覆盖）；
+    // first（命令 / env / envFile）里的地址会被识别成“可能需要放行”的候选，勾选后才加入白名单
     "runs": {
         "claude": {
             "containerName": "my-claude-{now}",

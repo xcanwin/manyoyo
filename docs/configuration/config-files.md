@@ -16,7 +16,8 @@ description: "~/.manyoyo/manyoyo.json 的全部字段、合并规则与最小示
 - 标量字段：取最高优先级的值。
 - `env`：按 key 合并，后者覆盖前者。
 - `envFile`、`volumes`、`ports`、`imageBuildArgs`：按「全局 → `runs.<name>` → 命令行」追加。
-- `serverUser` / `serverPass`：命令行 > `runs.<name>` > 全局配置 > 环境变量 > 默认值。
+- `autostart` / `autostartOnServe` / `network`：网页新建容器时按同一优先级（请求 > `runs.<name>` > 全局）带入弹窗，并以带入的值为基线；没改的字段不发送，清空 / 关闭 / 改回默认都是合法的显式覆盖。
+- `first`（命令、`first.env`、`first.envFile`）里的域名、IP、端口会在新建容器弹窗里被识别成“可能需要放行的地址”（只提示，勾选后才加入白名单；识别失败不影响创建）。
 
 ```json5
 {

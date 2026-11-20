@@ -122,3 +122,7 @@ You can also set them in `manyoyo.json` globally or under `runs.<name>` when cre
 - **Are rules lost when the container restarts?** No: manyoyo re-applies them after every start, and autostart and the agent do not run before that. While serve is running it watches container start events, so an external restart (`podman restart`) is re-applied automatically.
 - **"Network rules failed to apply"?** The page shows the reason; the existing rules stay and the container stays "not released". Typical causes: the image has no `nft` (old image, upgrade it) or the runtime is unavailable.
 - **Does Docker work?** Yes. On macOS, Docker Desktop must share `~/.manyoyo` (the user directory is shared by default).
+
+## Recording HTTP(S)
+
+Turning on "Record HTTP(S)" in the Network view injects the filtering proxy and records HTTP(S) that goes through it: host, port, method, status, bytes and duration (no URL path/query, bodies, cookies or `Proxy-Authorization`). It does not loosen any network rule and cannot see direct IP or non-HTTP traffic; turning it off restores direct connections. Each container keeps at most 2000 records or 1 MiB, cleaned up when the container is deleted.
