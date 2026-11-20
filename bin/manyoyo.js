@@ -50,6 +50,8 @@ const {
 const { applyAptMirror } = require('../lib/mirrors');
 const containerState = require('../lib/container-state');
 const { clearEgressData } = require('../lib/egress-sidecar');
+const extensionsStore = require('../lib/extensions-store');
+const extensionsApply = require('../lib/extensions-apply');
 const { buildExecArgs, resolveContainerId } = require('../lib/container-exec');
 const { createNetworkManager, NETWORK_NAME } = require('../lib/container-network');
 const { normalizePolicy, isUnrestricted: isUnrestrictedPolicy } = require('../lib/network-policy');
