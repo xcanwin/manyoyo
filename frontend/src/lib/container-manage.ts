@@ -121,12 +121,15 @@ export function samePolicy(a: NetworkPolicy, b: NetworkPolicy): boolean {
   return JSON.stringify(canon(a)) === JSON.stringify(canon(b))
 }
 
-// 新建容器时要发给服务端的 network：与默认（收紧、无规则）相同就不发，交给 runs / 全局配置与服务端默认
-// autostartOnServe 单独走自己的字段，不在 network 里
-export function networkForCreate(policy: NetworkPolicy): Omit<NetworkPolicy, "autostartOnServe"> | undefined {
+// 新建容器时要发给服务端的 network：与基线（没选运行配置时是默认策略，选了就是服务端返回的预设）相同就不发，
+// 交给 runs / 全局配置与服务端默认；与基线不同才发（包括把预设改回默认）。autostartOnServe 单独走自己的字段。
+export function networkForCreate(
+  policy: NetworkPolicy,
+  baseline: NetworkPolicy = defaultPolicy()
+): Omit<NetworkPolicy, "autostartOnServe"> | undefined {
   const rest: Partial<NetworkPolicy> = cleanPolicy(policy)
   delete rest.autostartOnServe
-  const base: Partial<NetworkPolicy> = defaultPolicy()
+  const base: Partial<NetworkPolicy> = cleanPolicy(baseline)
   delete base.autostartOnServe
   return samePolicy(rest as NetworkPolicy, base as NetworkPolicy) ? undefined : (rest as Omit<NetworkPolicy, "autostartOnServe">)
 }

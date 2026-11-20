@@ -218,7 +218,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
         });
 
         test('新建时填的提示词写进状态目录；没填就按系统设置现算', async () => {
-            const create = body => request(`${baseUrl}/api/sessions`, json(cookie, 'POST', { createOptions: { hostPath: tempHost, imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.0.0-common', ...body } }));
+            const create = ({ run, ...body } = {}) => request(`${baseUrl}/api/sessions`, json(cookie, 'POST', { ...(run ? { run } : {}), createOptions: { hostPath: tempHost, imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.0.0-common', ...body } }));
             const before = new Set(state.listStateIds(tempHost));
             const withPrompt = await create({ containerName: 'promptbox1', systemPrompt: { enabled: false, text: '创建时写的' } });
             expect(withPrompt.response.status).toBe(200);
@@ -444,7 +444,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
 
     describe('新建会话带自启动与网络', () => {
         test('autostart / network 写进状态目录；自定义或非本机绑定没有 confirmRisk 时 400', async () => {
-            const create = body => request(`${baseUrl}/api/sessions`, json(cookie, 'POST', { createOptions: { hostPath: tempHost, imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.0.0-common', ...body } }));
+            const create = ({ run, ...body } = {}) => request(`${baseUrl}/api/sessions`, json(cookie, 'POST', { ...(run ? { run } : {}), createOptions: { hostPath: tempHost, imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.0.0-common', ...body } }));
             const risky = await create({ containerName: 'newbox1', network: { preset: 'custom', outbound: [allowRow('@any')] } });
             expect(risky.response.status).toBe(400);
             expect(risky.text).toContain('confirmRisk');
@@ -467,6 +467,117 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             const withExpose = await create({ containerName: 'newbox4', network: { expose: [{ bind: '127.0.0.1', hostPort, port: 8080 }] }, confirmRisk: true });
             expect(withExpose.response.status).toBe(200);
             await new Promise((resolve, reject) => { const c = net.connect(hostPort, '127.0.0.1', () => { c.destroy(); resolve(); }); c.on('error', reject); });
+        });
+    });
+
+    describe('新建容器预设与确认基线', () => {
+        const configPath = () => path.join(tempHost, 'manyoyo.json');
+        const preset = (query = '') => request(`${baseUrl}/api/system/new-container-preset${query}`, { headers: { Cookie: cookie } });
+        const create = ({ run, ...body } = {}) => request(`${baseUrl}/api/sessions`, json(cookie, 'POST', { ...(run ? { run } : {}), createOptions: { hostPath: tempHost, imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.0.0-common', ...body } }));
+        const idOf = name => state.listStateIds(tempHost).find(id => {
+            try { return state.readMeta(tempHost, id).name === name; } catch (e) { return false; }
+        });
+
+        test('未登录 401；run 不存在 404；run 名非法 400；配置解析失败 400', async () => {
+            expect((await request(`${baseUrl}/api/system/new-container-preset`)).response.status).toBe(401);
+
+            fs.writeFileSync(configPath(), '{ autostart: "boot", network: { preset: "allowlist" } }\n', 'utf-8');
+            expect((await preset('?run=nothere')).response.status).toBe(404);
+            expect((await preset('?run=%01bad')).response.status).toBe(400);
+
+            fs.writeFileSync(configPath(), '{ autostart: ', 'utf-8');
+            const broken = await preset();
+            expect(broken.response.status).toBe(400);
+            expect(broken.json.error).toBeTruthy();
+            expect(broken.text).not.toContain('autostart: "boot"');
+        });
+
+        test('按 请求 > runs.<name> > 全局 返回自启动 / autostartOnServe / v2 网络（v1 一次性迁移）', async () => {
+            fs.writeFileSync(configPath(), JSON.stringify({
+                autostart: 'global-boot\n',
+                autostartOnServe: true,
+                network: { preset: 'allowlist', egress: { domains: ['global.example.com'] } },
+                runs: {
+                    qa: {
+                        autostart: 'run-boot\n',
+                        autostartOnServe: false,
+                        network: { outbound: [{ action: 'allow', target: '10.2.0.0/16', ports: '443', proto: 'tcp', enabled: true }] }
+                    },
+                    plain: {}
+                }
+            }, null, 2), 'utf-8');
+
+            const globalOnly = await preset();
+            expect(globalOnly.response.status).toBe(200);
+            expect(globalOnly.json).toEqual(expect.objectContaining({
+                run: '',
+                autostart: 'global-boot\n',
+                autostartOnServe: true
+            }));
+            // v1 的 domains 在返回时转换成 v2 的允许规则（不写盘）
+            expect(globalOnly.json.network).toEqual(expect.objectContaining({ version: 2, preset: 'allowlist', autostartOnServe: true }));
+            expect(globalOnly.json.network.outbound).toEqual([expect.objectContaining({ action: 'allow', target: 'global.example.com', enabled: true })]);
+            expect(fs.readFileSync(configPath(), 'utf-8')).toContain('"egress"');
+
+            const qa = await preset('?run=qa');
+            expect(qa.response.status).toBe(200);
+            expect(qa.json).toEqual(expect.objectContaining({ run: 'qa', autostart: 'run-boot\n', autostartOnServe: false }));
+            expect(qa.json.network).toEqual(expect.objectContaining({
+                version: 2,
+                preset: 'restricted',
+                autostartOnServe: false,
+                outbound: [{ action: 'allow', target: '10.2.0.0/16', ports: '443', proto: 'tcp', enabled: true }]
+            }));
+
+            // 运行配置没写自启动就继承全局
+            const plain = await preset('?run=plain');
+            expect(plain.json).toEqual(expect.objectContaining({ autostart: 'global-boot\n', autostartOnServe: true }));
+        });
+
+        test('预设里已有的宽规则不重复确认；在预设上新增宽规则仍要确认', async () => {
+            const wide = { action: 'allow', target: '@host', ports: '', proto: 'all', enabled: true };
+            fs.writeFileSync(configPath(), JSON.stringify({
+                runs: { qa: { network: { preset: 'allowlist', outbound: [wide] } } }
+            }, null, 2), 'utf-8');
+
+            const same = await create({ run: 'qa', containerName: 'preset-same', network: { preset: 'allowlist', outbound: [wide] } });
+            expect(same.response.status).toBe(200);
+            expect(state.readNetworkRaw(tempHost, idOf('preset-same')).outbound).toEqual([wide]);
+
+            const added = await create({
+                run: 'qa',
+                containerName: 'preset-added',
+                network: { preset: 'allowlist', outbound: [wide, { action: 'allow', target: '@any', ports: '', proto: 'all', enabled: true }] }
+            });
+            expect(added.response.status).toBe(400);
+            expect(added.text).toContain('confirmRisk');
+
+            const confirmed = await create({
+                run: 'qa',
+                containerName: 'preset-confirmed',
+                confirmRisk: true,
+                network: { preset: 'allowlist', outbound: [wide, { action: 'allow', target: '@any', ports: '', proto: 'all', enabled: true }] }
+            });
+            expect(confirmed.response.status).toBe(200);
+            expect(state.readNetworkRaw(tempHost, idOf('preset-confirmed')).outbound).toHaveLength(2);
+        });
+
+        test('autostart 空串与 autostartOnServe: false 能显式覆盖运行配置', async () => {
+            fs.writeFileSync(configPath(), JSON.stringify({
+                runs: { qa: { autostart: 'run-boot\n', autostartOnServe: true } }
+            }, null, 2), 'utf-8');
+
+            const inherited = await create({ run: 'qa', containerName: 'inherit-qa' });
+            expect(inherited.response.status).toBe(200);
+            const inheritedId = idOf('inherit-qa');
+            expect(state.readAutostart(tempHost, inheritedId)).toBe('run-boot\n');
+            expect(state.readNetworkRaw(tempHost, inheritedId).autostartOnServe).toBe(true);
+
+            const overridden = await create({ run: 'qa', containerName: 'override-qa', autostart: '', autostartOnServe: false });
+            expect(overridden.response.status).toBe(200);
+            const overriddenId = idOf('override-qa');
+            expect(state.readAutostart(tempHost, overriddenId)).toBe('');
+            expect(state.readNetworkRaw(tempHost, overriddenId).autostartOnServe).toBe(false);
         });
     });
 });

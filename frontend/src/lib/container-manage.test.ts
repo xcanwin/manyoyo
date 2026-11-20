@@ -28,6 +28,7 @@ import {
   validateRule,
   validateTarget,
 } from "./container-manage"
+import { mergeSelectedCandidates, type EndpointCandidate } from "./network-infer"
 
 // 与 test/env-text.test.js 同一组语料（服务端 node 实现、容器内 bash 实现都对照过）
 const CORPUS: Array<[string, Record<string, string>]> = [
@@ -127,6 +128,56 @@ describe("新建容器的 network", () => {
     expect(sent).toEqual(expect.objectContaining({ preset: "custom", version: 2 }))
     expect(sent).not.toHaveProperty("autostartOnServe")
     expect(networkForCreate(withOut(rule("allow", " github.com ", { ports: "443, 80" })))?.outbound).toEqual([rule("allow", "github.com", { ports: "443,80" })])
+  })
+
+  test("与预设基线比较：非默认基线改回默认也能发出去；与基线相同不发；空行不算", () => {
+    const baseline: NetworkPolicy = { ...defaultPolicy(), preset: "allowlist", outbound: [rule("allow", "corp.example.com")] }
+    expect(networkForCreate(defaultPolicy(), baseline)).toEqual(expect.objectContaining({ preset: "restricted", outbound: [] }))
+    expect(networkForCreate(baseline, baseline)).toBeUndefined()
+    expect(networkForCreate({ ...baseline, autostartOnServe: true }, baseline)).toBeUndefined()
+    const extra = networkForCreate({ ...baseline, outbound: [...baseline.outbound, rule("allow", "api.example.com")] }, baseline)
+    expect(extra?.outbound).toEqual([rule("allow", "corp.example.com"), rule("allow", "api.example.com")])
+    expect(networkForCreate(withOut(rule("allow", "  ")), defaultPolicy())).toBeUndefined()
+  })
+})
+
+describe("合并地址识别候选", () => {
+  const candidate = (overrides: Partial<EndpointCandidate>): EndpointCandidate => ({
+    id: "domain|api.example.com|443",
+    kind: "domain",
+    target: "api.example.com",
+    ports: "443",
+    proto: "tcp",
+    sources: ["autostart"],
+    evidence: "https://api.example.com",
+    resolved: [],
+    risk: "",
+    defaultChecked: true,
+    ...overrides,
+  })
+
+  test("按候选顺序插到出站规则最前；域名候选同时补私有解析地址；已存在的允许规则不重复添加", () => {
+    const base: NetworkPolicy = { ...defaultPolicy(), outbound: [rule("allow", "keep.example.com")] }
+    const candidates = [
+      candidate({ id: "domain|api.example.com|443", target: "api.example.com", resolved: ["10.2.3.4"] }),
+      candidate({ id: "cidr|10.9.0.0/16|", kind: "cidr", target: "10.9.0.0/16", ports: "", proto: "all", evidence: "10.9.0.0/16" }),
+      candidate({ id: "host|@host|8080", kind: "host", target: "@host", ports: "8080", proto: "tcp", evidence: "@host:8080" }),
+    ]
+    const merged = mergeSelectedCandidates(base, candidates, new Set(candidates.map((c) => c.id)))
+    expect(merged.outbound.map((r) => [r.action, r.target, r.ports, r.proto])).toEqual([
+      ["allow", "api.example.com", "443", "tcp"],
+      ["allow", "10.2.3.4", "443", "tcp"],
+      ["allow", "10.9.0.0/16", "", "all"],
+      ["allow", "@host", "8080", "tcp"],
+      ["allow", "keep.example.com", "", "all"],
+    ])
+
+    const again = mergeSelectedCandidates(merged, candidates, new Set(candidates.map((c) => c.id)))
+    expect(again.outbound).toHaveLength(5)
+    const none = mergeSelectedCandidates(base, candidates, new Set())
+    expect(none).toBe(base)
+    const partial = mergeSelectedCandidates(base, candidates, new Set([candidates[2].id]))
+    expect(partial.outbound.map((r) => r.target)).toEqual(["@host", "keep.example.com"])
   })
 })
 
