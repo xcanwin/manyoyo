@@ -9,7 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { sidecarName } = require('../../../lib/egress-sidecar');
+const { sidecarName, chooseSidecarIp, subnetOfNetwork } = require('../../../lib/egress-sidecar');
 
 const SLOTS = 5;
 const SLOT_DIR = path.join(os.tmpdir(), 'manyoyo-it-sidecar-slots');
@@ -32,6 +32,39 @@ function alive(pid) {
 }
 
 // 运行中的 sidecar 占的槽位（真正会撞地址的）与其他测试进程刚领走的槽位分开返回
+// 实际占用了 sidecar 固定 IP 的槽位：用户容器可能是动态拿到 .250 的，只避开其它 sidecar 不够
+function slotsWithUsedIps(runtime) {
+    const used = new Set();
+    const network = spawnSync(runtime, ['network', 'inspect', 'manyoyo', '--format', '{{json .}}'], { encoding: 'utf-8' });
+    if (network.status !== 0) return used;
+    let subnet = '';
+    try {
+        const parsed = JSON.parse(String(network.stdout || 'null'));
+        subnet = subnetOfNetwork(parsed);
+    } catch (e) {
+        return used;
+    }
+    if (!subnet) return used;
+    const ipSlots = new Map();
+    for (let i = 0; i < 200 && ipSlots.size < SLOTS; i += 1) {
+        const probe = path.join(os.tmpdir(), `manyoyo-slot-probe-${i}`);
+        try {
+            ipSlots.set(chooseSidecarIp(subnet, probe), slotOfHome(probe));
+        } catch (e) {
+            break;
+        }
+    }
+    const ps = spawnSync(runtime, ['ps', '--format', '{{.Names}}'], { encoding: 'utf-8' });
+    if (ps.status !== 0) return used;
+    for (const name of String(ps.stdout || '').split('\n').map(value => value.trim()).filter(Boolean)) {
+        const inspected = spawnSync(runtime, ['inspect', '--format', '{{with index .NetworkSettings.Networks "manyoyo"}}{{.IPAddress}}{{end}}', name], { encoding: 'utf-8' });
+        if (inspected.status !== 0) continue;
+        const ip = String(inspected.stdout || '').trim();
+        if (ipSlots.has(ip)) used.add(ipSlots.get(ip));
+    }
+    return used;
+}
+
 function occupiedSlots() {
     const sidecars = new Set();
     for (const runtime of ['podman', 'docker']) {
@@ -41,6 +74,7 @@ function occupiedSlots() {
             const m = /^manyoyo-egress-([0-9a-f]{8})$/.exec(name.trim());
             if (m) sidecars.add(slotOfHash(m[1]));
         }
+        slotsWithUsedIps(runtime).forEach(slot => sidecars.add(slot));
     }
     const reserved = new Set();
     fs.mkdirSync(SLOT_DIR, { recursive: true });

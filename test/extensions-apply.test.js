@@ -237,3 +237,39 @@ describe('extensions-apply：受管标记与失败重试', () => {
         expect(apply.readState(home, 'fedcba9876543210').pending).toBe(false);
     });
 });
+
+describe('extensions-apply：超限技能整体跳过', () => {
+    let home;
+    beforeEach(() => {
+        home = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-oversize-'));
+        store.writeSkill(home, 'common', 'demo', '---\nname: demo\n---\nok\n');
+        store.writeSkill(home, 'common', 'big', '---\nname: big\n---\nok\n');
+        fs.writeFileSync(path.join(home, '.manyoyo', 'extensions', 'skills', 'common', 'big', 'assets.bin'), Buffer.alloc(2 * 1024 * 1024, 1));
+    });
+    afterEach(() => {
+        fs.rmSync(home, { recursive: true, force: true });
+    });
+
+    test('skillDirHash 不读取超限文件；同步跳过该技能并给 warning，状态不 pending', async () => {
+        const bigDir = path.join(home, '.manyoyo', 'extensions', 'skills', 'common', 'big');
+        const spy = jest.spyOn(fs, 'readFileSync');
+        expect(apply.skillDirHash(bigDir)).toBe('');
+        expect(spy.mock.calls.every(call => !String(call[0]).endsWith('assets.bin'))).toBe(true);
+        spy.mockRestore();
+
+        const run = async (args) => {
+            if (args[0] === 'node' && args[2] === apply.SKILL_LINK_SCRIPT) {
+                const params = JSON.parse(args[3]);
+                return { code: 0, stdout: JSON.stringify({ skills: { claude: params.items.claude.map(item => item.name), codex: params.items.codex.map(item => item.name) }, conflicts: [], warnings: [] }), stderr: '' };
+            }
+            if (args[0] === 'node' && args[2] === apply.MCP_EXISTS_SCRIPT) return { code: 0, stdout: JSON.stringify({ claude: [], codex: [] }), stderr: '' };
+            return { code: 0, stdout: '{}', stderr: '' };
+        };
+        const first = await apply.applyExtensions({ homeDir: home, containerName: 'box', containerId: '0123456789abcdef', mode: 'mount', runInContainer: run });
+        expect(first.warnings.join('\n')).toContain('common/big');
+        expect(first.pending).toBe(false);
+        expect(apply.readState(home, '0123456789abcdef').skills.claude).toEqual(['demo']);
+        const second = await apply.applyExtensions({ homeDir: home, containerName: 'box', containerId: '0123456789abcdef', mode: 'mount', runInContainer: run });
+        expect(second).toEqual(expect.objectContaining({ applied: false, skipped: true }));
+    });
+});

@@ -39,7 +39,7 @@ type Skill = { name: string; source: string; description: string }
 type Mcp = { name: string; detail: string; status: string; tone: "success" | "warning" | "error" }
 type AgentExtensions = { program: string; label: string; skills: Skill[]; mcp: Mcp[] }
 
-type SharedSkill = { agent: "common" | "claude" | "codex"; name: string; description: string; updatedAt: string; nameMismatch?: boolean }
+type SharedSkill = { agent: "common" | "claude" | "codex"; name: string; description: string; updatedAt: string; nameMismatch?: boolean; oversized?: boolean }
 type SharedMcp = { id: string; name: string; agents: string[]; transport: string; enabled: boolean; hasEnv?: boolean; hasHeaders?: boolean }
 type SharedStatus = {
   mode: string
@@ -148,7 +148,12 @@ export function ExtensionsPanel({ session }: { session: SessionSummary }) {
       const result = await apiPost(`${base}/apply`, {})
       const warnings = Array.isArray(result.warnings) ? (result.warnings as string[]) : []
       const conflicts = Array.isArray(result.conflicts) ? result.conflicts : []
-      setNotice(`已同步${conflicts.length ? `，${conflicts.length} 项冲突未覆盖` : ""}${warnings.length ? `，${warnings.length} 条警告` : ""}`)
+      const pending = result.pending === true
+      setNotice(
+        pending
+          ? `同步未完成，可重试${conflicts.length ? `（${conflicts.length} 项冲突未覆盖）` : ""}${warnings.length ? `：${warnings[0]}` : ""}`
+          : `已同步${conflicts.length ? `，${conflicts.length} 项冲突未覆盖` : ""}${warnings.length ? `，${warnings.length} 条警告` : ""}`
+      )
       load()
     } catch (err) {
       setError(err instanceof Error ? err.message : "同步失败")
@@ -282,6 +287,7 @@ export function ExtensionsPanel({ session }: { session: SessionSummary }) {
         <span className="flex flex-wrap items-center gap-1">
           <Badge variant="secondary">{s.agent === "common" ? "全部" : s.agent}</Badge>
           {s.nameMismatch ? <Badge variant="warning">目录名与 name 不一致</Badge> : null}
+          {s.oversized ? <Badge variant="warning">超过大小上限，未同步</Badge> : null}
         </span>
       ),
     },

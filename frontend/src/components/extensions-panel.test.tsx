@@ -11,8 +11,10 @@ const session = { name: "demo", containerName: "demo", agentId: "default" } as S
 let container: HTMLDivElement
 let root: Root
 let payload: unknown
+let applyResult: Record<string, unknown>
 
 beforeEach(() => {
+  applyResult = { warnings: [], conflicts: [] }
   payload = {
     agents: [
       {
@@ -38,7 +40,7 @@ beforeEach(() => {
         mcp: [{ id: "abc123", name: "echo", agents: ["claude"], transport: "stdio", enabled: true }],
       }))
     }
-    if (String(url).includes("/extensions/apply")) return new Response(JSON.stringify({ warnings: [], conflicts: [] }))
+    if (String(url).includes("/extensions/apply")) return new Response(JSON.stringify(applyResult))
     return new Response(JSON.stringify(payload))
   }))
   container = document.createElement("div")
@@ -78,6 +80,17 @@ describe("技能与 MCP 面板", () => {
     expect(text).toContain("echo")
     expect(text).toContain("同步到当前容器")
     expect(text).toContain("共享 MCP 的密钥会出现在所有使用该条目的容器里")
+  })
+
+  test("同步返回 pending:true 时提示未完成、可重试", async () => {
+    applyResult = { pending: true, warnings: ['同步共享技能失败: boom'], conflicts: [] }
+    await act(async () => root.render(<ExtensionsPanel session={session} />))
+    await flush()
+    const sync = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((item) => item.textContent?.includes("同步到当前容器"))!
+    await act(async () => sync.click())
+    await flush()
+    expect(container.textContent).toContain("同步未完成，可重试")
+    expect(container.textContent).not.toContain("已同步")
   })
 
   test("同步到当前容器：调用 apply 并显示结果", async () => {

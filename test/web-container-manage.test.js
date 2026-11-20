@@ -6,6 +6,8 @@ const os = require('os');
 const path = require('path');
 const { startWebServer } = require('../lib/web/server');
 const state = require('../lib/container-state');
+const extensionsStore = require('../lib/extensions-store');
+const extensionsApply = require('../lib/extensions-apply');
 const { normalizePolicy } = require('../lib/network-policy');
 const allowRow = (target, extra = {}) => ({ action: 'allow', target, ports: '', proto: 'all', enabled: true, ...extra });
 
@@ -418,6 +420,35 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(removed.json.forwards).toEqual([]);
             await expect(new Promise((resolve, reject) => { const s = net.connect(hostPort, '127.0.0.1', () => { s.destroy(); resolve(); }); s.on('error', reject); })).rejects.toBeTruthy();
             expect((await request(`${baseUrl}/api/containers/boxa/expose`, json(cookie, 'DELETE', { bind: '127.0.0.1', hostPort }))).response.status).toBe(404);
+        });
+    });
+
+    describe('共享扩展状态', () => {
+        test('state.pending=true 时 shared.pending 为 true；完整成功（pending 不在）且哈希一致才为 false', async () => {
+            const currentHash = extensionsStore.catalogHash(tempHost);
+            extensionsApply.writeState(tempHost, boxA.id, {
+                mode: 'mount',
+                catalogHash: currentHash,
+                pending: true,
+                skills: { claude: [], codex: [] },
+                mcp: { claude: [], codex: [] },
+                conflicts: []
+            });
+            const failed = await request(`${baseUrl}/api/sessions/boxa/extensions`, { headers: { Cookie: cookie } });
+            expect(failed.response.status).toBe(200);
+            expect(failed.json.shared).toEqual(expect.objectContaining({ pending: true, mode: 'mount' }));
+
+            extensionsApply.writeState(tempHost, boxA.id, {
+                mode: 'mount',
+                catalogHash: currentHash,
+                pending: false,
+                skills: { claude: [], codex: [] },
+                mcp: { claude: [], codex: [] },
+                conflicts: []
+            });
+            const ok = await request(`${baseUrl}/api/sessions/boxa/extensions`, { headers: { Cookie: cookie } });
+            expect(ok.response.status).toBe(200);
+            expect(ok.json.shared).toEqual(expect.objectContaining({ pending: false }));
         });
     });
 
