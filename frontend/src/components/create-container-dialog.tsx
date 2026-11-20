@@ -2,8 +2,12 @@ import * as React from "react"
 
 import { useAgentAvailability } from "@/hooks/use-agent-availability"
 import { AGENT_UNAVAILABLE_HINT } from "@/lib/setup"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Spinner } from "@/components/ui/spinner"
 import {
   Dialog,
   DialogBody,
@@ -23,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Hint } from "@/components/hint"
 import { fetchModelServices, runLabel, runLabelMap } from "@/lib/model-services"
 import { apiGet, apiPost } from "@/lib/api"
 import { expandTemplate, formatNow } from "@/lib/name-template"
@@ -39,8 +44,15 @@ import {
   parseEnvText,
   policyProblems,
   policyRisks,
+  PRESET_LABELS,
   type NetworkPolicy,
 } from "@/lib/container-manage"
+import {
+  mergeSelectedCandidates,
+  type EndpointCandidate,
+  type InferResponse,
+  type NewContainerPreset,
+} from "@/lib/network-infer"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 
 import { KeyLabel } from "@/components/key-label"
@@ -99,6 +111,19 @@ type RunPreset = {
   [key: string]: unknown
 }
 
+const SOURCE_LABELS: Record<EndpointCandidate["sources"][number], string> = {
+  autostart: "自启动",
+  first: "首次命令",
+  "first.env": "首次环境变量",
+  "first.envFile": "首次环境变量文件",
+}
+
+const RISK_LABELS: Record<Exclude<EndpointCandidate["risk"], "">, string> = {
+  private: "内网",
+  metadata: "云元数据",
+  wide: "范围很大",
+}
+
 function parseLines(text: string): string[] {
   return text
     .split("\n")
@@ -113,7 +138,36 @@ function parseEnvForm(text: string): Record<string, string> | undefined {
     : undefined
 }
 
-function buildCreateOptions(form: CreateContainerForm) {
+function hasNetworkContent(policy: NetworkPolicy): boolean {
+  return networkForCreate(policy) !== undefined || policy.auditHttp === true
+}
+
+const ruleKey = (target: string, ports: string, proto: string) =>
+  `allow|${target}|${ports}|${proto}`
+
+function hasSameAllowRule(policy: NetworkPolicy, candidate: EndpointCandidate): boolean {
+  const existing = new Set(
+    policy.outbound
+      .filter((rule) => rule.action === "allow")
+      .map((rule) => ruleKey((rule.target ?? "").trim().toLowerCase(), rule.ports, rule.proto))
+  )
+  return existing.has(ruleKey(candidate.target.toLowerCase(), candidate.ports, candidate.proto))
+}
+
+function coversDeniedRule(policy: NetworkPolicy, candidate: EndpointCandidate): boolean {
+  return policy.outbound.some(
+    (rule) =>
+      rule.enabled &&
+      rule.action === "deny" &&
+      (rule.target ?? "").trim().toLowerCase() === candidate.target.toLowerCase()
+  )
+}
+
+function buildCreateOptions(
+  form: CreateContainerForm,
+  preset: NewContainerPreset | null,
+  mergedNetwork: NetworkPolicy
+) {
   const options: Record<string, unknown> = {}
   type StringKey = {
     [K in keyof CreateContainerForm]: CreateContainerForm[K] extends string
@@ -143,8 +197,11 @@ function buildCreateOptions(form: CreateContainerForm) {
   if (envFile.length) options.envFile = envFile
   const volumes = parseLines(form.volumes)
   if (volumes.length) options.volumes = volumes
-  if (form.autostart.trim()) options.autostart = form.autostart
-  if (form.autostartOnServe) options.autostartOnServe = true
+  // 只有相对预设（没有预设时是空值）改过才发送；空串 / false 也是合法的显式覆盖
+  if (form.autostart !== (preset?.autostart ?? "")) options.autostart = form.autostart
+  if (form.autostartOnServe !== (preset?.autostartOnServe ?? false)) {
+    options.autostartOnServe = form.autostartOnServe
+  }
   // 没改过内容就不带，由服务端按所选运行配置算默认值
   if (
     !form.systemPromptEnabled ||
@@ -155,8 +212,8 @@ function buildCreateOptions(form: CreateContainerForm) {
       text: form.systemPrompt,
     }
   }
-  // 放开类的改动（自定义）已在编辑器里确认过，这里带上 confirmRisk
-  const network = networkForCreate(form.network)
+  // 与预设不同才发（包括把预设改回默认）；放开类的改动已在编辑器 / 这里确认过，带上 confirmRisk
+  const network = networkForCreate(mergedNetwork, preset?.network ?? defaultPolicy())
   if (network) {
     options.network = network
     options.confirmRisk = true
@@ -183,10 +240,133 @@ export function CreateContainerDialog({
   // 默认建议的工作目录（工作目录根/时间戳，和快捷对话一样）：只是预填，点“创建”时才真的建目录
   const [suggestedDir, setSuggestedDir] = React.useState("")
   const [suggestedContainerPath, setSuggestedContainerPath] = React.useState("")
+  // 服务端返回的预设（“没有请求覆盖时的有效配置”）：表单以它为基线，只发送改过的字段
+  const [preset, setPreset] = React.useState<NewContainerPreset | null>(null)
+  const [presetLoading, setPresetLoading] = React.useState(false)
+  const [presetError, setPresetError] = React.useState("")
+  const [presetVersion, setPresetVersion] = React.useState(0)
+  // 自动展开：初始 / 切换运行配置时按预设内容展开；之后尊重用户的手动开合
+  const [expansion, setExpansion] = React.useState({ autostart: false, network: false })
+  // 地址识别候选（只是建议，用户勾选后才加入白名单）
+  const [candidates, setCandidates] = React.useState<EndpointCandidate[]>([])
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+  const [inferLoading, setInferLoading] = React.useState(false)
+  const [inferError, setInferError] = React.useState("")
+  const [inferTruncated, setInferTruncated] = React.useState(false)
+  const candidatesRef = React.useRef<HTMLDivElement>(null)
+  const selectedRef = React.useRef<Set<string>>(new Set())
+  const seenCandidateIdsRef = React.useRef<Set<string>>(new Set())
+  const candidatesAutoExpandedRef = React.useRef(false)
+  const inferTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const inferSeqRef = React.useRef(0)
+  const presetSeqRef = React.useRef(0)
+  const loadSeqRef = React.useRef(0)
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
   const isAgentAvailable = useAgentAvailability(open)
 
+  function applySelected(next: Set<string>) {
+    selectedRef.current = next
+    setSelectedIds(next)
+  }
+
+  function resetCandidates() {
+    seenCandidateIdsRef.current = new Set()
+    applySelected(new Set())
+    setCandidates([])
+    setInferTruncated(false)
+    setInferError("")
+  }
+
+  function applyInfer(data: InferResponse) {
+    const seen = seenCandidateIdsRef.current
+    const next = new Set<string>()
+    for (const candidate of data.candidates) {
+      if (selectedRef.current.has(candidate.id)) next.add(candidate.id)
+      else if (!seen.has(candidate.id) && candidate.defaultChecked) next.add(candidate.id)
+    }
+    data.candidates.forEach((candidate) => seen.add(candidate.id))
+    applySelected(next)
+    setCandidates(data.candidates)
+    setInferTruncated(Boolean(data.truncated))
+    if (data.candidates.length && !candidatesAutoExpandedRef.current) {
+      candidatesAutoExpandedRef.current = true
+      setExpansion((prev) => (prev.network ? prev : { ...prev, network: true }))
+    }
+  }
+
+  function scheduleInfer(
+    autostart: string | undefined,
+    runName: string,
+    networkPreset: NetworkPolicy["preset"],
+    delay: number
+  ) {
+    if (inferTimerRef.current) clearTimeout(inferTimerRef.current)
+    const seq = ++inferSeqRef.current
+    const fire = async () => {
+      setInferLoading(true)
+      setInferError("")
+      try {
+        const body: Record<string, unknown> = { preset: networkPreset }
+        if (runName) body.run = runName
+        if (autostart !== undefined) body.autostart = autostart
+        const data = (await apiPost(
+          "/api/system/new-container-preset/infer",
+          body
+        )) as InferResponse
+        if (seq !== inferSeqRef.current) return
+        applyInfer(data)
+      } catch (err) {
+        if (seq !== inferSeqRef.current) return
+        setInferError(err instanceof Error ? err.message : "地址识别失败")
+      } finally {
+        if (seq === inferSeqRef.current) setInferLoading(false)
+      }
+    }
+    inferTimerRef.current = setTimeout(fire, delay)
+  }
+
+  function applyPreset(value: NewContainerPreset) {
+    setPreset(value)
+    setPresetVersion((version) => version + 1)
+    setForm((prev) => ({
+      ...prev,
+      autostart: value.autostart,
+      autostartOnServe: value.autostartOnServe,
+      network: value.network,
+    }))
+    resetCandidates()
+    candidatesAutoExpandedRef.current = false
+    setExpansion({
+      autostart: Boolean(value.autostart.trim() || value.autostartOnServe),
+      network: hasNetworkContent(value.network),
+    })
+    scheduleInfer(value.autostart, value.run || "", value.network.preset, 0)
+  }
+
+  async function loadPreset(runName: string) {
+    const seq = ++presetSeqRef.current
+    setPresetLoading(true)
+    setPresetError("")
+    try {
+      const value = (await apiGet(
+        `/api/system/new-container-preset${runName ? `?run=${encodeURIComponent(runName)}` : ""}`
+      )) as NewContainerPreset
+      if (seq !== presetSeqRef.current) return
+      applyPreset(value)
+    } catch (err) {
+      if (seq !== presetSeqRef.current) return
+      // 不静默按默认值回填：保留当前表单，显示错误；用户清空运行配置后按全局预设重试
+      setPreset(null)
+      setPresetError(err instanceof Error ? err.message : "读取运行配置的预设失败")
+    } finally {
+      if (seq === presetSeqRef.current) setPresetLoading(false)
+    }
+  }
+
   const loadDefaults = React.useCallback(async () => {
+    const seq = ++loadSeqRef.current
+    setPresetLoading(true)
+    setPresetError("")
     try {
       const data = await apiGet("/api/config")
       const parsed = (data.parsed || {}) as Record<string, unknown>
@@ -229,6 +409,27 @@ export function CreateContainerDialog({
           }
         })
         .catch(() => null)
+      // 全局预设（没选运行配置时）：拉取失败只提示，不阻塞其余默认值
+      let presetFailure = ""
+      const presetValue = await apiGet("/api/system/new-container-preset").catch(
+        (err: unknown) => {
+          presetFailure = err instanceof Error ? err.message : "读取预设失败"
+          return null
+        }
+      )
+      if (seq !== loadSeqRef.current) return
+      const baseline = presetValue && typeof presetValue === "object"
+        ? (presetValue as NewContainerPreset)
+        : null
+      setPreset(baseline)
+      setPresetVersion((version) => version + 1)
+      setPresetError(baseline ? "" : presetFailure)
+      resetCandidates()
+      candidatesAutoExpandedRef.current = false
+      setExpansion({
+        autostart: Boolean(baseline && (baseline.autostart.trim() || baseline.autostartOnServe)),
+        network: Boolean(baseline && hasNetworkContent(baseline.network)),
+      })
       setSuggestedDir(suggestion?.createHost ? suggestion.host : "")
       setSuggestedContainerPath(suggestion?.container ?? "")
       setForm({
@@ -250,11 +451,28 @@ export function CreateContainerDialog({
         agentPromptCommand: String(defaults.agentPromptCommand || ""),
         systemPrompt: composed,
         systemPromptDefault: composed,
+        ...(baseline
+          ? {
+              autostart: baseline.autostart,
+              autostartOnServe: baseline.autostartOnServe,
+              network: baseline.network,
+            }
+          : {}),
       })
+      if (baseline) {
+        scheduleInfer(baseline.autostart, baseline.run || "", baseline.network.preset, 0)
+      }
     } catch {
+      if (seq !== loadSeqRef.current) return
       setRuns({})
+      setPreset(null)
+      resetCandidates()
       setForm(DEFAULT_FORM)
+    } finally {
+      if (seq === loadSeqRef.current) setPresetLoading(false)
     }
+    // 预设 / 推断只在打开时和用户操作时触发；这里引用到的都是稳定的 setState 与模块函数
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 渲染期间对比 open 变化来重置错误提示，而不是在 effect 里同步 setState；
@@ -269,6 +487,13 @@ export function CreateContainerDialog({
     if (!open) return
     queueMicrotask(() => loadDefaults())
   }, [open, loadDefaults])
+
+  React.useEffect(
+    () => () => {
+      if (inferTimerRef.current) clearTimeout(inferTimerRef.current)
+    },
+    []
+  )
 
   // 选了自带目录的运行配置时目录框留空（交给运行配置），提示里写出它用的是哪个目录，不能是一片空白
   const runPreset = form.run ? runs[form.run] : undefined
@@ -315,6 +540,7 @@ export function CreateContainerDialog({
         ...(agentPromptCommand ? { agentPromptCommand } : {}),
       }
     })
+    void loadPreset(runName)
   }
 
   function handleCliChange(value: string | null) {
@@ -326,9 +552,44 @@ export function CreateContainerDialog({
     }))
   }
 
+  function handleAutostartChange(value: string) {
+    setField("autostart", value)
+    scheduleInfer(value, form.run, form.network.preset, 800)
+  }
+
+  function handleNetworkChange(value: NetworkPolicy) {
+    const presetChanged = value.preset !== form.network.preset
+    setField("network", value)
+    if (presetChanged) {
+      // 旧模式的候选不能合并到新模式
+      resetCandidates()
+      scheduleInfer(form.autostart, form.run, value.preset, 0)
+    }
+  }
+
+  function toggleCandidate(id: string, checked: boolean) {
+    const next = new Set(selectedRef.current)
+    if (checked) next.add(id)
+    else next.delete(id)
+    applySelected(next)
+  }
+
+  function revealCandidates() {
+    setExpansion((prev) => ({ ...prev, network: true }))
+    requestAnimationFrame(() => candidatesRef.current?.scrollIntoView({ block: "nearest" }))
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (submitting) return
+    if (presetLoading) {
+      setError("正在读取运行配置的预设，请稍候")
+      return
+    }
+    if (presetError) {
+      setError(presetError)
+      return
+    }
     if (!form.hostPath.trim() && !form.run) {
       setError("hostPath 不能为空")
       return
@@ -337,8 +598,10 @@ export function CreateContainerDialog({
       setError("网络规则里有写法不对的地方，请先改正")
       return
     }
-    // 放开类的改动（自定义模式已在编辑器里确认过）：范围很大的出站规则、绑定 0.0.0.0 的端口暴露在这里确认
-    const risks = policyRisks(defaultPolicy(), cleanPolicy(form.network))
+    const mergedNetwork = mergeSelectedCandidates(form.network, candidates, selectedIds)
+    // 放开类的改动（自定义模式已在编辑器里确认过）：范围很大的出站规则、绑定 0.0.0.0 的端口暴露在这里确认；
+    // 预设里本来就有的宽规则不再重复问
+    const risks = policyRisks(preset?.network ?? defaultPolicy(), cleanPolicy(mergedNetwork))
     if (
       risks.includes("wide") &&
       !(await confirm({
@@ -362,7 +625,7 @@ export function CreateContainerDialog({
     setSubmitting(true)
     setError("")
     try {
-      const createOptions = buildCreateOptions(form)
+      const createOptions = buildCreateOptions(form, preset, mergedNetwork)
       // 预填的目录还没建：此刻才建（用户改成别的路径就不动，那个路径本来就得存在）
       if (suggestedDir && form.hostPath.trim() === suggestedDir) {
         const made = await apiPost("/api/fs/directories/mkdir", {
@@ -387,6 +650,8 @@ export function CreateContainerDialog({
     }
   }
 
+  const presetFromRun = Boolean(preset && preset.run)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="xl">
@@ -399,6 +664,25 @@ export function CreateContainerDialog({
         >
           <DialogBody>
             <FieldGroup>
+              {candidates.length ? (
+                <Alert>
+                  <AlertDescription>
+                    检测到 {candidates.length} 个可能需要放行的地址（来自自启动 /
+                    首次命令），已在下方「网络」里列出。
+                  </AlertDescription>
+                  <AlertAction>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={revealCandidates}
+                    >
+                      查看并选择
+                    </Button>
+                  </AlertAction>
+                </Alert>
+              ) : null}
+
               <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2">
                 <Field>
                   <KeyLabel htmlFor="create-run" k="run" />
@@ -420,6 +704,9 @@ export function CreateContainerDialog({
                       </SelectGroup>
                     </SelectContent>
                   </Select>
+                  {presetError ? (
+                    <Hint className="block text-destructive">{presetError}</Hint>
+                  ) : null}
                 </Field>
                 <Field>
                   <KeyLabel htmlFor="create-container-name" k="containerName" />
@@ -608,19 +895,146 @@ export function CreateContainerDialog({
                 />
               </SectionToggle>
 
-              <SectionToggle title="网络（默认收紧，含端口暴露）">
-                <NetworkEditor
-                  policy={form.network}
-                  onChange={(value) => setField("network", value)}
-                  showAccess={false}
-                />
+              <SectionToggle
+                title={
+                  <span className="flex flex-wrap items-center gap-2">
+                    网络（默认收紧，含端口暴露）
+                    {presetFromRun ? <Badge variant="secondary">运行配置带入</Badge> : null}
+                    <Badge variant="outline">{PRESET_LABELS[form.network.preset]}</Badge>
+                  </span>
+                }
+                open={expansion.network}
+                onOpenChange={(value) =>
+                  setExpansion((prev) => ({ ...prev, network: value }))
+                }
+              >
+                <div className="flex flex-col gap-4">
+                  {candidates.length || inferLoading || inferError ? (
+                    <div
+                      ref={candidatesRef}
+                      className="flex flex-col gap-2 rounded-lg border p-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <CardTitle>检测到可能需要放行的地址</CardTitle>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            scheduleInfer(
+                              form.autostart,
+                              form.run,
+                              form.network.preset,
+                              0
+                            )
+                          }
+                          disabled={inferLoading}
+                        >
+                          {inferLoading ? "识别中..." : "重新识别"}
+                        </Button>
+                      </div>
+                      <Hint>
+                        来自自启动 / 首次命令，勾选后加入出站允许规则；只是建议，不勾选就不会添加。
+                      </Hint>
+                      {inferError ? (
+                        <Alert variant="destructive">
+                          <AlertDescription>{inferError}</AlertDescription>
+                        </Alert>
+                      ) : null}
+                      {inferLoading ? (
+                        <div className="flex items-center gap-2">
+                          <Spinner />
+                          <Hint>正在识别…</Hint>
+                        </div>
+                      ) : null}
+                      <div className="flex flex-col gap-2">
+                        {candidates.map((candidate) => {
+                          const already = hasSameAllowRule(form.network, candidate)
+                          return (
+                            <label
+                              key={candidate.id}
+                              className="flex cursor-pointer items-start gap-2 rounded-md border p-2 hover:bg-muted/70"
+                            >
+                              <Checkbox
+                                className="mt-0.5"
+                                checked={selectedIds.has(candidate.id)}
+                                onCheckedChange={(checked) =>
+                                  toggleCandidate(candidate.id, Boolean(checked))
+                                }
+                              />
+                              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                                <span className="flex flex-wrap items-center gap-2">
+                                  <span className="truncate font-mono">
+                                    {candidate.target}
+                                  </span>
+                                  <Hint mono>
+                                    {candidate.ports
+                                      ? `端口 ${candidate.ports}`
+                                      : "不限端口"}
+                                  </Hint>
+                                  {candidate.risk ? (
+                                    <Badge
+                                      variant={
+                                        candidate.risk === "metadata"
+                                          ? "destructive"
+                                          : "warning"
+                                      }
+                                    >
+                                      {RISK_LABELS[candidate.risk]}
+                                    </Badge>
+                                  ) : null}
+                                  {already ? (
+                                    <Badge variant="secondary">已有规则</Badge>
+                                  ) : null}
+                                  {coversDeniedRule(form.network, candidate) ? (
+                                    <Badge variant="warning">将覆盖拒绝规则</Badge>
+                                  ) : null}
+                                </span>
+                                <Hint className="truncate">
+                                  来源：
+                                  {candidate.sources
+                                    .map((source) => SOURCE_LABELS[source])
+                                    .join(" / ")}
+                                  {" · "}
+                                  <span className="font-mono">{candidate.evidence}</span>
+                                </Hint>
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                      {inferTruncated ? (
+                        <Hint>只显示前 50 条，其余请手动添加。</Hint>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <NetworkEditor
+                    key={`${form.run}:${presetVersion}`}
+                    policy={form.network}
+                    onChange={handleNetworkChange}
+                    showAccess={false}
+                  />
+                </div>
               </SectionToggle>
 
-              <SectionToggle title="自启动命令">
+              <SectionToggle
+                title={
+                  <span className="flex flex-wrap items-center gap-2">
+                    自启动命令
+                    {preset && preset.run && (preset.autostart.trim() || preset.autostartOnServe) ? (
+                      <Badge variant="secondary">运行配置带入</Badge>
+                    ) : null}
+                  </span>
+                }
+                open={expansion.autostart}
+                onOpenChange={(value) =>
+                  setExpansion((prev) => ({ ...prev, autostart: value }))
+                }
+              >
                 <AutostartEditor
                   idPrefix="create"
                   script={form.autostart}
-                  onScriptChange={(value) => setField("autostart", value)}
+                  onScriptChange={handleAutostartChange}
                   onServe={form.autostartOnServe}
                   onServeChange={(value) => setField("autostartOnServe", value)}
                 />
@@ -658,8 +1072,11 @@ export function CreateContainerDialog({
             >
               重置默认
             </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "创建中..." : "创建并进入"}
+            <Button
+              type="submit"
+              disabled={submitting || presetLoading || Boolean(presetError)}
+            >
+              {submitting ? "创建中..." : presetLoading ? "读取预设中..." : "创建并进入"}
             </Button>
           </DialogFooter>
         </form>

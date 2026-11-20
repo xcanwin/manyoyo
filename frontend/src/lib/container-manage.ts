@@ -78,10 +78,12 @@ export type NetworkPolicy = {
   inbound: Rule[]
   expose: ExposeEntry[]
   autostartOnServe: boolean
+  /** 记录代理可见的 HTTP(S)（默认关）。菜单里不编辑它，但保存网络规则时要原样保留 */
+  auditHttp?: boolean
 }
 
 export function defaultPolicy(): NetworkPolicy {
-  return { version: 2, preset: "restricted", outbound: [], inbound: [], expose: [], autostartOnServe: false }
+  return { version: 2, preset: "restricted", outbound: [], inbound: [], expose: [], autostartOnServe: false, auditHttp: false }
 }
 
 export function ruleValue(rule: Rule, direction: Direction): string {
@@ -107,7 +109,12 @@ export function cleanPolicy(policy: NetworkPolicy): NetworkPolicy {
     rules
       .filter((rule) => ruleValue(rule, direction).trim() !== "")
       .map((rule) => withValue({ ...rule, ports: rule.ports.replace(/\s+/g, "") }, direction, ruleValue(rule, direction).trim()))
-  return { ...policy, outbound: clean(policy.outbound, "outbound"), inbound: clean(policy.inbound, "inbound") }
+  return {
+    ...policy,
+    auditHttp: policy.auditHttp === true,
+    outbound: clean(policy.outbound, "outbound"),
+    inbound: clean(policy.inbound, "inbound"),
+  }
 }
 
 /** 键顺序无关的结构比较（服务端返回的规则与界面里编辑过的规则键顺序可能不同） */
