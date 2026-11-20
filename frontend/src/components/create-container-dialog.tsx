@@ -168,7 +168,8 @@ function buildCreateOptions(
   preset: NewContainerPreset | null,
   mergedNetwork: NetworkPolicy
 ) {
-  const options: Record<string, unknown> = {}
+  // 弹窗自己提供候选勾选界面：告诉服务端不要再自动放行（否则会覆盖用户取消勾选的选择）
+  const options: Record<string, unknown> = { autoAllowScriptEndpoints: false }
   type StringKey = {
     [K in keyof CreateContainerForm]: CreateContainerForm[K] extends string
       ? K

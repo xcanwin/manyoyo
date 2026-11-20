@@ -149,6 +149,8 @@ After choosing a run, its autostart script, `autostartOnServe` and network rules
 
 The dialog also scans autostart and `first` (command, `first.env`, `first.envFile`) for addresses that may need to be allowed, with target, port, source and risk. Candidates are suggestions only: they are added to the outbound allowlist only when you tick them. Cloud metadata, very wide ranges and wildcard domains are unticked by default. Detection does not cover every possible syntax and never blocks creation.
 
+Entries without a candidate picker (quick chat, the `my run` CLI, cloned/recreated containers) automatically allow the default-checked candidates (cloud metadata, very wide ranges and wildcard domains stay out). To allow a risky item, add a rule in "Container settings". This only happens at **creation** time; changing the autostart script of an existing container never changes its network rules automatically.
+
 ## Network view
 
 Top bar ⋯ → container group → "Network" shows HTTP(S) traffic seen by the filtering proxy: allow and deny records in reverse chronological order, plus summary counts, distinct targets and bytes. Denied rows can be allowed in one click. Records contain only host, port, method, status, bytes and duration — no URL path/query, bodies, cookies or `Proxy-Authorization`.

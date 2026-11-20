@@ -1,6 +1,7 @@
 'use strict';
 
-const { extractEndpointTokens, inferEndpointCandidates, MAX_INPUT_BYTES } = require('../lib/network-infer');
+const { extractEndpointTokens, inferEndpointCandidates, withScriptEndpoints, MAX_INPUT_BYTES } = require('../lib/network-infer');
+const { normalizePolicy } = require('../lib/network-policy');
 
 // 测试里不查真实 DNS：默认把域名解析成公网地址，个别用例覆盖
 const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
@@ -282,5 +283,43 @@ describe('network-infer：extractEndpointTokens', () => {
         ]));
         expect(JSON.stringify(tokens)).not.toContain('token=1');
         expect(tokens[0].source).toBe('first');
+    });
+});
+
+describe('withScriptEndpoints：没有候选界面的入口自动放行', () => {
+    test('restricted：自启动里的 host.docker.internal:<端口> 自动加 @host 允许规则，插在最前', async () => {
+        const policy = normalizePolicy({ preset: 'restricted', outbound: [{ action: 'allow', target: 'keep.example.com', ports: '', proto: 'all', enabled: true }] });
+        const next = await withScriptEndpoints(policy, { autostart: 'curl -fsS http://host.docker.internal:9999/health' });
+        expect(next.outbound[0]).toEqual({ action: 'allow', target: '@host', ports: '9999', proto: 'tcp', enabled: true });
+        expect(next.outbound[1]).toEqual({ action: 'allow', target: 'keep.example.com', ports: '', proto: 'all', enabled: true });
+        expect(policy.outbound).toHaveLength(1); // 不原地修改
+        const again = await withScriptEndpoints(next, { autostart: 'curl -fsS http://host.docker.internal:9999/health' });
+        expect(again).toBe(next); // 已存在就不重复加
+    });
+
+    test('first 命令与 first.env 里的地址也会放行；metadata / 宽网段 / 通配域名不加', async () => {
+        const policy = normalizePolicy({ preset: 'allowlist' });
+        const next = await withScriptEndpoints(policy, {
+            firstCommand: 'curl https://api.example.com:8443/v1\ncurl 169.254.169.254\ncurl 10.0.0.0/8\ncurl "https://*.corp.example.com/x"',
+            firstEnvLines: ['API_HOST=llm.corp.example'],
+            lookup: async () => [{ address: '93.184.216.34', family: 4 }]
+        });
+        const targets = next.outbound.map(rule => `${rule.target}|${rule.ports}|${rule.proto}`);
+        expect(targets).toContain('api.example.com|8443|tcp');
+        expect(targets).toContain('llm.corp.example||all');
+        expect(targets).not.toContain('169.254.169.254||all');
+        expect(targets).not.toContain('10.0.0.0/8||all');
+        expect(targets).not.toContain('*.corp.example.com||all');
+    });
+
+    test('restricted 下解析不到私有地址的公网域名不加；custom / 空输入 / DNS 失败都不改变策略', async () => {
+        const restricted = normalizePolicy({ preset: 'restricted' });
+        const publicOnly = await withScriptEndpoints(restricted, { firstCommand: 'curl https://api.example.com', lookup: async () => [{ address: '93.184.216.34', family: 4 }] });
+        expect(publicOnly).toBe(restricted);
+        const failedDns = await withScriptEndpoints(normalizePolicy({ preset: 'allowlist' }), { firstCommand: 'curl https://nx.example.com', lookup: async () => { throw new Error('nx'); } });
+        expect(failedDns.outbound.map(rule => rule.target)).toEqual(['nx.example.com']);
+        const custom = normalizePolicy({ preset: 'custom', outbound: [{ action: 'allow', target: '@any', ports: '', proto: 'all', enabled: true }] });
+        expect(await withScriptEndpoints(custom, { autostart: 'curl http://10.2.3.4:80' })).toBe(custom);
+        expect(await withScriptEndpoints(restricted, {})).toBe(restricted);
     });
 });

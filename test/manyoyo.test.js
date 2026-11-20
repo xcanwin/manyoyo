@@ -1511,6 +1511,69 @@ exit 0
             }
         });
 
+        test('CLI run -r 自动放行自启动 / first 里默认勾选的地址（没有候选界面）', () => {
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-auto-net-'));
+            const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-auto-net-home-'));
+            const statePath = path.join(tempDir, 'state.txt');
+            const dockerLogPath = path.join(tempDir, 'docker.log');
+            const fakeDockerPath = path.join(tempDir, 'docker');
+            writeExecutable(fakeDockerPath, `#!/bin/sh
+echo "$@" >> "${dockerLogPath}"
+STATE_FILE="${statePath}"
+if [ "$1" = "--version" ]; then echo "Docker version 26.0.0"; exit 0; fi
+if [ "$1" = "ps" ] && [ "$3" = "-q" ]; then [ -f "$STATE_FILE.id" ] && echo "fakecontainer"; exit 0; fi
+if [ "$1" = "inspect" ] && [ "$2" = "--format" ]; then
+  echo "{\\"Name\\":\\"/$(cat "$STATE_FILE")\\",\\"Config\\":{\\"Labels\\":{\\"manyoyo.id\\":\\"$(cat "$STATE_FILE.id")\\"},\\"Env\\":[]},\\"NetworkSettings\\":{\\"Networks\\":{}},\\"State\\":{\\"Running\\":true,\\"Status\\":\\"running\\"}}"
+  exit 0
+fi
+if [ "$1" = "ps" ] && [ "$2" = "-a" ]; then [ -f "$STATE_FILE" ] && cat "$STATE_FILE"; exit 0; fi
+if [ "$1" = "run" ]; then
+  case "$*" in *manyoyo-helper-*) exit 0;; esac
+  shift
+  while [ $# -gt 0 ]; do
+    if [ "$1" = "--label" ]; then case "$2" in manyoyo.id=*) echo "\${2#manyoyo.id=}" > "$STATE_FILE.id";; esac; fi
+    if [ "$1" = "--name" ]; then echo "$2" > "$STATE_FILE"; fi
+    shift
+  done
+  exit 0
+fi
+if [ "$1" = "inspect" ] && [ "$2" = "-f" ]; then
+  if [ "$3" = "{{.State.Status}}" ]; then echo "running"; exit 0; fi
+  if [ "$3" = "{{index .Config.Labels \\"manyoyo.default_cmd\\"}}" ]; then echo "regular-cmd"; exit 0; fi
+fi
+if [ "$1" = "exec" ]; then exit 0; fi
+exit 0
+`);
+
+            writeGlobalConfig(tempHome, {
+                runs: {
+                    autoNet: {
+                        containerName: 'auto-net-test',
+                        shell: 'regular-cmd',
+                        autostart: 'curl -fsS http://host.docker.internal:9999/health\n',
+                        first: { shell: 'curl -fsS http://host.docker.internal:9998/first' }
+                    }
+                }
+            });
+
+            try {
+                execSync(`node ${BIN_PATH} run -r autoNet`, {
+                    encoding: 'utf-8',
+                    input: '\n',
+                    env: { ...process.env, HOME: tempHome, PATH: `${tempDir}:${process.env.PATH}` }
+                });
+                const containersRoot = path.join(tempHome, '.manyoyo', 'containers');
+                const id = fs.readdirSync(containersRoot)[0];
+                const network = JSON.parse(fs.readFileSync(path.join(containersRoot, id, 'network.json'), 'utf-8'));
+                const targets = network.outbound.map(rule => `${rule.target}|${rule.ports}|${rule.proto}`);
+                expect(targets).toContain('@host|9999|tcp');
+                expect(targets).toContain('@host|9998|tcp');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+                fs.rmSync(tempHome, { recursive: true, force: true });
+            }
+        });
+
         test('existing container should skip first command', () => {
             const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-existing-'));
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-first-existing-home-'));

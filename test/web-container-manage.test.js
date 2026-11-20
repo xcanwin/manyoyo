@@ -616,6 +616,22 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(state.readNetworkRaw(tempHost, idOf('preset-confirmed')).outbound).toHaveLength(2);
         });
 
+        test('没有候选界面的入口自动放行自启动 / first 里的 @host 端口；弹窗入口可显式关闭', async () => {
+            // 快捷对话、克隆等走同一个接口且不带标记 → 自动放行
+            const auto = await create({ containerName: 'auto-ext-1', autostart: 'curl -fsS http://host.docker.internal:9999/health\n' });
+            expect(auto.response.status).toBe(200);
+            expect(state.readNetworkRaw(tempHost, idOf('auto-ext-1')).outbound[0]).toEqual({ action: 'allow', target: '@host', ports: '9999', proto: 'tcp', enabled: true });
+
+            const firstAuto = await create({ containerName: 'auto-ext-2', first: { shell: 'curl -fsS http://host.docker.internal:9999/first' } });
+            expect(firstAuto.response.status).toBe(200);
+            expect(state.readNetworkRaw(tempHost, idOf('auto-ext-2')).outbound).toEqual([expect.objectContaining({ target: '@host', ports: '9999', proto: 'tcp' })]);
+
+            // 新建容器弹窗自己勾选候选 → 服务端不自动加（用户取消勾选的选择不能被覆盖）
+            const manual = await create({ containerName: 'auto-ext-3', autostart: 'curl -fsS http://host.docker.internal:9999/health\n', autoAllowScriptEndpoints: false });
+            expect(manual.response.status).toBe(200);
+            expect(state.readNetworkRaw(tempHost, idOf('auto-ext-3')).outbound).toEqual([]);
+        });
+
         test('地址识别：认证 / 参数 / run 校验；扫描自启动、first 命令、first.env 与 first.envFile', async () => {
             const infer = body => request(`${baseUrl}/api/system/new-container-preset/infer`, json(cookie, 'POST', body));
             expect((await request(`${baseUrl}/api/system/new-container-preset/infer`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: '{}' })).response.status).toBe(401);

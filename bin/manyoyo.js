@@ -56,6 +56,7 @@ const { buildExecArgs, resolveContainerId } = require('../lib/container-exec');
 const { createNetworkManager, NETWORK_NAME } = require('../lib/container-network');
 const { normalizePolicy, isUnrestricted: isUnrestrictedPolicy } = require('../lib/network-policy');
 const { withEnvEndpoints } = require('../lib/network-endpoints');
+const { withScriptEndpoints } = require('../lib/network-infer');
 const { resolveManageOptions } = require('../lib/container-manage-options');
 const {
     sanitizeSensitiveData,
@@ -2230,7 +2231,13 @@ async function createNewContainer(runtime) {
     await ensureRunImage(runtime);
 
     const networkManager = createCliNetworkManager(runtime);
-    const networkPolicy = await withEnvEndpoints(await networkManager.resolveRefs(normalizePolicy(runtime.network)), [...userEnvLines, ...containerState.readEnvFilePaths(runtime.envFiles || []).flatMap(file => file.entries.map(entry => `${entry.key}=${entry.value}`))]);
+    const envNetworkPolicy = await withEnvEndpoints(await networkManager.resolveRefs(normalizePolicy(runtime.network)), [...userEnvLines, ...containerState.readEnvFilePaths(runtime.envFiles || []).flatMap(file => file.entries.map(entry => `${entry.key}=${entry.value}`))]);
+    // CLI 没有候选勾选界面：自动放行自启动 / first 里默认勾选的地址（metadata / 很宽的规则不加）
+    const networkPolicy = await withScriptEndpoints(envNetworkPolicy, {
+        autostart: runtime.autostart,
+        firstCommand: joinExecCommand(runtime.firstExecCommandPrefix, runtime.firstExecCommand, runtime.firstExecCommandSuffix),
+        firstEnvLines: containerState.envArgsToLines(runtime.firstContainerEnvs)
+    });
     if (!hasNetworkArg([...(runtime.contModeArgs || []), ...(runtime.containerExtraArgs || [])])) {
         try {
             await networkManager.ensureBridgeNetwork();

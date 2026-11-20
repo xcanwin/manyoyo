@@ -196,6 +196,8 @@ describe("运行配置预设带入", () => {
     expect(options).not.toHaveProperty("autostart")
     expect(options).not.toHaveProperty("autostartOnServe")
     expect(options).not.toHaveProperty("network")
+    // 弹窗自己管理候选勾选，服务端不要再自动加
+    expect(options.autoAllowScriptEndpoints).toBe(false)
   })
 
   test("清空自启动、关掉 serve 拉起、把网络改回默认，都显式发送", async () => {

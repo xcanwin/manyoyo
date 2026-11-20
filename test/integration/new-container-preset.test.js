@@ -222,6 +222,8 @@ maybe('新建容器预设与地址识别（真实容器）', () => {
                 imageVersion,
                 autostart: `curl -fsS -m 5 http://host.containers.internal:${fixturePort}/ok -o /run/manyoyo/autostart-result || echo FAILED > /run/manyoyo/autostart-result\n`,
                 autostartOnServe: false,
+                // 与新建容器弹窗一致：用户显式取消了候选勾选，服务端不要再自动放行
+                autoAllowScriptEndpoints: false,
                 network: { preset: 'restricted', outbound: [], inbound: [], expose: [] }
             }
         });
