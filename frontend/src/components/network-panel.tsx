@@ -4,10 +4,10 @@ import { RefreshCwIcon, Trash2Icon } from "lucide-react"
 import { apiDelete, apiGet, apiPost, apiPut, type SessionSummary } from "@/lib/api"
 import { formatBytes, formatDateTime } from "@/lib/format"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
@@ -44,8 +44,8 @@ type NetworkPolicyLike = { auditHttp?: boolean; [key: string]: unknown }
 
 const COVERAGE_TEXT: Record<CoverageReason, string> = {
   proxied: "这里只记录经过过滤代理的 HTTP(S)；直连 IP、非 HTTP 协议和 nft 层直接拒绝的访问不在记录里。",
-  auditOff: "这个容器现在不走过滤代理，所以没有放行记录；打开「记录 HTTP(S)」后，经过代理的请求会出现在这里。",
-  noDomainRules: "这个容器没有域名规则，HTTP(S) 是直连的，代理看不到。打开「记录 HTTP(S)」后即可记录代理可见的请求。",
+  auditOff: "这个容器现在不走过滤代理，所以没有放行记录；打开下方「记录 HTTP(S)」的开关后，经过代理的请求会出现在这里。",
+  noDomainRules: "这个容器没有域名规则，HTTP(S) 是直连的，代理看不到；打开下方「记录 HTTP(S)」的开关后即可记录代理可见的请求。",
   unrestricted: "这个容器不限制出站，HTTP(S) 不经过过滤代理，没有放行记录。",
   unsupported: "当前网络模式下无法记录 HTTP(S)。",
 }
@@ -273,18 +273,6 @@ export function NetworkPanel({
         {data ? (
           <Alert variant={data.coverage.reason === "proxied" ? "default" : "warning"}>
             <AlertDescription>{COVERAGE_TEXT[data.coverage.reason]}</AlertDescription>
-            {data.coverage.reason !== "proxied" ? (
-              <AlertAction>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void toggleAudit(true)}
-                  disabled={toggling || data.coverage.auditHttp}
-                >
-                  {data.coverage.auditHttp ? "已打开记录" : "记录 HTTP(S)"}
-                </Button>
-              </AlertAction>
-            ) : null}
           </Alert>
         ) : null}
 
@@ -292,17 +280,15 @@ export function NetworkPanel({
           <CardHeader>
             <CardTitle>记录 HTTP(S)</CardTitle>
             <CardDescription>只影响经过代理的 HTTP(S)，不含直连和非 HTTP 协议；不会放宽任何网络规则。</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-end">
+            <CardAction>
               <Switch
                 aria-label="记录 HTTP(S)"
                 checked={data?.coverage.auditHttp === true}
                 disabled={toggling || !data}
                 onCheckedChange={(checked) => void toggleAudit(checked)}
               />
-            </div>
-          </CardContent>
+            </CardAction>
+          </CardHeader>
         </Card>
 
         <Card>
