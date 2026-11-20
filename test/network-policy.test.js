@@ -326,9 +326,13 @@ describe('auditHttp 与 proxyEnabled', () => {
 
     test('audit-only 的代理规则仍保留 restricted 的默认拒绝行（不放宽目标）', () => {
         const policy = p.normalizePolicy({ preset: 'restricted', auditHttp: true });
-        const compiled = p.compileProxyPolicy(policy, { hostIps: ['172.16.99.1'], bridge: { subnet: '10.89.0.0/24', gateway: '10.89.0.1' }, containers: {} });
+        const endpoints = { hostIps: ['172.16.99.1'], bridge: { subnet: '10.89.0.0/24', gateway: '10.89.0.1' }, containers: {} };
+        const compiled = p.compileProxyPolicy(policy, endpoints);
         expect(compiled.default).toBe('allow');
         expect(compiled.rules.filter(r => r.action === 'deny').length).toBeGreaterThan(0);
+        // 审计模式下宿主机本地服务（Playwright 端口等）也要在代理里放行
+        const withHostServices = p.compileProxyPolicy(policy, { ...endpoints, hostServicePorts: [8935] });
+        expect(withHostServices.rules).toEqual(expect.arrayContaining([expect.objectContaining({ action: 'allow', ports: '8935', proto: 'tcp' })]));
     });
 });
 

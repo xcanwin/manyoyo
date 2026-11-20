@@ -1,5 +1,5 @@
 import * as React from "react"
-import { RefreshCwIcon } from "lucide-react"
+import { RefreshCwIcon, Trash2Icon } from "lucide-react"
 
 import { apiDelete, apiGet, apiPost, apiPut, type SessionSummary } from "@/lib/api"
 import { formatBytes, formatDateTime } from "@/lib/format"
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { DataTable, type DataColumn } from "@/components/data-table"
@@ -201,24 +202,31 @@ export function NetworkPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
+        compact
         title="网络"
         actions={
-          <div className="flex items-center gap-2">
+          <>
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon-sm"
               aria-label="刷新"
               title="刷新"
               onClick={() => void load()}
               disabled={loading}
             >
-              <RefreshCwIcon data-icon="inline-start" />
-              刷新
+              {loading ? <Spinner /> : <RefreshCwIcon />}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => void clearRecords()} disabled={!data?.records.length}>
-              清空
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="清空"
+              title="清空"
+              onClick={() => void clearRecords()}
+              disabled={!data?.records.length}
+            >
+              <Trash2Icon />
             </Button>
-          </div>
+          </>
         }
       />
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4 max-md:p-3">

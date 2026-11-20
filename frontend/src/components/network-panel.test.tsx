@@ -84,8 +84,8 @@ describe("网络视图", () => {
     await tick()
     expect(calls.find((call) => call.url.endsWith("/network/allow"))?.body).toEqual({ domain: "api.example.com", confirmRisk: true })
 
-    const clear = button("清空")
-    await act(async () => clear!.click())
+    const clear = container.querySelector<HTMLButtonElement>('[aria-label="清空"]')!
+    await act(async () => clear.click())
     await tick()
     const confirms = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).filter((item) => item.textContent === "清空")
     await act(async () => confirms[confirms.length - 1].click())

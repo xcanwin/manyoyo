@@ -125,4 +125,4 @@ You can also set them in `manyoyo.json` globally or under `runs.<name>` when cre
 
 ## Recording HTTP(S)
 
-Turning on "Record HTTP(S)" in the Network view injects the filtering proxy and records HTTP(S) that goes through it: host, port, method, status, bytes and duration (no URL path/query, bodies, cookies or `Proxy-Authorization`). It does not loosen any network rule and cannot see direct IP or non-HTTP traffic; turning it off restores direct connections. Each container keeps at most 2000 records or 1 MiB, cleaned up when the container is deleted.
+Turning on "Record HTTP(S)" in the Network view injects the filtering proxy and records HTTP(S) that goes through it: host, port, method, status, bytes and duration (no URL path/query, bodies, cookies or `Proxy-Authorization`). Host aliases (`host.containers.internal` / `host.docker.internal`) also go through the proxy and are recorded. It does not loosen any network rule and cannot see direct IP or non-HTTP traffic; turning it off restores direct connections. Each container keeps at most 2000 records or 1 MiB, cleaned up when the container is deleted.

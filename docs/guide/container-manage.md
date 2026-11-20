@@ -125,4 +125,4 @@ description: 在网页「设置容器」页随时修改容器的环境变量、�
 
 ## 记录 HTTP(S)
 
-「网络」视图里的「记录 HTTP(S)」打开后，会给容器注入过滤代理，把经过代理的 HTTP(S) 记录成 host、端口、方法、状态、字节和耗时（不含 URL path/query、正文、Cookie、`Proxy-Authorization`）。它不会放宽任何网络规则，也不会拦直连 IP 或非 HTTP 协议；关掉后恢复直连。每个容器最多保留 2000 条或 1 MiB，删除容器时一并清理。
+「网络」视图里的「记录 HTTP(S)」打开后，会给容器注入过滤代理，把经过代理的 HTTP(S) 记录成 host、端口、方法、状态、字节和耗时（不含 URL path/query、正文、Cookie、`Proxy-Authorization`）。宿主机别名（`host.containers.internal` / `host.docker.internal`）也会经过代理并被记录；它不会放宽任何网络规则，也看不到直连 IP 或非 HTTP 协议；关掉后恢复直连。每个容器最多保留 2000 条或 1 MiB，删除容器时一并清理。

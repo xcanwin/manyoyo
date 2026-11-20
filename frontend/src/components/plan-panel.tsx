@@ -160,18 +160,18 @@ export function PlanPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
+        compact
         title="计划"
         actions={
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon-sm"
             aria-label="刷新"
             title="刷新"
             onClick={() => void load()}
             disabled={loading}
           >
-            <RefreshCwIcon data-icon="inline-start" />
-            刷新
+            {loading ? <Spinner /> : <RefreshCwIcon />}
           </Button>
         }
       />
@@ -293,6 +293,7 @@ export function PlanPanel({
                       size="icon-sm"
                       aria-label="删除"
                       title="删除"
+                      className="self-end sm:self-auto"
                       onClick={() => removeDod(index)}
                     >
                       <Trash2Icon />
