@@ -158,6 +158,7 @@ describe('网页导出 / 导入接口', () => {
         expect(res.status).toBe(200);
         expect(res.json.tiers.map(t => t.id)).toEqual(['light', 'standard', 'full']);
         expect(res.json.items.find(i => i.id === 'agentSessions')).toBeTruthy();
+        expect(res.json.minFreeBytes).toBe(1024 * 1024 * 1024);
     });
 
     test('直接下载：POST 立即返回 202 → 后台准备（ready）→ GET 下载（只能取一次）→ 归档里有清单、历史、END；响应带 X-Accel-Buffering: no', async () => {

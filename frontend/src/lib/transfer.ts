@@ -13,6 +13,8 @@ export type TransferPreview = {
   containers: { name: string; remark: string; status: string }[]
   zstd: boolean
   freeBytes: number | null
+  // 保存到服务器时要保留的磁盘余量；旧服务端没有该字段时前端按 1 GB 兜底
+  minFreeBytes?: number
 }
 
 export type TransferJob = {

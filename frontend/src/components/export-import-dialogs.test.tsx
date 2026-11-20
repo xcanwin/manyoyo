@@ -192,7 +192,41 @@ describe("导出弹窗", () => {
       await press("保存到服务器")
       expect((button("开始导出") as HTMLButtonElement).disabled).toBe(true)
       expect(text()).toContain("剩余空间")
+      // 提示必须说明“文件大小之外的保留余量”，不能把它说成放不下文件
+      expect(text()).toContain("保存到服务器需要")
+      expect(text()).toContain("另需保留")
+      expect(text()).toContain("余量")
     } finally {
+      PREVIEW.freeBytes = 100 * 1024 * 1024 * 1024
+    }
+  })
+
+  test("保留余量用服务端下发的 minFreeBytes：120 MB 够 100 MB 余量 + 小文件", async () => {
+    const originalMin = (PREVIEW as { minFreeBytes?: number }).minFreeBytes
+    try {
+      ;(PREVIEW as { minFreeBytes?: number }).minFreeBytes = 100 * 1024 * 1024
+      PREVIEW.freeBytes = 120 * 1024 * 1024
+      await mountExport()
+      await press("保存到服务器")
+      expect((button("开始导出") as HTMLButtonElement).disabled).toBe(false)
+    } finally {
+      if (originalMin === undefined) delete (PREVIEW as { minFreeBytes?: number }).minFreeBytes
+      else (PREVIEW as { minFreeBytes?: number }).minFreeBytes = originalMin
+      PREVIEW.freeBytes = 100 * 1024 * 1024 * 1024
+    }
+  })
+
+  test("剩余空间低于服务端下发的保留余量时禁用保存到服务器", async () => {
+    const originalMin = (PREVIEW as { minFreeBytes?: number }).minFreeBytes
+    try {
+      ;(PREVIEW as { minFreeBytes?: number }).minFreeBytes = 100 * 1024 * 1024
+      PREVIEW.freeBytes = 90 * 1024 * 1024
+      await mountExport()
+      await press("保存到服务器")
+      expect((button("开始导出") as HTMLButtonElement).disabled).toBe(true)
+    } finally {
+      if (originalMin === undefined) delete (PREVIEW as { minFreeBytes?: number }).minFreeBytes
+      else (PREVIEW as { minFreeBytes?: number }).minFreeBytes = originalMin
       PREVIEW.freeBytes = 100 * 1024 * 1024 * 1024
     }
   })

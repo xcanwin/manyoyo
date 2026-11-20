@@ -96,7 +96,9 @@ export function ExportDialog({
   const tierId = preview ? matchTier(preview.items, preview.tiers, items) : "standard"
   const total = preview ? estimateTotal(preview.estimates, items) : { bytes: 0, unknown: false }
   const free = preview?.freeBytes ?? null
-  const needFree = total.bytes * 1.1 + 1024 * 1024 * 1024
+  // 服务端返回的保留余量（默认 1 GB；旧服务端没有该字段时按 1 GB 兜底）
+  const reserveBytes = preview?.minFreeBytes ?? 1024 * 1024 * 1024
+  const needFree = total.bytes * 1.1 + reserveBytes
   const diskShort = output === "server" && free !== null && free < needFree
 
   function toggleContainer(name: string) {
@@ -258,7 +260,7 @@ export function ExportDialog({
           {diskShort ? (
             <Alert variant="destructive" className="mt-4">
               <AlertDescription>
-                服务器剩余空间 {formatBytes(free)}，不够放下约 {formatBytes(total.bytes)} 的导出文件。请改用“直接下载”或清理空间。
+                服务器剩余空间 {formatBytes(free)}，保存到服务器需要 {formatBytes(needFree)}（导出文件约 {formatBytes(total.bytes)}，另需保留 {formatBytes(reserveBytes)} 余量）。请改用“直接下载”或清理空间。
               </AlertDescription>
             </Alert>
           ) : null}
