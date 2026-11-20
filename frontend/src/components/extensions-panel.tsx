@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
@@ -326,11 +326,11 @@ export function ExtensionsPanel({ session }: { session: SessionSummary }) {
         <Card>
           <CardHeader>
             <CardTitle>共享库</CardTitle>
+            <CardDescription>
+              共享技能是代码：它会挂进每个新容器并被 Agent 读到，添加前请确认内容可信。共享 MCP 的密钥会出现在所有使用该条目的容器里。
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <Hint className="block">
-              共享技能是代码：它会挂进每个新容器并被 Agent 读到，添加前请确认内容可信。共享 MCP 的密钥会出现在所有使用该条目的容器里。
-            </Hint>
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => { setSkillForm({ agent: "common", name: "", content: "---\nname: \ndescription: \n---\n" }); setSkillDialog({ agent: "common", name: "" }) }}>
                 <PlusIcon data-icon="inline-start" />

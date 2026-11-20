@@ -7,7 +7,7 @@ import { useConfirmDialog } from "@/hooks/use-confirm-dialog"
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
@@ -239,6 +239,7 @@ export function NetworkPanel({
         <Card>
           <CardHeader>
             <CardTitle>最近记录</CardTitle>
+            <CardDescription>经过过滤代理的 HTTP(S)，按时间倒序；汇总基于全部记录。</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -288,12 +289,12 @@ export function NetworkPanel({
         ) : null}
 
         <Card>
-          <CardContent className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex flex-col gap-1">
-                <span>记录 HTTP(S)</span>
-                <Hint>只影响经过代理的 HTTP(S)，不含直连和非 HTTP 协议；不会放宽任何网络规则。</Hint>
-              </div>
+          <CardHeader>
+            <CardTitle>记录 HTTP(S)</CardTitle>
+            <CardDescription>只影响经过代理的 HTTP(S)，不含直连和非 HTTP 协议；不会放宽任何网络规则。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-end">
               <Switch
                 aria-label="记录 HTTP(S)"
                 checked={data?.coverage.auditHttp === true}
@@ -304,36 +305,40 @@ export function NetworkPanel({
           </CardContent>
         </Card>
 
-        {loading && !data ? (
-          <Skeleton className="h-40 w-full" />
-        ) : data && data.records.length ? (
-          <DataTable
-            columns={columns}
-            rows={data.records}
-            rowKey={(row) => row.id}
-            label="网络记录"
-            actions={(row) =>
-              row.decision === "deny" ? (
-                <Button variant="outline" size="sm" onClick={() => void allowHost(row)}>
-                  允许
-                </Button>
-              ) : null
-            }
-          />
-        ) : (
-          <Empty>
-            <EmptyHeader>
-              <EmptyTitle>还没有网络记录</EmptyTitle>
-              <EmptyDescription>
-                这里会显示经过过滤代理的 HTTP(S)；被拒绝的访问也会列出来。
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        )}
-
-        <Hint>
-          只记录 host、端口、方法、状态、字节、耗时；不记录 URL path/query、请求 / 响应正文、Cookie、Proxy-Authorization。
-        </Hint>
+        <Card>
+          <CardHeader>
+            <CardTitle>记录</CardTitle>
+            <CardDescription>只记录 host、端口、方法、状态、字节、耗时；不记录 URL path/query、正文、Cookie、Proxy-Authorization。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading && !data ? (
+              <Skeleton className="h-40 w-full" />
+            ) : data && data.records.length ? (
+              <DataTable
+                columns={columns}
+                rows={data.records}
+                rowKey={(row) => row.id}
+                label="网络记录"
+                actions={(row) =>
+                  row.decision === "deny" ? (
+                    <Button variant="outline" size="sm" onClick={() => void allowHost(row)}>
+                      允许
+                    </Button>
+                  ) : null
+                }
+              />
+            ) : (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyTitle>还没有网络记录</EmptyTitle>
+                  <EmptyDescription>
+                    这里会显示经过过滤代理的 HTTP(S)；被拒绝的访问也会列出来。
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            )}
+          </CardContent>
+        </Card>
       </div>
       {dialog}
     </div>

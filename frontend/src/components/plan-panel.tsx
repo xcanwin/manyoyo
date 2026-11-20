@@ -6,7 +6,7 @@ import { formatDateTime } from "@/lib/format"
 import { emptyPlan, groupPlanItems, normalizePlan, type Plan, type PlanDod, type PlanPayload } from "@/lib/plan"
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
@@ -205,6 +205,7 @@ export function PlanPanel({
         <Card>
           <CardHeader>
             <CardTitle>进度</CardTitle>
+            <CardDescription>AGENT 计划项的完成数与最近更新时间。</CardDescription>
           </CardHeader>
           <CardContent>
             {loading && !etag ? (
@@ -223,6 +224,7 @@ export function PlanPanel({
         <Card>
           <CardHeader>
             <CardTitle>当前计划</CardTitle>
+            <CardDescription>来自 Claude 的 TodoWrite / TaskCreate / TaskUpdate。</CardDescription>
           </CardHeader>
           <CardContent>
             {!plan.items.length ? (
@@ -255,6 +257,7 @@ export function PlanPanel({
         <Card>
           <CardHeader>
             <CardTitle>验收标准</CardTitle>
+            <CardDescription>你自己维护的完成条件；只记录和展示，不会阻塞 AGENT 执行。</CardDescription>
           </CardHeader>
           <CardContent>
             {!plan.dod.length ? (
