@@ -3,8 +3,8 @@
     "version": "8.7.7",
     "imageVersion": "2.3.2-common",
     "playwrightCliVersion": "0.1.22",
-    "patchrightCoreVersion": "1.64.1",
-    "patchrightCoreIntegrity": "sha512-nUWuqaaUVd60qepdDPv+i5g257F8jywbzn7aKV8fPRur4dmkFLxYV/xus8f69gKAB7+S/zfdYe0zA3mJkO6+0w==",
+    "patchrightCoreVersion": "1.64.3",
+    "patchrightCoreIntegrity": "sha512-AikBjQ6CcsEtk7pJGlZ7ITxIInVd0a8HWPtuGjx2Y0Ogb88sj1wqICiYFz4du6fbaLQStLNEnWCmYm5uODsEzQ==",
     "description": "MANYOYO（慢悠悠）– open-source AI coding agent sandbox: run Claude Code, Codex, Gemini CLI and OpenCode in YOLO mode safely inside Docker/Podman",
     "keywords": [
         "manyoyo",
@@ -71,21 +71,21 @@
         "manyoyo.example.json"
     ],
     "dependencies": {
-        "commander": "^15.0.0",
+        "commander": "^15.1.0",
         "json5": "^2.2.3",
-        "patchright-core": "1.64.1",
-        "ws": "^8.21.3"
+        "patchright-core": "1.64.3",
+        "ws": "^8.23.0"
     },
     "devDependencies": {
         "jest": "^30.5.2",
         "vitepress": "^1.6.4"
     },
     "overrides": {
-        "glob": "^13.0.6",
-        "minimatch": "^10.2.6",
-        "postcss": "^8.5.28",
+        "glob": "^14.0.6",
+        "minimatch": "^11.0.9",
+        "postcss": "^8.5.33",
         "test-exclude": "^8.0.0",
-        "vite": "^6.4.3"
+        "vite": "^6.4.6"
     },
     "jest": {
         "testMatch": [
