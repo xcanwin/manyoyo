@@ -158,24 +158,24 @@ export function PlanPanel({
   const groups = groupPlanItems(plan.items)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        compact
-        title="计划"
-        actions={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="刷新"
-            title="刷新"
-            onClick={() => void load()}
-            disabled={loading}
-          >
-            {loading ? <Spinner /> : <RefreshCwIcon />}
-          </Button>
-        }
-      />
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4 max-md:p-3">
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-3 md:p-4">
+        <PageHeader
+          title="计划"
+          description="查看 AGENT 的计划与进度，并维护自己的验收标准。"
+          actions={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="刷新"
+              title="刷新"
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              {loading ? <Spinner /> : <RefreshCwIcon />}
+            </Button>
+          }
+        />
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>

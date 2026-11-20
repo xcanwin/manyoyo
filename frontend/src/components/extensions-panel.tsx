@@ -301,17 +301,17 @@ export function ExtensionsPanel({ session }: { session: SessionSummary }) {
   ]
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <PageHeader
-        compact
-        title="技能与 MCP"
-        actions={
-          <Button variant="ghost" size="icon-sm" title="刷新" aria-label="刷新" onClick={load} disabled={loading}>
-            {loading ? <Spinner /> : <RefreshCwIcon />}
-          </Button>
-        }
-      />
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-3 md:p-4">
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-3 md:p-4">
+        <PageHeader
+          title="技能与 MCP"
+          description="在宿主机维护共享技能与 MCP，新容器自动带上，已有容器按需同步。"
+          actions={
+            <Button variant="ghost" size="icon-sm" title="刷新" aria-label="刷新" onClick={load} disabled={loading}>
+              {loading ? <Spinner /> : <RefreshCwIcon />}
+            </Button>
+          }
+        />
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>

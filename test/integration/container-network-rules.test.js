@@ -130,6 +130,8 @@ maybe('统一网络规则（真实容器）', () => {
     const code = async (name, url, extra = '') => (await exec(name, `curl --noproxy '*' -s -m 5 -o /dev/null -w '%{http_code}' ${extra} ${url}; true`)).stdout.trim();
     // 与 manyoyo 的 exec 一致：加载 managed.env（过滤代理地址）
     const viaProxy = async (c, url) => (await exec(c.name, `curl -s -m 12 -o /dev/null -w '%{http_code}' ${url}; true`, { withEnv: true, homeDir: c.homeDir })).stdout.trim();
+    // 强制走代理：忽略 NO_PROXY（审计用例要看代理的记录）
+    const viaForcedProxy = async (c, url) => (await exec(c.name, `curl --noproxy '' -s -m 12 -o /dev/null -w '%{http_code}' ${url}; true`, { withEnv: true, homeDir: c.homeDir })).stdout.trim();
     const setPolicy = (c, policy) => state.writeNetworkRaw(c.homeDir || home, c.st.id, normalizePolicy(policy));
     const listen = async (c, port) => exec(c.name, `nohup python3 -m http.server ${port} >/tmp/h${port}.log 2>&1 & sleep 1`, { timeout: 10000 });
 
@@ -287,27 +289,22 @@ maybe('统一网络规则（真实容器）', () => {
         await manager.apply(c.name);
         const envText = (await exec(c.name, 'env | sort', { withEnv: true, homeDir: c.homeDir })).stdout;
         expect(envText).toMatch(/^HTTP_PROXY=http:\/\/10\.89\./m);
-        // 宿主机别名也经过代理（否则看不到 host.docker.internal 的记录）；只让容器自己的环回直连
-        expect(envText).toMatch(/^NO_PROXY=localhost,127\.0\.0\.1,::1$/m);
-        expect(envText).not.toMatch(/^NO_PROXY=.*host\./m);
+        // 宿主机别名走 NO_PROXY 直连（用户要求的固定行为）
+        expect(envText).toMatch(/^NO_PROXY=.*host\.containers\.internal/m);
+        expect(envText).toMatch(/^no_proxy=.*host\.docker\.internal/m);
 
-        // 普通 curl（不强制 --noproxy）就应该经过代理并被记录
         const url = `http://host.containers.internal:${hostPort}/`;
-        expect(await viaProxy(c, url)).toBe('200');
-        // 用户实际用的是 host.docker.internal，也要同样被记录
-        expect(await viaProxy(c, `http://host.docker.internal:${hostPort}/docker`)).toBe('200');
+        expect(await viaForcedProxy(c, url)).toBe('200');
         let records = [];
-        for (let i = 0; i < 40 && records.length < 2; i += 1) {
+        for (let i = 0; i < 40 && records.length === 0; i += 1) {
             await sleep(100);
             records = trafficLib.read(egressPaths(home).traffic, c.st.id);
         }
-        expect(records.map(r => r.host).sort()).toEqual(['host.containers.internal', 'host.docker.internal']);
-        expect(records[0]).toEqual(expect.objectContaining({ port: hostPort, decision: 'allow', proto: 'http', method: 'GET', status: 200 }));
+        expect(records).toEqual([expect.objectContaining({ host: 'host.containers.internal', port: hostPort, decision: 'allow', proto: 'http', method: 'GET', status: 200 })]);
         expect(records[0].bytesOut).toBeGreaterThanOrEqual(6);
-        expect(JSON.stringify(records)).not.toContain('host-ok');
+        expect(JSON.stringify(records[0])).not.toContain('host-ok');
 
-        // 策略没有被放宽：没允许的私网端口仍然不通（经代理会被拒绝，直连被 nft 拒绝）
-        expect(await viaProxy(c, 'http://host.containers.internal:9/')).not.toBe('200');
+        // 策略没有被放宽：没允许的私网端口仍被 nft 直接拒绝
         expect(await code(c.name, 'http://host.containers.internal:9/', '--noproxy "*"')).toBe('000');
 
         // 关掉审计：不再注入代理

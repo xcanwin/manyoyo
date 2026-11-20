@@ -200,36 +200,36 @@ export function NetworkPanel({
     : []
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        compact
-        title="网络"
-        actions={
-          <>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="刷新"
-              title="刷新"
-              onClick={() => void load()}
-              disabled={loading}
-            >
-              {loading ? <Spinner /> : <RefreshCwIcon />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="清空"
-              title="清空"
-              onClick={() => void clearRecords()}
-              disabled={!data?.records.length}
-            >
-              <Trash2Icon />
-            </Button>
-          </>
-        }
-      />
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4 max-md:p-3">
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-3 md:p-4">
+        <PageHeader
+          title="网络"
+          description="查看经过过滤代理的 HTTP(S) 记录，切换记录开关不需要重建容器。"
+          actions={
+            <>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="刷新"
+                title="刷新"
+                onClick={() => void load()}
+                disabled={loading}
+              >
+                {loading ? <Spinner /> : <RefreshCwIcon />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="清空"
+                title="清空"
+                onClick={() => void clearRecords()}
+                disabled={!data?.records.length}
+              >
+                <Trash2Icon />
+              </Button>
+            </>
+          }
+        />
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
