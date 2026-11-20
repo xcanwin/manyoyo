@@ -27,7 +27,10 @@ manyoyo serve 127.0.0.1:<port> --stop     # the port is in the address printed a
 manyoyo update              # upgrade to the latest version
 manyoyo update --rollback   # return to the previous version
 manyoyo update --code       # install the latest main branch code (unreleased)
+manyoyo update --ignore-tls # temporarily ignore HTTPS certificate errors (corporate proxy / self-signed CA only)
 ```
+
+If a corporate proxy or self-signed CA causes `self-signed certificate` / `unable to verify the first certificate`, install the CA first. Only when that is temporarily impossible, add `--ignore-tls` to `update` (it affects only my's GitHub requests, not the global environment; image pulls are still verified by the container runtime).
 
 An upgrade downloads only what changed, tens of MB. To run the latest code without waiting for a release, see the "Code Builds" section of [Advanced Install](../advanced/installation.md).
 

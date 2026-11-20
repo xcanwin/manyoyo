@@ -2147,6 +2147,38 @@ exit 0
             expect(output).toContain('update');
         });
 
+        test('update --ignore-tls 出现在帮助里；npm 安装路径把 NODE_TLS_REJECT_UNAUTHORIZED=0 只传给 npm 子进程', () => {
+            const help = execSync(`"${process.execPath}" ${BIN_PATH} update --help`, { encoding: 'utf-8' });
+            expect(help).toContain('--ignore-tls');
+
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-update-tls-'));
+            const fakeNpmPath = path.join(tempDir, 'npm');
+            const npmLogPath = path.join(tempDir, 'npm.log');
+            const envLogPath = path.join(tempDir, 'npm.env');
+            const depPath = path.join(tempDir, 'dep-registry');
+            fs.mkdirSync(depPath, { recursive: true });
+            fs.writeFileSync(fakeNpmPath, `#!/bin/sh
+echo "$@" >> "${npmLogPath}"
+echo "\${NODE_TLS_REJECT_UNAUTHORIZED:-}" >> "${envLogPath}"
+if [ "$1" = "ls" ]; then
+cat <<NPMEOF
+{"dependencies":{"@xcanwin/manyoyo":{"path":"${depPath}"}}}
+NPMEOF
+fi
+exit 0
+`, { mode: 0o755 });
+            try {
+                execSync(`"${process.execPath}" ${BIN_PATH} update --ignore-tls`, {
+                    encoding: 'utf-8',
+                    env: { ...process.env, PATH: `${tempDir}:${process.env.PATH}`, HOME: tempDir, NODE_TLS_REJECT_UNAUTHORIZED: '' },
+                    cwd: tempDir
+                });
+                expect(fs.readFileSync(envLogPath, 'utf-8')).toContain('0');
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+        });
+
         test('update should invoke npm update when global install source is registry', () => {
             const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-update-'));
             const fakeNpmPath = path.join(tempDir, 'npm');

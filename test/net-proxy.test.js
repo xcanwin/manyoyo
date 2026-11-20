@@ -107,6 +107,16 @@ describe('getGithubFetch', () => {
         const result = getGithubFetch({ env: { https_proxy: 'http://u:p@h:1' }, platform: 'linux', nodeVersion: '24.21.0' });
         expect(result.notice).toBe('使用代理: http://h:1');
     });
+
+    test('ignoreTls：直连也改用自家 fetch，提示里写明已忽略证书校验；不改全局', () => {
+        const baseFetch = jest.fn();
+        const before = [process.env.NODE_TLS_REJECT_UNAUTHORIZED, https.globalAgent, globalThis.fetch];
+        const result = getGithubFetch({ env: {}, platform: 'linux', baseFetch, ignoreTls: true });
+        expect(result.fetch).not.toBe(baseFetch);
+        expect(result.notice).toContain('忽略 HTTPS 证书校验');
+        expect([process.env.NODE_TLS_REJECT_UNAUTHORIZED, https.globalAgent, globalThis.fetch]).toEqual(before);
+        expect(getGithubFetch({ env: { https_proxy: 'http://h:1' }, platform: 'linux', nodeVersion: '24.21.0', ignoreTls: true }).notice).toContain('忽略 HTTPS 证书校验');
+    });
 });
 
 // ---- 真实代理替身：只处理 CONNECT（HTTPS 目标）和绝对地址转发（HTTP 目标），并记录经过的请求 ----
@@ -198,6 +208,8 @@ describe('createProxyFetch（真实代理替身）', () => {
                 expect(proxy.seen).toEqual([`CONNECT localhost:${port}`]);
                 // 不信任这张证书时必须失败（校验没有被关掉）
                 await expect(createProxyFetch(env)(`https://localhost:${port}/`)).rejects.toBeTruthy();
+                // 显式 ignoreTls 时才放行（agentOptions 经 CONNECT 隧道同样生效）
+                expect((await createProxyFetch(env, { rejectUnauthorized: false })(`https://localhost:${port}/`)).ok).toBe(true);
             } finally {
                 target.close();
             }
@@ -205,6 +217,27 @@ describe('createProxyFetch（真实代理替身）', () => {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+});
+
+const opensslOk = spawnSync('openssl', ['version']).status === 0;
+(opensslOk ? test : test.skip)('ignoreTls 能直连自签证书（默认仍然拒绝）', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'net-proxy-tls-'));
+    try {
+        const gen = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'k.pem'), '-out', path.join(dir, 'c.pem'), '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'], { encoding: 'utf-8' });
+        expect(gen.status).toBe(0);
+        const target = https.createServer({ key: fs.readFileSync(path.join(dir, 'k.pem')), cert: fs.readFileSync(path.join(dir, 'c.pem')) }, (req, res) => res.end('ok'));
+        const port = await listen(target);
+        try {
+            const url = `https://localhost:${port}/`;
+            await expect(createProxyFetch(null)(url)).rejects.toBeTruthy();
+            const insecure = getGithubFetch({ env: {}, platform: 'linux', ignoreTls: true });
+            expect(await (await insecure.fetch(url)).text()).toBe('ok');
+        } finally {
+            target.close();
+        }
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
 });
 
 test('不修改全局：http.globalAgent / https.globalAgent / 全局 fetch 保持原样（serve 里还有访问本机的请求）', () => {

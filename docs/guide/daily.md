@@ -27,7 +27,10 @@ manyoyo serve 127.0.0.1:<端口> --stop     # 端口见启动时打印的地址
 manyoyo update              # 升级到最新版本
 manyoyo update --rollback   # 回到上一版本
 manyoyo update --code       # 安装 main 分支最新代码（未发布）
+manyoyo update --ignore-tls # 临时忽略 HTTPS 证书错误（仅公司代理 / 自签证书环境）
 ```
+
+公司代理或自签证书导致 `self-signed certificate` / `unable to verify the first certificate` 时，先安装系统 CA；确实临时无法解决再在 `update` 上加 `--ignore-tls`（只影响 my 访问 GitHub，不会改动全局环境变量；拉取镜像仍由容器运行时校验证书）。
 
 升级只下载变化的部分，几十 MB。不等发版想用最新代码，见[安装详解](../advanced/installation.md)的“代码版”。
 

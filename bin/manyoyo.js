@@ -860,6 +860,10 @@ function updateNetworkNextSteps(proxy, release) {
 
 async function updateOfflineInstall(mode, options, globalConfig) {
     const { appRoot } = mode;
+    const ignoreTls = options.ignoreTls === true;
+    const warnIgnoreTls = () => {
+        if (ignoreTls) console.log(`${YELLOW}⚠️  已忽略 HTTPS 证书校验（--ignore-tls）：只应在公司代理 / 自签证书环境临时使用；网络中间人可能篡改下载内容。${NC}`);
+    };
     if (options.rollback) {
         const result = appUpdate.rollbackApp({ appRoot });
         console.log(`${GREEN}✅ 已回滚: ${result.from || '未知'} → ${result.to}${NC}`);
@@ -871,7 +875,8 @@ async function updateOfflineInstall(mode, options, globalConfig) {
     console.log(`${CYAN}🔄 当前版本: ${installed}${NC}`);
     let result;
     if (options.code) {
-        const github = getGithubFetch();
+        warnIgnoreTls();
+        const github = getGithubFetch({ ignoreTls });
         if (github.notice) console.log(`${CYAN}🌐 ${github.notice}${NC}`);
         console.log(`${CYAN}🔄 正在查询分支 ${options.code} 的代码版...${NC}`);
         try {
@@ -908,7 +913,8 @@ async function updateOfflineInstall(mode, options, globalConfig) {
         console.log(`${CYAN}⬇️  安装本地升级包 ${path.basename(options.file)}${NC}`);
         result = await appUpdate.installAppFile({ appRoot, file: path.resolve(options.file), targetOs: appUpdate.platformOs() });
     } else {
-        const github = getGithubFetch();
+        warnIgnoreTls();
+        const github = getGithubFetch({ ignoreTls });
         if (github.notice) console.log(`${CYAN}🌐 ${github.notice}${NC}`);
         let release = null;
         try {
@@ -1041,8 +1047,14 @@ async function updateManyoyo(options = {}, globalConfig = {}) {
     }
 
     console.log(`${CYAN}🔄 当前版本: ${currentVersion}${NC}`);
+    if (options.ignoreTls === true) {
+        console.log(`${YELLOW}⚠️  已为 npm 忽略 HTTPS 证书校验（--ignore-tls）：只应在公司代理 / 自签证书环境临时使用。${NC}`);
+    }
     console.log(`${CYAN}🔄 正在更新 ${MANYOYO_NAME} 到最新版本...${NC}`);
-    runCmd('npm', ['update', '-g', '@xcanwin/manyoyo', '--prefer-online'], { stdio: 'inherit' });
+    runCmd('npm', ['update', '-g', '@xcanwin/manyoyo', '--prefer-online'], {
+        stdio: 'inherit',
+        ...(options.ignoreTls === true ? { env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: '0' } } : {})
+    });
 
     // 升级后获取新版本
     let newVersion = 'unknown';
@@ -1275,7 +1287,8 @@ https://github.com/xcanwin/manyoyo
         .option('--rollback', '回到上一版本')
         .option('--file <path>', '安装手动下载的升级包（manyoyo-<版本>-<系统>-<架构>-app.tar.gz，同目录需有 SHA256SUMS）')
         .option('--code [branch]', '安装某个分支的最新代码版（未发布，默认 main）')
-        .action(options => selectAction('update', { update: true, rollback: Boolean(options.rollback), file: options.file || '', code: options.code === undefined ? '' : (options.code === true ? 'main' : options.code) }));
+        .option('--ignore-tls', '忽略 HTTPS 证书校验错误（公司代理 / 自签证书环境临时使用；只影响 my 访问 GitHub，拉取镜像仍由容器运行时校验证书）')
+        .action(options => selectAction('update', { update: true, rollback: Boolean(options.rollback), file: options.file || '', code: options.code === undefined ? '' : (options.code === true ? 'main' : options.code), ignoreTls: Boolean(options.ignoreTls) }));
 
     program.command('uninstall')
         .helpGroup('日常:')
