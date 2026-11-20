@@ -4,7 +4,7 @@ import { PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 import { apiErrorData, apiGet, apiPut, type SessionSummary } from "@/lib/api"
 import { formatDateTime } from "@/lib/format"
 import { emptyPlan, groupPlanItems, normalizePlan, type Plan, type PlanDod, type PlanPayload } from "@/lib/plan"
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -188,17 +188,17 @@ export function PlanPanel({
         ) : null}
         {conflict ? (
           <Alert variant="warning">
-            <AlertDescription>计划已在别处更新，你保存的是旧版本。可以重新加载最新计划，或用你的内容覆盖。</AlertDescription>
-            <AlertAction>
-              <div className="flex items-center gap-2">
+            <AlertDescription className="flex flex-col gap-2">
+              <span>计划已在别处更新，你保存的是旧版本。可以重新加载最新计划，或用你的内容覆盖。</span>
+              <span className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => void load()} disabled={saving}>
                   重新加载
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => void saveOverriding()} disabled={saving}>
                   仍然保存
                 </Button>
-              </div>
-            </AlertAction>
+              </span>
+            </AlertDescription>
           </Alert>
         ) : null}
 
@@ -274,6 +274,7 @@ export function PlanPanel({
                     <div className="flex items-center gap-2">
                       <Checkbox
                         aria-label="完成"
+                        className="touch-hit"
                         checked={item.checked}
                         onCheckedChange={(checked) => updateDod(index, { checked: Boolean(checked) })}
                       />
@@ -296,7 +297,7 @@ export function PlanPanel({
                       size="icon-sm"
                       aria-label="删除"
                       title="删除"
-                      className="self-end sm:self-auto"
+                      className="touch-hit self-end sm:self-auto"
                       onClick={() => removeDod(index)}
                     >
                       <Trash2Icon />

@@ -72,7 +72,8 @@ function AlertAction({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="alert-action"
-      className={cn("absolute top-2 right-2", className)}
+      // 本地修改：垂直居中。原先 top-2 在单行提示里会让 28px 按钮底边正好贴住提示条底边
+      className={cn("absolute top-1/2 right-2 -translate-y-1/2", className)}
       {...props}
     />
   )

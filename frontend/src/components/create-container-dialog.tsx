@@ -2,7 +2,7 @@ import * as React from "react"
 
 import { useAgentAvailability } from "@/hooks/use-agent-availability"
 import { AGENT_UNAVAILABLE_HINT } from "@/lib/setup"
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CardTitle } from "@/components/ui/card"
@@ -716,11 +716,11 @@ export function CreateContainerDialog({
             <FieldGroup>
               {candidates.length ? (
                 <Alert>
-                  <AlertDescription>
-                    检测到 {candidates.length} 个可能需要放行的地址（来自自启动 /
-                    首次命令），已在下方「网络」里列出。
-                  </AlertDescription>
-                  <AlertAction>
+                  <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="min-w-0">
+                      检测到 {candidates.length} 个可能需要放行的地址（来自自启动 /
+                      首次命令），已在下方「网络」里列出。
+                    </span>
                     <Button
                       type="button"
                       size="sm"
@@ -729,7 +729,7 @@ export function CreateContainerDialog({
                     >
                       查看并选择
                     </Button>
-                  </AlertAction>
+                  </AlertDescription>
                 </Alert>
               ) : null}
 
