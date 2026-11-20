@@ -78,7 +78,7 @@ export type NetworkPolicy = {
   inbound: Rule[]
   expose: ExposeEntry[]
   autostartOnServe: boolean
-  /** 记录代理可见的 HTTP(S)（默认关）。菜单里不编辑它，但保存网络规则时要原样保留 */
+  /** 记录经过代理的 HTTP(S)（默认关）。菜单里不编辑它，但保存网络规则时要原样保留 */
   auditHttp?: boolean
 }
 
@@ -128,8 +128,8 @@ export function samePolicy(a: NetworkPolicy, b: NetworkPolicy): boolean {
   return JSON.stringify(canon(a)) === JSON.stringify(canon(b))
 }
 
-// 新建容器时要发给服务端的 network：与基线（没选运行配置时是默认策略，选了就是服务端返回的预设）相同就不发，
-// 交给 runs / 全局配置与服务端默认；与基线不同才发（包括把预设改回默认）。autostartOnServe 单独走自己的字段。
+// 新建容器时要发给服务端的 network：和原来的值相同就不发（没选运行配置时是默认策略，选了就是服务端返回的运行配置），
+// 交给 runs / 全局配置与服务端默认；不同才发（包括把运行配置改回默认）。autostartOnServe 单独走自己的字段。
 export function networkForCreate(
   policy: NetworkPolicy,
   baseline: NetworkPolicy = defaultPolicy()

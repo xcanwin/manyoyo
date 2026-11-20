@@ -1,6 +1,6 @@
 'use strict';
 
-// 真实容器：新建容器预设带入、显式覆盖、地址识别与自启动放行。
+// 真实容器：新建容器自动填入运行配置、明确改掉、地址识别与自启动放行。
 // 运行时不可用或镜像缺失时自动跳过；临时 HOME，只建 qa-preset-* 容器，结束按创建清单删除。
 const { spawn, spawnSync } = require('child_process');
 const crypto = require('crypto');
@@ -116,7 +116,7 @@ async function waitForFile(file, predicate, timeoutMs = 30000) {
     return null;
 }
 
-maybe('新建容器预设与地址识别（真实容器）', () => {
+maybe('新建容器运行配置与地址识别（真实容器）', () => {
     let home;
     let work;
     let fixture;
@@ -168,7 +168,7 @@ maybe('新建容器预设与地址识别（真实容器）', () => {
 
     const idOf = name => state.listStateIds(home).find(id => state.readMeta(home, id).name === name);
 
-    test('预设接口返回运行配置的值；不带覆盖时容器按预设创建', async () => {
+    test('配置接口返回运行配置的值；不带覆盖时容器按运行配置创建', async () => {
         const preset = await api.call('GET', '/api/system/new-container-preset?run=qa');
         expect(preset.status).toBe(200);
         expect(preset.json).toEqual(expect.objectContaining({ run: 'qa', autostartOnServe: true }));
@@ -203,7 +203,7 @@ maybe('新建容器预设与地址识别（真实容器）', () => {
         expect(first).toContain('host-ok');
     }, 120000);
 
-    test('地址识别给出 @host 候选；空串 / false / 默认网络能显式覆盖预设，未放行时自启动被拦', async () => {
+    test('地址识别给出 @host 地址；空串 / false / 默认网络能明确改掉运行配置，未放行时自启动被拦', async () => {
         const infer = await api.call('POST', '/api/system/new-container-preset/infer', { run: 'qa' });
         expect(infer.status).toBe(200);
         expect(infer.json.candidates).toEqual(expect.arrayContaining([
@@ -222,7 +222,7 @@ maybe('新建容器预设与地址识别（真实容器）', () => {
                 imageVersion,
                 autostart: `curl -fsS -m 5 http://host.containers.internal:${fixturePort}/ok -o /run/manyoyo/autostart-result || echo FAILED > /run/manyoyo/autostart-result\n`,
                 autostartOnServe: false,
-                // 与新建容器弹窗一致：用户显式取消了候选勾选，服务端不要再自动放行
+                // 与新建容器弹窗一致：用户明确取消了地址勾选，服务端不要再自动放行
                 autoAllowScriptEndpoints: false,
                 network: { preset: 'restricted', outbound: [], inbound: [], expose: [] }
             }
@@ -234,7 +234,7 @@ maybe('新建容器预设与地址识别（真实容器）', () => {
         const blockedResult = await waitForFile(path.join(state.paths(home, id).box, 'autostart-result'), text => text.includes('FAILED'));
         expect(blockedResult).toContain('FAILED');
 
-        // 把识别到的候选勾选后合并进白名单：同样的自启动能访问
+        // 把识别到的地址勾选后加入白名单：同样的自启动能访问
         const allowed = `qa-preset-allowed-${crypto.randomBytes(2).toString('hex')}`;
         created.push(allowed);
         const allowedRes = await api.call('POST', '/api/sessions', {

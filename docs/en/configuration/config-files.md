@@ -17,8 +17,8 @@ Priority: command line > `runs.<name>` > global config > defaults.
 - `env`: merged by key, later wins.
 - `envFile`, `volumes`, `ports`, `imageBuildArgs`: appended in the order global -> `runs.<name>` -> command line.
 - `serverUser` / `serverPass`: command line > `runs.<name>` > global config > environment variable > default.
-- `autostart` / `autostartOnServe` / `network`: when creating a container in the web UI, the same precedence applies (request > `runs.<name>` > global) and the values are shown in the dialog as the baseline; unchanged fields are not sent, while clearing / turning off / switching back to the default is a valid explicit override.
-- Addresses, IPs and ports in `first` (command, `first.env`, `first.envFile`) are detected as "addresses that may need to be allowed" in the new-container dialog (added to the allowlist when ticked; detection never blocks creation). Entries without a candidate picker (quick chat, the `my run` CLI, cloned/recreated containers) automatically allow the default-checked candidates (cloud metadata, very wide ranges and wildcard domains stay out), only at creation time.
+- `autostart` / `autostartOnServe` / `network`: when creating a container in the web UI, the same precedence applies (request > `runs.<name>` > global) and the values are filled into the dialog. Fields you do not change are not sent; clearing a field, turning it off, or switching back to the default is sent as your explicit choice.
+- Domains, IPs and ports in `first` (command, `first.env`, `first.envFile`) are listed in the new-container dialog and join the allowlist only when ticked. A detection failure never blocks creation. Quick chat, the `my run` CLI and cloned/recreated containers have no picker, so they automatically allow the addresses that are ticked by default (cloud metadata, very wide ranges and wildcard domains stay out). This only happens at creation time.
 
 ```json5
 {

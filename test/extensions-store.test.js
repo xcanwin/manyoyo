@@ -134,7 +134,7 @@ describe('extensions-store：技能目录辅助文件的大小上限', () => {
         fs.rmSync(home, { recursive: true, force: true });
     });
 
-    test('超过 1 MB 的辅助文件不参与哈希：catalogSummary 给 warning，listSkills 标记 oversized', () => {
+    test('超过 1 MB 的其它文件不参与内容校验：catalogSummary 给 warning，listSkills 标记 oversized', () => {
         const dir = path.join(home, '.manyoyo', 'extensions', 'skills', 'common', 'big');
         const big = path.join(dir, 'assets.bin');
         fs.writeFileSync(big, Buffer.alloc(2 * 1024 * 1024, 1));
@@ -144,15 +144,15 @@ describe('extensions-store：技能目录辅助文件的大小上限', () => {
         expect(listed).toEqual(expect.objectContaining({ oversized: true }));
         expect(listed.warnings.join('\n')).toContain('assets.bin');
         const firstHash = summary.hash;
-        // 修改超限文件内容：哈希不变（没有读取它，也不会反复触发同步）
+        // 修改超限文件内容：校验值不变（没有读取它，也不会反复触发同步）
         fs.writeFileSync(big, Buffer.alloc(2 * 1024 * 1024, 2));
         expect(store.catalogHash(home)).toBe(firstHash);
-        // 删除大文件后恢复正常哈希
+        // 删除大文件后恢复正常校验值
         fs.rmSync(big);
         expect(store.catalogHash(home)).not.toBe(firstHash);
     });
 
-    test('正常的辅助文件参与哈希；mcp.json 超过 1 MB 时忽略并给 warning', () => {
+    test('正常的其它文件参与内容校验；mcp.json 超过 1 MB 时忽略并给 warning', () => {
         const dir = path.join(home, '.manyoyo', 'extensions', 'skills', 'common', 'big');
         const extra = path.join(dir, 'notes.md');
         fs.writeFileSync(extra, 'one');

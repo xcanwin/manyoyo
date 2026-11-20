@@ -26,7 +26,7 @@
 - `files-panel.tsx` + `code-mirror-editor.tsx`：文件浏览与编辑，切走标签前经 `confirmLeaveIfDirty` 拦一次未保存修改。
 - `terminal-view.tsx`：xterm 终端面板，含按键条与移动端输入条。
 - `html-preview-panel.tsx`：`Sheet` 里的沙箱 iframe 预览（`allow-scripts` 且不给 `allow-same-origin`）。
-- `create-container-dialog.tsx`：新建容器时拉 `/api/system/new-container-preset`（按 请求 > runs > 全局）回填 autostart / autostartOnServe / network，有内容自动展开；表单以预设为基线，只发改过的字段（空串 / false / 改回默认也算显式覆盖）；地址候选来自 `POST .../infer`（800ms 防抖、切换网络模式立即重跑、勾选后才合并进出站规则）。`networkForCreate(policy, baseline)` 的第二个参数是预设基线；`mergeSelectedCandidates` 在 `lib/network-infer.ts`。
+- `create-container-dialog.tsx`：新建容器时拉 `/api/system/new-container-preset`（按 请求 > runs > 全局）自动填入 autostart / autostartOnServe / network，有内容自动展开；表单以这些自动填入的值为准，只发改过的字段（清空成空串、改成 false、改回默认也算改过）；地址列表来自 `POST .../infer`（改完自启动等 800 毫秒再识别，切换网络模式立即重新识别，勾选后才加进出站规则）。`networkForCreate(policy, baseline)` 的第二个参数是自动填入的网络；`mergeSelectedCandidates` 在 `lib/network-infer.ts`。
 - `network-panel.tsx`：网络视图（汇总 / 筛选 / 覆盖提示 / 记录开关 / 拒绝行允许 / 清空）；打开且页面可见时每 5 秒刷新一次。
 - `plan-panel.tsx` + `lib/plan.ts`：计划视图（Agent 计划分组 + 验收清单编辑 / If-Match 保存 / 409 冲突）；计划项只按纯文本渲染；离开视图时由 `workspace-panel` 的 `changeView` 拦一次未保存修改。
 - `extensions-panel.tsx`：技能与 MCP 视图，上半部分是宿主级共享库（技能 / MCP CRUD、同步到当前容器、测试连接），下半部分按 Agent 列出容器里的现状；项目来源标「项目提供」，共享库的密钥只显示 key 与末 4 位。

@@ -31,7 +31,7 @@ describe('network-infer：URL 提取', () => {
         expect(raw).not.toContain('secret');
     });
 
-    test('默认端口按协议：http 80 / https 443 / ws 80 / wss 443 / ftp 21；显式端口保留', async () => {
+    test('默认端口按协议：http 80 / https 443 / ws 80 / wss 443 / ftp 21；写明端口时保留', async () => {
         const result = await inferEndpointCandidates({
             firstCommand: [
                 'curl http://a.example.com/x',
@@ -191,7 +191,7 @@ describe('network-infer：按模式过滤与 DNS', () => {
         expect(llm.defaultChecked).toBe(true);
     });
 
-    test('allowlist 收公网域名；DNS 失败仍保留域名候选但 resolved 为空', async () => {
+    test('allowlist 收公网域名；DNS 失败仍保留域名地址但 resolved 为空', async () => {
         const lookup = async () => { throw new Error('timeout'); };
         const result = await inferEndpointCandidates({
             firstCommand: 'curl https://public.example.com/',
@@ -202,7 +202,7 @@ describe('network-infer：按模式过滤与 DNS', () => {
         expect(result.candidates[0].resolved).toEqual([]);
     });
 
-    test('DNS 全部返回环回 / 未指定 / 组播时跳过候选', async () => {
+    test('DNS 全部返回环回 / 未指定 / 组播时跳过地址', async () => {
         const lookup = async () => [
             { address: '127.0.0.1', family: 4 },
             { address: '0.0.0.0', family: 4 },
@@ -216,7 +216,7 @@ describe('network-infer：按模式过滤与 DNS', () => {
         expect(result.candidates).toEqual([]);
     });
 
-    test('custom 不生成候选并说明原因', async () => {
+    test('custom 不生成地址并说明原因', async () => {
         const result = await inferEndpointCandidates({
             firstCommand: 'curl https://api.example.com/',
             preset: 'custom',
@@ -227,7 +227,7 @@ describe('network-infer：按模式过滤与 DNS', () => {
         expect(result.reason).toBe('unrestricted');
     });
 
-    test('DNS 单 host 超时与总预算：超时返回未解析候选，不报错', async () => {
+    test('DNS 单 host 超时与总预算：超时返回未解析地址，不报错', async () => {
         const slow = () => new Promise(() => {});
         const started = Date.now();
         const result = await inferEndpointCandidates({
@@ -256,7 +256,7 @@ describe('network-infer：去重、来源、排序与上限', () => {
         expect(result.candidates[0].sources).toEqual(['autostart', 'first', 'first.env']);
     });
 
-    test('候选按来源顺序稳定排序；超过 50 条置 truncated 并只返回前 50 条', async () => {
+    test('地址按来源顺序稳定排序；超过 50 条置 truncated 并只返回前 50 条', async () => {
         const lines = Array.from({ length: 60 }, (_, i) => `curl https://h${i}.example.com/`).join('\n');
         const result = await inferEndpointCandidates({ firstCommand: lines, preset: 'allowlist', lookup: publicLookup });
         expect(result.candidates).toHaveLength(50);
@@ -286,7 +286,7 @@ describe('network-infer：extractEndpointTokens', () => {
     });
 });
 
-describe('withScriptEndpoints：没有候选界面的入口自动放行', () => {
+describe('withScriptEndpoints：没有勾选界面的入口自动放行', () => {
     test('restricted：自启动里的 host.docker.internal:<端口> 自动加 @host 允许规则，插在最前', async () => {
         const policy = normalizePolicy({ preset: 'restricted', outbound: [{ action: 'allow', target: 'keep.example.com', ports: '', proto: 'all', enabled: true }] });
         const next = await withScriptEndpoints(policy, { autostart: 'curl -fsS http://host.docker.internal:9999/health' });

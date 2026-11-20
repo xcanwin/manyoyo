@@ -5,7 +5,7 @@ const planLib = require('../lib/web/plan');
 const tool = (toolName, extra = {}) => ({ kind: 'tool', provider: 'claude', toolName, toolId: `${toolName}-1`, phase: 'started', ...extra });
 const todo = (text, status = 'pending') => ({ content: text, status, activeForm: text });
 
-describe('web/plan：计划投影', () => {
+describe('web/plan：计划更新', () => {
     test('空计划稳定；normalizePlan 对缺失 / 损坏 / 超长返回可用结构', () => {
         const empty = planLib.emptyPlan();
         expect(empty).toEqual({ version: 1, revision: 0, updatedAt: null, items: [], dod: [] });
@@ -93,7 +93,7 @@ describe('web/plan：计划投影', () => {
             ['todo:1', '当前一', 'completed'],
             ['todo:2', '当前二', 'pending']
         ]);
-        // 消息被裁剪后，早期 TaskCreate 丢了就丢了；TodoWrite 的快照仍在
+        // 消息被裁剪后，早期 TaskCreate 丢了就丢了；TodoWrite 的整份内容仍在
         expect(planLib.recomputeFromMessages(messages.slice(1)).items).toHaveLength(2);
         expect(planLib.recomputeFromMessages([])).toEqual(planLib.emptyPlan());
     });

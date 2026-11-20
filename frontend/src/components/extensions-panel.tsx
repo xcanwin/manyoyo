@@ -101,8 +101,8 @@ const emptyMcpForm = (): McpForm => ({
   enabled: true,
 })
 
-// “技能与 MCP”视图：上面是宿主级共享库（可增删改、同步到容器），下面是容器里 Agent 自己报告的现状。
-// 共享技能是代码、共享 MCP 的密钥对所有容器可见——界面上如实写明，不假装隔离。
+// “技能与 MCP”视图：上面是宿主机上的共享库（可增删改、同步到容器），下面是容器里 Agent 自己报告的现状。
+// 共享技能是代码，共享 MCP 的密钥对所有使用它的容器可见；界面上要如实写明，不假装隔离。
 export function ExtensionsPanel({ session }: { session: SessionSummary }) {
   const [agents, setAgents] = React.useState<AgentExtensions[] | null>(null)
   const [shared, setShared] = React.useState<SharedStatus | null>(null)
@@ -151,8 +151,8 @@ export function ExtensionsPanel({ session }: { session: SessionSummary }) {
       const pending = result.pending === true
       setNotice(
         pending
-          ? `同步未完成，可重试${conflicts.length ? `（${conflicts.length} 项冲突未覆盖）` : ""}${warnings.length ? `：${warnings[0]}` : ""}`
-          : `已同步${conflicts.length ? `，${conflicts.length} 项冲突未覆盖` : ""}${warnings.length ? `，${warnings.length} 条警告` : ""}`
+          ? `同步未完成，可重试${conflicts.length ? `（有 ${conflicts.length} 项冲突没有处理）` : ""}${warnings.length ? `：${warnings[0]}` : ""}`
+          : `已同步${conflicts.length ? `，有 ${conflicts.length} 项冲突没有处理` : ""}${warnings.length ? `，${warnings.length} 条警告` : ""}`
       )
       load()
     } catch (err) {
@@ -351,7 +351,7 @@ export function ExtensionsPanel({ session }: { session: SessionSummary }) {
                 同步到当前容器
               </Button>
               <Hint>
-                {shared ? (shared.mode === "mount" ? "当前容器：只读挂载 + 受管链接" : shared.mode ? "当前容器：复制模式" : "当前容器还没有同步过") : ""}
+                {shared ? (shared.mode === "mount" ? "当前容器：只读挂载 + 共享库创建的链接" : shared.mode ? "当前容器：复制模式" : "当前容器还没有同步过") : ""}
                 {shared?.pending ? " · 共享库有更新，需要同步" : ""}
               </Hint>
             </div>
@@ -397,7 +397,7 @@ export function ExtensionsPanel({ session }: { session: SessionSummary }) {
               <Alert variant="warning">
                 <AlertDescription>
                   有 {shared.conflicts.length} 项同名内容没有被覆盖（容器里的真实目录 / 用户自己加的 MCP /
-                  项目里的同名技能）。共享库只管理自己下发的条目。
+                  项目里的同名技能）。共享库只管理由它添加的条目。
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -493,7 +493,7 @@ export function ExtensionsPanel({ session }: { session: SessionSummary }) {
           <DialogHeader>
             <DialogTitle>{mcpDialog?.id ? "编辑 MCP" : "新增 MCP"}</DialogTitle>
             <DialogDescription>
-              共享 MCP 会下发到每个使用它的容器；密钥会出现在这些容器里。MCP 的命令受容器的网络策略约束。
+              共享 MCP 会同步到每个使用它的容器；密钥会出现在这些容器里。MCP 的命令受容器的网络策略约束。
             </DialogDescription>
           </DialogHeader>
           <DialogBody>

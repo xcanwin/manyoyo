@@ -1,4 +1,4 @@
-// 会话计划面板的类型与纯函数。计划由服务端投影并落盘（lib/web/plan.js），这里只做展示与分组。
+// 会话计划面板的类型与纯函数。计划由服务端根据执行过程生成并写入文件（lib/web/plan.js），这里只做展示和分组。
 export type PlanStatus = "pending" | "in_progress" | "completed"
 
 export type PlanItem = {

@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/collapsible"
 
 // 折叠区（STYLE.md 第 7 节）：每块上方一条分割线，标题是区块标题档（14px / 600），悬停变色，默认收起；
-// 展开态不另加背景或描边。传了 open / onOpenChange 就是受控的（新建容器弹窗按预设自动展开）。
+// 展开态不另加背景或描边。传了 open / onOpenChange 就由父组件控制（新建容器弹窗会在有内容时自动展开）。
 export function SectionToggle({
   title,
   children,

@@ -86,7 +86,7 @@ export function NetworkPanel({
     [base, decision]
   )
 
-  // 打开视图、切筛选时加载；可见时每 5 秒刷新一次（setTimeout 链），页面隐藏时停
+  // 打开视图、切换筛选时读取；页面可见时每 5 秒刷新一次（用 setTimeout 串起来），页面隐藏时停止
   React.useEffect(() => {
     if (!session.containerName) return
     queueMicrotask(() => void load())

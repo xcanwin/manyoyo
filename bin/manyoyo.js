@@ -2232,7 +2232,7 @@ async function createNewContainer(runtime) {
 
     const networkManager = createCliNetworkManager(runtime);
     const envNetworkPolicy = await withEnvEndpoints(await networkManager.resolveRefs(normalizePolicy(runtime.network)), [...userEnvLines, ...containerState.readEnvFilePaths(runtime.envFiles || []).flatMap(file => file.entries.map(entry => `${entry.key}=${entry.value}`))]);
-    // CLI 没有候选勾选界面：自动放行自启动 / first 里默认勾选的地址（metadata / 很宽的规则不加）
+    // CLI 没有勾选界面：自动放行自启动 / first 里默认勾选的地址（云元数据、范围过大的网段不加）
     const networkPolicy = await withScriptEndpoints(envNetworkPolicy, {
         autostart: runtime.autostart,
         firstCommand: joinExecCommand(runtime.firstExecCommandPrefix, runtime.firstExecCommand, runtime.firstExecCommandSuffix),

@@ -172,7 +172,7 @@ describe("新建容器弹窗尺寸", () => {
   })
 })
 
-describe("运行配置预设带入", () => {
+describe("运行配置自动填入", () => {
   const projectPreset = {
     run: "proj",
     autostart: "echo boot\n",
@@ -180,7 +180,7 @@ describe("运行配置预设带入", () => {
     network: { version: 2, preset: "allowlist", outbound: [{ action: "allow", target: "corp.example.com", ports: "443", proto: "tcp", enabled: true }], inbound: [], expose: [], autostartOnServe: true },
   }
 
-  test("选运行配置后回填自启动 / autostartOnServe / 网络，有内容自动展开", async () => {
+  test("选运行配置后自动填入自启动 / autostartOnServe / 网络，有内容自动展开", async () => {
     runs = { proj: { yolo: "c" } }
     presets.proj = projectPreset
     await open()
@@ -193,7 +193,7 @@ describe("运行配置预设带入", () => {
     expect(Array.from(document.querySelectorAll<HTMLInputElement>("input")).map((item) => item.value)).toContain("corp.example.com")
   })
 
-  test("没改预设时提交不带 autostart / autostartOnServe / network", async () => {
+  test("没改运行配置时提交不带 autostart / autostartOnServe / network", async () => {
     runs = { proj: { yolo: "c" } }
     presets.proj = projectPreset
     await open()
@@ -203,11 +203,11 @@ describe("运行配置预设带入", () => {
     expect(options).not.toHaveProperty("autostart")
     expect(options).not.toHaveProperty("autostartOnServe")
     expect(options).not.toHaveProperty("network")
-    // 弹窗自己管理候选勾选，服务端不要再自动加
+    // 弹窗里自己勾选地址，服务端不要再自动加
     expect(options.autoAllowScriptEndpoints).toBe(false)
   })
 
-  test("清空自启动、关掉 serve 拉起、把网络改回默认，都显式发送", async () => {
+  test("清空自启动、关掉 serve 拉起、把网络改回默认，都会明确发送", async () => {
     runs = { proj: { yolo: "c" } }
     presets.proj = projectPreset
     await open()
@@ -228,7 +228,7 @@ describe("运行配置预设带入", () => {
     expect((options.network as { preset: string }).preset).toBe("restricted")
   })
 
-  test("候选默认勾选普通项、风险项不勾；提交时合并进出站允许规则", async () => {
+  test("默认勾选普通地址、不勾风险项；提交时加入进出站允许规则", async () => {
     runs = { proj: { yolo: "c" } }
     presets.proj = { ...projectPreset, autostart: "", autostartOnServe: false, network: { version: 2, preset: "restricted", outbound: [], inbound: [], expose: [], autostartOnServe: false } }
     inferResult = {
@@ -248,7 +248,7 @@ describe("运行配置预设带入", () => {
     expect(outbound.map((rule) => rule.target)).toEqual(["10.2.3.4"])
   })
 
-  test("识别失败只提示，不阻塞创建；切换运行配置会清掉旧候选与旧自启动", async () => {
+  test("识别失败只提示，不阻塞创建；切换运行配置会清掉旧地址与旧自启动", async () => {
     runs = { proj: { yolo: "c" }, plain: { yolo: "c" } }
     presets.proj = projectPreset
     presets.plain = emptyPreset("plain")
@@ -278,8 +278,8 @@ describe("运行配置预设带入", () => {
   })
 })
 
-describe("预设加载竞态", () => {
-  test("初始默认值晚返回时不会覆盖已经选好的运行配置预设", async () => {
+describe("配置加载顺序", () => {
+  test("初始默认值晚返回时不会覆盖已经选好的运行配置", async () => {
     runs = { qa: { yolo: "c" } }
     presets[""] = { run: "", autostart: "GLOBAL-BOOT\n", autostartOnServe: false, network: { version: 2, preset: "restricted", outbound: [], inbound: [], expose: [], autostartOnServe: false } }
     presets.qa = { run: "qa", autostart: "RUN-BOOT\n", autostartOnServe: false, network: { version: 2, preset: "allowlist", outbound: [{ action: "allow", target: "corp.example.com", ports: "443", proto: "tcp", enabled: true }], inbound: [], expose: [], autostartOnServe: false } }
@@ -288,7 +288,7 @@ describe("预设加载竞态", () => {
     await open()
     await selectRun("qa")
     expect((document.getElementById("create-autostart") as HTMLTextAreaElement).value).toBe("RUN-BOOT\n")
-    // 全局预设此时才返回，不能覆盖 run 的自启动 / 网络
+    // 全局配置此时才返回，不能覆盖 run 的自启动 / 网络
     await act(async () => releaseGlobal())
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)) })
     expect((document.getElementById("create-autostart") as HTMLTextAreaElement).value).toBe("RUN-BOOT\n")
@@ -297,14 +297,14 @@ describe("预设加载竞态", () => {
     expect(JSON.stringify(calls.find((call) => call.url === "/api/sessions" && call.method === "POST")!.body)).not.toContain("GLOBAL-BOOT")
   })
 
-  test("运行配置预设加载期间禁用提交，加载完恢复", async () => {
+  test("运行配置加载期间禁用提交，加载完恢复", async () => {
     runs = { qa: { yolo: "c" } }
     presets.qa = { run: "qa", autostart: "RUN-BOOT\n", autostartOnServe: false, network: { version: 2, preset: "restricted", outbound: [], inbound: [], expose: [], autostartOnServe: false } }
     let releaseRun = () => {}
     await open()
     runPresetGate = new Promise<void>((resolve) => { releaseRun = resolve })
     await selectRun("qa")
-    const submitButton = () => Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((item) => item.textContent?.includes("创建并进入") || item.textContent?.includes("读取预设中"))!
+    const submitButton = () => Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((item) => item.textContent?.includes("创建并进入") || item.textContent?.includes("读取配置中"))!
     expect(submitButton().disabled).toBe(true)
     await act(async () => releaseRun())
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)) })

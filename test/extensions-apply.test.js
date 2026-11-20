@@ -71,7 +71,7 @@ describe('extensions-apply', () => {
         }));
         expect(JSON.stringify(state)).not.toContain('sk-secret-value');
 
-        // 幂等：内容没变直接跳过，不重复跑 CLI
+        // 重复执行：内容没变直接跳过，不重复跑 CLI
         const again = await apply.applyExtensions({ homeDir: home, containerName: 'box', containerId: ID, mode: 'mount', runInContainer: run });
         expect(again).toEqual(expect.objectContaining({ applied: false, skipped: true }));
         const forced = await apply.applyExtensions({ homeDir: home, containerName: 'box', containerId: ID, mode: 'mount', runInContainer: run, force: true });
@@ -140,7 +140,7 @@ describe('extensions-apply', () => {
     });
 });
 
-describe('extensions-apply：受管标记与失败重试', () => {
+describe('extensions-apply：共享库标记与失败重试', () => {
     let home;
     beforeEach(() => {
         home = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-managed-'));
@@ -157,7 +157,7 @@ describe('extensions-apply：受管标记与失败重试', () => {
         });
     }
 
-    test('准备脚本不删除用户替换的同名目录；只清理标记与旧哈希匹配的受管副本', () => {
+    test('准备脚本不删除用户替换的同名目录；只清理标记与旧校验值匹配的共享库副本', () => {
         const userDir = path.join(home, '.claude/skills/keepme');
         fs.mkdirSync(userDir, { recursive: true });
         fs.writeFileSync(path.join(userDir, 'SKILL.md'), '用户自己的内容');
@@ -182,10 +182,10 @@ describe('extensions-apply：受管标记与失败重试', () => {
         // 没有标记 → 用户目录，保留并记冲突
         expect(fs.existsSync(path.join(userDir, 'SKILL.md'))).toBe(true);
         expect(parsed.conflicts).toEqual(expect.arrayContaining([expect.objectContaining({ agent: 'claude', name: 'keepme', reason: 'user-replaced' })]));
-        // 标记哈希和 state 不一致 → 保留并记冲突
+        // 标记里的校验值和 state 不一致 → 保留并记冲突
         expect(fs.existsSync(path.join(mismatchedDir, 'SKILL.md'))).toBe(true);
         expect(parsed.conflicts).toEqual(expect.arrayContaining([expect.objectContaining({ agent: 'claude', name: 'mismatch', reason: 'marker-mismatch' })]));
-        // 标记与 state 哈希匹配 → 清掉并重新复制
+        // 标记与 state 里的校验值一致 → 清掉并重新复制
         expect(fs.existsSync(staleDir)).toBe(false);
         expect(parsed.copy).toEqual([{ agent: 'codex', name: 'managed' }]);
     });

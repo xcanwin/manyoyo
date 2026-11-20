@@ -1313,7 +1313,7 @@ export function WorkspacePanel({
   creatingAgent: boolean
 }) {
   const [view, setView] = React.useState<View>("activity")
-  // 计划视图里从流事件拿到的实时计划（打开视图时 PlanPanel 自己会再拉一次，带 etag）
+  // 计划视图里从流事件拿到的实时计划（打开视图时 PlanPanel 自己会再读一次，带 etag）
   const [livePlan, setLivePlan] = React.useState<{ sessionName: string; plan: Plan } | null>(null)
   const planDirtyRef = React.useRef(false)
   const handlePlanDirty = React.useCallback((dirty: boolean) => {

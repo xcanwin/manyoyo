@@ -765,8 +765,8 @@ describe('目录列举的前缀与数量上限（@ 补全用）', () => {
     });
 });
 
-describe('计划（TodoWrite / TaskCreate / TaskUpdate 投影）', () => {
-    test('一轮结束后落盘：/messages 带 plan，流里有 plan 事件；旧 session 按空计划读', async () => {
+describe('计划（根据 TodoWrite / TaskCreate / TaskUpdate 生成）', () => {
+    test('一轮结束后保存：/messages 带 plan，流里有 plan 事件；旧 session 按空计划读', async () => {
         await withServer(async ({ baseUrl, cookie }) => {
             const before = await request(`${baseUrl}/api/sessions/demo/plan`, { headers: { Cookie: cookie } });
             expect(before.response.status).toBe(200);

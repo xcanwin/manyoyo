@@ -34,7 +34,7 @@ describe('egress-traffic：记录与读取', () => {
         fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    test('写入后有落盘；读取按时间倒序；非法 id / 字段被丢弃', () => {
+    test('写入后保存到文件；读取按时间倒序；非法 id / 字段被丢弃', () => {
         const recorder = traffic.createRecorder({ dir, now: () => '2026-01-01T00:00:00.000Z' });
         recorder.record(record({ host: 'a.example.com', ts: '2026-01-01T00:00:00.000Z' }));
         recorder.record(record({ host: 'b.example.com', ts: '2026-01-01T00:00:01.000Z' }));

@@ -574,7 +574,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
         });
     });
 
-    describe('新建容器预设与确认基线', () => {
+    describe('新建容器运行配置与确认', () => {
         const configPath = () => path.join(tempHost, 'manyoyo.json');
         const preset = (query = '') => request(`${baseUrl}/api/system/new-container-preset${query}`, { headers: { Cookie: cookie } });
         const create = ({ run, ...body } = {}) => request(`${baseUrl}/api/sessions`, json(cookie, 'POST', { ...(run ? { run } : {}), createOptions: { hostPath: tempHost, imageName: 'localhost/xcanwin/manyoyo', imageVersion: '1.0.0-common', ...body } }));
@@ -638,7 +638,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(plain.json).toEqual(expect.objectContaining({ autostart: 'global-boot\n', autostartOnServe: true }));
         });
 
-        test('预设里已有的宽规则不重复确认；在预设上新增宽规则仍要确认', async () => {
+        test('运行配置里已有的宽规则不重复确认；在运行配置上新增宽规则仍要确认', async () => {
             const wide = { action: 'allow', target: '@host', ports: '', proto: 'all', enabled: true };
             fs.writeFileSync(configPath(), JSON.stringify({
                 runs: { qa: { network: { preset: 'allowlist', outbound: [wide] } } }
@@ -666,7 +666,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(state.readNetworkRaw(tempHost, idOf('preset-confirmed')).outbound).toHaveLength(2);
         });
 
-        test('没有候选界面的入口自动放行自启动 / first 里的 @host 端口；弹窗入口可显式关闭', async () => {
+        test('没有勾选界面的入口自动放行自启动 / first 里的 @host 端口；弹窗入口可明确关闭', async () => {
             // 快捷对话、克隆等走同一个接口且不带标记 → 自动放行
             const auto = await create({ containerName: 'auto-ext-1', autostart: 'curl -fsS http://host.docker.internal:9999/health\n' });
             expect(auto.response.status).toBe(200);
@@ -676,7 +676,7 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(firstAuto.response.status).toBe(200);
             expect(state.readNetworkRaw(tempHost, idOf('auto-ext-2')).outbound).toEqual([expect.objectContaining({ target: '@host', ports: '9999', proto: 'tcp' })]);
 
-            // 新建容器弹窗自己勾选候选 → 服务端不自动加（用户取消勾选的选择不能被覆盖）
+            // 新建容器弹窗自己勾选地址 → 服务端不自动加（用户取消勾选的选择不能被覆盖）
             const manual = await create({ containerName: 'auto-ext-3', autostart: 'curl -fsS http://host.docker.internal:9999/health\n', autoAllowScriptEndpoints: false });
             expect(manual.response.status).toBe(200);
             expect(state.readNetworkRaw(tempHost, idOf('auto-ext-3')).outbound).toEqual([]);
@@ -732,14 +732,14 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(overridden.json.candidates.map(c => `${c.kind}|${c.target}|${c.ports}`)).toContain('domain|db.internal|5432');
             expect(overridden.json.candidates.map(c => `${c.kind}|${c.target}|${c.ports}`)).not.toContain('cidr|10.9.8.7|9000');
 
-            // custom 不限制：不生成候选
+            // custom 不限制：不生成地址
             const custom = await infer({ run: 'qa', preset: 'custom' });
             expect(custom.response.status).toBe(200);
             expect(custom.json.candidates).toEqual([]);
             expect(custom.json.reason).toBe('unrestricted');
         });
 
-        test('autostart 空串与 autostartOnServe: false 能显式覆盖运行配置', async () => {
+        test('autostart 空串与 autostartOnServe: false 能明确改掉运行配置', async () => {
             fs.writeFileSync(configPath(), JSON.stringify({
                 runs: { qa: { autostart: 'run-boot\n', autostartOnServe: true } }
             }, null, 2), 'utf-8');

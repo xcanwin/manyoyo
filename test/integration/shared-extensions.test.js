@@ -1,6 +1,6 @@
 'use strict';
 
-// 真实容器：共享技能只读挂载 + 受管链接；共享 MCP 经 Agent 原生 CLI 下发（Claude / Codex）。
+// 真实容器：共享技能只读挂载 + 共享库创建的链接；共享 MCP 经 Agent 自己的 CLI 下发（Claude / Codex）。
 // 运行时不可用或镜像缺失时自动跳过；临时 HOME，只建 qa-shared-* 容器，结束按创建清单删除。
 const { spawn, spawnSync } = require('child_process');
 const crypto = require('crypto');
@@ -134,7 +134,7 @@ maybe('共享技能与 MCP（真实容器）', () => {
         fs.rmSync(work, { recursive: true, force: true });
     }, 120000);
 
-    test('新容器只读挂载共享技能目录，容器 home 里是指向共享目录的受管链接；共享状态可读', async () => {
+    test('新容器只读挂载共享技能目录，容器 home 里是指向共享目录的链接；共享状态可读', async () => {
         const mounted = rtSync(['exec', name, 'sh', '-lc', 'cat /run/manyoyo-extensions/skills/common/shared-demo/SKILL.md']);
         expect(mounted.status).toBe(0);
         expect(mounted.stdout).toContain('共享技能演示');

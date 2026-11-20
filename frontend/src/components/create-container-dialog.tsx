@@ -168,7 +168,7 @@ function buildCreateOptions(
   preset: NewContainerPreset | null,
   mergedNetwork: NetworkPolicy
 ) {
-  // 弹窗自己提供候选勾选界面：告诉服务端不要再自动放行（否则会覆盖用户取消勾选的选择）
+  // 弹窗里自己勾选地址，告诉服务端不要再自动放行（否则会盖掉用户取消勾选的选择）
   const options: Record<string, unknown> = { autoAllowScriptEndpoints: false }
   type StringKey = {
     [K in keyof CreateContainerForm]: CreateContainerForm[K] extends string
@@ -198,7 +198,7 @@ function buildCreateOptions(
   if (envFile.length) options.envFile = envFile
   const volumes = parseLines(form.volumes)
   if (volumes.length) options.volumes = volumes
-  // 只有相对预设（没有预设时是空值）改过才发送；空串 / false 也是合法的显式覆盖
+  // 只有和自动填入的值不同才发送；清空成空串 / 改成 false 也算改过
   if (form.autostart !== (preset?.autostart ?? "")) options.autostart = form.autostart
   if (form.autostartOnServe !== (preset?.autostartOnServe ?? false)) {
     options.autostartOnServe = form.autostartOnServe
@@ -213,7 +213,7 @@ function buildCreateOptions(
       text: form.systemPrompt,
     }
   }
-  // 与预设不同才发（包括把预设改回默认）；放开类的改动已在编辑器 / 这里确认过，带上 confirmRisk
+  // 和自动填入的网络不同才发（包括改回默认）；放开限制的改动已在编辑器 / 这里确认过，带上 confirmRisk
   const network = networkForCreate(mergedNetwork, preset?.network ?? defaultPolicy())
   if (network) {
     options.network = network
@@ -241,17 +241,17 @@ export function CreateContainerDialog({
   // 默认建议的工作目录（工作目录根/时间戳，和快捷对话一样）：只是预填，点“创建”时才真的建目录
   const [suggestedDir, setSuggestedDir] = React.useState("")
   const [suggestedContainerPath, setSuggestedContainerPath] = React.useState("")
-  // 服务端返回的预设（“没有请求覆盖时的有效配置”）：表单以它为基线，只发送改过的字段
+  // 服务端返回的运行配置值（没有请求覆盖时实际会用的配置）：表单以它为原来的值，只发送改过的字段
   const [preset, setPreset] = React.useState<NewContainerPreset | null>(null)
-  // 初始默认值与运行配置预设各自在途；提交按钮在任一在途时都禁用
+  // 初始默认值和运行配置的读取各自进行中；提交按钮在任一进行中时都禁用
   const [initialLoading, setInitialLoading] = React.useState(false)
   const [runPresetLoading, setRunPresetLoading] = React.useState(false)
   const presetLoading = initialLoading || runPresetLoading
   const [presetError, setPresetError] = React.useState("")
   const [presetVersion, setPresetVersion] = React.useState(0)
-  // 自动展开：初始 / 切换运行配置时按预设内容展开；之后尊重用户的手动开合
+  // 自动展开：初始 / 切换运行配置时按自动填入的内容展开；之后尊重用户的手动开合
   const [expansion, setExpansion] = React.useState({ autostart: false, network: false })
-  // 地址识别候选（只是建议，用户勾选后才加入白名单）
+  // 检测到的地址（只是建议，用户勾选后才加入白名单）
   const [candidates, setCandidates] = React.useState<EndpointCandidate[]>([])
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [inferLoading, setInferLoading] = React.useState(false)
@@ -265,7 +265,7 @@ export function CreateContainerDialog({
   const inferSeqRef = React.useRef(0)
   const presetSeqRef = React.useRef(0)
   const loadSeqRef = React.useRef(0)
-  // 用户当前选的运行配置（同步记录，供初始默认值返回时判断要不要覆盖预设字段）
+  // 用户当前选的运行配置（同步记录，供初始默认值返回时判断要不要覆盖自动填入的字段）
   const runSelectionRef = React.useRef("")
   const runPresetLoadingRef = React.useRef(false)
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
@@ -363,9 +363,9 @@ export function CreateContainerDialog({
       applyPreset(value)
     } catch (err) {
       if (seq !== presetSeqRef.current) return
-      // 不静默按默认值回填：保留当前表单，显示错误；用户清空运行配置后按全局预设重试
+      // 读取失败时不悄悄按默认值填入：保留当前表单并显示错误；用户清空运行配置后可以按全局配置重试
       setPreset(null)
-      setPresetError(err instanceof Error ? err.message : "读取运行配置的预设失败")
+      setPresetError(err instanceof Error ? err.message : "读取运行配置失败")
     } finally {
       if (seq === presetSeqRef.current) {
         runPresetLoadingRef.current = false
@@ -376,7 +376,7 @@ export function CreateContainerDialog({
 
   const loadDefaults = React.useCallback(async () => {
     const seq = ++loadSeqRef.current
-    // 重置默认：回到“没有运行配置”的全局预设，同时作废在途的运行配置预设
+    // 重置默认：回到“没有运行配置”的全局配置，同时作废正在读取的运行配置
     runSelectionRef.current = ""
     runPresetLoadingRef.current = false
     setRunPresetLoading(false)
@@ -425,17 +425,17 @@ export function CreateContainerDialog({
           }
         })
         .catch(() => null)
-      // 全局预设（没选运行配置时）：拉取失败只提示，不阻塞其余默认值
+      // 没选运行配置时读全局配置：读取失败只提示，不阻塞其余默认值
       let presetFailure = ""
       const presetValue = await apiGet("/api/system/new-container-preset").catch(
         (err: unknown) => {
-          presetFailure = err instanceof Error ? err.message : "读取预设失败"
+          presetFailure = err instanceof Error ? err.message : "读取配置失败"
           return null
         }
       )
       if (seq !== loadSeqRef.current) return
       const selectedRun = runSelectionRef.current;
-      // 用户在初始默认值返回前已经选了 run（或它的预设还在加载）：只补非预设字段，绝不覆盖自启动 / 网络
+      // 用户在初始默认值返回前已经选了 run（或它的配置还在加载）：只补其它字段，绝不覆盖自启动 / 网络
       if (selectedRun || runPresetLoadingRef.current) {
         const selectedRunConf = selectedRun ? runsMap[selectedRun] : undefined
         const selectedRunHasHost = typeof selectedRunConf?.hostPath === "string" && selectedRunConf.hostPath.trim() !== ""
@@ -520,7 +520,7 @@ export function CreateContainerDialog({
     } finally {
       if (seq === loadSeqRef.current) setInitialLoading(false)
     }
-    // 预设 / 推断只在打开时和用户操作时触发；这里引用到的都是稳定的 setState 与模块函数
+    // 配置 / 识别只在打开时和用户操作时触发；这里引用到的都是稳定的 setState 与模块函数
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -611,7 +611,7 @@ export function CreateContainerDialog({
     const presetChanged = value.preset !== form.network.preset
     setField("network", value)
     if (presetChanged) {
-      // 旧模式的候选不能合并到新模式
+      // 旧模式下的地址不能合并到新模式
       resetCandidates()
       scheduleInfer(form.autostart, form.run, value.preset, 0)
     }
@@ -633,7 +633,7 @@ export function CreateContainerDialog({
     event.preventDefault()
     if (submitting) return
     if (presetLoading) {
-      setError("正在读取运行配置的预设，请稍候")
+      setError("正在读取运行配置，请稍候")
       return
     }
     if (presetError) {
@@ -650,7 +650,7 @@ export function CreateContainerDialog({
     }
     const mergedNetwork = mergeSelectedCandidates(form.network, candidates, selectedIds)
     // 放开类的改动（自定义模式已在编辑器里确认过）：范围很大的出站规则、绑定 0.0.0.0 的端口暴露在这里确认；
-    // 预设里本来就有的宽规则不再重复问
+    // 运行配置里本来就有的宽规则不再重复问
     const risks = policyRisks(preset?.network ?? defaultPolicy(), cleanPolicy(mergedNetwork))
     if (
       risks.includes("wide") &&
@@ -1126,7 +1126,7 @@ export function CreateContainerDialog({
               type="submit"
               disabled={submitting || presetLoading || Boolean(presetError)}
             >
-              {submitting ? "创建中..." : presetLoading ? "读取预设中..." : "创建并进入"}
+              {submitting ? "创建中..." : presetLoading ? "读取配置中..." : "创建并进入"}
             </Button>
           </DialogFooter>
         </form>

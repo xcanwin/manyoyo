@@ -1,5 +1,5 @@
-// 地址识别候选（服务端 lib/network-infer.js 的形状）与“勾选后合并进出站规则”的纯函数。
-// 只做展示与合并；识别、风险分级、DNS 都在服务端。
+// 地址列表（形状与服务端 lib/network-infer.js 一致）和“勾选后加入进出站规则”的纯函数。
+// 这里只负责展示和合并；识别、风险分类、DNS 都在服务端。
 
 import { newRule, type NetworkPolicy, type Rule } from "./container-manage"
 
@@ -35,8 +35,8 @@ export type NewContainerPreset = {
 const keyOf = (target: string, ports: string, proto: string) => `allow|${target}|${ports}|${proto}`
 
 /**
- * 把勾选的候选合并进出站允许规则（插到最前，保持候选顺序）。
- * 域名候选同时补上它解析出来的私有地址（过滤代理看域名，不走代理的工具看 IP）。
+ * 把勾选的地址加入出站允许规则（插到最前，保持列表里的顺序）。
+ * 域名还会同时补上它解析出来的私有地址（过滤代理看域名，不走代理的工具看 IP）。
  * 已存在完全相同的允许规则（action|target|ports|proto）就跳过；用户自己的规则顺序不变。
  */
 export function mergeSelectedCandidates(

@@ -696,7 +696,7 @@ export type StreamEvent =
   | { type: "ping" }
   // 这一轮结束后服务端接着发排队的下一条：本条流到此为止，前端改为跟随下一轮
   | { type: "queue_next" }
-  // 本轮结束后服务端更新了计划（TodoWrite / TaskCreate / TaskUpdate 的投影）
+  // 本轮结束后服务端更新了计划（根据 TodoWrite / TaskCreate / TaskUpdate 生成）
   | { type: "plan"; plan: unknown }
   // 被网络策略拦下的域名；model=true 表示是 Agent 自己的模型地址，服务端随后会中止本轮
   | { type: "network_denied"; host: string; model?: boolean }

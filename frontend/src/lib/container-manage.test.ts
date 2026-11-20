@@ -130,7 +130,7 @@ describe("新建容器的 network", () => {
     expect(networkForCreate(withOut(rule("allow", " github.com ", { ports: "443, 80" })))?.outbound).toEqual([rule("allow", "github.com", { ports: "443,80" })])
   })
 
-  test("与预设基线比较：非默认基线改回默认也能发出去；与基线相同不发；空行不算", () => {
+  test("和原来的值比较：非默认值改回默认也能发出去；和原来相同就不发；空行不算", () => {
     const baseline: NetworkPolicy = { ...defaultPolicy(), preset: "allowlist", outbound: [rule("allow", "corp.example.com")] }
     expect(networkForCreate(defaultPolicy(), baseline)).toEqual(expect.objectContaining({ preset: "restricted", outbound: [] }))
     expect(networkForCreate(baseline, baseline)).toBeUndefined()
@@ -141,7 +141,7 @@ describe("新建容器的 network", () => {
   })
 })
 
-describe("合并地址识别候选", () => {
+describe("合并检测到的地址", () => {
   const candidate = (overrides: Partial<EndpointCandidate>): EndpointCandidate => ({
     id: "domain|api.example.com|443",
     kind: "domain",
@@ -156,7 +156,7 @@ describe("合并地址识别候选", () => {
     ...overrides,
   })
 
-  test("按候选顺序插到出站规则最前；域名候选同时补私有解析地址；已存在的允许规则不重复添加", () => {
+  test("按列表顺序插到出站规则最前；域名同时补上私有解析地址；已有的允许规则不重复添加", () => {
     const base: NetworkPolicy = { ...defaultPolicy(), outbound: [rule("allow", "keep.example.com")] }
     const candidates = [
       candidate({ id: "domain|api.example.com|443", target: "api.example.com", resolved: ["10.2.3.4"] }),

@@ -1511,7 +1511,7 @@ exit 0
             }
         });
 
-        test('CLI run -r 自动放行自启动 / first 里默认勾选的地址（没有候选界面）', () => {
+        test('CLI run -r 自动放行自启动 / first 里默认勾选的地址（没有勾选界面）', () => {
             const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-auto-net-'));
             const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-auto-net-home-'));
             const statePath = path.join(tempDir, 'state.txt');

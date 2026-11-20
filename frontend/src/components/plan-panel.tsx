@@ -16,8 +16,8 @@ import { Hint } from "@/components/hint"
 import { PageHeader } from "@/components/page-header"
 import { TaskStatusIcon } from "@/components/trace-block"
 
-// “计划”视图：服务端保存的 Agent 计划投影（TodoWrite / TaskCreate / TaskUpdate）+ 用户维护的验收清单。
-// 计划项是 Agent 产出的不可信文本，只按纯文本渲染，不走 Markdown / innerHTML。
+// “计划”视图：服务端保存的 Agent 计划（来自 TodoWrite / TaskCreate / TaskUpdate）+ 用户维护的验收清单。
+// 计划内容是 Agent 写出的文本，不能当代码执行；只按纯文本显示，不走 Markdown / innerHTML。
 export function PlanPanel({
   session,
   livePlan,
@@ -72,7 +72,7 @@ export function PlanPanel({
     queueMicrotask(() => void load())
   }, [load])
 
-  // Agent 的计划变了：没有未保存修改就重新拉一次（要新的 etag）；有修改只提示，不覆盖用户的草稿
+  // Agent 的计划变了：没有未保存修改就重新读取一次（要新的 etag）；有修改只提示，不覆盖用户的草稿
   React.useEffect(() => {
     if (!livePlan) return
     if (dirtyRef.current) {
@@ -205,7 +205,7 @@ export function PlanPanel({
         <Card>
           <CardHeader>
             <CardTitle>进度</CardTitle>
-            <CardDescription>AGENT 计划项的完成数与最近更新时间。</CardDescription>
+            <CardDescription>AGENT 计划条目的完成数与最近更新时间。</CardDescription>
           </CardHeader>
           <CardContent>
             {loading && !etag ? (
