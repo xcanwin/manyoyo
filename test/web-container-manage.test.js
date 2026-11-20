@@ -562,6 +562,58 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
             expect(state.readNetworkRaw(tempHost, idOf('preset-confirmed')).outbound).toHaveLength(2);
         });
 
+        test('地址识别：认证 / 参数 / run 校验；扫描自启动、first 命令、first.env 与 first.envFile', async () => {
+            const infer = body => request(`${baseUrl}/api/system/new-container-preset/infer`, json(cookie, 'POST', body));
+            expect((await request(`${baseUrl}/api/system/new-container-preset/infer`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: '{}' })).response.status).toBe(401);
+
+            const envFile = path.join(tempHost, 'first.env');
+            fs.writeFileSync(envFile, 'FILE_TARGET=filehost.internal\nhttp_proxy=http://proxy.internal:3128\n', 'utf-8');
+            fs.writeFileSync(configPath(), JSON.stringify({
+                runs: {
+                    qa: {
+                        autostart: 'curl http://10.9.8.7:9000/health',
+                        network: { preset: 'allowlist' },
+                        first: {
+                            shell: 'curl http://host.containers.internal:8080/ok',
+                            env: { API_HOST: 'llm.corp.invalid' },
+                            envFile: [envFile, 'relative.env', path.join(tempHost, 'missing.env')]
+                        }
+                    }
+                }
+            }, null, 2), 'utf-8');
+
+            expect((await infer({ run: 'nothere' })).response.status).toBe(404);
+            expect((await infer({ preset: 'nope' })).response.status).toBe(400);
+            expect((await infer({ autostart: 5 })).response.status).toBe(400);
+            expect((await infer({ autostart: 'x'.repeat(300 * 1024) })).response.status).toBe(400);
+
+            const result = await infer({ run: 'qa' });
+            expect(result.response.status).toBe(200);
+            const found = result.json.candidates.map(c => `${c.kind}|${c.target}|${c.ports}`);
+            expect(found).toEqual(expect.arrayContaining([
+                'cidr|10.9.8.7|9000',
+                'host|@host|8080',
+                'domain|llm.corp.invalid|',
+                'domain|filehost.internal|'
+            ]));
+            expect(found).not.toContain('domain|proxy.internal|3128');
+            expect(result.text).not.toContain('/health');
+            expect(result.text).not.toContain('/ok');
+            expect(result.text).not.toContain('curl');
+
+            // 请求里的 autostart（用户当前编辑的文本）覆盖运行配置
+            const overridden = await infer({ run: 'qa', autostart: 'nc db.internal:5432' });
+            expect(overridden.response.status).toBe(200);
+            expect(overridden.json.candidates.map(c => `${c.kind}|${c.target}|${c.ports}`)).toContain('domain|db.internal|5432');
+            expect(overridden.json.candidates.map(c => `${c.kind}|${c.target}|${c.ports}`)).not.toContain('cidr|10.9.8.7|9000');
+
+            // custom 不限制：不生成候选
+            const custom = await infer({ run: 'qa', preset: 'custom' });
+            expect(custom.response.status).toBe(200);
+            expect(custom.json.candidates).toEqual([]);
+            expect(custom.json.reason).toBe('unrestricted');
+        });
+
         test('autostart 空串与 autostartOnServe: false 能显式覆盖运行配置', async () => {
             fs.writeFileSync(configPath(), JSON.stringify({
                 runs: { qa: { autostart: 'run-boot\n', autostartOnServe: true } }
