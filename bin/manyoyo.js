@@ -2282,6 +2282,74 @@ async function createNewContainer(runtime) {
  * @returns {string[]} 命令参数数组
  */
 // 容器网络规则的下发器：CLI 与 serve 各建一份，helper 容器用当前 imageVersion 的官方镜像
+// 共享技能 / MCP 下发（CLI run 路径）：与 serve 共用 lib/extensions-apply。失败只提示，不影响 Agent 启动
+async function applySharedExtensionsCli(runtime) {
+    try {
+        const homeDir = os.homedir();
+        if (!extensionsStore.listSkills(homeDir).length && !extensionsStore.listMcp(homeDir).length) return;
+        const id = resolveContainerId(dockerExecArgs, runtime.containerName);
+        if (!containerState.isValidId(id)) return;
+        let mode = 'copy';
+        try {
+            const mounts = JSON.parse(String(dockerExecArgs(['inspect', '-f', '{{json .Mounts}}', runtime.containerName], { stdio: 'pipe' }) || '[]'));
+            if (Array.isArray(mounts) && mounts.some(item => item && item.Destination === '/run/manyoyo-extensions/skills')) mode = 'mount';
+        } catch (e) { mode = 'copy'; }
+        const runInContainer = (args, opts = {}) => new Promise(resolve => {
+            let exec;
+            try {
+                exec = buildExecArgs({ homeDir, dockerExecArgs }, runtime.containerName, { interactive: opts.stdin !== undefined, extraEnv: opts.extraEnv || [], command: args });
+            } catch (e) {
+                resolve({ code: 1, stdout: '', stderr: e.message });
+                return;
+            }
+            let child;
+            try {
+                child = spawn(DOCKER_CMD, exec.args, { env: DOCKER_ENV, stdio: ['pipe', 'pipe', 'pipe'] });
+            } catch (e) {
+                exec.cleanup();
+                resolve({ code: 1, stdout: '', stderr: e.message });
+                return;
+            }
+            let stdout = '';
+            let stderr = '';
+            let settled = false;
+            const finish = (code, errMsg) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                if (errMsg) stderr += errMsg;
+                exec.cleanup();
+                resolve({ code, stdout, stderr });
+            };
+            const timer = setTimeout(() => { child.kill('SIGKILL'); finish(124); }, opts.timeoutMs || 30000);
+            child.stdout.on('data', chunk => { if (stdout.length < 1024 * 1024) stdout += chunk; });
+            child.stderr.on('data', chunk => { if (stderr.length < 64 * 1024) stderr += chunk; });
+            child.on('error', error => finish(1, error && error.message ? error.message : ''));
+            child.on('close', code => finish(typeof code === 'number' ? code : 1));
+            if (opts.stdin !== undefined) child.stdin.end(opts.stdin);
+            else child.stdin.end();
+        });
+        const copySkill = (source, dest) => new Promise((resolve, reject) => {
+            let child;
+            try {
+                child = spawn(DOCKER_CMD, ['cp', source, `${runtime.containerName}:${dest}`], { env: DOCKER_ENV, stdio: ['ignore', 'ignore', 'pipe'] });
+            } catch (e) {
+                reject(e);
+                return;
+            }
+            let stderr = '';
+            child.stderr.on('data', chunk => { stderr += chunk; });
+            const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('复制超时')); }, 30000);
+            child.on('error', error => { clearTimeout(timer); reject(error); });
+            child.on('close', code => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error(stderr.trim().slice(0, 200))); });
+        });
+        const result = await extensionsApply.applyExtensions({ homeDir, containerName: runtime.containerName, containerId: id, mode, workDir: runtime.containerPath, runInContainer, copySkill });
+        (result.warnings || []).forEach(message => { if (!runtime.quiet.cnew && !runtime.quiet.full) console.warn(`${YELLOW}共享技能 / MCP：${message}${NC}`); });
+    } catch (e) {
+        if (!runtime.quiet.cnew && !runtime.quiet.full) console.warn(`${YELLOW}共享技能 / MCP 同步失败：${e.message}${NC}`);
+    }
+}
+
 function createCliNetworkManager(runtime) {
     return createNetworkManager({
         command: DOCKER_CMD,
@@ -2300,6 +2368,7 @@ function previewContainerState() {
 function buildDockerRunArgs(runtime) {
     return buildContainerRunArgs({
         state: runtime.state,
+        extensionsSkillsDir: extensionsStore.skillsMountDir(os.homedir()),
         defaultNetwork: NETWORK_NAME,
         containerName: runtime.containerName,
         hostPath: runtime.hostPath,
@@ -2336,6 +2405,7 @@ async function connectExistingContainer(runtime) {
         dockerExecArgs(['start', runtime.containerName], { stdio: 'pipe' });
     }
     await createCliNetworkManager(runtime).ensureReady(runtime.containerName);
+    await applySharedExtensionsCli(runtime);
 
     // Get default command from label
     const defaultCommand = dockerExecArgs(['inspect', '-f', '{{index .Config.Labels "manyoyo.default_cmd"}}', runtime.containerName]).trim();

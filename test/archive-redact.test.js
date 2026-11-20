@@ -10,6 +10,18 @@ describe('lib/archive/redact', () => {
         expect(out.removed).toEqual(['abc-secret-1', 'secret_x1']);
     });
 
+    test('claude mcp add-json -s user 写出的顶层 mcpServers：env / headers 清空，URL 里的密码去掉', () => {
+        const out = JSON.parse(redact.redactFieldFile('/root/.claude.json', JSON.stringify({
+            mcpServers: {
+                echo: { type: 'stdio', command: 'npx', args: ['-y', 'echo'], env: { API_KEY: 'sk-test-12345678' } },
+                web: { type: 'http', url: 'https://user:pw@x.test/mcp', headers: { Authorization: 'Bearer abc12345', 'X-Trace': 'public' } }
+            }
+        })).text);
+        expect(out.mcpServers.echo.env).toEqual({ API_KEY: '' });
+        expect(out.mcpServers.web.headers).toEqual({ Authorization: '', 'X-Trace': 'public' });
+        expect(out.mcpServers.web.url).not.toContain('pw');
+    });
+
     test('claude 的 .claude.json / settings.json：mcpServers 里的 env 和 headers（含项目下的）里的密钥也清空', () => {
         const projects = { '/w': { mcpServers: { notion: { command: 'x', env: { NOTION_TOKEN: 'secret_xxxxxxxx', LANG: 'zh' }, headers: { Authorization: 'Bearer abc12345' } } } } };
         const json = redact.redactFieldFile('/root/.claude.json', JSON.stringify({ primaryApiKey: 'sk-aaaaaaaaaaaaaaaaaaaa', projects }));

@@ -31,7 +31,16 @@ beforeEach(() => {
     ],
   }
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }))
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(payload))))
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (String(url) === "/api/extensions") {
+      return new Response(JSON.stringify({
+        skills: [{ agent: "common", name: "shared-demo", description: "共享的", updatedAt: "2026-01-01T00:00:00.000Z" }],
+        mcp: [{ id: "abc123", name: "echo", agents: ["claude"], transport: "stdio", enabled: true }],
+      }))
+    }
+    if (String(url).includes("/extensions/apply")) return new Response(JSON.stringify({ warnings: [], conflicts: [] }))
+    return new Response(JSON.stringify(payload))
+  }))
   container = document.createElement("div")
   document.body.appendChild(container)
   root = createRoot(container)
@@ -59,10 +68,28 @@ describe("技能与 MCP 面板", () => {
     expect(container.querySelector("img")).toBeNull()
     expect(text).toContain("<img src=x onerror=alert(1)>")
     // 底部说明
-    expect(text).toContain("容器里看不到宿主机的 skill")
+    expect(text).toContain("共享技能在新建容器时通过只读挂载生效")
     // 没有技能 / MCP 的分组给出空状态
     expect(text).toContain("没有技能")
     expect(text).toContain("没有 MCP 服务器")
+    // 宿主级共享库
+    expect(text).toContain("共享库")
+    expect(text).toContain("shared-demo")
+    expect(text).toContain("echo")
+    expect(text).toContain("同步到当前容器")
+    expect(text).toContain("共享 MCP 的密钥会出现在所有使用该条目的容器里")
+  })
+
+  test("同步到当前容器：调用 apply 并显示结果", async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+    await act(async () => root.render(<ExtensionsPanel session={session} />))
+    await flush()
+    const sync = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((item) => item.textContent?.includes("同步到当前容器"))!
+    await act(async () => sync.click())
+    await flush()
+    const applyCall = fetchMock.mock.calls.find((call) => String(call[0]).includes("/extensions/apply"))
+    expect(applyCall).toBeTruthy()
+    expect(container.textContent).toContain("已同步")
   })
 
   test("容器里没有任何 Agent：给一句话", async () => {

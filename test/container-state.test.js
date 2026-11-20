@@ -91,6 +91,21 @@ describe('buildContainerRunArgs 状态目录参数', () => {
     test('缺少状态目录直接报错', () => {
         expect(() => buildContainerRunArgs({ ...base, state: undefined })).toThrow(/状态目录/);
     });
+    test('共享技能目录存在时只读挂载；不存在时不加（docker 对不存在的 bind 源会报错）', () => {
+        const store = require('../lib/extensions-store');
+        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-ext-run-'));
+        try {
+            expect(store.skillsMountDir(home)).toBe('');
+            store.writeSkill(home, 'common', 'demo', '---\nname: demo\n---\n');
+            const dir = store.skillsMountDir(home);
+            expect(dir).toBe(path.join(home, '.manyoyo', 'extensions', 'skills'));
+            const args = buildContainerRunArgs({ ...base, extensionsSkillsDir: dir });
+            expect(args).toEqual(expect.arrayContaining(['--volume', `${dir}:/run/manyoyo-extensions/skills:ro`]));
+            expect(buildContainerRunArgs(base)).not.toContain('/run/manyoyo-extensions/skills:ro');
+        } finally {
+            fs.rmSync(home, { recursive: true, force: true });
+        }
+    });
 });
 
 describe('box/ 里的不可信文件', () => {
