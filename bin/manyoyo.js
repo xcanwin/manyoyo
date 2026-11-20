@@ -49,6 +49,7 @@ const {
 } = require('../lib/runtime-normalizers');
 const { applyAptMirror } = require('../lib/mirrors');
 const containerState = require('../lib/container-state');
+const { clearEgressData } = require('../lib/egress-sidecar');
 const { buildExecArgs, resolveContainerId } = require('../lib/container-exec');
 const { createNetworkManager, NETWORK_NAME } = require('../lib/container-network');
 const { normalizePolicy, isUnrestricted: isUnrestrictedPolicy } = require('../lib/network-policy');
@@ -759,7 +760,10 @@ function removeContainer(name) {
     // 先读 id：容器删掉后就查不到了；同时删状态目录，同名重建不会继承旧 env / 规则
     const stateId = resolveContainerId(dockerExecArgs, name);
     dockerExecArgs(['rm', '-f', name], { stdio: 'pipe' });
-    if (stateId) containerState.removeState(os.homedir(), stateId);
+    if (stateId) {
+        containerState.removeState(os.homedir(), stateId);
+        clearEgressData(os.homedir(), stateId);
+    }
     if ( !(QUIET.crm || QUIET.full) ) console.log(`${GREEN}✅ 已彻底删除。${NC}`);
 }
 

@@ -421,6 +421,60 @@ describe('Web 容器管理接口（env / 自启动 / 网络 / 端口暴露 / 孤
         });
     });
 
+    describe('网络流量记录', () => {
+        const trafficLib = require('../lib/egress-traffic');
+        const { egressPaths } = require('../lib/egress-sidecar');
+
+        test('GET /network/traffic 返回记录、汇总与覆盖说明；非法参数 400；DELETE 清空', async () => {
+            const r = await request(`${baseUrl}/api/containers/boxa/network/traffic`, { headers: { Cookie: cookie } });
+            expect(r.response.status).toBe(200);
+            expect(r.json).toEqual(expect.objectContaining({
+                records: expect.any(Array),
+                summary: expect.objectContaining({ allowed: expect.any(Number), denied: expect.any(Number), hosts: expect.any(Number), bytesIn: expect.any(Number), bytesOut: expect.any(Number) }),
+                coverage: expect.objectContaining({ proxied: expect.any(Boolean), auditHttp: expect.any(Boolean), reason: expect.any(String) })
+            }));
+            expect((await request(`${baseUrl}/api/containers/boxa/network/traffic?limit=0`, { headers: { Cookie: cookie } })).response.status).toBe(400);
+            expect((await request(`${baseUrl}/api/containers/boxa/network/traffic?limit=5000`, { headers: { Cookie: cookie } })).response.status).toBe(400);
+            expect((await request(`${baseUrl}/api/containers/boxa/network/traffic?decision=bad`, { headers: { Cookie: cookie } })).response.status).toBe(400);
+            expect((await request(`${baseUrl}/api/containers/boxa/network/traffic?host=${'a'.repeat(300)}`, { headers: { Cookie: cookie } })).response.status).toBe(400);
+            expect((await request(`${baseUrl}/api/containers/nothere/network/traffic`, { headers: { Cookie: cookie } })).response.status).toBe(404);
+            const cleared = await request(`${baseUrl}/api/containers/boxa/network/traffic`, json(cookie, 'DELETE'));
+            expect(cleared.response.status).toBe(200);
+        });
+
+        test('合并放行与拒绝记录：时间倒序、host 过滤、summary 基于全部记录；DELETE 清空放行记录', async () => {
+            const paths = egressPaths(tempHost);
+            fs.mkdirSync(paths.traffic, { recursive: true });
+            const recorder = trafficLib.createRecorder({ dir: paths.traffic });
+            recorder.record({ id: boxA.id, host: 'api.example.com', port: 443, decision: 'allow', proto: 'tcp', method: 'CONNECT', status: 200, bytesIn: 10, bytesOut: 20, durationMs: 5, ts: '2026-01-01T00:00:00.000Z' });
+            recorder.record({ id: boxA.id, host: 'cdn.example.com', port: 80, decision: 'allow', proto: 'http', method: 'GET', status: 200, bytesIn: 5, bytesOut: 30, durationMs: 7, ts: '2026-01-01T00:00:02.000Z' });
+            recorder.record({ id: boxB.id, host: 'other.example.com', port: 443, decision: 'allow', proto: 'tcp', method: 'CONNECT', status: 200, bytesIn: 1, bytesOut: 2, durationMs: 3 });
+            recorder.stop();
+
+            const all = await request(`${baseUrl}/api/containers/boxa/network/traffic`, { headers: { Cookie: cookie } });
+            expect(all.response.status).toBe(200);
+            expect(all.json.records.map(r => r.host)).toEqual(['cdn.example.com', 'api.example.com']);
+            expect(all.json.summary).toEqual({ allowed: 2, denied: 0, hosts: 2, bytesIn: 15, bytesOut: 50 });
+            expect(all.json.coverage).toEqual({ proxied: false, auditHttp: false, reason: 'noDomainRules' });
+
+            const host = await request(`${baseUrl}/api/containers/boxa/network/traffic?host=API.example.com&decision=allow&limit=1`, { headers: { Cookie: cookie } });
+            expect(host.json.records.map(r => r.host)).toEqual(['api.example.com']);
+            expect(host.json.summary.allowed).toBe(1);
+            expect((await request(`${baseUrl}/api/containers/boxa/network/traffic?decision=deny`, { headers: { Cookie: cookie } })).json.records).toEqual([]);
+
+            const put = await request(`${baseUrl}/api/containers/boxa/network`, json(cookie, 'PUT', { policy: { ...state.readNetworkRaw(tempHost, boxA.id), auditHttp: true } }));
+            expect(put.response.status).toBe(200);
+            expect(put.json.policy.auditHttp).toBe(true);
+            expect(state.readNetworkRaw(tempHost, boxA.id).auditHttp).toBe(true);
+            const audited = await request(`${baseUrl}/api/containers/boxa/network/traffic`, { headers: { Cookie: cookie } });
+            expect(audited.json.coverage).toEqual({ proxied: true, auditHttp: true, reason: 'proxied' });
+            expect(applied.some(([name]) => name === 'boxa')).toBe(true);
+
+            expect((await request(`${baseUrl}/api/containers/boxa/network/traffic`, json(cookie, 'DELETE'))).response.status).toBe(200);
+            expect((await request(`${baseUrl}/api/containers/boxa/network/traffic`, { headers: { Cookie: cookie } })).json.records).toEqual([]);
+        });
+    });
+
     describe('孤儿状态目录', () => {
         test('列出没有对应容器的状态目录，只能删孤儿', async () => {
             const orphan = state.createState({ homeDir: tempHost, meta: { name: 'gone' } });

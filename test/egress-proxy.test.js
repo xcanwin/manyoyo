@@ -44,6 +44,13 @@ describe('egress-proxy', () => {
     let policies;
     let lookups;
     let denied;
+    let trafficEvents;
+    const waitFor = async predicate => {
+        for (let i = 0; i < 100; i += 1) {
+            if (predicate()) return;
+            await new Promise(resolve => setTimeout(resolve, 20));
+        }
+    };
     const clientOf = ip => {
         const id = { [SRC.A]: A, [SRC.B]: B }[ip];
         return id && policies[id] ? { id, ...policies[id] } : null;
@@ -60,6 +67,7 @@ describe('egress-proxy', () => {
 
     beforeEach(async () => {
         denied = [];
+        trafficEvents = [];
         policies = {
             [A]: compile('allowlist', [
                 rule('allow', 'ok.example.com'), rule('allow', '*.wild.example.com'),
@@ -78,6 +86,7 @@ describe('egress-proxy', () => {
         proxy = createEgressProxy({
             getClient: ip => clientOf(ip),
             onDenied: event => denied.push(event),
+            onTraffic: event => trafficEvents.push(event),
             mapAddress: () => '127.0.0.1',
             lookup: async host => { if (!lookups[host]) throw new Error('nx'); return lookups[host]; }
         });
@@ -216,6 +225,59 @@ describe('egress-proxy', () => {
             expect(bad.body).toBe('Forbidden');
             expect(bad.headers['proxy-status']).toBe('proxy; error=http_request_denied');
             expect(Object.keys(bad.headers).sort()).toEqual(['connection', 'content-length', 'content-type', 'date', 'proxy-status']);
+        } finally {
+            await new Promise(resolve => target.close(resolve));
+        }
+    });
+
+    test('允许的 CONNECT 记录 host / 端口 / 字节 / 耗时，不含隧道内容与 path', async () => {
+        const res = await connect(proxyPort, `ok.example.com:${echoPort}`);
+        expect(res.status).toBe(200);
+        await waitFor(() => trafficEvents.length === 1);
+        expect(trafficEvents).toHaveLength(1);
+        expect(trafficEvents[0]).toEqual(expect.objectContaining({
+            id: A, host: 'ok.example.com', port: echoPort, decision: 'allow', proto: 'tcp', method: 'CONNECT', status: 200
+        }));
+        expect(trafficEvents[0].bytesIn).toBeGreaterThanOrEqual(4);
+        expect(trafficEvents[0].bytesOut).toBeGreaterThanOrEqual(9);
+        expect(trafficEvents[0].durationMs).toBeGreaterThanOrEqual(0);
+        expect(JSON.stringify(trafficEvents[0])).not.toContain('ping');
+        expect(JSON.stringify(trafficEvents[0])).not.toContain('pong');
+    });
+
+    test('普通 HTTP 放行后记录 method / 状态 / 字节；被拒绝的不写放行记录；记录回调抛错不影响转发', async () => {
+        const target = http.createServer((req, res) => res.end('hello-body'));
+        const targetPort = await listen(target);
+        policies[A] = compile('allowlist', [rule('allow', 'ok.example.com')]);
+        const get = urlPath => new Promise(resolve => {
+            http.get({ host: '127.0.0.1', port: proxyPort, path: urlPath, headers: { Host: 'ok.example.com' } }, res => {
+                let body = '';
+                res.on('data', c => { body += c; });
+                res.on('end', () => resolve({ status: res.statusCode, body }));
+            });
+        });
+        try {
+            expect((await get(`http://ok.example.com:${targetPort}/secret?token=abc`)).status).toBe(200);
+            await waitFor(() => trafficEvents.length === 1);
+            expect(trafficEvents[0]).toEqual(expect.objectContaining({ id: A, host: 'ok.example.com', port: targetPort, decision: 'allow', proto: 'http', method: 'GET', status: 200 }));
+            expect(trafficEvents[0].bytesOut).toBeGreaterThanOrEqual(10);
+            expect(JSON.stringify(trafficEvents[0])).not.toContain('token');
+            expect(JSON.stringify(trafficEvents[0])).not.toContain('secret');
+
+            expect((await get(`http://evil.example.org:${targetPort}/x`)).status).toBe(403);
+            await new Promise(resolve => setTimeout(resolve, 100));
+            expect(trafficEvents).toHaveLength(1);
+
+            // 回调抛错：转发仍然正常
+            await proxy.stop();
+            proxy = createEgressProxy({
+                getClient: ip => clientOf(ip),
+                onTraffic: () => { throw new Error('boom'); },
+                mapAddress: () => '127.0.0.1',
+                lookup: async host => lookups[host]
+            });
+            proxyPort = await proxy.start({ host: '127.0.0.1', port: 0 });
+            expect((await get(`http://ok.example.com:${targetPort}/ok`)).status).toBe(200);
         } finally {
             await new Promise(resolve => target.close(resolve));
         }

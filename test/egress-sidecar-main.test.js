@@ -60,6 +60,45 @@ describe('egress-sidecar-main', () => {
         expect(list.map(r => r.host).sort()).toEqual(['evil.example.org', 'ok.example.com']);
     });
 
+
+    test('traffic 目录记录放行的 CONNECT；denied 目录不受影响', async () => {
+        const http = require('http');
+        const traffic = require('../lib/egress-traffic');
+        const up = http.createServer();
+        const sockets = [];
+        up.on('connect', (req, socket) => { sockets.push(socket); socket.write('HTTP/1.1 200 Connection Established\r\n\r\n'); socket.on('data', d => socket.write(`pong:${d}`)); socket.on('error', () => {}); });
+        await new Promise(resolve => up.listen(0, '127.0.0.1', resolve));
+        const trafficDir = path.join(dir, 'traffic');
+        fs.mkdirSync(trafficDir);
+        writeClients({ '127.0.0.1': allowDomain('ok.example.com') });
+        fs.writeFileSync(path.join(dir, 'data', 'upstream.txt'), `http://127.0.0.1:${up.address().port}\n`);
+        server = await start({ dataDir: path.join(dir, 'data'), deniedDir: path.join(dir, 'denied'), trafficDir, port: 0, host: '127.0.0.1', lookup: async () => ['8.8.8.8'] });
+        try {
+            await new Promise(resolve => setTimeout(resolve, 700));
+            await new Promise(resolve => {
+                const socket = net.connect({ port: server.port, host: '127.0.0.1' });
+                let buf = '';
+                socket.on('connect', () => socket.write('CONNECT ok.example.com:443 HTTP/1.1\r\nHost: x\r\n\r\n'));
+                socket.on('data', c => {
+                    buf += c;
+                    if (buf.includes('200 Connection Established')) socket.write('ping');
+                    if (buf.includes('pong:ping')) { socket.destroy(); resolve(); }
+                });
+            });
+            // 停止时先关隧道（关闭时才记录字节）再冲刷记录
+            await server.stop();
+            server = null;
+            const records = traffic.read(trafficDir, A);
+            expect(records).toHaveLength(1);
+            expect(records[0]).toEqual(expect.objectContaining({ host: 'ok.example.com', port: 443, decision: 'allow', proto: 'tcp', method: 'CONNECT', status: 200 }));
+            expect(records[0].bytesIn).toBeGreaterThanOrEqual(4);
+            expect(records[0].bytesOut).toBeGreaterThanOrEqual(9);
+            expect(denied.read(path.join(dir, 'denied'), A)).toEqual([]);
+        } finally {
+            sockets.forEach(socket => socket.destroy());
+            await new Promise(resolve => up.close(resolve));
+        }
+    });
     test('upstream.txt 热更新：改了就用新的上游，不需要重启', async () => {
         const http = require('http');
         const seen = [];

@@ -10,7 +10,7 @@ const inRule = (action, source, extra = {}) => ({ action, source, ports: '', pro
 describe('normalizePolicy（v2）', () => {
     test('默认是 restricted，空结构齐全', () => {
         expect(p.normalizePolicy(undefined)).toEqual({
-            version: 2, preset: 'restricted', outbound: [], inbound: [], expose: [], autostartOnServe: false
+            version: 2, preset: 'restricted', outbound: [], inbound: [], expose: [], autostartOnServe: false, auditHttp: false
         });
     });
 
@@ -87,7 +87,8 @@ describe('v1 → v2 迁移', () => {
             egress: { domains: ['github.com'], rules: [{ cidr: '192.168.1.5', ports: '8080', proto: 'udp' }] },
             peers: { inbound: [{ from: ID, ports: '7000', proto: 'tcp' }] },
             expose: [{ bind: '0.0.0.0', hostPort: 18080, port: 80 }],
-            autostartOnServe: true
+            autostartOnServe: true,
+            auditHttp: false
         });
         expect(n).toEqual({
             version: 2,
@@ -100,7 +101,8 @@ describe('v1 → v2 迁移', () => {
             ],
             inbound: [inRule('allow', `@container:${ID}`, { ports: '7000', proto: 'tcp' })],
             expose: [{ bind: '0.0.0.0', hostPort: 18080, port: 80 }],
-            autostartOnServe: true
+            autostartOnServe: true,
+            auditHttp: false
         });
     });
 
@@ -304,6 +306,29 @@ describe('buildNftRuleset', () => {
         const text = p.buildNftRuleset(p.normalizePolicy({}), { allow: [{ ip: 'fd00::1', ports: '443' }, { ip: '8.8.8.0/24', ports: '', proto: 'udp' }] });
         expect(text).toContain('ip6 daddr fd00::1 tcp dport 443 accept');
         expect(text).toContain('ip daddr 8.8.8.0/24 meta l4proto udp accept');
+    });
+});
+
+describe('auditHttp 与 proxyEnabled', () => {
+    test('默认 false；只认 true；proxyEnabled = 有域名规则或 auditHttp', () => {
+        expect(p.defaultPolicy().auditHttp).toBe(false);
+        expect(p.normalizePolicy({ auditHttp: true }).auditHttp).toBe(true);
+        expect(p.normalizePolicy({ auditHttp: 'yes' }).auditHttp).toBe(false);
+        const noDomains = p.normalizePolicy({ preset: 'restricted' });
+        const domain = p.normalizePolicy({ preset: 'allowlist', outbound: [rule('allow', 'a.example.com')] });
+        expect(p.proxyEnabled(noDomains)).toBe(false);
+        expect(p.proxyEnabled(domain)).toBe(true);
+        expect(p.proxyEnabled({ ...noDomains, auditHttp: true })).toBe(true);
+        expect(p.usesProxy({ ...noDomains, auditHttp: true })).toBe(false);
+        // 只改 auditHttp 时策略内容变化（下发状态里的 policyHash 会跟着变）
+        expect(JSON.stringify({ ...noDomains, auditHttp: true })).not.toBe(JSON.stringify(noDomains));
+    });
+
+    test('audit-only 的代理规则仍保留 restricted 的默认拒绝行（不放宽目标）', () => {
+        const policy = p.normalizePolicy({ preset: 'restricted', auditHttp: true });
+        const compiled = p.compileProxyPolicy(policy, { hostIps: ['172.16.99.1'], bridge: { subnet: '10.89.0.0/24', gateway: '10.89.0.1' }, containers: {} });
+        expect(compiled.default).toBe('allow');
+        expect(compiled.rules.filter(r => r.action === 'deny').length).toBeGreaterThan(0);
     });
 });
 

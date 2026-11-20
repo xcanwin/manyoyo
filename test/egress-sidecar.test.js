@@ -102,7 +102,9 @@ describe('createSidecarManager（假运行时）', () => {
         expect(info).toEqual({ name: sidecar.sidecarName(home), ip: expect.stringMatching(/^10\.89\.0\.\d+$/), port: 3128 });
         const run = calls.find(a => a[0] === 'run');
         const p = mgr.paths();
-        expect(run).toEqual(expect.arrayContaining(['--cap-drop', 'ALL', '--cap-add', 'DAC_OVERRIDE', '--read-only', '--ip', info.ip, '--mac-address', sidecar.macForIp(info.ip), '--entrypoint', 'node', `${p.app}:/app:ro`, `${p.data}:/data:ro`, `${p.denied}:/denied`]));
+        expect(run).toEqual(expect.arrayContaining(['--cap-drop', 'ALL', '--cap-add', 'DAC_OVERRIDE', '--read-only', '--ip', info.ip, '--mac-address', sidecar.macForIp(info.ip), '--entrypoint', 'node', `${p.app}:/app:ro`, `${p.data}:/data:ro`, `${p.denied}:/denied`, `${p.traffic}:/traffic`, 'EGRESS_TRAFFIC_DIR=/traffic']));
+        expect(fs.statSync(p.traffic).isDirectory()).toBe(true);
+        expect(fs.statSync(p.traffic).mode & 0o777).toBe(0o700);
         expect(run.join(' ')).not.toMatch(/--publish|-p /);
         expect(run.slice(-2)).toEqual(['img:1', '/app/egress-sidecar-main.js']);
         await mgr.ensure();

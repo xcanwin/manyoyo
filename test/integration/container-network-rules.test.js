@@ -15,6 +15,8 @@ const { buildExecArgs } = require('../../lib/container-exec');
 const { createNetworkManager, NETWORK_NAME } = require('../../lib/container-network');
 const { normalizePolicy, isUnrestricted, buildNftRuleset } = require('../../lib/network-policy');
 const state = require('../../lib/container-state');
+const trafficLib = require('../../lib/egress-traffic');
+const { egressPaths } = require('../../lib/egress-sidecar');
 
 const IMAGE_NAME = 'ghcr.io/xcanwin/manyoyo';
 const IMAGE = `${IMAGE_NAME}:${imageVersion}`;
@@ -128,6 +130,8 @@ maybe('统一网络规则（真实容器）', () => {
     const code = async (name, url, extra = '') => (await exec(name, `curl --noproxy '*' -s -m 5 -o /dev/null -w '%{http_code}' ${extra} ${url}; true`)).stdout.trim();
     // 与 manyoyo 的 exec 一致：加载 managed.env（过滤代理地址）
     const viaProxy = async (c, url) => (await exec(c.name, `curl -s -m 12 -o /dev/null -w '%{http_code}' ${url}; true`, { withEnv: true, homeDir: c.homeDir })).stdout.trim();
+    // 强制走代理：忽略 NO_PROXY（审计用例要看代理的记录）
+    const viaForcedProxy = async (c, url) => (await exec(c.name, `curl --noproxy '' -s -m 12 -o /dev/null -w '%{http_code}' ${url}; true`, { withEnv: true, homeDir: c.homeDir })).stdout.trim();
     const setPolicy = (c, policy) => state.writeNetworkRaw(c.homeDir || home, c.st.id, normalizePolicy(policy));
     const listen = async (c, port) => exec(c.name, `nohup python3 -m http.server ${port} >/tmp/h${port}.log 2>&1 & sleep 1`, { timeout: 10000 });
 
@@ -277,6 +281,37 @@ maybe('统一网络规则（真实容器）', () => {
         await manager.ensureReady(c.name);
         expect(await viaProxy(c, 'http://example.com/')).toBe('403');
     }, 180000);
+
+
+    test('auditHttp：没有域名规则也注入代理与 NO_PROXY，放行记录写入 traffic；关掉后不再注入，策略不放宽', async () => {
+        const policy = { preset: 'restricted', auditHttp: true, outbound: [allow('@host', { ports: String(hostPort), proto: 'tcp' })] };
+        const c = await create({ policy });
+        await manager.apply(c.name);
+        const envText = (await exec(c.name, 'env | sort', { withEnv: true, homeDir: c.homeDir })).stdout;
+        expect(envText).toMatch(/^HTTP_PROXY=http:\/\/10\.89\./m);
+        expect(envText).toMatch(/^NO_PROXY=.*host\.containers\.internal/m);
+        expect(envText).toMatch(/^no_proxy=.*host\.docker\.internal/m);
+
+        const url = `http://host.containers.internal:${hostPort}/`;
+        expect(await viaForcedProxy(c, url)).toBe('200');
+        let records = [];
+        for (let i = 0; i < 40 && records.length === 0; i += 1) {
+            await sleep(100);
+            records = trafficLib.read(egressPaths(home).traffic, c.st.id);
+        }
+        expect(records).toEqual([expect.objectContaining({ host: 'host.containers.internal', port: hostPort, decision: 'allow', proto: 'http', method: 'GET', status: 200 })]);
+        expect(records[0].bytesOut).toBeGreaterThanOrEqual(6);
+        expect(JSON.stringify(records[0])).not.toContain('host-ok');
+
+        // 策略没有被放宽：没允许的私网端口仍被 nft 直接拒绝
+        expect(await code(c.name, 'http://host.containers.internal:9/', '--noproxy "*"')).toBe('000');
+
+        // 关掉审计：不再注入代理
+        setPolicy(c, { ...policy, auditHttp: false });
+        await manager.apply(c.name);
+        const envAfter = (await exec(c.name, 'env | sort', { withEnv: true, homeDir: c.homeDir })).stdout;
+        expect(envAfter).not.toMatch(/^HTTP_PROXY=/m);
+    }, 120000);
 
     test('防伪造：走过滤代理的收紧容器没有 NET_RAW、绑不到别人的地址，nft 里有发往代理的 antiSpoof 规则', async () => {
         const c = await create({ policy: { outbound: [deny('example.com')] } });
