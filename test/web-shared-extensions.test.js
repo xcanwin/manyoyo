@@ -6,6 +6,7 @@ const net = require('net');
 const os = require('os');
 const path = require('path');
 const { startWebServer, __testing } = require('../lib/web/server');
+const store = require('../lib/extensions-store');
 
 function getFreePort() {
     return new Promise((resolve, reject) => {
@@ -108,6 +109,29 @@ describe('共享技能 / MCP 接口', () => {
         const removed = await request(`${baseUrl}/api/extensions/skills/claude/demo`, json(cookie, 'DELETE'));
         expect(removed.response.status).toBe(200);
         expect(fs.existsSync(skillFile)).toBe(false);
+    });
+
+    test('mcp.json 超过 1 MB：API 返回 400，磁盘上的旧文件不变', async () => {
+        const bigInput = index => ({
+            name: `big-${index}`,
+            agents: ['claude'],
+            transport: 'stdio',
+            command: 'x',
+            args: Array.from({ length: 64 }, () => 'y'.repeat(1024))
+        });
+        for (let i = 0; i < 40; i += 1) {
+            try {
+                store.saveMcp(tempHome, bigInput(i));
+            } catch (e) {
+                break;
+            }
+        }
+        const file = path.join(tempHome, '.manyoyo', 'extensions', 'mcp.json');
+        const before = fs.readFileSync(file, 'utf-8');
+        const res = await request(`${baseUrl}/api/extensions/mcp`, json(cookie, 'POST', bigInput(99)));
+        expect(res.response.status).toBe(400);
+        expect(res.json.error).toContain('1 MB');
+        expect(fs.readFileSync(file, 'utf-8')).toBe(before);
     });
 
     test('MCP：校验、密钥只回掩码、留空保留原值', async () => {

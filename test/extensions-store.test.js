@@ -165,3 +165,50 @@ describe('extensions-store：技能目录辅助文件的大小上限', () => {
         expect(store.listMcp(home)).toEqual([]);
     });
 });
+
+describe('extensions-store：全局总量上限不吞掉后续技能 / mcp.json 写入上限', () => {
+    let home;
+    beforeEach(() => {
+        home = fs.mkdtempSync(path.join(os.tmpdir(), 'manyoyo-ext-limits-'));
+        store.writeSkill(home, 'common', 'small', '---\nname: small\n---\nsmall\n');
+        store.writeSkill(home, 'common', 'big', '---\nname: big\n---\nbig\n');
+        const bigDir = path.join(home, '.manyoyo', 'extensions', 'skills', 'common', 'big');
+        for (let i = 0; i < 25; i += 1) fs.writeFileSync(path.join(bigDir, `part-${i}.bin`), Buffer.alloc(900 * 1024, i));
+    });
+    afterEach(() => {
+        fs.rmSync(home, { recursive: true, force: true });
+    });
+
+    test('一个总量超限的技能不会让后续技能消失：big 标 oversized，small 仍列出', () => {
+        const listed = store.listSkills(home);
+        expect(listed.map(item => item.name).sort()).toEqual(['big', 'small']);
+        expect(listed.find(item => item.name === 'big').oversized).toBe(true);
+        expect(listed.find(item => item.name === 'small').oversized).toBe(false);
+    });
+
+    test('mcp.json 写入超过 1 MB 直接拒绝，磁盘上的旧文件不变', () => {
+        store.saveMcp(home, { name: 'keep', agents: ['claude'], transport: 'stdio', command: 'keep' });
+        const file = path.join(home, '.manyoyo', 'extensions', 'mcp.json');
+        const bigInput = index => ({
+            name: `big-${index}`,
+            agents: ['claude'],
+            transport: 'stdio',
+            command: 'x',
+            args: Array.from({ length: 64 }, () => 'y'.repeat(1024))
+        });
+        let failure = null;
+        let before = fs.readFileSync(file, 'utf-8');
+        for (let i = 0; i < 40; i += 1) {
+            before = fs.readFileSync(file, 'utf-8');
+            try {
+                store.saveMcp(home, bigInput(i));
+            } catch (e) {
+                failure = e;
+                break;
+            }
+        }
+        expect(failure).toBeTruthy();
+        expect(failure.message).toContain('1 MB');
+        expect(fs.readFileSync(file, 'utf-8')).toBe(before);
+    });
+});

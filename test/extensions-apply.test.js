@@ -250,6 +250,24 @@ describe('extensions-apply：超限技能整体跳过', () => {
         fs.rmSync(home, { recursive: true, force: true });
     });
 
+    test('一个总量超限的技能不会挡住后续小技能同步', async () => {
+        // big 的 25 个 900 KB 文件：单文件都合法，但目录总量超过 20 MB
+        const bigDir = path.join(home, '.manyoyo', 'extensions', 'skills', 'common', 'big');
+        for (let i = 0; i < 25; i += 1) fs.writeFileSync(path.join(bigDir, `part-${i}.bin`), Buffer.alloc(900 * 1024, i));
+        const run = async (args) => {
+            if (args[0] === 'node' && args[2] === apply.SKILL_LINK_SCRIPT) {
+                const params = JSON.parse(args[3]);
+                return { code: 0, stdout: JSON.stringify({ skills: { claude: params.items.claude.map(item => item.name), codex: params.items.codex.map(item => item.name) }, conflicts: [], warnings: [] }), stderr: '' };
+            }
+            if (args[0] === 'node' && args[2] === apply.MCP_EXISTS_SCRIPT) return { code: 0, stdout: JSON.stringify({ claude: [], codex: [] }), stderr: '' };
+            return { code: 0, stdout: '{}', stderr: '' };
+        };
+        const result = await apply.applyExtensions({ homeDir: home, containerName: 'box', containerId: 'fedcba9876543211', mode: 'mount', runInContainer: run });
+        expect(result.warnings.join('\n')).toContain('common/big');
+        expect(result.pending).toBe(false);
+        expect(apply.readState(home, 'fedcba9876543211').skills.claude).toEqual(['demo']);
+    });
+
     test('skillDirHash 不读取超限文件；同步跳过该技能并给 warning，状态不 pending', async () => {
         const bigDir = path.join(home, '.manyoyo', 'extensions', 'skills', 'common', 'big');
         const spy = jest.spyOn(fs, 'readFileSync');
