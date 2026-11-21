@@ -139,6 +139,17 @@ describe('release-pipeline workflow', () => {
         posts.forEach(line => expect(line).toContain("X-Requested-With: XMLHttpRequest"));
     });
 
+    test('the web smoke makes serve use the runtime the installer actually picked (docker info can time out during install, podman imports the image, then serve picks docker and starts pulling it)', () => {
+        const verify = job('prepublish-verify');
+        // 安装步骤捕获实际选中的 docker / podman，记到 RUNNER_TEMP/runtime
+        expect(verify).toContain('使用已有的 \\(docker\\|podman\\)');
+        expect(verify).toContain('$RUNNER_TEMP/runtime');
+        // Web smoke 在启动 serve 之前写临时配置，固定同一个运行时
+        expect(verify).toContain('containerRuntime');
+        expect(verify).toContain('chmod 600');
+        expect(verify.indexOf('containerRuntime')).toBeLessThan(verify.indexOf('serve 127.0.0.1:3911'));
+    });
+
     test('a reused draft is emptied first (assets of the previous attempt must not mix with the new build), and finalize refuses empty lists', () => {
         const draft = job('draft');
         expect(draft).toContain('delete-asset');

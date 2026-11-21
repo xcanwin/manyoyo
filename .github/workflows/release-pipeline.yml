@@ -349,9 +349,17 @@ jobs:
       - name: Install with scripts/install.sh (checksums enforced), import the image, check update
         run: |
           set -eu
+          set -o pipefail
           export HOME="$RUNNER_TEMP/home"
           mkdir -p "$HOME"
-          MANYOYO_VERSION="$VERSION" MANYOYO_DOWNLOAD_BASE="http://127.0.0.1:8765" MANYOYO_SUMS_BASE="http://127.0.0.1:8765" sh scripts/install.sh --install-only
+          install_log="$RUNNER_TEMP/install.log"
+          MANYOYO_VERSION="$VERSION" MANYOYO_DOWNLOAD_BASE="http://127.0.0.1:8765" MANYOYO_SUMS_BASE="http://127.0.0.1:8765" sh scripts/install.sh --install-only 2>&1 | tee "$install_log"
+          # 安装器与 serve 各自探测运行时，时机不同可能选到不同的那个（镜像只导进安装器选的那个）。
+          # 记下安装器实际选中的运行时，下一步让 serve 固定用它，避免对着没有镜像的运行时开始拉取、建会话直接 409。
+          runtime="$(sed -n 's/.*使用已有的 \(docker\|podman\).*/\1/p' "$install_log" | tail -n 1)"
+          test -n "$runtime"
+          printf '%s\n' "$runtime" > "$RUNNER_TEMP/runtime"
+          echo "安装器使用的容器运行时: $runtime"
           m="$HOME/.manyoyo/bin/manyoyo"
           test "$("$m" -v)" = "$VERSION"
           for _ in $(seq 1 90); do
@@ -368,6 +376,11 @@ jobs:
           set -eu
           export HOME="$RUNNER_TEMP/home"
           m="$HOME/.manyoyo/bin/manyoyo"
+          # 固定用安装器选中的运行时，别让 serve 再探一次（两次探测可能选到不同运行时）
+          runtime="$(cat "$RUNNER_TEMP/runtime")"
+          case "$runtime" in docker|podman) ;; *) echo "没有记录安装器使用的容器运行时: $runtime"; exit 1 ;; esac
+          printf '{\n    "containerRuntime": "%s"\n}\n' "$runtime" > "$HOME/.manyoyo/manyoyo.json"
+          chmod 600 "$HOME/.manyoyo/manyoyo.json"
           pass="$(openssl rand -hex 12)"
           base="http://127.0.0.1:3911"
           "$m" serve 127.0.0.1:3911 -U smoke -P "$pass" > "$RUNNER_TEMP/serve.log" 2>&1 &
