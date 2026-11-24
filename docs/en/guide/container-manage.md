@@ -79,6 +79,8 @@ An inbound "allow `@any`" does not open the outbound side of other restricted co
 
 If you put URLs that point to the host or private addresses in the environment when creating a container (e.g. `OLLAMA_BASE_URL=http://host.containers.internal:11434`), the matching allow rule is added automatically; you can see (and delete) it in the table. Network settings saved by older versions are converted to the new format automatically.
 
+Addresses in `autostart` / `first` are also listed under "Network" in the dialog: socat address pairs, ssh / scp / rsync / sshfs, non-HTTP URLs such as databases, Docker registry references and NFS / CIFS mounts are recognized; ticked entries join the outbound allowlist. Quick chat, the `my run` CLI and cloned/recreated containers have no picker and automatically allow the default-ticked addresses. Detection only reads text: it never executes commands or reads config files referenced by the script.
+
 ### Domain rules
 
 As long as an enabled domain rule exists, in any mode, the container's HTTP(S) traffic goes through a dedicated filtering proxy in the manyoyo network, which decides by the same table; browsers, `curl` and agents in the web terminal, chat and manyoyo commands use it automatically. In a shell you opened yourself with `podman exec` / `docker exec`, run `source /run/manyoyo-sys/env.sh && reload-env` first; for ssh, databases and other non-HTTP protocols use IP rules.

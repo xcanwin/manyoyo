@@ -17,7 +17,7 @@ description: "~/.manyoyo/manyoyo.json 的全部字段、合并规则与最小示
 - `env`：按 key 合并，后者覆盖前者。
 - `envFile`、`volumes`、`ports`、`imageBuildArgs`：按「全局 → `runs.<name>` → 命令行」追加。
 - `autostart` / `autostartOnServe` / `network`：网页新建容器时，会按同样的优先级（请求 > `runs.<name>` > 全局）把值填进弹窗。没有改动的字段不会提交；清空、关闭或改回默认，都会作为你的明确选择提交。
-- `first`（命令、`first.env`、`first.envFile`）里的域名、IP、端口会在新建容器弹窗里被列出来，勾选后才加入白名单；识别失败不影响创建。快捷对话、命令行 `my run`、克隆 / 重建容器没有勾选界面，会自动放行默认勾选的地址（云服务器元数据、范围过大的网段、通配域名除外），只在创建时发生。
+- `autostart` 与 `first`（命令、`first.env`、`first.envFile`）里的地址会在新建容器弹窗里列出来，勾选后才加入出站白名单；识别失败不影响创建。常见写法都能识别：URL（含数据库 / 消息队列协议）、`host:port`、socat 地址对、ssh / scp / rsync / sshfs、Docker 镜像仓库、NFS / CIFS 挂载。只读文本，不执行命令，也不读取脚本里引用的配置文件。快捷对话、命令行 `my run`、克隆 / 重建容器没有勾选界面，会自动放行默认勾选的地址（云服务器元数据、范围过大的网段、通配域名除外），只在创建时发生。
 
 ```json5
 {

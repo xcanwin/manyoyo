@@ -274,6 +274,151 @@ describe('network-infer：去重、来源、排序与上限', () => {
     });
 });
 
+describe('network-infer：常见自启动写法', () => {
+    test('socat 地址对：只取连接侧，LISTEN 侧不出站；TCP / UDP / OPENSSL / 宿主机别名', async () => {
+        const result = await inferEndpointCandidates({
+            autostart: [
+                'socat TCP_LISTEN:30001,fork,reuseaddr TCP:host.docker.internal:30001',
+                'socat TCP-LISTEN:8080,fork,reuseaddr TCP4:10.2.3.4:8080',
+                'socat UDP-LISTEN:5353,fork UDP:8.8.8.8:53',
+                'socat TCP-LISTEN:8443,fork,reuseaddr OPENSSL:backend.corp.example:443'
+            ].join('\n'),
+            preset: 'allowlist',
+            lookup: publicLookup
+        });
+        expect(targets(result)).toEqual([
+            'host|@host|30001',
+            'cidr|10.2.3.4|8080',
+            'cidr|8.8.8.8|53',
+            'domain|backend.corp.example|443'
+        ]);
+        expect(result.candidates[0].proto).toBe('tcp');
+        expect(result.candidates[2].proto).toBe('udp');
+    });
+
+    test('SSH 隧道 / scp / rsync / sshfs：只放行实际连接的服务器，-L/-R/-D 的转发目标不直连', async () => {
+        const result = await inferEndpointCandidates({
+            autostart: [
+                'ssh -N -L 5432:db.corp.example:5432 deploy@bastion.corp.example',
+                'ssh deploy@bastion.corp.example',
+                'scp -P 2222 file deploy@bastion.corp.example:/data',
+                'rsync -avz deploy@backup.corp.example:/data /data',
+                'rsync --port=873 rsync://mirror.corp.example/module',
+                'sshfs -p 2222 deploy@files.corp.example:/ /mnt/files',
+                'autossh -M 0 -N -L 3000:localhost:3000 deploy@tunnel.corp.example',
+                'ssh -p 2223 -J jump@jump.corp.example target@internal.corp.example',
+                'git clone ssh://git@git.corp.example:2222/team/repo.git'
+            ].join('\n'),
+            preset: 'allowlist',
+            lookup: publicLookup
+        });
+        expect(targets(result)).toEqual([
+            'domain|bastion.corp.example|22',
+            'domain|bastion.corp.example|2222',
+            'domain|backup.corp.example|22',
+            'domain|mirror.corp.example|873',
+            'domain|files.corp.example|2222',
+            'domain|tunnel.corp.example|22',
+            'domain|jump.corp.example|22',
+            'domain|internal.corp.example|2223',
+            'domain|git.corp.example|2222'
+        ]);
+        expect(targets(result)).not.toContain('domain|db.corp.example|5432');
+        const raw = JSON.stringify(result);
+        expect(raw).not.toContain('deploy');
+        expect(raw).not.toContain('jump@');
+    });
+
+    test('宿主机别名、--flag=值、GOPROXY 逗号列表', async () => {
+        const result = await inferEndpointCandidates({
+            autostart: [
+                'nc -zv host.docker.internal 11434',
+                'psql -h host.docker.internal -p 5432',
+                'mysql -h host.docker.internal -P 3306',
+                'OLLAMA_HOST=host.containers.internal',
+                'mysql --host=db.corp.example --port=3306',
+                'npm install --registry=registry.corp.example:4873',
+                'go env -w GOPROXY=https://goproxy.corp.example,direct'
+            ].join('\n'),
+            preset: 'allowlist',
+            lookup: publicLookup
+        });
+        expect(targets(result)).toEqual([
+            'host|@host|11434',
+            'host|@host|5432',
+            'host|@host|3306',
+            'host|@host|',
+            'domain|db.corp.example|3306',
+            'domain|registry.corp.example|4873',
+            'domain|goproxy.corp.example|443'
+        ]);
+    });
+
+    test('非 HTTP URL scheme：数据库 / 消息队列 / 镜像协议；不泄露 userinfo 与 path', async () => {
+        const result = await inferEndpointCandidates({
+            autostart: [
+                'DATABASE_URL=postgres://user:secret@db.corp.example:5432/app',
+                'REDIS_URL=redis://:secret@cache.corp.example:6379/0',
+                'mongodb+srv://user:secret@cluster.corp.example/db',
+                'amqp://mq.corp.example:5672',
+                'udp://dns.corp.example:53',
+                'docker://registry.corp.example:5000/img'
+            ].join('\n'),
+            preset: 'allowlist',
+            lookup: publicLookup
+        });
+        expect(targets(result)).toEqual([
+            'domain|db.corp.example|5432',
+            'domain|cache.corp.example|6379',
+            'domain|cluster.corp.example|27017',
+            'domain|mq.corp.example|5672',
+            'domain|dns.corp.example|53',
+            'domain|registry.corp.example|5000'
+        ]);
+        expect(result.candidates[4].proto).toBe('all');
+        const raw = JSON.stringify(result);
+        expect(raw).not.toContain('user');
+        expect(raw).not.toContain('secret');
+        expect(raw).not.toContain('/app');
+        expect(raw).not.toContain('/0');
+    });
+
+    test('私有镜像仓库：pull / run / login / Dockerfile FROM；Docker Hub 名称不误收', async () => {
+        const result = await inferEndpointCandidates({
+            autostart: [
+                'docker pull registry.corp.example:5000/team/img:latest',
+                'podman pull ghcr.io/org/img',
+                'docker run --rm -e A=B -v /data:/data registry.corp.example:5000/app serve',
+                'docker pull nginx:1.27',
+                'echo "FROM registry.corp.example:5000/team/base AS build" > Dockerfile',
+                'docker login registry.corp.example:5000'
+            ].join('\n'),
+            preset: 'allowlist',
+            lookup: publicLookup
+        });
+        expect(targets(result)).toEqual([
+            'domain|registry.corp.example|5000',
+            'domain|ghcr.io|443'
+        ]);
+    });
+
+    test('NFS / CIFS / SMB 挂载', async () => {
+        const result = await inferEndpointCandidates({
+            autostart: [
+                'mount -t nfs nfs.corp.example:/export /mnt/nfs',
+                'mount -t cifs //nas.corp.example/share /mnt/share -o user=u',
+                'smbclient //nas.corp.example/share -U user'
+            ].join('\n'),
+            preset: 'allowlist',
+            lookup: publicLookup
+        });
+        expect(targets(result)).toEqual([
+            'domain|nfs.corp.example|2049',
+            'domain|nas.corp.example|445'
+        ]);
+    });
+});
+
 describe('network-infer：extractEndpointTokens', () => {
     test('只返回解析后的 token，不含原文；同一段文本里的 URL 与 host:port 去重前都能看到', () => {
         const tokens = extractEndpointTokens('curl https://h.example.com:8443/path?token=1\nnc other.example:99', { source: 'first' });
@@ -287,6 +432,19 @@ describe('network-infer：extractEndpointTokens', () => {
 });
 
 describe('withScriptEndpoints：没有勾选界面的入口自动放行', () => {
+    test('socat 的宿主机映射自动加 @host 端口规则；LISTEN 侧不加', async () => {
+        const policy = normalizePolicy({ preset: 'restricted' });
+        const next = await withScriptEndpoints(policy, { autostart: 'socat TCP_LISTEN:30001,fork,reuseaddr TCP:host.docker.internal:30001' });
+        expect(next.outbound).toEqual([{ action: 'allow', target: '@host', ports: '30001', proto: 'tcp', enabled: true }]);
+        const again = await withScriptEndpoints(next, { autostart: 'socat TCP_LISTEN:30001,fork,reuseaddr TCP:host.docker.internal:30001' });
+        expect(again).toBe(next);
+
+        const privateTarget = await withScriptEndpoints(normalizePolicy({ preset: 'restricted' }), {
+            autostart: 'socat TCP-LISTEN:9000,fork,reuseaddr TCP:10.2.3.4:9000'
+        });
+        expect(privateTarget.outbound).toEqual([{ action: 'allow', target: '10.2.3.4', ports: '9000', proto: 'tcp', enabled: true }]);
+    });
+
     test('restricted：自启动里的 host.docker.internal:<端口> 自动加 @host 允许规则，插在最前', async () => {
         const policy = normalizePolicy({ preset: 'restricted', outbound: [{ action: 'allow', target: 'keep.example.com', ports: '', proto: 'all', enabled: true }] });
         const next = await withScriptEndpoints(policy, { autostart: 'curl -fsS http://host.docker.internal:9999/health' });

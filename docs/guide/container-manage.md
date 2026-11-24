@@ -79,6 +79,8 @@ description: 在网页「设置容器」页随时修改容器的环境变量、�
 
 新建容器时如果在环境变量里填了指向宿主机或私有地址的 URL（如 `OLLAMA_BASE_URL=http://host.containers.internal:11434`），对应的允许规则会自动加上，规则表里看得到，也可以删。旧版本保存的网络配置会自动转成新格式。
 
+自启动 / `first` 里的地址也会在弹窗的「网络」里列出来：socat 地址对、ssh / scp / rsync / sshfs、数据库等非 HTTP URL、Docker 镜像仓库、NFS / CIFS 挂载这些常见写法都能识别，勾选后加入出站白名单。快捷对话、命令行 `my run` 和克隆 / 重建没有勾选界面，会自动放行默认勾选的地址。识别只读文本，不执行命令，也不读取脚本引用的配置文件。
+
 ### 域名规则
 
 只要有启用的域名规则，不论哪个模式，容器的 HTTP(S) 访问都会经过 manyoyo 网络里的专用过滤代理，按同一张表判断；网页终端、对话和 manyoyo 命令里的浏览器、`curl`、Agent 自动使用它。自己用 `podman exec` / `docker exec` 开的 shell 要先执行 `source /run/manyoyo-sys/env.sh && reload-env`；ssh、数据库等非 HTTP 协议请用 IP 规则。
