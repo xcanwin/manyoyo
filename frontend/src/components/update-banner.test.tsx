@@ -45,6 +45,11 @@ describe("UpdateBanner", () => {
     const banner = container.querySelector('[data-testid="update-banner"]')
     expect(banner?.textContent).toContain("8.0.0")
     expect(banner?.textContent).toContain("manyoyo update")
+    // Alert 基类曾带 has-data-[slot=alert-action]:relative，特异性压过调用处的 fixed，
+    // 提示条变成布局里的普通块；fixed 必须原样留下，且不能有带变体的 relative
+    expect(banner?.className).toContain("fixed")
+    expect(banner?.className).not.toMatch(/(?:^|\s)relative(?:\s|$)/)
+    expect(banner?.className).not.toContain(":relative")
   })
 
   test("dismissing hides it and remembers the version, so a reload stays quiet", async () => {
