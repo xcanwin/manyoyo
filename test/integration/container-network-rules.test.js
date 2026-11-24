@@ -173,6 +173,21 @@ maybe('统一网络规则（真实容器）', () => {
         expect(proxyHits).toBe(before + 2);
     }, 180000);
 
+    test('有拒绝域名时，容器不能直连运行时注入的上游代理绕过过滤代理', async () => {
+        const upstream = `http://${alias}:${proxyPort}`;
+        const c = await create({ policy: { outbound: [deny('example.com')] }, runEnv: { http_proxy: upstream, https_proxy: upstream } });
+        await manager.apply(c.name);
+        const before = proxyHits;
+        // 规则保存前打开的终端里残留的就是运行时注入的代理：直连它等于绕过过滤代理
+        const direct = await exec(c.name, `curl -s -m 8 -o /dev/null -w '%{http_code}' -x ${upstream} http://p1.invalid/; true`);
+        expect(direct.stdout.trim()).toBe('000');
+        expect(proxyHits).toBe(before);
+        // 过滤代理（sidecar）仍然能经同一个上游出网
+        expect(await viaProxy(c, 'http://p2.example.test/')).toBe('200');
+        expect(proxyHits).toBe(before + 1);
+        expect(await viaProxy(c, 'http://example.com/')).toBe('403');
+    }, 180000);
+
     test('收紧矩阵：公网通；宿主机端口、其他容器、元数据地址不通（拒绝而不是超时）', async () => {
         const a = await create();
         const b = await create();
@@ -211,13 +226,17 @@ maybe('统一网络规则（真实容器）', () => {
         expect(await code(a.name, `http://${ipOf(b.name)}:7001/`)).toBe('000');
     }, 180000);
 
-    test('域名规则（收紧）：拒绝行经过滤代理 403 并出现在被拦截列表，其他域名照常；直连被挡之外的端口不受影响', async () => {
+    test('域名规则（收紧）：拒绝行经过滤代理 403，直连 80/443 也被拒绝；其他域名照常', async () => {
         const c = await create({ policy: { outbound: [deny('example.com')] } });
         await manager.apply(c.name);
         const env = (await exec(c.name, 'env | grep -i "^https\\?_proxy=" | sort', { withEnv: true })).stdout;
         expect(env).toMatch(/^https?_proxy=http:\/\/\d+\.\d+\.\d+\.\d+:3128$/im);
         expect(await viaProxy(c, 'http://example.com/')).toBe('403');
         if (online()) expect(await viaProxy(c, 'http://example.org/')).toMatch(/^(200|30\d)$/);
+        // 直连（--noproxy）也被拒绝：拒绝域名不能靠绕过过滤代理规避
+        const ruleset = await rtAsync(['run', '--rm', '--pull=never', '--network', `container:${c.name}`, '--cap-drop', 'ALL', '--cap-add', 'NET_ADMIN', '--user', 'root', '--entrypoint', 'nft', IMAGE, 'list', 'ruleset']);
+        expect(ruleset.stdout).toContain('meta l4proto { tcp, udp } th dport { 80, 443 } reject');
+        if (online()) expect(await code(c.name, 'https://example.com/')).toBe('000');
         await sleep(1500);
         const list = require('../../lib/egress-denied').read(manager.sidecar.paths().denied, c.st.id);
         expect(list.some(r => r.host === 'example.com')).toBe(true);

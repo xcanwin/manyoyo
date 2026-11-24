@@ -9,6 +9,7 @@ import {
   describeNetStatus,
   describeTarget,
   fuzzyMatch,
+  hasDomainRules,
   isShadowingRule,
   isSensitiveKey,
   isUnrestricted,
@@ -313,5 +314,17 @@ describe("samePolicy", () => {
     const edited = { ...defaultPolicy(), outbound: [{ action: "allow", ports: "80", proto: "all", enabled: true, target: "@host" }] } as NetworkPolicy
     expect(samePolicy(edited, server)).toBe(true)
     expect(samePolicy({ ...edited, outbound: [{ ...edited.outbound[0], enabled: false }] }, server)).toBe(false)
+  })
+})
+
+describe("hasDomainRules", () => {
+  const rule = (target: string, extra: Partial<Rule> = {}): Rule => ({ action: "allow", target, ports: "", proto: "all", enabled: true, ...extra })
+  test("启用的允许 / 拒绝域名都算；暂停、IP 与变量不算", () => {
+    const base = defaultPolicy()
+    expect(hasDomainRules(base)).toBe(false)
+    expect(hasDomainRules({ ...base, outbound: [rule("a.example.com")] })).toBe(true)
+    expect(hasDomainRules({ ...base, outbound: [rule("a.example.com", { action: "deny" })] })).toBe(true)
+    expect(hasDomainRules({ ...base, outbound: [rule("a.example.com", { enabled: false })] })).toBe(false)
+    expect(hasDomainRules({ ...base, outbound: [rule("203.0.113.7"), rule("@host")] })).toBe(false)
   })
 })

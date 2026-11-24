@@ -52,7 +52,7 @@ Besides an IP, a CIDR or a domain (`*.example.com` matches subdomains; outbound 
 
 You can type `@host` or `@container:name` directly instead of picking from the list.
 
-The container itself and the endpoints manyoyo needs (DNS, upstream proxy, Playwright, package mirrors) are always allowed; you don't write them, and they show as grey rows marked "Required". Rows marked "Mode default" are the defaults of the current mode; rows marked "Derived" appear automatically in the outbound table when another container's inbound allows this one, so you don't add them.
+The container itself and the endpoints manyoyo needs (DNS, filtering proxy, Playwright, package mirrors) are always allowed; you don't write them, and they show as grey rows marked "Required". Rows marked "Mode default" are the defaults of the current mode; rows marked "Derived" appear automatically in the outbound table when another container's inbound allows this one, so you don't add them.
 
 The three outbound modes only decide the default rows at the bottom:
 
@@ -83,10 +83,10 @@ Addresses in `autostart` / `first` are also listed under "Network" in the dialog
 
 ### Domain rules
 
-As long as an enabled domain rule exists, in any mode, the container's HTTP(S) traffic goes through a dedicated filtering proxy in the manyoyo network, which decides by the same table; browsers, `curl` and agents in the web terminal, chat and manyoyo commands use it automatically. In a shell you opened yourself with `podman exec` / `docker exec`, run `source /run/manyoyo-sys/env.sh && reload-env` first; for ssh, databases and other non-HTTP protocols use IP rules.
+As long as an enabled domain rule exists, in any mode, the container's HTTP(S) traffic goes through a dedicated filtering proxy in the manyoyo network, which decides by the same table; newly opened web terminals, chat and the browser, `curl` and agents in manyoyo commands use it automatically. In a shell opened before the rules were saved (including the web terminal), run `source /run/manyoyo-sys/env.sh && reload-env` first; the same applies to a shell you opened yourself with `podman exec` / `docker exec`. For ssh, databases and other non-HTTP protocols use IP rules.
 
 - An exact domain is allowed as soon as it matches (even if it resolves to a private address: writing it means you trust it); a wildcard domain (`*.example.com`) that resolves to the host, a private network or cloud metadata still needs a rule that allows that address.
-- Domain rules do not cover programs that connect to an IP directly; those are judged by the IP rules. So a "deny domain" under Restricted or Custom only blocks HTTP(S) that goes through the proxy; use "Allowlist only" to enforce it.
+- When there is a deny-domain rule, direct connections to the ports covered by those rules and to the runtime-injected upstream proxy are rejected too (only the filtering proxy can reach the upstream): a rule without ports covers 80 / 443 (including QUIC on UDP 443), so a proxy variable left in a shell opened before the rules were saved, and `curl --noproxy '*'`, cannot bypass the proxy. The cost is that programs which do not use the proxy will fail. Direct connections to other ports / addresses are still judged by IP rules; use "Allowlist only" to enforce every protocol and port.
 - When going out through an upstream proxy, the domain is resolved by the upstream, which cannot stop DNS rebinding by a malicious domain; don't allow domains you don't trust.
 - **The agent's model service domain must be allowed too**: domains of URLs in the environment are added when a container is created; for an existing container switched to "Allowlist only", the page lists them as buttons, one click adds each.
 - **A page won't load or a click does nothing?** Open **Recently blocked** on the "Set container" tab and click "Allow": it takes effect immediately (inserted at the top of your rules). Other domains the page references may still be blocked; allow them the same way. The browser's own background requests can be ignored. If a new site is blocked while the agent runs, the chat shows a notice once.

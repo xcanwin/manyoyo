@@ -22,6 +22,7 @@ import {
   type Preset,
   PRESET_HINTS,
   PRESET_LABELS,
+  isDomainTarget,
   newRule,
   ruleValue,
   switchPreset,
@@ -94,6 +95,7 @@ export function NetworkEditor({
 
   const outboundDomains = new Set(policy.outbound.map((rule) => ruleValue(rule, "outbound").trim().toLowerCase()))
   const suggestions = policy.preset === "allowlist" ? suggestedDomains.filter((domain) => !outboundDomains.has(domain)) : []
+  const hasDomainDeny = policy.outbound.some((rule) => rule.enabled && rule.action === "deny" && isDomainTarget(ruleValue(rule, "outbound")))
 
   const exposeColumns: RowColumn<ExposeRow>[] = [
     { key: "bind", label: "宿主机监听地址", options: BIND_OPTIONS, className: "flex-[2]" },
@@ -145,6 +147,11 @@ export function NetworkEditor({
               </Button>
             ))}
           </div>
+        ) : null}
+        {hasDomainDeny && policy.preset !== "allowlist" ? (
+          <FieldDescription>
+            有「拒绝域名」规则：容器直连这些规则覆盖的端口（没写端口时按 80/443）、以及直连运行时注入的上游代理都会被拒绝，HTTP(S) 必须经过滤代理（不走代理的程序会失败）。其他端口请用 IP 规则或改用「仅白名单」。
+          </FieldDescription>
         ) : null}
       </Field>
 

@@ -223,6 +223,43 @@ describe('buildNftRuleset', () => {
         expect(text).not.toContain('ads.example.com');
     });
 
+    test('拒绝域名时直连 80/443 也拒绝（--noproxy 绕不过）；只允许域名不额外拒绝', () => {
+        const deny = p.buildNftRuleset(p.normalizePolicy({ outbound: [rule('deny', 'ads.example.com')] }), endpoints);
+        expect(deny).toContain('meta l4proto { tcp, udp } th dport { 80, 443 } reject');
+        // 显式允许的 IP 端口在直连拒绝之前，仍然生效
+        const withAllow = p.buildNftRuleset(p.normalizePolicy({ outbound: [rule('allow', '203.0.113.7', { ports: '443', proto: 'tcp' }), rule('deny', 'ads.example.com')] }), endpoints);
+        expect(lineIndex(withAllow, 'ip daddr { 203.0.113.7 } tcp dport 443 accept')).toBeLessThan(lineIndex(withAllow, 'th dport { 80, 443 } reject'));
+        // 拒绝行写了端口就按写的端口拒绝
+        const withPorts = p.buildNftRuleset(p.normalizePolicy({ outbound: [rule('deny', 'ads.example.com', { ports: '8080,8443-8444', proto: 'tcp' })] }), endpoints);
+        expect(withPorts).toContain('tcp dport { 8080, 8443-8444 } reject');
+        expect(withPorts).not.toContain('th dport { 80, 443 } reject');
+        // 只有允许域名时不做直连拦截；allowlist 已有最后一条无条件 reject，不重复
+        expect(p.buildNftRuleset(p.normalizePolicy({ outbound: [rule('allow', 'a.example.com')] }), endpoints)).not.toContain('th dport { 80, 443 } reject');
+        expect(p.buildNftRuleset(p.normalizePolicy({ preset: 'allowlist', outbound: [rule('deny', 'ads.example.com')] }), endpoints)).not.toContain('th dport { 80, 443 } reject');
+    });
+
+    test('暂停的拒绝域名不做直连拦截；自定义模式同样拦截；多条拒绝行端口合并', () => {
+        const paused = p.buildNftRuleset(p.normalizePolicy({ outbound: [rule('deny', 'ads.example.com', { enabled: false })] }), endpoints);
+        expect(paused).not.toContain('th dport { 80, 443 } reject');
+        expect(paused).not.toContain('tcp dport 8080 reject');
+        const custom = p.buildNftRuleset(p.normalizePolicy({ preset: 'custom', outbound: [rule('deny', 'ads.example.com')] }), endpoints);
+        expect(custom).toContain('th dport { 80, 443 } reject');
+        const both = p.buildNftRuleset(p.normalizePolicy({ outbound: [rule('deny', 'ads.example.com'), rule('deny', 'stats.example.com', { ports: '8080,8443', proto: 'tcp' })] }), endpoints);
+        expect(both).toContain('th dport { 80, 443 } reject');
+        expect(both).toContain('tcp dport { 8080, 8443 } reject');
+        expect(p.hasDomainDeny(p.normalizePolicy({ outbound: [rule('deny', 'ads.example.com', { enabled: false })] }))).toBe(false);
+        expect(p.domainDenyPorts(p.normalizePolicy({ outbound: [rule('deny', 'ads.example.com'), rule('deny', 'stats.example.com', { ports: '8080,8443', proto: 'tcp' })] }))).toEqual({ all: true, ports: '8080,8443' });
+    });
+
+    test('拒绝域名时运行时注入的上游代理被显式拒绝', () => {
+        const policy = p.normalizePolicy({ outbound: [rule('deny', 'ads.example.com')] });
+        const text = p.buildNftRuleset(policy, { ...endpoints, blocked: [{ ip: '203.0.113.9', ports: '10808', proto: 'tcp' }] });
+        expect(text).toContain('ip daddr 203.0.113.9 tcp dport 10808 reject');
+        // 显式允许的同一地址在拒绝之前，仍然生效（用户主动放行是例外）
+        const withAllow = p.buildNftRuleset(p.normalizePolicy({ outbound: [rule('allow', '203.0.113.9', { ports: '10808', proto: 'tcp' }), rule('deny', 'ads.example.com')] }), { ...endpoints, blocked: [{ ip: '203.0.113.9', ports: '10808', proto: 'tcp' }] });
+        expect(lineIndex(withAllow, 'ip daddr { 203.0.113.9 } tcp dport 10808 accept')).toBeLessThan(lineIndex(withAllow, 'ip daddr 203.0.113.9 tcp dport 10808 reject'));
+    });
+
     test('allowlist：用户规则后无条件 reject，不含私有网段列表', () => {
         const policy = p.normalizePolicy({ preset: 'allowlist', outbound: [rule('allow', 'github.com'), rule('allow', '140.82.112.0/20', { ports: '22', proto: 'tcp' })] });
         const text = p.buildNftRuleset(policy, endpoints);

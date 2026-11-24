@@ -258,7 +258,7 @@ const DEFAULT_WHY = "模式默认：切换上方模式会改变这些行；要�
 
 export const OUTBOUND_TOP: LockedRule[] = [
   { action: "allow", target: "@cont_local", why: "容器本机始终允许" },
-  { action: "allow", target: "@manyoyo", why: "manyoyo 自身需要：DNS、上游代理、浏览器、软件源" },
+  { action: "allow", target: "@manyoyo", why: "manyoyo 自身需要：DNS、过滤代理、浏览器、软件源" },
 ]
 export const INBOUND_TOP: LockedRule[] = [{ action: "allow", target: "@cont_local", why: "容器本机始终允许" }]
 
@@ -352,6 +352,11 @@ export function validatePorts(ports: string): string {
 export function isDomainTarget(value: string): boolean {
   const text = value.trim()
   return !!text && !text.startsWith("@") && !IPV4_RE.test(text) && !IPV6_RE.test(text) && DOMAIN_RE.test(text)
+}
+
+/** 出站有启用的域名规则（允许或拒绝）：这类规则会让容器走过滤代理，新增 / 删除后已打开的终端要 reload-env。 */
+export function hasDomainRules(policy: NetworkPolicy): boolean {
+  return policy.outbound.some((rule) => rule.enabled && isDomainTarget(ruleValue(rule, "outbound")))
 }
 
 /** 域名规则只看 tcp：udp 的域名规则服务端不收 */

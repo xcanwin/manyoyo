@@ -20,6 +20,7 @@ import {
   type NetworkPolicy,
   type NetworkState,
   describeNetStatus,
+  hasDomainRules,
   parseEnvText,
   cleanPolicy,
   samePolicy,
@@ -267,7 +268,14 @@ export function ContainerManagePanel({ containerName }: { containerName: string 
         data = await putNetwork(toSave, true)
       }
       applyNetwork(data as unknown as NetworkState)
-      setNetMessage({ tone: "ok", text: "已保存并生效（不需要重启容器）。" })
+      // 新增或删除域名规则都会改变容器该不该走过滤代理：已打开的终端里残留的代理变量要 reload-env 才更新
+      const proxyChanged = (net ? hasDomainRules(net.policy) : false) || hasDomainRules(toSave)
+      setNetMessage({
+        tone: "ok",
+        text: proxyChanged
+          ? "已保存并生效（不需要重启容器）。已打开的终端执行 reload-env 后才会使用新的代理设置。"
+          : "已保存并生效（不需要重启容器）。",
+      })
     } catch (error) {
       const { data } = apiErrorData(error)
       if (data.policy) applyNetwork(data as unknown as NetworkState)
