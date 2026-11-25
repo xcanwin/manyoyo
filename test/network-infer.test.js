@@ -445,6 +445,22 @@ describe('withScriptEndpoints：没有勾选界面的入口自动放行', () => 
         expect(privateTarget.outbound).toEqual([{ action: 'allow', target: '10.2.3.4', ports: '9000', proto: 'tcp', enabled: true }]);
     });
 
+    test('有拒绝域名规则时，restricted 下也放行 first 的公网地址（直连 80/443 已被收紧）', async () => {
+        const policy = normalizePolicy({ preset: 'restricted', outbound: [{ action: 'deny', target: 'blocked.example.org', enabled: true }] });
+        const next = await withScriptEndpoints(policy, { firstCommand: 'curl https://example.com/x', lookup: publicLookup });
+        // 域名规则给过滤代理用，解析出的公网地址给直连用（域名拒绝时 nft 会拒绝所有直连 80/443）
+        expect(next.outbound.slice(0, 2)).toEqual([
+            { action: 'allow', target: 'example.com', ports: '443', proto: 'tcp', enabled: true },
+            { action: 'allow', target: '93.184.216.34', ports: '443', proto: 'tcp', enabled: true }
+        ]);
+    });
+
+    test('没有拒绝域名时 restricted 仍不为公网地址加规则（公网默认允许）', async () => {
+        const policy = normalizePolicy({ preset: 'restricted' });
+        const next = await withScriptEndpoints(policy, { firstCommand: 'curl https://example.com/x', lookup: publicLookup });
+        expect(next).toBe(policy);
+    });
+
     test('restricted：自启动里的 host.docker.internal:<端口> 自动加 @host 允许规则，插在最前', async () => {
         const policy = normalizePolicy({ preset: 'restricted', outbound: [{ action: 'allow', target: 'keep.example.com', ports: '', proto: 'all', enabled: true }] });
         const next = await withScriptEndpoints(policy, { autostart: 'curl -fsS http://host.docker.internal:9999/health' });

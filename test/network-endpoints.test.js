@@ -49,6 +49,13 @@ describe('withEnvEndpoints', () => {
     expect(restricted.outbound.every(r => r.enabled)).toBe(true);
   });
 
+  test('有拒绝域名规则时，模型服务的公网地址也加直连放行（否则 Agent 直连会被 80/443 拒绝规则挡住）', async () => {
+    const envLines = ['ANTHROPIC_BASE_URL=https://public.example.com/api'];
+    const policy = normalizePolicy({ preset: 'restricted', outbound: [{ action: 'deny', target: 'blocked.example.org', enabled: true }] });
+    const merged = await withEnvEndpoints(policy, envLines, lookup);
+    expect(ruleRows(merged)).toEqual(['deny blocked.example.org', 'allow 8.8.8.8 443']);
+  });
+
   test('不限制的自定义策略不动', async () => {
     const open = normalizePolicy({ preset: 'custom' });
     expect(await withEnvEndpoints(open, ['B=http://192.168.1.50:8000'], lookup)).toBe(open);
