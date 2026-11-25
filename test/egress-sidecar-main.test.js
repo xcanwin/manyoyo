@@ -61,6 +61,18 @@ describe('egress-sidecar-main', () => {
     });
 
 
+    test('clients.json 刚写入就请求：新容器立即被认识，不受 500ms 刷新节流影响', async () => {
+        writeClients({ '127.0.0.1': allowDomain('ok.example.com') });
+        server = await start({ dataDir: path.join(dir, 'data'), deniedDir: path.join(dir, 'denied'), port: 0, host: '127.0.0.1', lookup: async () => ['127.0.0.1'] });
+        await new Promise(resolve => setTimeout(resolve, 650));
+        // 被拒请求立即返回，同时完成一次刷新检查，把节流的起点拉到眼前
+        expect(await connectVia(server.port, 'evil.example.org:80', '127.0.0.1')).toMatch(/^HTTP\/1.1 403/);
+        // apply 刚写入新容器的映射，first 命令紧接着出网
+        writeClients({ '127.0.0.1': allowDomain('ok.example.com'), '127.0.0.2': allowDomain('new.example.com') });
+        // 已认到容器：允许的域名解析到环回被拒（destination_ip_prohibited），而不是“未知来源”（http_request_denied）
+        expect(await connectVia(server.port, 'new.example.com:80', '127.0.0.2')).toContain('destination_ip_prohibited');
+    });
+
     test('traffic 目录记录放行的 CONNECT；denied 目录不受影响', async () => {
         const http = require('http');
         const traffic = require('../lib/egress-traffic');

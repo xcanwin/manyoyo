@@ -220,7 +220,7 @@ Jest 已忽略 `temp/` 工作目录；`npm test` 会校验入口文档示例版�
 
 - 网络集成测试（`test/integration/container-network*.test.js`）：一个测试文件只起**一个** HOME 的 sidecar——sidecar 固定 IP 按 HOME 哈希只错开 5 个槽位，两个 HOME 同时在 `manyoyo` 网络里有 sidecar 会 20% 撞地址（还有 podman CNI 释放租约的延迟）；模拟“运行时注入代理”要给运行时子进程**清掉本机已有的代理变量再注入**（`http_proxy=true` 会让本机变量盖过 `containers.conf` 的 env），夹具代理 / HTTP 服务必须监听 `0.0.0.0`。前端比较“是否有未保存修改”不要用 `JSON.stringify` 比对象（服务端与界面里改过的规则键顺序不同，会一直显示未保存）。
 
-- 过滤代理 sidecar 按来源 IP 认容器，前提是容器伪造不了来源：`buildContainerRunArgs` 统一 `--cap-drop NET_RAW`（docker 默认带，podman 没有），nft 另有“发往 sidecar 且源地址不是自己就丢弃”；sidecar 要固定 IP **和** MAC（只固定 IP 时重启后 ARP 缓存让出网断约一分钟），rootful 下要 `--cap-add DAC_OVERRIDE`（`--cap-drop ALL` 后 root 读不了用户的 0700 目录，rootless 与嵌套 dind 都测不出来）；sidecar 的重建版本号只含程序文件（上游代理写 `upstream.txt` 热更新），否则 CLI 与 serve 环境不同会互相删重建；凡是按名字 / 镜像列容器的地方都要用 `isSidecarName` 排除它。嵌套 dind 重启要 stop + start（`restart` 会因 containerd 残留 pid 起不来）；docker 的 `rm` 没有 `-t`。
+- 过滤代理 sidecar 按来源 IP 认容器，前提是容器伪造不了来源：`buildContainerRunArgs` 统一 `--cap-drop NET_RAW`（docker 默认带，podman 没有），nft 另有“发往 sidecar 且源地址不是自己就丢弃”；sidecar 要固定 IP **和** MAC（只固定 IP 时重启后 ARP 缓存让出网断约一分钟），rootful 下要 `--cap-add DAC_OVERRIDE`（`--cap-drop ALL` 后 root 读不了用户的 0700 目录，rootless 与嵌套 dind 都测不出来）；sidecar 的重建版本号只含程序文件（上游代理写 `upstream.txt` 热更新），否则 CLI 与 serve 环境不同会互相删重建；`clients.json` 的刷新有 500ms 节流，来源 IP 未命中时必须强制重读一次——新容器下发规则后 `first` 立刻出网，等节流会被当成未知来源 403（现象是“first 在网络策略生效前跑了”，实际是代理还没认识它）；凡是按名字 / 镜像列容器的地方都要用 `isSidecarName` 排除它。嵌套 dind 重启要 stop + start（`restart` 会因 containerd 残留 pid 起不来）；docker 的 `rm` 没有 `-t`。
 
 ## 版本对齐
 
